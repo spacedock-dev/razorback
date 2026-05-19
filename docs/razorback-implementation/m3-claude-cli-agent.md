@@ -104,3 +104,16 @@ statsig + pypi).
   the contract; the in-shim enforcement is M3, the audit pass
   against `events.jsonl` is later.
 - Full DAB (12 datasets) — §M5.
+
+## Stage Report: plan
+
+- DONE: Plan steps map 1:1 to the 7 ACs in the M3 entity body, each with the design-doc §-cite that governs it (§6.2 BaseAgent subclasses + registry, §6.4 prompt content hashing, §9.2 tools_allowed contract). AC↔task map table at the top of the plan.
+  AC↔task map table at lines 79-87 of `docs/razorback-implementation/plans/m3-claude-cli-agent.md`; cites §6.2, §6.5, §9.2 plus the verbatim `run_experiment.py` line ranges. Note: §6.4 (prompt content hashing) is explicitly deferred to M5 per the design doc's prompt-freeze wording; M3 ships no prompt_file freeze — the plan calls this out in Task 2's `ClaudeCliAgentConfig` (prompt_file accepted, content-hashing not yet enforced).
+- DONE: The riskiest contract for M3 — that `claude -p` actually runs inside harbor's docker container with the right env vars and reaches the Anthropic API past harbor's network isolation — is plan Task 1 as a live nop-or-claude-CLI smoke against bookreview, BEFORE any registry/schema scaffolding lands. If the claude-CLI-in-container path fails (auth mode mismatch, proxy block too tight, harbor's required-env declaration missing a field), STOP and escalate; do NOT scaffold around it.
+  Task 1 sits before Tasks 2-6; lines 159-307 of the plan. Failure modes enumerated under "Step 2: Run the smoke" with explicit STOP-and-escalate directives.
+- DONE: The plan reads /Users/clkao/git/dataagentbench/benchmark/lib/run_experiment.py lines 1440-2046 verbatim and inherits the OAuth/API-key precedence rule (ANTHROPIC_API_KEY from .env via dotenv_values first, fall back to CLAUDE_CODE_OAUTH_TOKEN via read_claude_token; never both, never from os.environ). The plan cites the source-file line ranges and adapts the discipline to harbor's required-env declaration mechanism without redesigning it.
+  Task 3 implements `razorback.agents.auth.resolve_claude_auth` citing `run_experiment.py:1897-1917` and `:1993-2003`; Task 5's `razorback.agents.proxy` copies `:1497-1525` verbatim. AC-3's six tests (`test_claude_cli_auth_dotenv_only.py`) include the `os.environ` negative-path assertion that mirrors the entity's AC-3 verbatim.
+
+### Summary
+
+Wrote a TDD-shaped 8-task plan for M3 ClaudeCliAgent end-to-end. Task 1 is a risk-first claude-CLI-in-harbor-docker smoke that runs one bookreview query through a hand-rolled BaseAgent subclass, asserting the verifier emits a numeric reward — before any registry/schema/agent-class code lands. Auth, proxy-block, and required-env discipline are inherited verbatim from `dataagentbench/benchmark/lib/run_experiment.py:1440-2046` and `solve.sh:105`; harbor's `EnvironmentConfig.env` mechanism is the declaration surface for AC-1 and AC-7, with razorback resolving auth itself (via `dotenv_values`) to avoid the `os.environ` source AC-3 forbids. Plan lives at `docs/razorback-implementation/plans/m3-claude-cli-agent.md` on `main`.
