@@ -21,6 +21,20 @@ class SpacedockSolverAgentError(RazorbackError):
     """Raised on SpacedockSolverAgent contract violations."""
 
 
+def assert_phase_stats_schema(path: Path) -> None:
+    """Public schema check for §6.8 phase_stats.json. M5's aggregator imports this."""
+    data = json.loads(Path(path).read_text())
+    assert isinstance(data, dict)
+    for stage in ("model", "analyze", "verify"):
+        assert stage in data, f"missing stage: {stage}"
+        for k in ("tokens_in", "tokens_out", "cost_usd", "wallclock_s"):
+            assert k in data[stage], f"missing key {k!r} in stage {stage!r}"
+        assert isinstance(data[stage]["tokens_in"], int)
+        assert isinstance(data[stage]["tokens_out"], int)
+        assert isinstance(data[stage]["cost_usd"], (int, float))
+        assert isinstance(data[stage]["wallclock_s"], (int, float))
+
+
 class SpacedockSolverAgent(BaseAgent):
     SUPPORTS_WINDOWS = False
     SUPPORTS_ATIF = False
