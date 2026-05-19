@@ -101,6 +101,7 @@ one line per fired event in fire order; the corresponding
   (see `docs/pre-m1-findings.md`).
 - **Acceptance command:** `uv run rk run examples/specs/nop.yaml`
   is the §8.M1 acceptance command the validator reruns.
+- **Implementation plan:** `docs/razorback-implementation/plans/m1-rk-run-nop.md`.
 
 ## Out of scope
 
@@ -116,3 +117,16 @@ one line per fired event in fire order; the corresponding
   plan must produce a `tests/test.sh` for the nop spec's
   hello-world task that actually drops a reward file, and the
   run-dir must show `n_errored_trials: 0`.
+
+## Stage Report: plan
+
+- DONE: Plan steps map 1:1 to the 8 AC items in the M1 body, each with the design-doc §-cite that governs it (§6.1 harbor integration, §6.3 run-dir layout, §6.6 async observers, §6.7 job_name from sha256[:16], §3.2 exit codes).
+  AC↔task map table is at the top of the plan; each AC names its governing §-cite and the tasks that implement and assert it.
+- DONE: The riskiest contract — harbor's verifier reward.txt under Colima bind-mounts (see docs/pre-m1-findings.md) — is the FIRST integration step in the plan, not the last. Scaffolding (CLI, parser modules) follows after the live nop+hello-world+verifier round-trip is proven on the operator's machine.
+  Task 1 ("Mechanism validation — live nop+hello-world+verifier round-trip") precedes every scaffolding task; tasks 2–6 (errors, spec, freeze, job_name, manifest, CLI plumbing) come after.
+- DONE: The plan is committed to docs/razorback-implementation/plans/m1-rk-run-nop.md on main as a single file (entity stays a flat .md, not folder form), and the M1 entity body's Test plan section is extended with a one-line cross-reference to the plan path.
+  Plan path: `docs/razorback-implementation/plans/m1-rk-run-nop.md` (single file on main). Entity Test plan now ends with the cross-reference line.
+
+### Summary
+
+Plan written via the superpowers:writing-plans skill, 15 tasks ordered riskiest-contract-first. Task 1 runs the live nop+hello-world+verifier round-trip before any razorback code lands, so if `reward.txt` doesn't survive Colima bind-mounts we know on day one and escalate before scaffolding. Each AC maps to at least one TDD-shaped task with failing-test → green-test → commit cadence; the §8.M1 acceptance command appears as Task 14's interactive validation alongside the subprocess-driven integration test in Tasks 11–12.
