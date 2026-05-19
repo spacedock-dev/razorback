@@ -1,6 +1,8 @@
 # ABOUTME: SpacedockSolverAgent (§6.2 third bullet) — staged solver with halt-resume.
 # ABOUTME: __init__ recomputes sealed_hash and refuses on mismatch BEFORE any harbor I/O.
 
+import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +11,7 @@ import yaml
 from harbor.agents.base import BaseAgent
 from harbor.environments.base import BaseEnvironment
 
+from razorback.agents.claude_invoke import build_claude_argv
 from razorback.agents.proxy import PROXY_BLOCK_ENV
 from razorback.agents.seal import compute_sealed_hash, prompt_sha256
 from razorback.errors import RazorbackError, SeedMismatchError
@@ -177,5 +180,85 @@ class SpacedockSolverAgent(BaseAgent):
 
         self.verify_prompt_contents()
 
-    async def run(self, instruction, environment, context) -> None:
-        raise NotImplementedError("Task 5 implements run()")
+    async def run(
+        self,
+        instruction: str,
+        environment: BaseEnvironment,
+        context,
+    ) -> None:
+        """AC-4/AC-5: staged execution, agent_freeze/.git commits, phase_stats.json."""
+        freeze_dir = Path(self.logs_dir) / "agent_freeze"
+        freeze_dir.mkdir(parents=True, exist_ok=True)
+        await self._init_agent_freeze_repo(environment, freeze_dir)
+
+        self._phase_stats = {}
+        for stage in self._stages:
+            prompt_body = self._prompt_contents[stage]
+            rendered = self._render_stage_prompt(stage, prompt_body, instruction)
+            cmd = build_claude_argv(
+                prompt=rendered, model=self._model, tools_allowed=self._tools_allowed,
+            )
+            t0 = time.monotonic()
+            result = await environment.exec(
+                cmd, cwd=str(freeze_dir), env=self._exec_env, timeout_sec=600,
+            )
+            wallclock = time.monotonic() - t0
+            await self._commit_stage(environment, freeze_dir, stage)
+            self._phase_stats[stage] = {
+                "tokens_in": 0,
+                "tokens_out": 0,
+                "cost_usd": 0.0,
+                "wallclock_s": round(wallclock, 3),
+            }
+            if result.return_code != 0:
+                context.return_code = result.return_code
+                self._write_phase_stats_file(freeze_dir)
+                return
+
+        context.return_code = 0
+        self._write_phase_stats_file(freeze_dir)
+
+    async def _init_agent_freeze_repo(self, environment, freeze_dir: Path) -> None:
+        cmds = [
+            f"git -C {freeze_dir} init -q",
+            f"git -C {freeze_dir} config user.email razorback@local",
+            f"git -C {freeze_dir} config user.name razorback",
+            f"git -C {freeze_dir} config commit.gpgsign false",
+            f"git -C {freeze_dir} add -A",
+            f"git -C {freeze_dir} commit -q --allow-empty -m seed",
+        ]
+        for c in cmds:
+            r = await environment.exec(c)
+            if r.return_code != 0:
+                raise SpacedockSolverAgentError(
+                    f"agent_freeze repo init failed at: {c}\n"
+                    f"stderr={getattr(r, 'stderr', '')!r}"
+                )
+
+    async def _commit_stage(self, environment, freeze_dir: Path, stage: str) -> None:
+        cmds = [
+            f"git -C {freeze_dir} add -A",
+            f"git -C {freeze_dir} commit -q --allow-empty -m 'stage: {stage}'",
+        ]
+        for c in cmds:
+            r = await environment.exec(c)
+            if r.return_code != 0:
+                raise SpacedockSolverAgentError(
+                    f"agent_freeze stage commit failed at: {c}"
+                )
+
+    def _render_stage_prompt(self, stage: str, body: str, instruction: str) -> str:
+        return f"# Stage: {stage}\n\n{body}\n\n# Task instruction:\n{instruction}\n"
+
+    def _write_phase_stats_file(self, freeze_dir: Path) -> None:
+        """Write the §6.8 phase_stats.json. Public contract — DO NOT add unscoped fields."""
+        out = {}
+        for stage in self._stages:
+            s = self._phase_stats.get(stage, {})
+            out[stage] = {
+                "tokens_in": int(s.get("tokens_in", 0)),
+                "tokens_out": int(s.get("tokens_out", 0)),
+                "cost_usd": float(s.get("cost_usd", 0.0)),
+                "wallclock_s": float(s.get("wallclock_s", 0.0)),
+            }
+        (freeze_dir / "phase_stats.json").write_text(json.dumps(out, indent=2) + "\n")
