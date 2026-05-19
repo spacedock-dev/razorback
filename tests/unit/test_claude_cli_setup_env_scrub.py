@@ -1,4 +1,5 @@
 # ABOUTME: AC-2 — setup() scrubs env, injects ONLY the chosen auth, never co-mingles.
+# ABOUTME: Post FU-1: auth arrives via the `extra_env` constructor kwarg (harbor contract).
 
 from unittest.mock import AsyncMock, MagicMock
 
@@ -21,7 +22,7 @@ async def test_setup_with_only_api_key_carries_only_api_key(tmp_path):
     agent = ClaudeCliAgent(
         logs_dir=tmp_path,
         model_name="claude-opus-4-5",
-        resolved_auth_env={"ANTHROPIC_API_KEY": "sk-1"},
+        extra_env={"ANTHROPIC_API_KEY": "sk-1"},
     )
     await agent.setup(_make_environment())
     assert "ANTHROPIC_API_KEY" in agent._exec_env
@@ -33,19 +34,19 @@ async def test_setup_with_only_oauth_carries_only_oauth(tmp_path):
     agent = ClaudeCliAgent(
         logs_dir=tmp_path,
         model_name="claude-opus-4-5",
-        resolved_auth_env={"CLAUDE_CODE_OAUTH_TOKEN": "oauth-1"},
+        extra_env={"CLAUDE_CODE_OAUTH_TOKEN": "oauth-1"},
     )
     await agent.setup(_make_environment())
     assert "CLAUDE_CODE_OAUTH_TOKEN" in agent._exec_env
     assert "ANTHROPIC_API_KEY" not in agent._exec_env
 
 
-async def test_setup_refuses_to_co_mingle(tmp_path):
+async def test_constructor_refuses_to_co_mingle(tmp_path):
     with pytest.raises(Exception):
         ClaudeCliAgent(
             logs_dir=tmp_path,
             model_name="claude-opus-4-5",
-            resolved_auth_env={
+            extra_env={
                 "ANTHROPIC_API_KEY": "sk-1",
                 "CLAUDE_CODE_OAUTH_TOKEN": "oauth-1",
             },
@@ -57,7 +58,7 @@ async def test_setup_carries_proxy_block_into_exec_env(tmp_path):
     agent = ClaudeCliAgent(
         logs_dir=tmp_path,
         model_name="claude-opus-4-5",
-        resolved_auth_env={"ANTHROPIC_API_KEY": "sk-1"},
+        extra_env={"ANTHROPIC_API_KEY": "sk-1"},
     )
     await agent.setup(_make_environment())
     for k in ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY",
@@ -73,7 +74,7 @@ async def test_setup_validates_claude_binary_inside_container(tmp_path):
     agent = ClaudeCliAgent(
         logs_dir=tmp_path,
         model_name="claude-opus-4-5",
-        resolved_auth_env={"ANTHROPIC_API_KEY": "sk-1"},
+        extra_env={"ANTHROPIC_API_KEY": "sk-1"},
     )
     with pytest.raises(Exception):
         await agent.setup(env)

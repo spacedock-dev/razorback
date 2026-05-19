@@ -99,6 +99,8 @@ def _build_agent_config(
                 "spacedock-solver spec must be frozen (agent.prompt_contents missing)."
             )
         resolution = resolve_claude_auth(project_root=project_root, home=home)
+        # FU-1 AC-1: auth forwarded ONLY via AgentConfig.env (redacted on disk).
+        # kwargs is plaintext-on-disk and must not carry credentials.
         kwargs: dict[str, Any] = {
             "model": spec.agent.model,
             "sampling": {
@@ -111,7 +113,6 @@ def _build_agent_config(
             "prompts": dict(spec.agent.prompts),
             "prompt_contents": dict(spec.agent.prompt_contents),
             "sealed_hash": spec.agent.sealed_hash,
-            "resolved_auth_env": dict(resolution.env),
             "prior_frozen_spec_path": (
                 str(prior_frozen_spec_path) if prior_frozen_spec_path else None
             ),
@@ -130,8 +131,10 @@ def _build_agent_config(
                 "claude-cli agent requires project_root for .env auth discovery."
             )
         resolution = resolve_claude_auth(project_root=project_root, home=home)
+        # FU-1 AC-1: forward auth ONLY via AgentConfig.env (harbor redacts on disk
+        # via templatize_sensitive_env). kwargs is plaintext-on-disk and must not
+        # carry credentials.
         kwargs: dict[str, Any] = {
-            "resolved_auth_env": dict(resolution.env),
             "tools_allowed": list(spec.agent.tools_allowed),
             "sampling_temperature": spec.agent.sampling.temperature,
         }
@@ -168,7 +171,7 @@ def _build_ade_bench(
     *, spec: Spec, job_name: str, jobs_dir: Path, agent_cfg: AgentConfig,
 ) -> JobConfig:
     assert isinstance(spec.benchmark, AdeBenchBenchmarkBlock)
-    task_dirs = resolve_task_dirs(
+    resolved = resolve_task_dirs(
         tasks_root=spec.benchmark.tasks_root,
         tasks=spec.benchmark.tasks,
     )
@@ -178,7 +181,14 @@ def _build_ade_bench(
         n_concurrent_trials=1,
         n_attempts=spec.trials,
         agents=[agent_cfg],
-        tasks=[TaskConfig(path=p) for p in task_dirs],
+        tasks=[
+            TaskConfig(
+                path=r.path,
+                git_url=r.git_url,
+                git_commit_id=r.git_commit_id,
+            )
+            for r in resolved
+        ],
         verifier=VerifierConfig(disable=False),
         retry=RetryConfig(max_retries=0),
         environment=EnvironmentConfig(delete=False),

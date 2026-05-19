@@ -30,9 +30,9 @@ class ClaudeCliAgent(BaseAgent):
         mcp_servers=None,
         skills_dir=None,
         *,
-        resolved_auth_env: dict[str, str] | None = None,
         tools_allowed: list[str] | None = None,
         sampling_temperature: float | None = None,
+        extra_env: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(
@@ -43,13 +43,17 @@ class ClaudeCliAgent(BaseAgent):
             skills_dir=skills_dir,
             **kwargs,
         )
-        # AC-2: refuse co-mingled auth at construction time, before harbor runs anything.
-        env = dict(resolved_auth_env or {})
+        # FU-1 AC-1/AC-2: auth arrives via harbor's `extra_env` kwarg (resolved from
+        # AgentConfig.env at agent-factory time — see harbor.agents.factory). The
+        # env field is serialized to disk via templatize_sensitive_env, so the
+        # literal value never persists. The constructor still validates that at
+        # most one credential is forwarded (refusing co-mingled auth).
+        env = dict(extra_env or {})
         if "ANTHROPIC_API_KEY" in env and "CLAUDE_CODE_OAUTH_TOKEN" in env:
             raise ClaudeCliAgentError(
                 "ANTHROPIC_API_KEY and CLAUDE_CODE_OAUTH_TOKEN cannot both be set."
             )
-        self._resolved_auth_env = env
+        self._extra_env = env
         self._tools_allowed = (
             list(tools_allowed) if tools_allowed else list(DEFAULT_ALLOWED_TOOLS)
         )
@@ -97,7 +101,7 @@ class ClaudeCliAgent(BaseAgent):
                 "claude CLI not available inside the container "
                 f"(exit={result.return_code}, stderr={getattr(result, 'stderr', '')!r})"
             )
-        self._exec_env = {**PROXY_BLOCK_ENV, **self._resolved_auth_env}
+        self._exec_env = {**PROXY_BLOCK_ENV, **self._extra_env}
 
     async def run(
         self,

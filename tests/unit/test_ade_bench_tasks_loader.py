@@ -10,13 +10,15 @@ FIXTURE_TASKS = Path(__file__).parent.parent / "fixtures" / "ade_bench" / "tasks
 
 
 def test_resolves_known_slug_to_absolute_path():
-    paths = resolve_task_dirs(
+    resolved = resolve_task_dirs(
         tasks_root=FIXTURE_TASKS, tasks=["adebench-fixture-001"]
     )
-    assert len(paths) == 1
-    assert paths[0].is_absolute()
-    assert paths[0].name == "adebench-fixture-001"
-    assert (paths[0] / "task.toml").exists()
+    assert len(resolved) == 1
+    assert resolved[0].path.is_absolute()
+    assert resolved[0].path.name == "adebench-fixture-001"
+    assert (resolved[0].path / "task.toml").exists()
+    assert resolved[0].git_url is None
+    assert resolved[0].git_commit_id is None
 
 
 def test_raises_filenotfound_on_unknown_slug():
@@ -36,9 +38,9 @@ def test_raises_when_task_toml_missing(tmp_path):
 
 
 def test_resolves_multiple_slugs_in_order():
-    paths = resolve_task_dirs(
+    resolved = resolve_task_dirs(
         tasks_root=FIXTURE_TASKS,
         tasks=["adebench-fixture-001", "adebench-fixture-001"],
     )
-    assert len(paths) == 2
-    assert paths[0] == paths[1]
+    assert len(resolved) == 2
+    assert resolved[0] == resolved[1]

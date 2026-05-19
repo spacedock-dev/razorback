@@ -5,7 +5,7 @@ name = "adebench-fixture/adebench-fixture-001"
 description = "Synthetic ade-bench-shape task for the M7 translator smoke. NOT a real ade-bench task."
 
 [environment]
-docker_image = "alpine:3.19"
+docker_image = "dab-agent:latest"
 os = "linux"
 cpus = 1
 memory_mb = 512

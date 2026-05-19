@@ -74,7 +74,7 @@ def _agent_kwargs_from_frozen_spec(spec_path: Path) -> dict:
         "tools_allowed": list(agent["tools_allowed"]),
         "prompts": dict(agent["prompts"]),
         "sealed_hash": agent["sealed_hash"],
-        "resolved_auth_env": {"ANTHROPIC_API_KEY": "sk-test"},
+        "extra_env": {"ANTHROPIC_API_KEY": "sk-test"},
     }
 
 

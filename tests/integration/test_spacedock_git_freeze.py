@@ -72,7 +72,7 @@ def _build_agent(tmp_path, logs_dir):
         tools_allowed=["Bash"],
         prompts=prompts,
         sealed_hash=sealed,
-        resolved_auth_env={"ANTHROPIC_API_KEY": "sk-test"},
+        extra_env={"ANTHROPIC_API_KEY": "sk-test"},
         prompt_contents={
             "model": body_m.decode(),
             "analyze": body_a.decode(),

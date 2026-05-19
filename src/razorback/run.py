@@ -165,13 +165,18 @@ async def _execute_run_async(
 def _refuse_resume_if_spacedock_mismatch(job_config, agent_logs_dir: Path) -> None:
     """AC-1: pre-construct a SpacedockSolverAgent so its sealed_hash check fires
     BEFORE harbor.Job.create. Other agent kinds are no-ops here."""
+    from harbor.utils.env import resolve_env_vars
+
     for agent_cfg in job_config.agents:
         if agent_cfg.import_path != "razorback.agents.spacedock_solver:SpacedockSolverAgent":
             continue
         from razorback.agents.spacedock_solver import SpacedockSolverAgent
+        # FU-1: auth flows through AgentConfig.env (harbor's `extra_env` contract),
+        # NOT through kwargs (which would persist plaintext on disk).
         SpacedockSolverAgent(
             logs_dir=agent_logs_dir,
             model_name=agent_cfg.model_name,
+            extra_env=resolve_env_vars(agent_cfg.env),
             **agent_cfg.kwargs,
         )
 

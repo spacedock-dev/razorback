@@ -84,11 +84,24 @@ class DabBenchmarkBlock(BaseModel):
     datasets: list[str] = Field(min_length=1)
 
 
+class AdeBenchTaskEntry(BaseModel):
+    """FU-1 AC-3 — git-task entry matching harbor's TaskConfig git-task shape.
+
+    All three fields are required; partial entries reject with a ValidationError
+    naming the missing field. `path` is the in-repo relative path to the harbor
+    task directory; harbor's GitTaskId materializes it on demand.
+    """
+    model_config = ConfigDict(extra="forbid")
+    path: str
+    git_url: str
+    git_commit_id: str
+
+
 class AdeBenchBenchmarkBlock(BaseModel):
     model_config = ConfigDict(extra="forbid")
     kind: Literal["ade-bench"]
     tasks_root: Path
-    tasks: list[str] = Field(min_length=1)
+    tasks: list[str | AdeBenchTaskEntry] = Field(min_length=1)
 
 
 BenchmarkBlock = Annotated[

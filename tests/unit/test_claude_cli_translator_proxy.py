@@ -74,7 +74,8 @@ def test_translator_stamps_proxy_block_into_task_toml_environment_env(tmp_path):
     assert env_block["HF_DATASETS_OFFLINE"] == "1"
 
 
-def test_translator_passes_resolved_auth_into_agent_kwargs(tmp_path):
+def test_translator_passes_resolved_auth_into_agent_env_not_kwargs(tmp_path):
+    """FU-1 AC-1: auth rides via AgentConfig.env (harbor redacts on disk), NOT kwargs."""
     data_root = _make_fixture_dataset(tmp_path / "data")
     (tmp_path / ".env").write_text("ANTHROPIC_API_KEY=sk-test-2\n")
     spec = parse_spec_text(CLAUDE_SPEC.format(data_root=data_root))
@@ -88,9 +89,13 @@ def test_translator_passes_resolved_auth_into_agent_kwargs(tmp_path):
     )
     agent_cfg = cfg.agents[0]
     assert agent_cfg.import_path == "razorback.agents.claude_cli:ClaudeCliAgent"
-    assert agent_cfg.kwargs["resolved_auth_env"] == {"ANTHROPIC_API_KEY": "sk-test-2"}
+    # AC-1: kwargs must not carry any auth surface.
+    assert "resolved_auth_env" not in agent_cfg.kwargs
     assert agent_cfg.kwargs["tools_allowed"] == ["Bash", "Read", "Write", "Edit", "Glob", "Grep"]
     assert agent_cfg.kwargs["sampling_temperature"] == 0.0
+    # AC-1: env carries the resolved value in-memory (harbor's templatize_sensitive_env
+    # redacts on serialization, not on the Python object).
+    assert agent_cfg.env == {"ANTHROPIC_API_KEY": "sk-test-2"}
 
 
 def test_translator_never_emits_both_auth_names(tmp_path):
@@ -110,9 +115,10 @@ def test_translator_never_emits_both_auth_names(tmp_path):
         project_root=tmp_path,
         home=home,
     )
-    auth_env = cfg.agents[0].kwargs["resolved_auth_env"]
+    auth_env = cfg.agents[0].env
     assert "ANTHROPIC_API_KEY" in auth_env
     assert "CLAUDE_CODE_OAUTH_TOKEN" not in auth_env
+    assert "resolved_auth_env" not in cfg.agents[0].kwargs
 
 
 def test_translator_raises_when_no_credentials(tmp_path):

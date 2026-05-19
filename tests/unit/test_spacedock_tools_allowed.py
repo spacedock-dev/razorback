@@ -59,7 +59,7 @@ def _agent_kwargs(tmp_path, **overrides):
         tools_allowed=["Bash", "Read"],
         prompts=prompts,
         sealed_hash=sealed,
-        resolved_auth_env={"ANTHROPIC_API_KEY": "sk-test"},
+        extra_env={"ANTHROPIC_API_KEY": "sk-test"},
         prompt_contents={
             "model": body_m.decode(),
             "analyze": body_a.decode(),
