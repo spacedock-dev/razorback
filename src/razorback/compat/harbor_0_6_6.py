@@ -1,15 +1,24 @@
 # ABOUTME: Spec → harbor 0.6.6 JobConfig translator (§6.1).
-# ABOUTME: Supports agent.kind=nop and benchmark.kind ∈ {local, dab}.
+# ABOUTME: Supports agent.kind ∈ {nop, claude-cli}, benchmark.kind ∈ {local, dab}.
 
 from pathlib import Path
+from typing import Any
 
 from harbor.models.agent.name import AgentName
 from harbor.models.job.config import JobConfig, RetryConfig
 from harbor.models.trial.config import AgentConfig, TaskConfig, VerifierConfig
 
+from razorback.agents.auth import resolve_claude_auth
+from razorback.agents.proxy import PROXY_BLOCK_ENV
 from razorback.benchmarks.dab.prepare import prepare_dataset_tasks
 from razorback.errors import SpecError
-from razorback.spec.schema import DabBenchmarkBlock, LocalBenchmarkBlock, Spec
+from razorback.spec.schema import (
+    ClaudeCliAgentBlock,
+    DabBenchmarkBlock,
+    LocalBenchmarkBlock,
+    NopAgentBlock,
+    Spec,
+)
 
 
 def spec_to_job_config(
@@ -18,24 +27,19 @@ def spec_to_job_config(
     job_name: str,
     jobs_dir: Path,
     tasks_root: Path | None = None,
+    project_root: Path | None = None,
+    home: Path | None = None,
 ) -> tuple[JobConfig, dict[str, tuple[str, int]]]:
     """Translate a parsed spec into a harbor JobConfig and a trial_name_map.
 
-    Returns a 2-tuple: (JobConfig, trial_name_map). The map keys are the trial_name
-    prefixes harbor will assign (`<task_name>__<uuid7>`); values are (dataset, query_id).
-    For non-DAB benchmarks the map is empty.
-
-    `tasks_root` is required for DAB specs (where prepared task dirs land). The run
-    orchestrator passes `run_dir / "tasks"`. Local-benchmark specs may omit it.
+    Returns (JobConfig, trial_name_map). For non-DAB benchmarks the map is
+    empty. `tasks_root` is required for DAB specs. `project_root` is required
+    for claude-cli agents (.env-driven auth discovery — AC-3).
     """
-    if spec.agent.kind != "nop":
-        raise SpecError(
-            f"agent.kind=nop only (got {spec.agent.kind!r}); ClaudeCliAgent lands in M3."
-        )
+    agent_cfg, task_env = _build_agent_config(spec, project_root=project_root, home=home)
 
     if isinstance(spec.benchmark, LocalBenchmarkBlock):
-        return _build_local(spec=spec, job_name=job_name, jobs_dir=jobs_dir), {}
-
+        return _build_local(spec=spec, job_name=job_name, jobs_dir=jobs_dir, agent_cfg=agent_cfg), {}
     if isinstance(spec.benchmark, DabBenchmarkBlock):
         if tasks_root is None:
             raise SpecError("DAB specs require tasks_root (the run orchestrator passes it).")
@@ -44,19 +48,48 @@ def spec_to_job_config(
             job_name=job_name,
             jobs_dir=jobs_dir,
             tasks_root=Path(tasks_root),
+            agent_cfg=agent_cfg,
+            task_env=task_env,
         )
-
     raise SpecError(f"unsupported benchmark block: {type(spec.benchmark).__name__}")
 
 
-def _build_local(*, spec: Spec, job_name: str, jobs_dir: Path) -> JobConfig:
+def _build_agent_config(
+    spec: Spec, *, project_root: Path | None, home: Path | None,
+) -> tuple[AgentConfig, dict[str, str]]:
+    """Returns (agent_config, task_env_to_stamp_into_task_toml)."""
+    if isinstance(spec.agent, NopAgentBlock):
+        return AgentConfig(name=AgentName.NOP.value), {}
+    if isinstance(spec.agent, ClaudeCliAgentBlock):
+        if project_root is None:
+            raise SpecError(
+                "claude-cli agent requires project_root for .env auth discovery."
+            )
+        resolution = resolve_claude_auth(project_root=project_root, home=home)
+        kwargs: dict[str, Any] = {
+            "resolved_auth_env": dict(resolution.env),
+            "tools_allowed": list(spec.agent.tools_allowed),
+            "sampling_temperature": spec.agent.sampling.temperature,
+        }
+        agent_cfg = AgentConfig(
+            import_path="razorback.agents.claude_cli:ClaudeCliAgent",
+            model_name=spec.agent.model,
+            kwargs=kwargs,
+            env=dict(resolution.env),
+        )
+        task_env = dict(PROXY_BLOCK_ENV)
+        return agent_cfg, task_env
+    raise SpecError(f"unsupported agent block: {type(spec.agent).__name__}")
+
+
+def _build_local(*, spec: Spec, job_name: str, jobs_dir: Path, agent_cfg: AgentConfig) -> JobConfig:
     assert isinstance(spec.benchmark, LocalBenchmarkBlock)
     return JobConfig(
         job_name=job_name,
         jobs_dir=jobs_dir,
         n_concurrent_trials=1,
         n_attempts=spec.trials,
-        agents=[AgentConfig(name=AgentName.NOP.value)],
+        agents=[agent_cfg],
         tasks=[TaskConfig(path=Path(p).resolve()) for p in spec.benchmark.task_paths],
         verifier=VerifierConfig(disable=False),
         retry=RetryConfig(max_retries=0),
@@ -69,6 +102,8 @@ def _build_dab(
     job_name: str,
     jobs_dir: Path,
     tasks_root: Path,
+    agent_cfg: AgentConfig,
+    task_env: dict[str, str],
 ) -> tuple[JobConfig, dict[str, tuple[str, int]]]:
     assert isinstance(spec.benchmark, DabBenchmarkBlock)
     manifest_all: list[dict] = []
@@ -78,6 +113,7 @@ def _build_dab(
                 data_root=Path(spec.benchmark.data_root),
                 dataset=dataset,
                 tasks_root=tasks_root / dataset,
+                task_env=task_env,
             )
         )
     tasks = [TaskConfig(path=entry["task_dir"]) for entry in manifest_all]
@@ -89,7 +125,7 @@ def _build_dab(
         jobs_dir=jobs_dir,
         n_concurrent_trials=1,
         n_attempts=spec.trials,
-        agents=[AgentConfig(name=AgentName.NOP.value)],
+        agents=[agent_cfg],
         tasks=tasks,
         verifier=VerifierConfig(disable=False),
         retry=RetryConfig(max_retries=0),

@@ -51,7 +51,8 @@ def test_prepare_excludes_validate_py_from_workdir(tmp_path):
         tasks_root=tasks_root,
     )
     for entry in manifest:
-        workdir = entry["task_dir"] / "workdir"
+        # M3: harbor 0.6.6 only auto-uploads steps/<step>/workdir — see prepare.py.
+        workdir = entry["task_dir"] / "steps" / "main" / "workdir"
         assert not list(workdir.rglob("validate.py")), f"validate.py leaked into {workdir}"
 
 
@@ -65,10 +66,11 @@ def test_prepare_copies_safe_inputs(tmp_path):
         tasks_root=tasks_root,
     )
     q1 = next(e for e in manifest if e["query_id"] == 1)["task_dir"]
-    assert (q1 / "workdir" / "query.json").read_text() == '"question 1?"'
-    assert (q1 / "workdir" / "db_config.yaml").exists()
-    assert (q1 / "workdir" / "db_description.txt").exists()
-    assert (q1 / "workdir" / "query_dataset" / "review_query.db").exists()
+    workdir = q1 / "steps" / "main" / "workdir"
+    assert (workdir / "query.json").read_text() == '"question 1?"'
+    assert (workdir / "db_config.yaml").exists()
+    assert (workdir / "db_description.txt").exists()
+    assert (workdir / "query_dataset" / "review_query.db").exists()
 
 
 def test_prepare_writes_task_toml_and_dockerfile(tmp_path):

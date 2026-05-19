@@ -44,8 +44,14 @@ async def _execute_run_async(*, spec: Spec, runs_dir: Path) -> None:
 
     # Harbor's jobs_dir + job_name produces jobs_dir/<job_name>/, which is our run_dir.
     tasks_root = run_dir / "tasks"
+    # rk run is invoked from the project root; .env (AC-3 source) lives here.
+    project_root = Path.cwd()
     job_config, trial_name_map = spec_to_job_config(
-        spec, job_name=job_name, jobs_dir=run_dir.parent, tasks_root=tasks_root
+        spec,
+        job_name=job_name,
+        jobs_dir=run_dir.parent,
+        tasks_root=tasks_root,
+        project_root=project_root,
     )
 
     drain_task = asyncio.create_task(channel.drain())
