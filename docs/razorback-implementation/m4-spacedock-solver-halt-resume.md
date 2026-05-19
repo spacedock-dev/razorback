@@ -1,9 +1,9 @@
 ---
 id: 8c53p5jxwwckfkqzm3mg5drs
 title: M4 — SpacedockSolverAgent with halt-resume
-status: backlog
+status: plan
 source: design §8
-started:
+started: 2026-05-19T08:23:23Z
 completed:
 verdict:
 score: 0.7
