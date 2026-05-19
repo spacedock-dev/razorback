@@ -1,9 +1,9 @@
 ---
 id: zknb9f32jpzgtg83k9q7wm9d
 title: M1 — rk run against nop agent
-status: backlog
+status: plan
 source: design §8
-started:
+started: 2026-05-19T07:16:21Z
 completed:
 verdict:
 score: 1.0
