@@ -1,0 +1,186 @@
+{
+  "summary_version": 1,
+  "stratified_pass_at_1": 0.6746031746031745,
+  "datasets": {
+    "agnews": {
+      "dataset_pass_at_1": 0.25,
+      "n_queries": 4,
+      "queries": [
+        {
+          "query_id": 1,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        },
+        {
+          "query_id": 2,
+          "n_trials": 1,
+          "n_correct": 0,
+          "pass_at_1": 0.0
+        },
+        {
+          "query_id": 3,
+          "n_trials": 1,
+          "n_correct": 0,
+          "pass_at_1": 0.0
+        },
+        {
+          "query_id": 4,
+          "n_trials": 1,
+          "n_correct": 0,
+          "pass_at_1": 0.0
+        }
+      ]
+    },
+    "bookreview": {
+      "dataset_pass_at_1": 1.0,
+      "n_queries": 3,
+      "queries": [
+        {
+          "query_id": 1,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        },
+        {
+          "query_id": 2,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        },
+        {
+          "query_id": 3,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        }
+      ]
+    },
+    "googlelocal": {
+      "dataset_pass_at_1": 0.75,
+      "n_queries": 4,
+      "queries": [
+        {
+          "query_id": 1,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        },
+        {
+          "query_id": 2,
+          "n_trials": 1,
+          "n_correct": 0,
+          "pass_at_1": 0.0
+        },
+        {
+          "query_id": 3,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        },
+        {
+          "query_id": 4,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        }
+      ]
+    },
+    "music_brainz_20k": {
+      "dataset_pass_at_1": 0.3333333333333333,
+      "n_queries": 3,
+      "queries": [
+        {
+          "query_id": 1,
+          "n_trials": 1,
+          "n_correct": 0,
+          "pass_at_1": 0.0
+        },
+        {
+          "query_id": 2,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        },
+        {
+          "query_id": 3,
+          "n_trials": 1,
+          "n_correct": 0,
+          "pass_at_1": 0.0
+        }
+      ]
+    },
+    "stockindex": {
+      "dataset_pass_at_1": 1.0,
+      "n_queries": 3,
+      "queries": [
+        {
+          "query_id": 1,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        },
+        {
+          "query_id": 2,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        },
+        {
+          "query_id": 3,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        }
+      ]
+    },
+    "yelp": {
+      "dataset_pass_at_1": 0.7142857142857143,
+      "n_queries": 7,
+      "queries": [
+        {
+          "query_id": 1,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        },
+        {
+          "query_id": 2,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        },
+        {
+          "query_id": 3,
+          "n_trials": 1,
+          "n_correct": 0,
+          "pass_at_1": 0.0
+        },
+        {
+          "query_id": 4,
+          "n_trials": 1,
+          "n_correct": 0,
+          "pass_at_1": 0.0
+        },
+        {
+          "query_id": 5,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        },
+        {
+          "query_id": 6,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        },
+        {
+          "query_id": 7,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        }
+      ]
+    }
+  }
+}
