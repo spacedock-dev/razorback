@@ -43,7 +43,10 @@ async def _execute_run_async(*, spec: Spec, runs_dir: Path) -> None:
             channel.add_observer(StdoutObserver())
 
     # Harbor's jobs_dir + job_name produces jobs_dir/<job_name>/, which is our run_dir.
-    job_config = spec_to_job_config(spec, job_name=job_name, jobs_dir=run_dir.parent)
+    tasks_root = run_dir / "tasks"
+    job_config, trial_name_map = spec_to_job_config(
+        spec, job_name=job_name, jobs_dir=run_dir.parent, tasks_root=tasks_root
+    )
 
     drain_task = asyncio.create_task(channel.drain())
 
