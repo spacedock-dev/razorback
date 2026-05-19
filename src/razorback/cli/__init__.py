@@ -21,3 +21,19 @@ app.command("run")(run_command)
 from razorback.cli.spec import app as spec_app
 
 app.add_typer(spec_app, name="spec")
+
+from razorback.cli.runs import runs_app
+
+app.add_typer(runs_app, name="runs")
+
+from razorback.cli.constraints import constraints_app
+
+app.add_typer(constraints_app, name="constraints")
+
+from razorback.cli.baseline import baseline_app
+
+app.add_typer(baseline_app, name="baseline")
+
+from razorback.cli.registry import registry_app
+
+app.add_typer(registry_app, name="registry")

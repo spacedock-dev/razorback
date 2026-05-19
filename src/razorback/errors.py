@@ -28,3 +28,8 @@ class SpecError(RazorbackError):
 class SeedMismatchError(RazorbackError):
     """Halt-resume sealed-input hashes do not match the seed's frozen spec (§3.2)."""
     exit_code: int = ExitCode.SEED_MISMATCH
+
+
+class ConstraintViolation(RazorbackError):
+    """A spec violates a pinned field or a not-declared mutation surface (§3.2)."""
+    exit_code: int = ExitCode.CONSTRAINT_VIOLATION
