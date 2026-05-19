@@ -15,8 +15,11 @@ from harbor.models.trial.config import (
 
 from razorback.agents.auth import resolve_claude_auth
 from razorback.agents.proxy import PROXY_BLOCK_ENV
-from razorback.benchmarks.ade_bench.tasks import resolve_task_dirs
-from razorback.benchmarks.dab.prepare import prepare_dataset_tasks
+from razorback.benchmarks.ade_bench.tasks import (
+    materialize_git_task,
+    resolve_task_dirs,
+)
+from razorback.benchmarks.dab.prepare import _DEFAULT_DOCKER_IMAGE, prepare_dataset_tasks
 from razorback.errors import SpecError
 from razorback.spec.schema import (
     AdeBenchBenchmarkBlock,
@@ -68,7 +71,13 @@ def spec_to_job_config(
         )
     if isinstance(spec.benchmark, AdeBenchBenchmarkBlock):
         return (
-            _build_ade_bench(spec=spec, job_name=job_name, jobs_dir=jobs_dir, agent_cfg=agent_cfg),
+            _build_ade_bench(
+                spec=spec,
+                job_name=job_name,
+                jobs_dir=jobs_dir,
+                agent_cfg=agent_cfg,
+                home=home,
+            ),
             {},
         )
     raise SpecError(f"unsupported benchmark block: {type(spec.benchmark).__name__}")
@@ -168,27 +177,46 @@ def _build_local(*, spec: Spec, job_name: str, jobs_dir: Path, agent_cfg: AgentC
 
 
 def _build_ade_bench(
-    *, spec: Spec, job_name: str, jobs_dir: Path, agent_cfg: AgentConfig,
+    *,
+    spec: Spec,
+    job_name: str,
+    jobs_dir: Path,
+    agent_cfg: AgentConfig,
+    home: Path | None = None,
 ) -> JobConfig:
     assert isinstance(spec.benchmark, AdeBenchBenchmarkBlock)
     resolved = resolve_task_dirs(
         tasks_root=spec.benchmark.tasks_root,
         tasks=spec.benchmark.tasks,
     )
+    docker_image = (
+        spec.benchmark.docker_image_override or _DEFAULT_DOCKER_IMAGE
+    )
+    home_dir = Path(home) if home is not None else Path.home()
+    cache_root = home_dir / ".cache" / "razorback" / "ade-bench"
+
+    tasks: list[TaskConfig] = []
+    for r in resolved:
+        if r.git_url is not None and r.git_commit_id is not None:
+            # FU-2: rewrite docker_image at materialization, emit a LOCAL
+            # TaskConfig so harbor skips its own git fetch.
+            materialized = materialize_git_task(
+                git_url=r.git_url,
+                git_commit_id=r.git_commit_id,
+                source_path=r.path,
+                docker_image=docker_image,
+                cache_root=cache_root,
+            )
+            tasks.append(TaskConfig(path=materialized))
+        else:
+            tasks.append(TaskConfig(path=r.path))
     return JobConfig(
         job_name=job_name,
         jobs_dir=jobs_dir,
         n_concurrent_trials=1,
         n_attempts=spec.trials,
         agents=[agent_cfg],
-        tasks=[
-            TaskConfig(
-                path=r.path,
-                git_url=r.git_url,
-                git_commit_id=r.git_commit_id,
-            )
-            for r in resolved
-        ],
+        tasks=tasks,
         verifier=VerifierConfig(disable=False),
         retry=RetryConfig(max_retries=0),
         environment=EnvironmentConfig(delete=False),
