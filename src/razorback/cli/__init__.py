@@ -33,3 +33,7 @@ app.add_typer(constraints_app, name="constraints")
 from razorback.cli.baseline import baseline_app
 
 app.add_typer(baseline_app, name="baseline")
+
+from razorback.cli.registry import registry_app
+
+app.add_typer(registry_app, name="registry")
