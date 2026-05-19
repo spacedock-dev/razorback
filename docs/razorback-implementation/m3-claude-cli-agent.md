@@ -1,9 +1,9 @@
 ---
 id: 93fpren96j0by11d3y5fccs1
 title: M3 — ClaudeCliAgent end-to-end
-status: backlog
+status: plan
 source: design §8
-started:
+started: 2026-05-19T07:58:58Z
 completed:
 verdict:
 score: 0.85
