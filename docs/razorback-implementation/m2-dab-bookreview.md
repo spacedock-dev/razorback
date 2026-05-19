@@ -10,7 +10,7 @@ score: 0.9
 worktree: .worktrees/spacedock-ensign-m2-dab-bookreview
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 ---
 
 ## Problem
