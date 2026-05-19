@@ -1,16 +1,16 @@
 ---
 id: 12pw03062wxqmjxh17qm51rp
 title: M7 — Run-workflow integration + ade-bench (first ade-bench result)
-status: validation
+status: done
 source: design §8
 started: 2026-05-19T09:06:49Z
-completed:
-verdict:
+completed: 2026-05-19T14:19:23Z
+verdict: PASSED
 score: 0.9
-worktree: .worktrees/spacedock-ensign-m7-run-workflow-adebench
+worktree: 
 issue:
 pr:
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 ## Problem
