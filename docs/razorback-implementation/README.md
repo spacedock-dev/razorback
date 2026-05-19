@@ -1,8 +1,8 @@
 ---
 commissioned-by: spacedock@0.11.2
-entity-type: milestone
-entity-label: milestone
-entity-label-plural: milestones
+entity-type: package
+entity-label: package
+entity-label-plural: packages
 id-style: sd-b32
 stages:
   defaults:
@@ -29,24 +29,24 @@ stages:
 
 Razorback is the Python CLI built on `harbor==0.6.6` that makes
 agentic-benchmark research scriptable. This workflow ships razorback
-through its seven design-doc milestones (M1..M7) — from a `rk run`
+through its seven design-doc packages (M1..M7) — from a `rk run`
 smoke against harbor's bundled `nop` agent all the way to a first DAB
 result and a first ade-bench result.
 
-Each milestone is one entity in this workflow. The entity carries the
+Each package is one entity in this workflow. The entity carries the
 acceptance criteria from §8 of the design doc, moves through plan →
 implementation → validation in its own worktree, and lands on `main`
 via PR review managed by the `pr-merge` mod. The single design doc at
 `/Users/clkao/git/dataagentbench/docs/superpowers/specs/2026-05-18-razorback-python-on-harbor.md`
-is the source of truth — milestone bodies cite it rather than redefine
+is the source of truth — package bodies cite it rather than redefine
 it.
 
 ## File Naming
 
-Each milestone lives as either:
+Each package lives as either:
 
 - a flat markdown file `{slug}.md` (default), or
-- a folder `{slug}/` containing `index.md` when the milestone needs
+- a folder `{slug}/` containing `index.md` when the package needs
   sibling artifacts (plan documents, validation reports, code-review
   transcripts) that belong alongside the tracker.
 
@@ -55,29 +55,29 @@ Slugs are lowercase, hyphens, no spaces. Example:
 
 ## Schema
 
-Every milestone file has YAML frontmatter. Fields are documented
-below; see **Milestone Template** for a copy-paste starter.
+Every package file has YAML frontmatter. Fields are documented
+below; see **Package Template** for a copy-paste starter.
 
 ### Field Reference
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `id` | string | 24-character SD-B32 stored ID minted by `status --next-id --id-seed <slug>` |
-| `title` | string | Human-readable milestone name (e.g., "M1 — rk run against nop") |
+| `title` | string | Human-readable package name (e.g., "M1 — rk run against nop") |
 | `status` | enum | One of: backlog, plan, implementation, validation, done |
-| `source` | string | "design §8" for the seeded milestones; otherwise where the milestone came from |
+| `source` | string | "design §8" for the seeded packages; otherwise where the package came from |
 | `started` | ISO 8601 | When active work began (set at first dispatch off backlog) |
-| `completed` | ISO 8601 | When the milestone reached `done` |
+| `completed` | ISO 8601 | When the package reached `done` |
 | `verdict` | enum | PASSED or REJECTED — set at validation |
 | `score` | number | Priority score, 0.0–1.0 (optional) |
 | `worktree` | string | Worktree path while implementation or validation is active, empty otherwise. Sticky across the worktree stages, cleared at terminal merge. |
 | `issue` | string | GitHub issue reference (optional cross-reference) |
-| `pr` | string | GitHub PR reference (set when a PR is opened for the milestone branch) |
+| `pr` | string | GitHub PR reference (set when a PR is opened for the package branch) |
 | `mod-block` | string | Pending mod-declared blocking action, format `{lifecycle_point}:{mod_name}` |
 
 ### ID Style
 
-`id-style: sd-b32` — the workflow expects multiple milestone branches
+`id-style: sd-b32` — the workflow expects multiple package branches
 to be active in parallel (M1's PR review can overlap with M2's
 planning). SD-B32 stored IDs reconcile without coordination across
 worktrees. Display prefixes start at 2 chars and lengthen if a
@@ -87,12 +87,12 @@ collision arises.
 
 ### `backlog`
 
-A milestone enters `backlog` when it is first seeded from §8 of the
+A package enters `backlog` when it is first seeded from §8 of the
 design doc. The captain decides when to greenlight it for planning;
 this is a captain-gated holding stage.
 
-- **Inputs:** The milestone's acceptance criteria from design §8
-- **Outputs:** A seed milestone file with title, source (`design §8`),
+- **Inputs:** The package's acceptance criteria from design §8
+- **Outputs:** A seed package file with title, source (`design §8`),
   one-paragraph problem statement, and the acceptance criteria copied
   verbatim from §8 under `## Acceptance criteria`
 - **Good:** AC items name end-state artifacts (`spec.frozen.yaml`,
@@ -103,13 +103,13 @@ this is a captain-gated holding stage.
 
 ### `plan`
 
-A milestone moves to `plan` when the captain approves it for design
+A package moves to `plan` when the captain approves it for design
 work. The work here is to produce a written implementation plan
 against the design doc. The plan stays on `main` (no worktree yet) so
 it is reviewable independently of the worktree branch.
 
-- **Inputs:** The milestone body's AC; the design doc; the previous
-  milestone's worktree and validation report if relevant
+- **Inputs:** The package body's AC; the design doc; the previous
+  package's worktree and validation report if relevant
 - **Outputs:** An implementation plan written via the
   `superpowers:writing-plans` skill, committed to `docs/razorback-
   implementation/plans/{slug}.md` on `main` (or as a sibling in the
@@ -125,14 +125,14 @@ it is reviewable independently of the worktree branch.
 
 ### `implementation`
 
-A milestone moves to `implementation` once its plan is approved. The
+A package moves to `implementation` once its plan is approved. The
 work happens in a dedicated worktree on a feature branch named
 `m<N>-<slug>`, driven by the `superpowers:subagent-driven-
 development` skill so the implementation does not consume the first-
 officer context.
 
 - **Inputs:** The approved plan; the worktree branch
-- **Outputs:** The milestone's deliverable committed to the worktree
+- **Outputs:** The package's deliverable committed to the worktree
   branch — TDD-first (failing test → smallest implementation →
   passing test → refactor), with small atomic commits. A short stage
   report under `## Implementation summary` in the entity body names
@@ -148,14 +148,14 @@ officer context.
 
 ### `validation`
 
-A milestone moves to `validation` after implementation is complete. A
-**fresh** agent independently runs the milestone's acceptance command
+A package moves to `validation` after implementation is complete. A
+**fresh** agent independently runs the package's acceptance command
 from §8, verifies the expected artifacts match the run-dir layout in
 §6.3, and runs `superpowers:requesting-code-review` against the
 worktree branch. The validator does not write production code — it
 checks what was produced.
 
-- **Inputs:** The implementation's stage report; the milestone's AC;
+- **Inputs:** The implementation's stage report; the package's AC;
   the worktree branch
 - **Outputs:** A validation report at `docs/razorback-
   implementation/validation/{slug}.md` (or as a sibling in the
@@ -174,7 +174,7 @@ checks what was produced.
 
 ### `done`
 
-Terminal. The milestone's PR is merged into `main` and the entity is
+Terminal. The package's PR is merged into `main` and the entity is
 archived. The `pr-merge` mod watches for the merge and advances the
 entity here automatically.
 
@@ -183,14 +183,14 @@ entity here automatically.
 - **Outputs:** `completed` set, `verdict: PASSED`, the worktree torn
   down by the mod's terminal-merge step, the entity archived
 - **Good:** Reached `done` via a real merge, not a manual flag flip;
-  the next milestone in §8 ordering can start without waiting on
+  the next package in §8 ordering can start without waiting on
   cleanup
 - **Bad:** Marking done before the PR merged; leaving the worktree
   attached after merge
 
 ## Acceptance discipline
 
-Each milestone's body carries a `## Acceptance criteria` section with
+Each package's body carries a `## Acceptance criteria` section with
 the AC clauses transcribed from §8 of the design. The validation
 stage's gate decision is bound to those clauses:
 
@@ -210,18 +210,18 @@ View the workflow overview:
 /Users/clkao/git/spacedock/skills/commission/bin/status --workflow-dir /Users/clkao/git/razorback/docs/razorback-implementation
 ```
 
-Find milestones ready for their next stage:
+Find packages ready for their next stage:
 
 ```bash
 /Users/clkao/git/spacedock/skills/commission/bin/status --workflow-dir /Users/clkao/git/razorback/docs/razorback-implementation --next
 ```
 
-## Milestone Template
+## Package Template
 
 ```yaml
 ---
 id:
-title: M<N> — <short milestone name>
+title: M<N> — <short package name>
 status: backlog
 source: design §8
 started:
@@ -236,12 +236,12 @@ mod-block:
 
 ## Problem
 
-What this milestone delivers and why it sits where it does in the §8
+What this package delivers and why it sits where it does in the §8
 ordering. One short paragraph — cite the design rather than restate it.
 
 ## Acceptance criteria
 
-Each AC names an end-state property of the finished milestone (an
+Each AC names an end-state property of the finished package (an
 artifact, a run-dir invariant, an exit code) and how it is verified.
 
 **AC-1 — <End-state property cited from §8>.**
@@ -255,13 +255,13 @@ command from §8 the validator runs end-to-end.
 
 ## Out of scope
 
-What this milestone deliberately defers to a later milestone in §8.
+What this package deliberately defers to a later package in §8.
 ```
 
 ## Commit Discipline
 
 - Commit status changes at dispatch and stage-merge boundaries
-- Commit milestone body updates when substantive (plan link,
+- Commit package body updates when substantive (plan link,
   implementation summary, validation report link)
 - Implementation commits land on the worktree branch; merge to `main`
   happens via the `pr-merge` mod after PR review
