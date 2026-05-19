@@ -26,18 +26,30 @@ def pass_at_k(*, n: int, c: int, k: int) -> float:
 def aggregate_synthetic(rows: list[dict], out_path: Path) -> None:
     """Aggregate hand-written fixture rows.
 
-    Each row is a dict with keys: `dataset`, `query_id`, `rewards: {"reward": float}`.
-    Used by the AC-1 unit test before the harbor translator landing in Task 7.
+    Each row is a dict with keys: `dataset`, `query_id`, `rewards: {"reward": float}`,
+    and optionally `trial_index` (defaults to a per-(dataset, query_id) running counter).
+    Writes `summary.json` AND `per_trial_outcomes.json` (the M6 diff command's input).
     """
     per_query: dict[tuple[str, int], list[float]] = {}
+    outcomes: list[dict] = []
+    counter: dict[tuple[str, int], int] = {}
     for row in rows:
         ds = row["dataset"]
         qid = int(row["query_id"])
         reward = float(row["rewards"]["reward"])
         per_query.setdefault((ds, qid), []).append(reward)
+        ti = int(row["trial_index"]) if "trial_index" in row else counter.get((ds, qid), 0)
+        counter[(ds, qid)] = ti + 1
+        outcomes.append(
+            {"dataset": ds, "query_id": qid, "trial_index": ti, "reward": reward}
+        )
 
     summary = _build_summary(per_query)
     Path(out_path).write_text(json.dumps(summary, indent=2) + "\n")
+    sidecar = Path(out_path).parent / "per_trial_outcomes.json"
+    sidecar.write_text(
+        json.dumps({"outcomes_version": 1, "trials": outcomes}, indent=2) + "\n"
+    )
 
 
 def _build_summary(per_query: dict[tuple[str, int], list[float]]) -> dict:
@@ -82,6 +94,8 @@ def aggregate_job_result(
     each trial back to its (dataset, query_id) by exact `trial_name → key` lookup.
     """
     per_query: dict[tuple[str, int], list[float]] = {}
+    outcomes: list[dict] = []
+    counter: dict[tuple[str, int], int] = {}
     for tr in trial_results:
         key = _resolve_key(tr.trial_name, trial_name_map)
         if key is None:
@@ -90,9 +104,25 @@ def aggregate_job_result(
         if tr.verifier_result is not None and tr.verifier_result.rewards:
             reward = float(tr.verifier_result.rewards.get("reward", 0.0))
         per_query.setdefault(key, []).append(reward)
+        ds, qid = key
+        ti = counter.get(key, 0)
+        counter[key] = ti + 1
+        outcomes.append(
+            {
+                "dataset": ds,
+                "query_id": qid,
+                "trial_index": ti,
+                "trial_name": tr.trial_name,
+                "reward": reward,
+            }
+        )
 
     summary = _build_summary(per_query)
     Path(out_path).write_text(json.dumps(summary, indent=2) + "\n")
+    sidecar = Path(out_path).parent / "per_trial_outcomes.json"
+    sidecar.write_text(
+        json.dumps({"outcomes_version": 1, "trials": outcomes}, indent=2) + "\n"
+    )
 
 
 def _resolve_key(
