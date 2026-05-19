@@ -1,0 +1,13 @@
+version: 1
+experiment: m1-nop
+agent:
+  kind: nop
+benchmark:
+  kind: local
+  task_paths:
+    - examples/tasks/hello-world
+trials: 1
+observers:
+  - kind: jsonl
+    path: events.jsonl
+  - kind: stdout
