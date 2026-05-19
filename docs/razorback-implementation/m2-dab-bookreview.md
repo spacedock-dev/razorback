@@ -1,16 +1,16 @@
 ---
 id: erpsz704gkyytn8b8g86ysp8
 title: M2 — DAB adapter for bookreview (one dataset)
-status: validation
+status: done
 source: design §8
 started: 2026-05-19T07:42:22Z
-completed:
-verdict:
+completed: 2026-05-19T08:50:21Z
+verdict: PASSED
 score: 0.9
-worktree: .worktrees/spacedock-ensign-m2-dab-bookreview
+worktree: 
 issue:
 pr:
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 ## Problem
