@@ -1,13 +1,13 @@
 ---
 id: zknb9f32jpzgtg83k9q7wm9d
 title: M1 — rk run against nop agent
-status: plan
+status: implementation
 source: design §8
 started: 2026-05-19T07:16:21Z
 completed:
 verdict:
 score: 1.0
-worktree:
+worktree: .worktrees/spacedock-ensign-m1-rk-run-nop
 issue:
 pr:
 mod-block:
