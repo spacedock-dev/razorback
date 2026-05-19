@@ -4,7 +4,7 @@
 from pathlib import Path
 from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class SamplingBlock(BaseModel):
@@ -44,6 +44,25 @@ class SpacedockSolverAgentBlock(BaseModel):
     prompts: dict[str, str] = Field(default_factory=dict)
     prompt_contents: dict[str, str] | None = None
     sealed_hash: str | None = None
+
+    @field_validator("stages")
+    @classmethod
+    def _stages_exact(cls, v: list[str]) -> list[str]:
+        if v != ["model", "analyze", "verify"]:
+            raise ValueError(
+                f"stages must be ['model', 'analyze', 'verify']; got {v!r}"
+            )
+        return v
+
+    @model_validator(mode="after")
+    def _prompts_cover_stages(self) -> "SpacedockSolverAgentBlock":
+        missing = set(self.stages) - set(self.prompts.keys())
+        if missing:
+            raise ValueError(f"prompts missing for stages: {sorted(missing)}")
+        extra = set(self.prompts.keys()) - set(self.stages)
+        if extra:
+            raise ValueError(f"prompts has keys not in stages: {sorted(extra)}")
+        return self
 
 
 AgentBlock = Annotated[
