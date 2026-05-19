@@ -72,7 +72,6 @@ def _build_agent(tmp_path, logs_dir):
         tools_allowed=["Bash"],
         prompts=prompts,
         sealed_hash=sealed,
-        resolved_auth_env={"ANTHROPIC_API_KEY": "sk-test"},
         prompt_contents={
             "model": body_m.decode(),
             "analyze": body_a.decode(),
@@ -87,6 +86,8 @@ def test_run_creates_agent_freeze_git_repo_with_stage_commits(tmp_path, monkeypa
     """AC-4: agent_freeze/.git is a valid repo with per-stage commits."""
     bin_dir = _stub_claude_on_path(tmp_path)
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
 
     logs_dir = tmp_path / "logs"
     logs_dir.mkdir()
@@ -126,6 +127,8 @@ def test_run_never_writes_inside_harbor_agent_dir(tmp_path, monkeypatch):
     """AC-7 (positive): every razorback write lands under logs_dir/agent_freeze/."""
     bin_dir = _stub_claude_on_path(tmp_path)
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
 
     trial_root = tmp_path / "trial"
     (trial_root / "agent").mkdir(parents=True)

@@ -99,6 +99,8 @@ def _build_agent_config(
                 "spacedock-solver spec must be frozen (agent.prompt_contents missing)."
             )
         resolution = resolve_claude_auth(project_root=project_root, home=home)
+        # FU-1 AC-1: auth forwarded ONLY via AgentConfig.env (redacted on disk).
+        # kwargs is plaintext-on-disk and must not carry credentials.
         kwargs: dict[str, Any] = {
             "model": spec.agent.model,
             "sampling": {
@@ -111,7 +113,6 @@ def _build_agent_config(
             "prompts": dict(spec.agent.prompts),
             "prompt_contents": dict(spec.agent.prompt_contents),
             "sealed_hash": spec.agent.sealed_hash,
-            "resolved_auth_env": dict(resolution.env),
             "prior_frozen_spec_path": (
                 str(prior_frozen_spec_path) if prior_frozen_spec_path else None
             ),
