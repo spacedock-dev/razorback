@@ -1,0 +1,15 @@
+{
+  "summary_version": 1,
+  "stratified_pass_at_1": 0.5333333333333333,
+  "datasets": {
+    "bookreview": {
+      "dataset_pass_at_1": 0.5333333333333333,
+      "n_queries": 3,
+      "queries": [
+        {"query_id": 1, "n_trials": 5, "n_correct": 3, "pass_at_1": 0.6},
+        {"query_id": 2, "n_trials": 5, "n_correct": 0, "pass_at_1": 0.0},
+        {"query_id": 3, "n_trials": 5, "n_correct": 5, "pass_at_1": 1.0}
+      ]
+    }
+  }
+}
