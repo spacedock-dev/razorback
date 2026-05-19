@@ -10,7 +10,7 @@ score: 0.6
 worktree: .worktrees/spacedock-ensign-m6-constraints-registry-diff
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 ---
 
 ## Problem
