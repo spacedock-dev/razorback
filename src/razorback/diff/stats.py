@@ -3,10 +3,85 @@
 
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 from typing import Sequence
 
 import numpy as np
+from scipy.stats import binomtest, norm
+
+
+def wilson_ci(*, k: int, n: int, alpha: float) -> tuple[float, float]:
+    """Wilson 1927 score interval for a binomial proportion at level 1 - alpha.
+
+      z = phi^{-1}(1 - alpha/2)
+      p_hat = k / n
+      center = (p_hat + z^2/(2n)) / (1 + z^2/n)
+      half = (z / (1 + z^2/n)) * sqrt(p_hat(1-p_hat)/n + z^2/(4n^2))
+      ci = (max(0, center - half), min(1, center + half))
+
+    Cite: Wilson, E. B. (1927). "Probable inference, the law of succession, and
+    statistical inference." JASA.
+    """
+    if n == 0:
+        return (0.0, 1.0)
+    z = float(norm.ppf(1 - alpha / 2))
+    p_hat = k / n
+    denom = 1 + z * z / n
+    center = (p_hat + z * z / (2 * n)) / denom
+    half = (z / denom) * math.sqrt(p_hat * (1 - p_hat) / n + z * z / (4 * n * n))
+    return (max(0.0, center - half), min(1.0, center + half))
+
+
+def exact_mcnemar_p(*, b: int, c: int) -> float:
+    """Exact-binomial McNemar p-value (two-sided).
+
+    Under H0 (no treatment effect) each discordant pair is equally likely to favor
+    either arm. We use scipy.stats.binomtest at p=0.5; this is the same computation
+    as scipy.stats.contingency.mcnemar(exact=True) with a stable API across scipy 1.x.
+
+    For b = c = 0 (perfect agreement) we return 1.0 by convention.
+
+    Cite: McNemar (1947); design §6.5 ("using exact binomial when the discordant count
+    is small (the common case at the DAB N=5 local default)").
+    """
+    if b + c == 0:
+        return 1.0
+    return float(
+        binomtest(k=min(b, c), n=b + c, p=0.5, alternative="two-sided").pvalue
+    )
+
+
+def power_mde_at_fixed_n(
+    *,
+    alpha: float,
+    power: float,
+    baseline_p: float,
+    n: int,
+) -> float:
+    """Closed-form normal-approximation minimum detectable effect for a one-sample proportion.
+
+      z_{alpha/2} = phi^{-1}(1 - alpha/2)
+      z_{beta}    = phi^{-1}(power)
+      se          = sqrt(p_0(1-p_0)/n)
+      MDE         = (z_{alpha/2} + z_{beta}) * se
+
+    Cite: §6.5 "a power-at-fixed-N line that names the minimum detectable effect
+    at alpha and 80% power for the given `$trials * $queries`." We use the
+    closed-form normal-approximation MDE treating N as trials * queries (the total
+    paired trials). This is a CONSERVATIVE bound — pairing increases effective
+    sample size when correlation > 0, so the bootstrap CI captures the tighter
+    paired-test signal. The closed-form MDE here is the upper bound the operator
+    quotes alongside the bootstrap CI.
+
+    Cohen, J. (1988). "Statistical Power Analysis for the Behavioral Sciences."
+    """
+    if n <= 0:
+        return 0.0
+    z_alpha = float(norm.ppf(1 - alpha / 2))
+    z_beta = float(norm.ppf(power))
+    se = math.sqrt(baseline_p * (1 - baseline_p) / n)
+    return (z_alpha + z_beta) * se
 
 
 def paired_bootstrap_ci(
