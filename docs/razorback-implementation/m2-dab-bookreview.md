@@ -101,3 +101,16 @@ exists and is numeric, not its score.)
 - Halt-resume, prompt content hashing — §M4.
 - Provenance resolution — §M5.
 - `runs diff`, paired statistics — §M6.
+
+## Stage Report: plan
+
+- DONE: Plan steps map 1:1 to the 7 ACs in the M2 entity body, each with the design-doc §-cite that governs it (§6.5 DAB-as-harbor-adapter shape, §7 repository layout for benchmarks/dab/, §6.1 spec → JobConfig surface inherited from M1).
+  AC↔task map table at the top of the plan; each AC names its governing §-cite and the tasks that implement and assert it.
+- DONE: The riskiest contract for M2 — that aggregator output against a frozen synthetic input matches a golden — is a stand-alone unit test in plan Task 1, BEFORE wiring `prepare`/`verify` into harbor. The integration test against the real bookreview dataset (under /Users/clkao/git/dataagentbench/data/) comes AFTER the aggregator math is locked.
+  Task 1 authors the golden fixture and Task 2 implements `aggregate.py` against it; the integration test (Task 11) runs only after Tasks 4–9 have wired prepare/verify/translator/orchestrator end-to-end.
+- DONE: The plan is committed to docs/razorback-implementation/plans/m2-dab-bookreview.md on main as a single file, and cross-references M1's already-landed spec parser and JobConfig translator (the M2 entity inherits those surfaces; M2 does NOT redo them).
+  Plan path: `docs/razorback-implementation/plans/m2-dab-bookreview.md` (single file on main). Plan header's "M1 inputs (do not duplicate)" block names the M1 modules (spec/schema.py, compat/harbor_0_6_6.py, run.py, manifest.py, observers/, errors.py) that M2 extends rather than reimplements. Task 14 adds a cross-reference line in the entity Test plan.
+
+### Summary
+
+Plan written via the superpowers:writing-plans skill, 15 tasks (0–14) ordered riskiest-contract-first. Task 1 authors a golden `summary.json` and synthetic `trial_results.json` fixture; Task 2 implements `aggregate.py` to produce byte-exact output. Tasks 3–9 build out the supporting surfaces (per_trial_state_reset declaration, prepare.py, verify.py, spec schema extension, translator with retry-zero and trial-name map, acceptance spec, orchestrator dispatch). Task 7 absorbs the prepare/verify rewrite needed once the bind-mount-vs-tests-dir choice was made; the simpler "copy validate.py into /tests/" shape avoids a host-path bind mount entirely and keeps AC-2 trivially provable. Task 11's end-to-end runs against the real bookreview dataset under `/Users/clkao/git/dataagentbench/data/query_bookreview/` and asserts `summary.json` contains a numeric `stratified_pass_at_1` plus three per-query `pass_at_1: 0.0` (nop agent always wrong). Task 12 encodes AC-5's grep gate as a permanent pytest. Plan stays on main; no worktree was created for the plan stage.
