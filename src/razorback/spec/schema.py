@@ -84,8 +84,15 @@ class DabBenchmarkBlock(BaseModel):
     datasets: list[str] = Field(min_length=1)
 
 
+class AdeBenchBenchmarkBlock(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["ade-bench"]
+    tasks_root: Path
+    tasks: list[str] = Field(min_length=1)
+
+
 BenchmarkBlock = Annotated[
-    Union[LocalBenchmarkBlock, DabBenchmarkBlock],
+    Union[LocalBenchmarkBlock, DabBenchmarkBlock, AdeBenchBenchmarkBlock],
     Field(discriminator="kind"),
 ]
 

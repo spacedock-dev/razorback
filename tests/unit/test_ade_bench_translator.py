@@ -1,0 +1,50 @@
+# ABOUTME: AC-3 RISKIEST CONTRACT — ade-bench spec → JobConfig translator (§6.1).
+# ABOUTME: Translates a benchmark.kind=ade-bench spec into one TaskConfig per task slug.
+
+from pathlib import Path
+
+import pytest
+
+from razorback.compat import spec_to_job_config
+from razorback.spec.schema import (
+    AdeBenchBenchmarkBlock,
+    NopAgentBlock,
+    Spec,
+)
+
+FIXTURE_TASKS = Path(__file__).parent.parent / "fixtures" / "ade_bench" / "tasks"
+
+
+def _make_spec(slug: str) -> Spec:
+    return Spec(
+        version=1,
+        experiment="ade-bench-translator-smoke",
+        agent=NopAgentBlock(kind="nop"),
+        benchmark=AdeBenchBenchmarkBlock(
+            kind="ade-bench",
+            tasks_root=FIXTURE_TASKS,
+            tasks=[slug],
+        ),
+        trials=1,
+        observers=[],
+    )
+
+
+def test_translator_emits_one_taskconfig_per_slug(tmp_path):
+    spec = _make_spec("adebench-fixture-001")
+    job_config, trial_name_map = spec_to_job_config(
+        spec, job_name="testjob", jobs_dir=tmp_path
+    )
+    assert len(job_config.tasks) == 1
+    assert job_config.tasks[0].path == (FIXTURE_TASKS / "adebench-fixture-001").resolve()
+    assert job_config.n_attempts == 1
+    assert job_config.retry.max_retries == 0  # §6.5 parity with DAB
+    assert trial_name_map == {}  # ade-bench has no (dataset, query_id) pairing
+
+
+def test_translator_rejects_unknown_slug(tmp_path):
+    spec = _make_spec("does-not-exist")
+    with pytest.raises(Exception) as exc_info:
+        spec_to_job_config(spec, job_name="testjob", jobs_dir=tmp_path)
+    msg = str(exc_info.value).lower()
+    assert "does-not-exist" in msg or "not found" in msg

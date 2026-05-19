@@ -15,9 +15,11 @@ from harbor.models.trial.config import (
 
 from razorback.agents.auth import resolve_claude_auth
 from razorback.agents.proxy import PROXY_BLOCK_ENV
+from razorback.benchmarks.ade_bench.tasks import resolve_task_dirs
 from razorback.benchmarks.dab.prepare import prepare_dataset_tasks
 from razorback.errors import SpecError
 from razorback.spec.schema import (
+    AdeBenchBenchmarkBlock,
     ClaudeCliAgentBlock,
     DabBenchmarkBlock,
     LocalBenchmarkBlock,
@@ -63,6 +65,11 @@ def spec_to_job_config(
             tasks_root=Path(tasks_root),
             agent_cfg=agent_cfg,
             task_env=task_env,
+        )
+    if isinstance(spec.benchmark, AdeBenchBenchmarkBlock):
+        return (
+            _build_ade_bench(spec=spec, job_name=job_name, jobs_dir=jobs_dir, agent_cfg=agent_cfg),
+            {},
         )
     raise SpecError(f"unsupported benchmark block: {type(spec.benchmark).__name__}")
 
@@ -153,6 +160,27 @@ def _build_local(*, spec: Spec, job_name: str, jobs_dir: Path, agent_cfg: AgentC
         # delete=False preserves the prebuilt dab-agent:latest image across runs.
         # Default delete=True invokes `docker compose down --rmi all`, which removes
         # the prebuilt image and forces a rebuild before every subsequent run.
+        environment=EnvironmentConfig(delete=False),
+    )
+
+
+def _build_ade_bench(
+    *, spec: Spec, job_name: str, jobs_dir: Path, agent_cfg: AgentConfig,
+) -> JobConfig:
+    assert isinstance(spec.benchmark, AdeBenchBenchmarkBlock)
+    task_dirs = resolve_task_dirs(
+        tasks_root=spec.benchmark.tasks_root,
+        tasks=spec.benchmark.tasks,
+    )
+    return JobConfig(
+        job_name=job_name,
+        jobs_dir=jobs_dir,
+        n_concurrent_trials=1,
+        n_attempts=spec.trials,
+        agents=[agent_cfg],
+        tasks=[TaskConfig(path=p) for p in task_dirs],
+        verifier=VerifierConfig(disable=False),
+        retry=RetryConfig(max_retries=0),
         environment=EnvironmentConfig(delete=False),
     )
 
