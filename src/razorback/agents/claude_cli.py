@@ -1,7 +1,6 @@
 # ABOUTME: ClaudeCliAgent (§6.2) — wraps `claude -p`. setup() validates auth & CLI presence;
 # ABOUTME: run() emits one claude invocation per trial; version() parses `claude --version`.
 
-import shlex
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -10,25 +9,13 @@ from harbor.agents.base import BaseAgent
 from harbor.environments.base import BaseEnvironment
 from harbor.models.agent.context import AgentContext
 
+from razorback.agents.claude_invoke import DEFAULT_ALLOWED_TOOLS, build_claude_argv
 from razorback.agents.proxy import PROXY_BLOCK_ENV
 from razorback.errors import RazorbackError
 
 
 class ClaudeCliAgentError(RazorbackError):
     """Raised on ClaudeCliAgent contract violations (e.g. co-mingled auth)."""
-
-
-_DEFAULT_ALLOWED_TOOLS = ("Bash", "Read", "Write", "Edit", "Glob", "Grep")
-# Verbatim transcription of solve.sh:107-122 — disallowedTools list.
-_DEFAULT_DISALLOWED_TOOLS = (
-    "WebFetch", "WebSearch",
-    "Bash(curl *)", "Bash(wget *)", "Bash(git clone *)",
-    "Bash(huggingface-cli *)", "Bash(hf *)",
-    "Bash(pip install datasets*)", "Bash(pip install huggingface*)",
-    "Bash(pip install transformers*)", "Bash(pip install evaluate*)",
-    "Bash(pip3 install datasets*)", "Bash(pip3 install huggingface*)",
-    "Bash(pip3 install transformers*)", "Bash(pip3 install evaluate*)",
-)
 
 
 class ClaudeCliAgent(BaseAgent):
@@ -64,7 +51,7 @@ class ClaudeCliAgent(BaseAgent):
             )
         self._resolved_auth_env = env
         self._tools_allowed = (
-            list(tools_allowed) if tools_allowed else list(_DEFAULT_ALLOWED_TOOLS)
+            list(tools_allowed) if tools_allowed else list(DEFAULT_ALLOWED_TOOLS)
         )
         self._sampling_temperature = sampling_temperature
         self._exec_env: dict[str, str] = {}
@@ -119,14 +106,9 @@ class ClaudeCliAgent(BaseAgent):
         context: AgentContext,
     ) -> None:
         """One `claude -p <instruction>` per trial."""
-        cmd_parts = [
-            "claude", "-p", shlex.quote(instruction),
-            "--allowedTools", ",".join(self._tools_allowed),
-        ]
-        for disallowed in _DEFAULT_DISALLOWED_TOOLS:
-            cmd_parts.extend(["--disallowedTools", shlex.quote(disallowed)])
-        cmd_parts.extend(["--permission-mode", "bypassPermissions"])
-        if self.model_name:
-            cmd_parts.extend(["--model", self.model_name])
-        cmd = " ".join(cmd_parts)
+        cmd = build_claude_argv(
+            prompt=instruction,
+            model=self.model_name,
+            tools_allowed=self._tools_allowed,
+        )
         await environment.exec(cmd, env=self._exec_env, timeout_sec=600)

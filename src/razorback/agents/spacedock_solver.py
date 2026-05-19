@@ -7,7 +7,9 @@ from typing import Any
 import yaml
 
 from harbor.agents.base import BaseAgent
+from harbor.environments.base import BaseEnvironment
 
+from razorback.agents.proxy import PROXY_BLOCK_ENV
 from razorback.agents.seal import compute_sealed_hash, prompt_sha256
 from razorback.errors import RazorbackError, SeedMismatchError
 
@@ -147,8 +149,33 @@ class SpacedockSolverAgent(BaseAgent):
     def supported_sampling() -> set[str]:
         return {"temperature"}
 
-    async def setup(self, environment) -> None:
-        raise NotImplementedError("Task 4 implements setup()")
+    async def setup(self, environment: BaseEnvironment) -> None:
+        """AC-6: filter MCP servers; build exec env; validate claude + git binaries; AC-3 prompt hashes."""
+        if self._tools_allowed:
+            allowed = set(self._tools_allowed)
+            self.mcp_servers = [s for s in (self.mcp_servers or []) if s.name in allowed]
+
+        self._exec_env = {
+            **PROXY_BLOCK_ENV,
+            **self._resolved_auth_env,
+            "HOME": "/root",
+        }
+
+        version = await environment.exec("claude --version")
+        if version.return_code != 0:
+            raise SpacedockSolverAgentError(
+                f"claude CLI not available inside container (exit={version.return_code}, "
+                f"stderr={getattr(version, 'stderr', '')!r})"
+            )
+
+        git_v = await environment.exec("git --version")
+        if git_v.return_code != 0:
+            raise SpacedockSolverAgentError(
+                f"git not available inside container (exit={git_v.return_code}). "
+                "agent_freeze/.git commits require git."
+            )
+
+        self.verify_prompt_contents()
 
     async def run(self, instruction, environment, context) -> None:
         raise NotImplementedError("Task 5 implements run()")
