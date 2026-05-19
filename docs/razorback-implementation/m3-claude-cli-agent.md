@@ -10,7 +10,7 @@ score: 0.85
 worktree: .worktrees/spacedock-ensign-m3-claude-cli-agent
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 ---
 
 ## Problem
