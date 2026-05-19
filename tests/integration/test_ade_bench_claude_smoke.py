@@ -41,7 +41,7 @@ def test_rk_run_ade_bench_claude_smoke(tmp_path):
         f"rk run failed:\nstdout={result.stdout}\nstderr={result.stderr}"
     )
 
-    run_dirs = list((runs_dir / "ade-bench-claude-smoke").iterdir())
+    run_dirs = list((runs_dir / "ade-bench-claude-airbnb001").iterdir())
     assert len(run_dirs) == 1
     summary_path = run_dirs[0] / "summary.json"
     assert summary_path.exists()
