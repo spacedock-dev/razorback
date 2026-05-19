@@ -90,3 +90,17 @@ queries.
 - Markdown rendering for `--format markdown` — design lists it;
   the JSON path is the canonical output and markdown is a thin
   pretty-printer that can ship in a follow-up.
+
+## Stage Report: plan
+
+- DONE: Plan steps map 1:1 to the 7 ACs in the M6 entity body, each with the §-cite that governs it (§3.2 subcommand surface: constraints check, baseline promote/verify, runs diff, registry; §6.5 paired statistics: per-arm Wilson CI, exact-McNemar, paired bootstrap, power-at-fixed-N; §3.2 exit code 12 = ConstraintViolation, exit code 20 = SeedMismatchError for halt-resume diff refusal).
+  AC↔task map in `plans/m6-constraints-registry-diff.md` covers all 7 ACs with §-cites; Task 8 lands ConstraintViolation (exit 12), Task 6 lands SeedMismatchError (exit 20).
+- DONE: The riskiest contract for M6 — that the paired-bootstrap CI on the stratified delta produces numerically-stable output for the DAB N=5 case where exact-McNemar p clusters near 1.0 — is plan Task 1 as a unit test against hand-computed expected values, BEFORE wiring runs diff CLI surface.
+  Plan Task 1 lands `paired_bootstrap_ci` against a hand-authored 2×2×5 fixture with fixed numpy seed (B=1000); Task 7 (CLI) comes after Tasks 1-6 lock the math + pairing.
+- DONE: The plan extends M2/M5's aggregator + summary.json shape (per-query pass@1, per-dataset means, stratified macro-average) for the diff's paired pairing logic (by trial_name when JobConfig is deterministic, per §6.5). Cite which M5 plan tasks produce the inputs M6 reads.
+  Task 2 adds the additive `per_trial_outcomes.json` sidecar to `aggregate.py` (summary.json contract unchanged); M5 reuse table names M2 Task 2 (`_build_summary`), M5 Task 6 (`rk spec freeze` for AC-3 input), M5 Task 11 (`examples/specs/dab-dev-claude.yaml`), M2 Task 7 (translator `trial_name_map`). Plan names a §6.5-aligned divergence: pairing by `(dataset, query_id, trial_index)` instead of literal `trial_name` because harbor's `trial_name` is `<task_name>__<uuid7>` and uuid7 differs across runs.
+
+### Summary
+
+Plan landed at `docs/razorback-implementation/plans/m6-constraints-registry-diff.md` (commit 5be2dc6). 12 tasks, math-first ordering: Task 1 locks the paired-bootstrap CI against a hand-authored fixture before any CLI work; Tasks 2-6 land the sidecar + pairing + other three stats + composer + seed-refusal; Task 7 ships `rk runs diff`; Tasks 8-10 ship constraints / baseline / registry; Task 11 is acceptance; Task 12 cross-links the plan from the entity body. Notable divergence calls (named in the plan): pairing key is `(dataset, query_id, trial_index)` because harbor's `trial_name` is uuid7-suffixed and unstable across runs; exact-McNemar uses `scipy.stats.binomtest` (stable API across scipy 1.x) instead of `scipy.stats.contingency.mcnemar`; power-MDE uses the closed-form normal-approximation with N = trials × queries, reported as a conservative upper bound alongside the bootstrap CI.
+
