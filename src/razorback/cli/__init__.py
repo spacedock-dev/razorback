@@ -29,3 +29,7 @@ app.add_typer(runs_app, name="runs")
 from razorback.cli.constraints import constraints_app
 
 app.add_typer(constraints_app, name="constraints")
+
+from razorback.cli.baseline import baseline_app
+
+app.add_typer(baseline_app, name="baseline")
