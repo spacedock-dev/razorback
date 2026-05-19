@@ -12,6 +12,8 @@ from razorback.compat import spec_to_job_config
 from razorback.errors import RazorbackError, ExitCode
 from razorback.manifest import write_manifest
 from razorback.observers import EventChannel, JsonlObserver, StdoutObserver
+from razorback.provenance.drift import check_alias_drift, check_harbor_drift
+from razorback.provenance.provenance_yaml import write_provenance_yaml
 from razorback.spec.freeze import derive_job_name, freeze_spec
 from razorback.spec.schema import Spec
 
@@ -20,17 +22,57 @@ class HarborRuntimeError(RazorbackError):
     exit_code: int = ExitCode.HARBOR_RUNTIME
 
 
-def execute_run(*, spec: Spec, runs_dir: Path) -> None:
+def execute_run(
+    *, spec: Spec, runs_dir: Path, allow_alias_drift: bool = False
+) -> None:
     """Synchronous entry point invoked by the CLI."""
-    asyncio.run(_execute_run_async(spec=spec, runs_dir=runs_dir))
+    asyncio.run(
+        _execute_run_async(
+            spec=spec, runs_dir=runs_dir, allow_alias_drift=allow_alias_drift
+        )
+    )
 
 
-async def _execute_run_async(*, spec: Spec, runs_dir: Path) -> None:
+async def _execute_run_async(
+    *, spec: Spec, runs_dir: Path, allow_alias_drift: bool = False
+) -> None:
     frozen_text = freeze_spec(spec)
     job_name = derive_job_name(frozen_text)
 
     run_dir = Path(runs_dir).resolve() / spec.experiment / job_name
     run_dir.mkdir(parents=True, exist_ok=True)
+
+    frozen_provenance = spec.model_dump(mode="json").get("provenance") or {}
+    frozen_model_version = frozen_provenance.get("model_resolved_version")
+    frozen_harbor = frozen_provenance.get("harbor_version")
+    drift_record: dict | None = None
+
+    if frozen_harbor is not None:
+        check_harbor_drift(frozen=frozen_harbor, installed=None)
+
+    if frozen_model_version is not None:
+        model_alias = getattr(spec.agent, "model", None) or "claude-opus-4-5"
+        import anthropic
+
+        client = anthropic.Anthropic()
+        resolved_id, resolved_at = check_alias_drift(
+            model_alias=model_alias,
+            frozen_resolved_version=frozen_model_version,
+            client=client,
+            allow=allow_alias_drift,
+        )
+        if resolved_id != frozen_model_version:
+            drift_record = {
+                "model_alias": model_alias,
+                "frozen": frozen_model_version,
+                "resolved": resolved_id,
+                "resolved_at": resolved_at,
+            }
+
+    if frozen_provenance:
+        write_provenance_yaml(
+            run_dir / "provenance.yaml", frozen_provenance, drift_record=drift_record
+        )
 
     (run_dir / "spec.frozen.yaml").write_text(frozen_text)
     write_manifest(run_dir / "manifest.json", experiment=spec.experiment, job_name=job_name)
