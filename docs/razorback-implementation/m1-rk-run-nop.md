@@ -10,7 +10,7 @@ score: 1.0
 worktree: .worktrees/spacedock-ensign-m1-rk-run-nop
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 ---
 
 ## Problem
