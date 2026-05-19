@@ -1,16 +1,50 @@
 # ABOUTME: ade-bench harbor-task loader. Resolves spec.benchmark.tasks entries
 # ABOUTME: (legacy slugs or FU-1 git-task entries) into TaskConfig-ready records.
 
+import asyncio
 import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Awaitable
 
 import shortuuid
 from harbor.models.task.id import GitTaskId
 
 from razorback.benchmarks.dab.prepare import _DEFAULT_DOCKER_IMAGE
 from razorback.spec.schema import AdeBenchTaskEntry
+
+
+def _run_async(coro: Awaitable[Any]) -> Any:
+    """Run ``coro`` to completion whether or not we're inside an event loop.
+
+    The translator is invoked both from sync entrypoints (CLI freeze, unit
+    tests) and from inside ``_execute_run_async``'s running loop. When no loop
+    is running, ``asyncio.run`` is correct. When a loop IS running on this
+    thread, ``asyncio.run`` raises; we fall back to running the coroutine on
+    a dedicated worker thread with its own loop.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+
+    import threading
+
+    result: dict[str, Any] = {}
+
+    def runner() -> None:
+        try:
+            result["value"] = asyncio.run(coro)
+        except BaseException as exc:  # noqa: BLE001
+            result["error"] = exc
+
+    t = threading.Thread(target=runner)
+    t.start()
+    t.join()
+    if "error" in result:
+        raise result["error"]
+    return result["value"]
 
 
 @dataclass(frozen=True)
@@ -136,12 +170,10 @@ def materialize_git_task(
     if _fake_git_source is not None:
         shutil.copytree(_fake_git_source, target_dir)
     else:
-        import asyncio
-
         from harbor.tasks.client import TaskClient
 
         client = TaskClient()
-        asyncio.run(
+        _run_async(
             client.download_tasks(
                 task_ids=[task_id],
                 overwrite=True,
