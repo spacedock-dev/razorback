@@ -1,9 +1,15 @@
 # ABOUTME: ade-bench harbor-task loader. Resolves spec.benchmark.tasks entries
 # ABOUTME: (legacy slugs or FU-1 git-task entries) into TaskConfig-ready records.
 
+import re
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+import shortuuid
+from harbor.models.task.id import GitTaskId
+
+from razorback.benchmarks.dab.prepare import _DEFAULT_DOCKER_IMAGE
 from razorback.spec.schema import AdeBenchTaskEntry
 
 
@@ -53,3 +59,86 @@ def resolve_task_dirs(
                 )
             )
     return resolved
+
+
+def rewrite_docker_image(task_toml_path: Path, docker_image: str) -> None:
+    """Add or replace [environment].docker_image in task.toml.
+
+    Preserves every other field and the existing TOML structure. Operates as a
+    string transform (not a TOML round-trip) so authored field order and inline
+    comments survive verbatim.
+    """
+    text = task_toml_path.read_text()
+    pattern = re.compile(r'^docker_image\s*=\s*"[^"]*"\s*$', re.MULTILINE)
+    replacement = f'docker_image = "{docker_image}"'
+    if pattern.search(text):
+        new_text = pattern.sub(replacement, text)
+    else:
+        new_text = _insert_into_environment_block(text, replacement)
+    task_toml_path.write_text(new_text)
+
+
+def _insert_into_environment_block(text: str, line_to_insert: str) -> str:
+    """Insert ``line_to_insert`` as the last line of the ``[environment]`` block.
+
+    Matches ``[environment]`` only as a top-level table header (not
+    ``[environment.env]`` or any sub-table). Raises ``ValueError`` if the
+    block is absent.
+    """
+    header_re = re.compile(r'^\[environment\]\s*$', re.MULTILINE)
+    m = header_re.search(text)
+    if m is None:
+        raise ValueError(
+            "task.toml has no [environment] block; cannot insert docker_image"
+        )
+    next_header_re = re.compile(r'^\[[^\]]+\]\s*$', re.MULTILINE)
+    next_m = next_header_re.search(text, m.end())
+    tail_idx = len(text) if next_m is None else next_m.start()
+    insert_idx = tail_idx
+    while insert_idx > m.end() and text[insert_idx - 1] in (" ", "\t", "\n"):
+        insert_idx -= 1
+    prefix = "" if insert_idx == 0 or text[insert_idx - 1] == "\n" else "\n"
+    return text[:insert_idx] + prefix + line_to_insert + "\n" + text[insert_idx:]
+
+
+def materialize_git_task(
+    *,
+    git_url: str,
+    git_commit_id: str,
+    source_path: Path,
+    docker_image: str = _DEFAULT_DOCKER_IMAGE,
+    cache_root: Path,
+    _fake_git_source: Path | None = None,
+) -> Path:
+    """Fetch a git-shaped harbor task, rewrite docker_image, return the local dir.
+
+    The rewrite happens AFTER fetch, BEFORE harbor's environment reads task.toml.
+    The original source-of-truth at the git ref is untouched — only the
+    materialized copy under ``cache_root`` carries the rewrite.
+
+    ``cache_root`` is razorback-owned (NOT harbor's ``~/.cache/harbor/tasks``);
+    keeping the materialization separate prevents harbor's later fetch from
+    rmtree-clobbering our rewrite (per
+    ``harbor.tasks.client._copy_task_source_to_target``).
+
+    ``_fake_git_source`` is a test-only escape hatch that bypasses harbor's
+    ``TaskClient`` and copytree's a local dir to the materialized target.
+    Production code paths MUST pass ``_fake_git_source=None``.
+    """
+    task_id = GitTaskId(
+        git_url=git_url, git_commit_id=git_commit_id, path=source_path
+    )
+    target_dir = cache_root / shortuuid.uuid(str(task_id)) / source_path.name
+    if target_dir.exists():
+        shutil.rmtree(target_dir)
+    target_dir.parent.mkdir(parents=True, exist_ok=True)
+
+    if _fake_git_source is not None:
+        shutil.copytree(_fake_git_source, target_dir)
+    else:
+        raise NotImplementedError(
+            "Task 2 wires the harbor TaskClient real-fetch branch."
+        )
+
+    rewrite_docker_image(target_dir / "task.toml", docker_image)
+    return target_dir
