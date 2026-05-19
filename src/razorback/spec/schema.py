@@ -59,6 +59,21 @@ class ObserverBlock(BaseModel):
     path: str | None = None
 
 
+class ProvenanceBlock(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    pin_model_version: bool = True
+    pin_image_digest: bool = True
+    pin_agent_cli_hash: bool = True
+    pin_git_sha: bool = True
+    model_resolved_version: str | None = None
+    model_resolved_at: str | None = None
+    image_digest: str | None = None
+    agent_cli_hash: str | None = None
+    harness_git_sha: str | None = None
+    harbor_version: str | None = None
+    prompt_file_hashes: dict[str, str] | None = None
+
+
 class Spec(BaseModel):
     model_config = ConfigDict(extra="forbid")
     version: int
@@ -67,3 +82,4 @@ class Spec(BaseModel):
     benchmark: BenchmarkBlock
     trials: int = 1
     observers: list[ObserverBlock] = Field(default_factory=list)
+    provenance: ProvenanceBlock = Field(default_factory=ProvenanceBlock)
