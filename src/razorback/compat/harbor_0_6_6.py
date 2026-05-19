@@ -22,6 +22,7 @@ from razorback.spec.schema import (
     DabBenchmarkBlock,
     LocalBenchmarkBlock,
     NopAgentBlock,
+    SpacedockSolverAgentBlock,
     Spec,
 )
 
@@ -34,14 +35,21 @@ def spec_to_job_config(
     tasks_root: Path | None = None,
     project_root: Path | None = None,
     home: Path | None = None,
+    prior_frozen_spec_path: Path | None = None,
 ) -> tuple[JobConfig, dict[str, tuple[str, int]]]:
     """Translate a parsed spec into a harbor JobConfig and a trial_name_map.
 
     Returns (JobConfig, trial_name_map). For non-DAB benchmarks the map is
     empty. `tasks_root` is required for DAB specs. `project_root` is required
-    for claude-cli agents (.env-driven auth discovery — AC-3).
+    for claude-cli agents (.env-driven auth discovery — AC-3). `prior_frozen_spec_path`
+    threads through to spacedock-solver agent kwargs for AC-1 sealed-hash refusal.
     """
-    agent_cfg, task_env = _build_agent_config(spec, project_root=project_root, home=home)
+    agent_cfg, task_env = _build_agent_config(
+        spec,
+        project_root=project_root,
+        home=home,
+        prior_frozen_spec_path=prior_frozen_spec_path,
+    )
 
     if isinstance(spec.benchmark, LocalBenchmarkBlock):
         return _build_local(spec=spec, job_name=job_name, jobs_dir=jobs_dir, agent_cfg=agent_cfg), {}
@@ -60,11 +68,55 @@ def spec_to_job_config(
 
 
 def _build_agent_config(
-    spec: Spec, *, project_root: Path | None, home: Path | None,
+    spec: Spec,
+    *,
+    project_root: Path | None,
+    home: Path | None,
+    prior_frozen_spec_path: Path | None = None,
 ) -> tuple[AgentConfig, dict[str, str]]:
     """Returns (agent_config, task_env_to_stamp_into_task_toml)."""
     if isinstance(spec.agent, NopAgentBlock):
         return AgentConfig(name=AgentName.NOP.value), {}
+    if isinstance(spec.agent, SpacedockSolverAgentBlock):
+        if project_root is None:
+            raise SpecError(
+                "spacedock-solver agent requires project_root for .env auth discovery."
+            )
+        if spec.agent.sealed_hash is None:
+            raise SpecError(
+                "spacedock-solver spec must be frozen (agent.sealed_hash missing). "
+                "Run freeze before run."
+            )
+        if spec.agent.prompt_contents is None:
+            raise SpecError(
+                "spacedock-solver spec must be frozen (agent.prompt_contents missing)."
+            )
+        resolution = resolve_claude_auth(project_root=project_root, home=home)
+        kwargs: dict[str, Any] = {
+            "model": spec.agent.model,
+            "sampling": {
+                "temperature": spec.agent.sampling.temperature,
+                "top_p": spec.agent.sampling.top_p,
+                "seed": spec.agent.sampling.seed,
+            },
+            "stages": list(spec.agent.stages),
+            "tools_allowed": list(spec.agent.tools_allowed),
+            "prompts": dict(spec.agent.prompts),
+            "prompt_contents": dict(spec.agent.prompt_contents),
+            "sealed_hash": spec.agent.sealed_hash,
+            "resolved_auth_env": dict(resolution.env),
+            "prior_frozen_spec_path": (
+                str(prior_frozen_spec_path) if prior_frozen_spec_path else None
+            ),
+        }
+        agent_cfg = AgentConfig(
+            import_path="razorback.agents.spacedock_solver:SpacedockSolverAgent",
+            model_name=spec.agent.model,
+            kwargs=kwargs,
+            env=dict(resolution.env),
+        )
+        task_env = dict(PROXY_BLOCK_ENV)
+        return agent_cfg, task_env
     if isinstance(spec.agent, ClaudeCliAgentBlock):
         if project_root is None:
             raise SpecError(
