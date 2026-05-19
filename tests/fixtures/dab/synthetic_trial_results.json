@@ -1,0 +1,17 @@
+[
+  {"trial_name": "bookreview-q1__aaaa001", "task_name": "razorback/bookreview-q1", "dataset": "bookreview", "query_id": 1, "trial_index": 0, "rewards": {"reward": 1.0}},
+  {"trial_name": "bookreview-q1__aaaa002", "task_name": "razorback/bookreview-q1", "dataset": "bookreview", "query_id": 1, "trial_index": 1, "rewards": {"reward": 1.0}},
+  {"trial_name": "bookreview-q1__aaaa003", "task_name": "razorback/bookreview-q1", "dataset": "bookreview", "query_id": 1, "trial_index": 2, "rewards": {"reward": 0.0}},
+  {"trial_name": "bookreview-q1__aaaa004", "task_name": "razorback/bookreview-q1", "dataset": "bookreview", "query_id": 1, "trial_index": 3, "rewards": {"reward": 0.0}},
+  {"trial_name": "bookreview-q1__aaaa005", "task_name": "razorback/bookreview-q1", "dataset": "bookreview", "query_id": 1, "trial_index": 4, "rewards": {"reward": 1.0}},
+  {"trial_name": "bookreview-q2__bbbb001", "task_name": "razorback/bookreview-q2", "dataset": "bookreview", "query_id": 2, "trial_index": 0, "rewards": {"reward": 0.0}},
+  {"trial_name": "bookreview-q2__bbbb002", "task_name": "razorback/bookreview-q2", "dataset": "bookreview", "query_id": 2, "trial_index": 1, "rewards": {"reward": 0.0}},
+  {"trial_name": "bookreview-q2__bbbb003", "task_name": "razorback/bookreview-q2", "dataset": "bookreview", "query_id": 2, "trial_index": 2, "rewards": {"reward": 0.0}},
+  {"trial_name": "bookreview-q2__bbbb004", "task_name": "razorback/bookreview-q2", "dataset": "bookreview", "query_id": 2, "trial_index": 3, "rewards": {"reward": 0.0}},
+  {"trial_name": "bookreview-q2__bbbb005", "task_name": "razorback/bookreview-q2", "dataset": "bookreview", "query_id": 2, "trial_index": 4, "rewards": {"reward": 0.0}},
+  {"trial_name": "bookreview-q3__cccc001", "task_name": "razorback/bookreview-q3", "dataset": "bookreview", "query_id": 3, "trial_index": 0, "rewards": {"reward": 1.0}},
+  {"trial_name": "bookreview-q3__cccc002", "task_name": "razorback/bookreview-q3", "dataset": "bookreview", "query_id": 3, "trial_index": 1, "rewards": {"reward": 1.0}},
+  {"trial_name": "bookreview-q3__cccc003", "task_name": "razorback/bookreview-q3", "dataset": "bookreview", "query_id": 3, "trial_index": 2, "rewards": {"reward": 1.0}},
+  {"trial_name": "bookreview-q3__cccc004", "task_name": "razorback/bookreview-q3", "dataset": "bookreview", "query_id": 3, "trial_index": 3, "rewards": {"reward": 1.0}},
+  {"trial_name": "bookreview-q3__cccc005", "task_name": "razorback/bookreview-q3", "dataset": "bookreview", "query_id": 3, "trial_index": 4, "rewards": {"reward": 1.0}}
+]

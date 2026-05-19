@@ -43,7 +43,10 @@ async def _execute_run_async(*, spec: Spec, runs_dir: Path) -> None:
             channel.add_observer(StdoutObserver())
 
     # Harbor's jobs_dir + job_name produces jobs_dir/<job_name>/, which is our run_dir.
-    job_config = spec_to_job_config(spec, job_name=job_name, jobs_dir=run_dir.parent)
+    tasks_root = run_dir / "tasks"
+    job_config, trial_name_map = spec_to_job_config(
+        spec, job_name=job_name, jobs_dir=run_dir.parent, tasks_root=tasks_root
+    )
 
     drain_task = asyncio.create_task(channel.drain())
 
@@ -60,14 +63,23 @@ async def _execute_run_async(*, spec: Spec, runs_dir: Path) -> None:
         await channel.aclose()
         await drain_task
 
-    summary = {
-        "experiment": spec.experiment,
-        "job_name": job_name,
-        "n_total_trials": result.n_total_trials,
-        "n_completed_trials": result.stats.n_completed_trials,
-        "n_errored_trials": result.stats.n_errored_trials,
-    }
-    (run_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+    from razorback.spec.schema import DabBenchmarkBlock
+    if isinstance(spec.benchmark, DabBenchmarkBlock):
+        from razorback.benchmarks.dab.aggregate import aggregate_job_result
+        aggregate_job_result(
+            trial_results=result.trial_results,
+            trial_name_map=trial_name_map,
+            out_path=run_dir / "summary.json",
+        )
+    else:
+        summary = {
+            "experiment": spec.experiment,
+            "job_name": job_name,
+            "n_total_trials": result.n_total_trials,
+            "n_completed_trials": result.stats.n_completed_trials,
+            "n_errored_trials": result.stats.n_errored_trials,
+        }
+        (run_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
 
 
 def _hook_publisher(channel: EventChannel, event: TrialEvent):

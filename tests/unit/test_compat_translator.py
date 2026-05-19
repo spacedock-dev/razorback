@@ -26,11 +26,12 @@ observers: []
 
 def test_translator_produces_runnable_job_config(colima_safe_tmp_path):
     spec = parse_spec_text(SPEC)
-    cfg = spec_to_job_config(
+    cfg, trial_name_map = spec_to_job_config(
         spec,
         job_name="abc1234567890def",
         jobs_dir=colima_safe_tmp_path / "jobs",
     )
+    assert trial_name_map == {}
     assert isinstance(cfg, JobConfig)
     assert cfg.job_name == "abc1234567890def"
     assert cfg.jobs_dir == colima_safe_tmp_path / "jobs"

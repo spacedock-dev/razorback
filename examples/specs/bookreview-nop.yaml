@@ -1,0 +1,14 @@
+version: 1
+experiment: m2-bookreview-nop
+agent:
+  kind: nop
+benchmark:
+  kind: dab
+  data_root: /Users/clkao/git/dataagentbench/data
+  datasets:
+    - bookreview
+trials: 1
+observers:
+  - kind: jsonl
+    path: events.jsonl
+  - kind: stdout
