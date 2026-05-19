@@ -145,6 +145,21 @@ Implemented M3 ClaudeCliAgent end-to-end: registry + .env-only auth + setup/run/
 
 Fresh-agent validation reproduces six of seven ACs verbatim against `spacedock-ensign/m3-claude-cli-agent` tip `e49ec8c`; AC-6's live acceptance run scores a perfect `bookreview.dataset_pass_at_1 = 1.0`. The single blocker is that the M3 Task-1 smoke test fails on clean rerun (5/6 integration, not 6/6) because its workdir-relocation helper still references the pre-Task-5 prepare.py layout. Gate: **REJECTED** pending a small fix; full validation report at `docs/razorback-implementation/validation/m3-claude-cli-agent.md`.
 
+## Stage Report: validation (cycle 1)
+
+- DONE: From a clean checkout of `spacedock-ensign/m3-claude-cli-agent` (current tip `48d4fb8`), rerun `uv run pytest`. Confirm exit 0 and that the previously-failing `tests/integration/test_claude_cli_smoke_bookreview.py` is now absent (deleted) AND no other test regressed.
+  Pytest result: `72 passed in 432.09s`, exit 0. Smoke test file confirmed deleted (`test -f` → "deleted"; `git show --stat f233180` shows -245 lines, single file). Cycle-0 collected 73 tests with 1 failed; cycle-1 collects 72 with 0 failed — net delta is exactly the deleted smoke test, no other regression.
+- SKIPPED: Re-run the §8.M3 acceptance command (`uv run rk run examples/specs/bookreview-claude.yaml`).
+  Per team-lead's explicit instruction in the cycle-1 dispatch ("You do NOT need to re-run the §8.M3 acceptance command... The 7 ACs themselves still pass per cycle 0's verification; the only change between cycle 0 and cycle 1 is the deleted dead smoke test"). Cycle-0 acceptance produced `bookreview.dataset_pass_at_1 = 1.0` (3/3 correct); the deleted smoke test was a Task-1 risk-validation artifact, not part of the AC-6 path.
+- DONE: Decide PASSED or REJECTED. If REJECTED for any new reason, surface concrete blockers.
+  Cycle-0's single blocker (B-1) is resolved. No new issues. Gate decision: **PASSED**.
+- DONE: Append `## Stage Report: validation (cycle 1)` section and commit on worktree branch.
+  This block + commit on `spacedock-ensign/m3-claude-cli-agent`.
+
+### Summary
+
+Cycle-1 re-validation against tip `48d4fb8` confirms B-1 cleared: `uv run pytest` exits 0 with 72/72 green; the previously-failing smoke test file is deleted; no other test regressed. The acceptance-command re-run was skipped per team-lead's explicit cycle-1 dispatch (the only delta from cycle 0 is the deleted dead smoke test, which never gated AC-6). Gate: **PASSED**. Hand back to FO for merge.
+
 ### Feedback Cycles
 
 **Cycle 1 — REJECTED at validation (2026-05-19, auto-bounced to implementation).**
