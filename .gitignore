@@ -10,3 +10,4 @@ __pycache__/
 
 # Run dirs written by `rk run`
 _runs/
+.worktrees/
