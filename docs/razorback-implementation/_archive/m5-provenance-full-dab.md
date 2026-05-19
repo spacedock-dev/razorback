@@ -1,0 +1,153 @@
+---
+id: 46k3jhr4xy3qz83x6406jv2g
+title: M5 — Provenance freeze + full DAB scoring (first DAB result)
+status: done
+source: design §8
+started: 2026-05-19T08:23:23Z
+completed: 2026-05-19T12:39:28Z
+verdict: PASSED
+score: 0.95
+worktree: 
+issue:
+pr:
+mod-block: 
+archived: 2026-05-19T12:39:28Z
+---
+
+## Problem
+
+The "first DAB result" milestone CL named explicitly in the
+implementation brief. Two layers come together: `rk spec freeze`
+resolves every dynamic input (model version, image digest, git
+SHA, agent CLI hash, harbor version, prompt content hashes) and
+refuses on any unresolved field unless `--allow-missing`; and the
+DAB aggregator runs the §6.5 stratified pass@1 across the 12 DAB
+datasets, producing a real cross-dataset score from a full dev
+tier run. See §6.4, §6.5, §8.M5.
+
+`rk run` re-resolves the model version at run start and refuses
+with `AliasDriftError` (exit code 21) when the provider's
+resolved version disagrees with the frozen spec, per §6.4.
+
+## Acceptance criteria
+
+**AC-1 — `rk spec freeze` resolves all six provenance fields
+listed in §6.4 and refuses on any unresolved field absent
+`--allow-missing`.**
+Verified by: unit tests feed a spec missing each provenance
+field in turn and assert the freeze command exits with
+`ProvenanceError` (exit code 11) and writes neither the frozen
+spec nor `provenance.yaml`.
+
+**AC-2 — `--allow-missing` flag writes the frozen spec but
+records the unresolved fields in `provenance.yaml`.**
+Verified by: a unit test runs freeze with `--allow-missing`
+against a spec whose model API is mocked to return 503; the
+frozen spec lands and `provenance.yaml` contains the unresolved
+field marker.
+
+**AC-3 — `AliasDriftError` (exit code 21) fires when the
+provider returns a model version different from the frozen
+spec's pinned `model_resolved_version`.**
+Verified by: a unit test mocks the provider API to return a
+different version than the frozen value; `rk run` exits 21 and
+the resulting `provenance.yaml` (when `--allow-alias-drift` is
+passed) records both versions.
+
+**AC-4 — Major-version drift in installed harbor between freeze
+and run is a hard error.**
+Verified by: a unit test patches `harbor.__version__` to a
+different major than the frozen value; `rk run` refuses with a
+typed error before reaching `Job.create`.
+
+**AC-5 — The DAB aggregator produces a stratified macro-average
+across the 12 datasets per §6.5.**
+Verified by: a unit test feeds a fixture covering all 12 DAB
+datasets to the aggregator and asserts the resulting
+`summary.json` has a stratified pass@1 line whose value matches
+the cross-dataset macro-average computed by hand on the fixture.
+
+**AC-6 — End-to-end full DAB dev-tier run with a real agent
+(Claude or Codex) writes a complete `summary.json` with per-
+dataset and stratified scores.**
+Verified by: `uv run rk run examples/specs/dab-dev-claude.yaml`
+exits 0 against the full DAB dev tier and the run-dir's
+`summary.json` contains: a per-query block for each of the 12
+datasets, a per-dataset mean for each, and a single stratified
+macro-average line. Cost-bounded; one trial per query
+(`trials: 1`).
+
+**AC-7 — Provenance retries with exponential backoff on
+transient 503s.**
+Verified by: a unit test mocks the provider API to return 503
+twice then 200; the freeze succeeds and the resolved version
+lands in `provenance.yaml`.
+
+## Test plan
+
+- **Unit tests:** each provenance resolver field (model, image,
+  CLI, git SHA, harbor version, prompt hash); `--allow-missing`
+  behavior; alias drift detection; harbor version drift;
+  aggregator against the 12-dataset fixture; retry/backoff on
+  transient errors.
+- **Integration test:** full DAB dev tier through Claude via
+  harbor's docker environment. This is the cost-bearing test;
+  estimate one dev-tier run is the budget.
+- **Acceptance command:** `uv run rk spec freeze examples/specs/
+  dab-dev-claude.yaml` followed by `uv run rk run examples/specs/
+  dab-dev-claude.frozen.yaml` — the freeze command produces a
+  fully-pinned frozen spec and provenance.yaml; the run produces
+  a stratified score across the 12 DAB datasets.
+
+## Out of scope
+
+- `runs diff`, paired statistics — §M6.
+- Constraints check, baseline promote/verify, registry — §M6.
+- ade-bench or any other harbor-shipped benchmark — §M7.
+- Per-stage cost attribution for non-staged agents (claude /
+  codex emit one phase, not three) — already handled by §6.8's
+  schema; no additional work here.
+
+## Plan
+
+Implementation plan: [`plans/m5-provenance-full-dab.md`](plans/m5-provenance-full-dab.md).
+Tasks 1-3 land the riskiest contracts (alias drift, missing-provenance refusal, harbor drift) before any resolver code. Tasks 4-10 add the resolver stack, freeze CLI, drift wiring, and 12-dataset aggregator generalization. Tasks 11-13 are the AC-6 acceptance run — cost-bounded, one trial per query across all 12 DAB datasets.
+
+## Stage Report: plan
+
+- DONE: Plan steps map 1:1 to the 7 ACs in the M5 entity body, each with the §-cite that governs it (§6.4 provenance freeze + AliasDriftError + harbor version drift, §6.5 12-dataset stratified macro-average, §3.2 exit codes 11/21). AC↔task map at the top of the plan.
+  See "AC ↔ Task Map" table in `plans/m5-provenance-full-dab.md` (7 rows, each cites §6.4 / §6.5 / §3.2 and names the implementing Task).
+- DONE: The riskiest contract for M5 — that the model-alias-drift check (AC-3) actually fires when the provider returns a different version than the frozen `model_resolved_version` — is plan Task 1 as a unit test with a mocked provider, BEFORE any provider-API resolver code lands. Same for harbor version drift (AC-4) and missing-provenance refusal (AC-1). Math-heavy aggregator extension (AC-5: 12-dataset stratified average) comes AFTER the freeze/refusal machinery.
+  Task 1 (AC-3 alias-drift unit test against mocked Anthropic SDK) → Task 2 (AC-1 refusal unit tests) → Task 3 (AC-4 harbor-drift unit test) → Tasks 4-7 (resolvers, retry, freeze CLI, run wiring) → Tasks 8-10 (aggregator + translator widening for AC-5). AC-6 integration test is Task 12.
+- DONE: The plan extends M2's aggregator surface from docs/razorback-implementation/plans/m2-dab-bookreview.md to the full 12 DAB datasets, citing M2's `aggregate.py` module path. The plan does NOT re-derive the bookreview math — it generalizes M2's pass@1 + per-dataset mean code to a cross-dataset macro-average. Cite which lines of M2's plan are extended.
+  "M2 reuse" subsection cites `_build_summary` at M2 plan lines 317-337 and `pass_at_k` at lines 287-297. Task 8 adds the 12-dataset fixture; Task 9 verifies translator iteration over `spec.benchmark.datasets`. No math changes to `src/razorback/benchmarks/dab/aggregate.py`.
+
+### Summary
+
+Plan written at `docs/razorback-implementation/plans/m5-provenance-full-dab.md` (14 tasks). Risk-first ordering: AC-3 alias drift, AC-1 missing-provenance refusal, and AC-4 harbor drift land as mocked unit tests in Tasks 1-3 before any resolver/CLI code. Resolver stack (Anthropic SDK `client.models.retrieve()` + docker/git/hash/harbor/prompt), `rk spec freeze` Typer command, and `rk run` drift wiring follow in Tasks 4-7. AC-5 is verified via a 12-dataset synthetic fixture + golden (hand-computed stratified pass@1 = 6.5/12 = 0.5417) against M2's untouched aggregator. AC-6 integration test (Task 12) drives all 12 DAB datasets through Claude end-to-end, gated by `RAZORBACK_RUN_FULL_DAB_TEST=1` to keep CI cheap; the headline "first DAB result" lands when the implementer runs it. Provider-API resolver concretized as `anthropic.Anthropic().models.retrieve(alias)` returning `model.id` + `model.created_at` — no divergence from §6.4's design shape; Codex/OpenAI deferred to M6/M7 per design doc.
+
+## Stage Report: implementation
+
+- DONE: Plan Task 1 (mocked-provider model-alias-drift unit test) lands as a green pytest BEFORE the live provider-API resolver code lands. Same for plan Task 2 (missing-provenance refusal → exit 11) and Task 3 (harbor major-version drift). The provenance refusal machinery is in place before the aggregator extension (Tasks 5-7).
+  Commit order: 2be3ea6 (AC-3 alias drift), 6e3e977 (AC-1 refusal), e0e7a2a (AC-4 harbor drift) all land before 769d1a8 (resolvers) and d4ea553 (rk spec freeze CLI). 113 unit tests green at HEAD.
+- DONE: Each AC-1..AC-7 in the M5 entity body has at least one passing test that proves its `Verified by:` clause. The §8.M5 acceptance flow executes end-to-end against a 6-dataset subset of the DAB dev tier through Claude (cost-bounded, one trial per query) and writes a summary.json with per-query, per-dataset, and stratified-macro-average lines.
+  AC-1 → test_provenance_refuses_missing.py (9 tests). AC-2 → test_spec_freeze_cli.py::test_freeze_allow_missing_writes_with_unresolved_marker. AC-3 → test_provenance_alias_drift.py (4 tests) + test_run_drift_wired.py::test_run_refuses_on_alias_drift_by_default + test_provenance_yaml.py::test_drift_record_appears_under_alias_drift. AC-4 → test_provenance_harbor_drift.py (4 tests) + test_run_drift_wired.py::test_run_refuses_on_harbor_drift. AC-5 → test_dab_aggregate_twelve_datasets.py (2 tests; golden stratified = 6.5/12 = 0.5417 across all 12 dataset slugs). AC-6 → live run produced docs/razorback-implementation/m5-first-dab-result-summary.json (stratified = 0.6746 across 6 datasets / 24 queries through claude-opus-4-5-20251101). AC-7 → test_provenance_retry.py (3 tests) + test_provenance_resolvers.py::test_resolve_model_version_retries_503_then_succeeds.
+- DONE: M2's aggregator (src/razorback/benchmarks/dab/aggregate.py) is extended, not forked — the 12-dataset stratified macro-average generalizes M2's pass@1 + per-dataset mean code. M3's BaseAgent / ClaudeCliAgent is the agent surface AC-6 runs through. New provenance resolver lives at src/razorback/provenance/ per §7.
+  src/razorback/benchmarks/dab/aggregate.py untouched in M5 (last modified by M2). Translator iteration over spec.benchmark.datasets confirmed for 12 datasets (test_dab_translator_twelve.py). New package src/razorback/provenance/ adds errors.py + retry.py + resolvers.py + provenance_yaml.py + drift.py + freeze_cmd.py per the §7 file layout.
+
+### Summary
+
+All 13 plan tasks completed in risk-first order: refusal/drift contracts (T1-T3) land as mocked unit tests BEFORE the live resolver code (T4-T5) and freeze CLI (T6). Run-time drift wiring (T7) plugs check_harbor_drift + check_alias_drift in front of harbor's Job.create. The 12-dataset aggregator (T8) verifies M2's untouched math via a synthetic golden fixture with stratified pass@1 = 6.5/12 = 0.5417 (hand-derivable). Translator widening (T9) confirms spec.benchmark.datasets fan-out works for 12 dataset slugs. The headline AC-6 deliverable landed via a 6-dataset subset (`examples/specs/dab-dev-claude-subset.yaml`) per FO authorization after the full 12-dataset run hit a host-disk constraint (M2's prepare.py at src/razorback/benchmarks/dab/prepare.py:152-167 does shutil.copytree for every task's steps/main/workdir/, ballooning to ~30-60GB for the 12-dataset run; PATENTS alone is 5.2GB). **First DAB result: stratified_pass_at_1 = 0.6746 across bookreview/agnews/googlelocal/music_brainz_20k/stockindex/yelp (24 queries, claude-opus-4-5-20251101, image sha256:018978c8...).** Per-dataset: bookreview 1.000, stockindex 1.000, googlelocal 0.750, yelp 0.714, music_brainz_20k 0.333, agnews 0.250. Frozen-spec + provenance.yaml + summary.json all generated end-to-end via the §8.M5 acceptance command; the canonical 12-dataset spec `examples/specs/dab-dev-claude.yaml` remains in the tree for a future host with disk headroom. Tracked-forward M6+ item: M2 prepare.py should symlink query_dataset/ under Colima bind-mount rather than deep-copy, dropping per-task disk from O(GB) to O(MB) and unlocking the full 12-dataset run without host changes.
+
+## Stage Report: validation
+
+- DONE: From a clean checkout of spacedock-ensign/m5-provenance-full-dab worktree tip, rerun `uv run pytest` (no live API costs). Exit 0; the new M5 tests pass alongside M1's 17 + M2's 27 + M3's 28 + M4's tests (carry-forward). Reproduce — do NOT trust the implementation's stage-report numbers. The AC-6 live full-DAB-subset run is NOT rerun by the validator (it cost real money already and the deliverable summary.json snapshot is committed at docs/razorback-implementation/m5-first-dab-result-summary.json); inspect the snapshot directly.
+  `uv run pytest` → 118 passed, 1 skipped in 382.48s (rerun: 477.16s, same result). Decomposition: 17 M1 + 27 M2 + 28 M3 + 46 M5 unit + 1 M5 integration (gated, skipped). M4 not on this worktree (forked from M3-done). Snapshot inspected: 6 datasets, 24 queries, stratified_pass_at_1 = 0.6746031746..., validator re-derived sum/6 to floating-point precision.
+- DONE: Each AC-1..AC-7 in the M5 entity body has its `Verified by:` clause reproduced verbatim. Specifically: AC-1 (ProvenanceError + exit 11 on missing field), AC-2 (--allow-missing writes frozen spec + records unresolved in provenance.yaml), AC-3 (AliasDriftError + exit 21 on provider-version drift), AC-4 (harbor major-version drift refused), AC-5 (12-dataset stratified macro-average correct against the golden fixture — this is the math correctness AC, INDEPENDENT of the AC-6 subset deferral), AC-6 (PASSED-WITH-NOTE: 6-dataset subset run produced summary.json with per-query/per-dataset/stratified lines; the FO authorized the deferral from the full 12; note the disk-constraint reason and the M6+ symlink follow-up), AC-7 (retry with exponential backoff on transient 503s).
+  Per-AC test mapping in validation report. AC-1 → 10 PASSED. AC-2 → 3 PASSED. AC-3 → 5 PASSED (4 drift + 1 yaml record). AC-4 → 5 PASSED (4 drift + 1 run-wiring). AC-5 → 2 PASSED (golden match + independent re-derivation 6.5/12). AC-6 → snapshot inspection PASSED-WITH-NOTE. AC-7 → 4 PASSED (3 harness + 1 resolver-level 503-then-200).
+- DONE: An independent code review pass via `superpowers:requesting-code-review` classifies findings as blocking vs non-blocking. The validation report at docs/razorback-implementation/validation/m5-provenance-full-dab.md commits on the worktree branch with a PASSED or REJECTED gate decision. The subset-deferral on AC-6 is NOT itself a blocker — it was authorized by the FO before the run started; assess whether the deliverable is materially what M5 set out to produce (per-query / per-dataset / stratified pass@1 across N datasets through a real claude agent).
+  Code review: 4 Minor non-blocking findings (freeze_cmd.py bare except masks 404 diagnostic; HarborDriftError uses ExitCode.GENERIC=1 vs no §3.2 reservation; dab-dev-claude.yaml hardcodes /Users/clkao/... path matching M2 pattern; cli_bin hardcoded "claude" for Codex-deferred path per plan). Zero blocking. M1/M2/M3 carry-forward green. Gate decision: **PASSED** — approve to `done`.
+
+### Summary
+
+Fresh validator independently reproduced all 7 ACs from a clean checkout of the M5 worktree tip (`0111928`). `uv run pytest` → 118 passed, 1 skipped (intentional gated AC-6 live run). AC-1..AC-5 and AC-7 pass verbatim against their Verified by clauses. AC-6 is PASSED-WITH-NOTE: the FO-authorized 6-dataset subset live run produced a complete per-query/per-dataset/stratified summary.json (stratified_pass_at_1 = 0.6746, validator re-derived math to 1e-9), and the math for the full 12 is independently proven by AC-5's hand-derivable golden (6.5/12). Code review surfaced 4 Minor non-blocking findings; no blockers. M1/M2/M3 carry-forward green. **Gate: PASSED** — approve to `done`.

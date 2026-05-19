@@ -1,0 +1,842 @@
+[
+  {
+    "dataset": "agnews",
+    "query_id": 1,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "agnews",
+    "query_id": 1,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "agnews",
+    "query_id": 1,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "agnews",
+    "query_id": 1,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "agnews",
+    "query_id": 1,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "agnews",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "agnews",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "agnews",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "agnews",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "agnews",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "bookreview",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "bookreview",
+    "query_id": 1,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "bookreview",
+    "query_id": 1,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "bookreview",
+    "query_id": 1,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "bookreview",
+    "query_id": 1,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "bookreview",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "bookreview",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "bookreview",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "bookreview",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "bookreview",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "crmarenapro",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "crmarenapro",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "crmarenapro",
+    "query_id": 1,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "crmarenapro",
+    "query_id": 1,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "crmarenapro",
+    "query_id": 1,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "crmarenapro",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "crmarenapro",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "crmarenapro",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "crmarenapro",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "crmarenapro",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "DEPS_DEV_V1",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "DEPS_DEV_V1",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "DEPS_DEV_V1",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "DEPS_DEV_V1",
+    "query_id": 1,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "DEPS_DEV_V1",
+    "query_id": 1,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "DEPS_DEV_V1",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "DEPS_DEV_V1",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "DEPS_DEV_V1",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "DEPS_DEV_V1",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "DEPS_DEV_V1",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "GITHUB_REPOS",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "GITHUB_REPOS",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "GITHUB_REPOS",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "GITHUB_REPOS",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "GITHUB_REPOS",
+    "query_id": 1,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "GITHUB_REPOS",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "GITHUB_REPOS",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "GITHUB_REPOS",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "GITHUB_REPOS",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "GITHUB_REPOS",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "googlelocal",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "googlelocal",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "googlelocal",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "googlelocal",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "googlelocal",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "googlelocal",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "googlelocal",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "googlelocal",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "googlelocal",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "googlelocal",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "music_brainz_20k",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "music_brainz_20k",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "music_brainz_20k",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "music_brainz_20k",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "music_brainz_20k",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "music_brainz_20k",
+    "query_id": 2,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "music_brainz_20k",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "music_brainz_20k",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "music_brainz_20k",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "music_brainz_20k",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "PANCANCER_ATLAS",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "PANCANCER_ATLAS",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "PANCANCER_ATLAS",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "PANCANCER_ATLAS",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "PANCANCER_ATLAS",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "PANCANCER_ATLAS",
+    "query_id": 2,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "PANCANCER_ATLAS",
+    "query_id": 2,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "PANCANCER_ATLAS",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "PANCANCER_ATLAS",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "PANCANCER_ATLAS",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "PATENTS",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "PATENTS",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "PATENTS",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "PATENTS",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "PATENTS",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "PATENTS",
+    "query_id": 2,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "PATENTS",
+    "query_id": 2,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "PATENTS",
+    "query_id": 2,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "PATENTS",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "PATENTS",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "stockindex",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "stockindex",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "stockindex",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "stockindex",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "stockindex",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "stockindex",
+    "query_id": 2,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "stockindex",
+    "query_id": 2,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "stockindex",
+    "query_id": 2,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "stockindex",
+    "query_id": 2,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "stockindex",
+    "query_id": 2,
+    "rewards": {
+      "reward": 0.0
+    }
+  },
+  {
+    "dataset": "stockmarket",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "stockmarket",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "stockmarket",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "stockmarket",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "stockmarket",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "stockmarket",
+    "query_id": 2,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "stockmarket",
+    "query_id": 2,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "stockmarket",
+    "query_id": 2,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "stockmarket",
+    "query_id": 2,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "stockmarket",
+    "query_id": 2,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "yelp",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "yelp",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "yelp",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "yelp",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "yelp",
+    "query_id": 1,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "yelp",
+    "query_id": 2,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "yelp",
+    "query_id": 2,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "yelp",
+    "query_id": 2,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "yelp",
+    "query_id": 2,
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  {
+    "dataset": "yelp",
+    "query_id": 2,
+    "rewards": {
+      "reward": 1.0
+    }
+  }
+]

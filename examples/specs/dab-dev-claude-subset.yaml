@@ -1,0 +1,33 @@
+version: 1
+experiment: m5-dab-dev-claude-subset
+
+agent:
+  kind: claude-cli
+  model: claude-opus-4-5
+  sampling:
+    temperature: 0.0
+  tools_allowed: []
+
+benchmark:
+  kind: dab
+  data_root: /Users/clkao/git/dataagentbench/data
+  datasets:
+    - bookreview
+    - googlelocal
+    - music_brainz_20k
+    - yelp
+    - stockindex
+    - agnews
+
+trials: 1
+
+observers:
+  - kind: jsonl
+    path: events.jsonl
+  - kind: stdout
+
+provenance:
+  pin_model_version: true
+  pin_image_digest: true
+  pin_agent_cli_hash: true
+  pin_git_sha: true

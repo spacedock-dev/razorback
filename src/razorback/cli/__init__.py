@@ -17,3 +17,7 @@ def _root() -> None:
 
 
 app.command("run")(run_command)
+
+from razorback.cli.spec import app as spec_app
+
+app.add_typer(spec_app, name="spec")
