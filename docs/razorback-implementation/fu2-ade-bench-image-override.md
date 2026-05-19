@@ -1,13 +1,13 @@
 ---
 id: bbc6xyn89fqde0vxqc50yw7m
 title: FU-2 — ade-bench image override (real LLM-scored result)
-status: plan
+status: implementation
 source: post-FU1 follow-up (CL 2026-05-19)
 started: 2026-05-19T17:59:13Z
 completed:
 verdict:
 score: 0.95
-worktree:
+worktree: .worktrees/spacedock-ensign-fu2-ade-bench-image-override
 issue:
 pr:
 mod-block:
