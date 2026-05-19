@@ -103,3 +103,16 @@ only razorback subtree.
   — §M5 lands provenance.
 - Full DAB scoring — §M5.
 - `runs diff` halt-resume seed-mismatch refusal — §M6.
+
+## Stage Report: plan
+
+- DONE: Plan steps map 1:1 to the 7 ACs in the M4 entity body, each with the §-cite that governs it (§6.2 BaseAgent + registry, §6.4 prompts, §6.8 phase_stats.json and per-stage cost, §3.2 SeedMismatchError = exit code 20, §6.3 logs_dir/agent_freeze/ ownership). AC↔task map at the top of the plan.
+  AC↔task map table at `plans/m4-spacedock-solver-halt-resume.md` top; each AC names its §-cite. AC-1 → Task 1; AC-2 → Task 2; AC-3 → Task 3; AC-4 → Task 5; AC-5 → Tasks 5+6; AC-6 → Task 4; AC-7 → Task 7.
+- DONE: The riskiest contract for M4 — that the seed-mismatch refusal (AC-1) actually fires when a sealed-stage input differs between seed and resume — is plan Task 1, BEFORE the staged-execution / git-freeze machinery scaffolds. The fixture explicitly mutates `agent.prompt_file` content hash between seed and resume specs; the test asserts the agent exits SeedMismatchError before reaching harbor.Job.create, and the CLI exit code is 20.
+  Task 1 lands two tests (in-process `test_spacedock_seed_mismatch.py` and CLI `test_spacedock_cli_seed_mismatch_exit_code.py`) before Tasks 2-7 scaffold the registry, freeze, setup(), run(), and git-freeze machinery. The in-process test monkeypatches `harbor.Job.create` to raise if invoked — proving the refusal happens before harbor I/O.
+- DONE: The plan inherits the M3 BaseAgent pattern from docs/razorback-implementation/plans/m3-claude-cli-agent.md (registry/schema/required-env/env-scrub) and adds M4-specific scope: stages config in AgentConfig.kwargs (validated by the registry), per-trial git-freeze repo at logs_dir/agent_freeze/.git, phase_stats.json schema, content-hashed prompts pinned into spec.frozen.yaml. Cross-references the M3 plan's relevant tasks rather than duplicating them.
+  M3 cross-references: registry pattern (M3 Task 2), proxy block (M3 Task 5), auth loader (M3 Task 3), `claude_invoke.py` extracted from M3 Task 4. M4-specific divergence (sealed_hash extends M3's "content-hash one prompt" to "model + sampling + stages + every prompt") explicitly named in plan preamble under "M4 sealed-input definition".
+
+### Summary
+
+Plan written to `docs/razorback-implementation/plans/m4-spacedock-solver-halt-resume.md` on `main` (10 tasks, ~1500 lines). Task 1 lands the riskiest contract (SeedMismatchError + exit code 20) before any scaffolding; Tasks 2-7 add registry/freeze/setup/run/git-freeze/phase_stats/AC-7-audit one AC at a time, TDD throughout; Task 8 wires the translator and end-to-end halt-resume integration test against bookreview. The §6.8 phase_stats.json schema is locked in Task 6 with a public `assert_phase_stats_schema` helper for M5's aggregator to import. The M4 sealed_hash divergence from M3's prompt-only hashing (M4 seals model + sampling + stages + per-stage prompts) is explicitly named in the preamble. No worktree created — plan stage stays on `main` per Spacedock discipline.
