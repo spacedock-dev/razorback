@@ -152,3 +152,16 @@ Validator: `spacedock-ensign-m3-claude-cli-agent-validation` (kept alive for re-
 Blocker B-1: `tests/integration/test_claude_cli_smoke_bookreview.py::test_claude_cli_smoke_writes_numeric_reward` fails on clean `uv run pytest` (1 failed, 72 passed). Root cause: `_patch_task_for_dab_agent` helper references the pre-Task-5 `prepare.py` workdir layout via an `old_workdir.rename` block that no longer holds.
 Fix: delete the dead smoke test (its purpose is now covered by `test_rk_run_bookreview_claude.py` + the acceptance command, both green) OR drop the obsolete `old_workdir.rename` block.
 Routed to: implementation (fresh dispatch in same worktree, cycle1). Cycle cap 3; this is 1/3.
+
+## Stage Report: implementation (cycle 1)
+
+- DONE: Fix B-1: tests/integration/test_claude_cli_smoke_bookreview.py::test_claude_cli_smoke_writes_numeric_reward fails on clean `uv run pytest` because its `_patch_task_for_dab_agent` helper references the pre-Task-5 prepare.py workdir layout. Either delete the dead smoke test (preferred — its purpose is now covered by test_rk_run_bookreview_claude.py + the acceptance command) OR drop the obsolete `old_workdir.rename` block. One choice, smallest change.
+  Chose deletion (validator-preferred option). Removed 245 lines, the entire file. Commit `f233180`. Coverage of the same path is retained by `tests/integration/test_rk_run_bookreview_claude.py` (AC-6, ran green in cycle 0) and the §8.M3 acceptance command `uv run rk run examples/specs/bookreview-claude.yaml` (also green in cycle 0 — `bookreview.dataset_pass_at_1 = 1.0`).
+- DONE: `uv run pytest` from a clean checkout of the worktree branch tip exits 0 — all tests pass, no skipped failures, no regressions to the 4 non-blocking findings the validator noted (N-1..N-5) by accident.
+  Reran on tip `f233180`: 72 passed in 414.73s, exit 0. Cycle-0 ran 73 collected; cycle-1 runs 72 collected (one file removed). No code touched beyond the deletion — N-1..N-5 surfaces unmodified.
+- DONE: Append a `Stage Report: implementation (cycle 1)` section to the entity body documenting the fix choice (delete vs edit), the diff size, and confirmation that `uv run pytest` is fully green. Do not redo Stage Report items 2 and 3 from cycle 0 — they already passed.
+  This section.
+
+### Summary
+
+Cycle 1's blocker B-1 was cleared by deleting `tests/integration/test_claude_cli_smoke_bookreview.py` outright (validator-preferred option). The test was a Task-1 risk-first scaffold whose `_patch_task_for_dab_agent` helper rewrote prepare.py's output to match harbor's multi-step upload contract — once Task 5 folded those changes into prepare.py itself, the helper's `old_workdir.rename` block became a stale rewrite of a path that no longer exists. AC-6's coverage of the same path lives on in `test_rk_run_bookreview_claude.py` and the §8.M3 acceptance command, both green in cycle 0. Single-commit, 245-line deletion, no other code touched; `uv run pytest` clean run is 72/72 in 414.73s.
