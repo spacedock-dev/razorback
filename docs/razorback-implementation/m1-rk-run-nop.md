@@ -1,7 +1,7 @@
 ---
 id: zknb9f32jpzgtg83k9q7wm9d
 title: M1 — rk run against nop agent
-status: implementation
+status: validation
 source: design §8
 started: 2026-05-19T07:16:21Z
 completed:
