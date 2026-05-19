@@ -1,9 +1,9 @@
 ---
 id: 12pw03062wxqmjxh17qm51rp
 title: M7 — Run-workflow integration + ade-bench (first ade-bench result)
-status: backlog
+status: plan
 source: design §8
-started:
+started: 2026-05-19T09:06:49Z
 completed:
 verdict:
 score: 0.9
