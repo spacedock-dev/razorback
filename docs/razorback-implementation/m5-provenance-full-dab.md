@@ -1,7 +1,7 @@
 ---
 id: 46k3jhr4xy3qz83x6406jv2g
 title: M5 — Provenance freeze + full DAB scoring (first DAB result)
-status: implementation
+status: validation
 source: design §8
 started: 2026-05-19T08:23:23Z
 completed:
