@@ -21,3 +21,7 @@ app.command("run")(run_command)
 from razorback.cli.spec import app as spec_app
 
 app.add_typer(spec_app, name="spec")
+
+from razorback.cli.runs import runs_app
+
+app.add_typer(runs_app, name="runs")

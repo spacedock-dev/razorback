@@ -1,0 +1,40 @@
+# ABOUTME: `rk runs *` Typer commands (M6 lands `diff`; list/show land in M7).
+# ABOUTME: Maps razorback typed errors to documented exit codes (§3.2).
+
+import json
+from pathlib import Path
+
+import typer
+
+from razorback.diff.diff import check_paired_seed_compatibility, compute_diff
+from razorback.diff.pairing import load_run_outcomes
+from razorback.errors import RazorbackError
+
+runs_app = typer.Typer(help="Inspect and diff razorback run-dirs.", no_args_is_help=True)
+
+
+@runs_app.command("diff")
+def diff_command(
+    run_a: Path = typer.Argument(..., exists=True, file_okay=False, dir_okay=True),
+    run_b: Path = typer.Argument(..., exists=True, file_okay=False, dir_okay=True),
+    alpha: float = typer.Option(0.05, "--alpha", min=0.0001, max=0.5),
+    bootstrap_iters: int = typer.Option(10000, "--bootstrap-iters", min=100),
+    seed: int = typer.Option(0, "--seed", help="numpy RNG seed for the bootstrap"),
+    fmt: str = typer.Option(
+        "json",
+        "--format",
+        help="json (canonical) | markdown (deferred; falls back to json)",
+    ),
+) -> None:
+    """Paired diff between two run-dirs. JSON to stdout. §6.5."""
+    try:
+        check_paired_seed_compatibility(run_a, run_b)
+        a = load_run_outcomes(run_a)
+        b = load_run_outcomes(run_b)
+        result = compute_diff(
+            a, b, alpha=alpha, bootstrap_iters=bootstrap_iters, seed=seed,
+        )
+    except RazorbackError as exc:
+        typer.echo(f"{type(exc).__name__}: {exc}", err=True)
+        raise typer.Exit(exc.exit_code)
+    typer.echo(json.dumps(result, indent=2))
