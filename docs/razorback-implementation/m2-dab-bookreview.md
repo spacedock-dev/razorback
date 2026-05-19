@@ -132,3 +132,16 @@ Modules added under `src/razorback/benchmarks/dab/`: `aggregate.py` (stratified 
 ### Summary
 
 DAB-as-harbor-adapter implementation lands in 10 atomic `m2:` commits on `spacedock-ensign/m2-dab-bookreview` from 4f40c60 (golden fixture) through 571c2eb (integration test) plus this report. Riskiest contract first: aggregator math against the frozen golden was green before any harbor task wiring. Two plan deviations are documented under the Implementation summary section above; both stay inside the design-doc §6.5 envelope. The acceptance command exits 0 against the real `/Users/clkao/git/dataagentbench/data/query_bookreview/` and the full pytest suite is pristine (44/44, no warnings).
+
+## Stage Report: validation
+
+- DONE: From a clean checkout of the spacedock-ensign/m2-dab-bookreview worktree tip, rerun `uv run pytest` and the §8.M2 acceptance command `uv run rk run examples/specs/bookreview-nop.yaml` against the real bookreview dataset under /Users/clkao/git/dataagentbench/data/query_bookreview/. Both exit 0; the new tests pass alongside the 17 M1 tests; the run-dir's summary.json carries a numeric `stratified_pass_at_1` line plus per-query `pass_at_1` blocks. Reproduce — do NOT trust the implementation's stage-report numbers.
+  `uv run pytest` → 44 passed in 90.20s. `uv run rk run examples/specs/bookreview-nop.yaml --runs-dir /tmp/m2-validate-runs` → exit 0. Run-dir `_runs/m2-bookreview-nop/888e0d7319647eb1/summary.json` carries `stratified_pass_at_1: 0.0` (numeric) plus 3 per-query `pass_at_1` blocks. Reproduced 17 M1 tests via direct pytest collection against M1-era files = exactly 17.
+- DONE: Each AC-1..AC-7 in the M2 entity body has its `Verified by:` clause reproduced verbatim.
+  See `docs/razorback-implementation/validation/m2-dab-bookreview.md` §AC verification — every AC's clause is reproduced with the exact test name, exact output, and (where applicable) live command output. Highlights: AC-1 golden byte-exact via `test_aggregator_matches_golden_summary`; AC-5 live `grep -n 'stats\.evals' src/razorback/benchmarks/dab/aggregate.py` returns exit 1 (no match); AC-7 live `summary.json` has numeric `stratified_pass_at_1: 0.0` + 3 per-query `pass_at_1: 0.0`.
+- DONE: An independent code review pass via `superpowers:requesting-code-review` classifies findings as blocking vs non-blocking. The validation report at docs/razorback-implementation/validation/m2-dab-bookreview.md commits on the worktree branch with a PASSED or REJECTED gate decision.
+  Code review section in the validation report: 0 blocking, 4 non-blocking findings (N-1 forward-tracks the live verifier path for M3; N-2..N-4 confirm existing documented design choices). Gate decision: **PASSED**.
+
+### Summary
+
+Fresh-agent validation reproduces every AC verbatim against the worktree tip (`b0d36aa`). 44/44 tests green, 17 M1 tests carried forward, the §8.M2 acceptance command exits 0 against the real bookreview dataset, and `summary.json` carries the expected stratified + per-query pass@1 shape. Code review: 0 blockers, 4 non-blocking findings (one M3-forward-tracking, three confirming existing design choices). Gate decision: PASSED. Validation report at `docs/razorback-implementation/validation/m2-dab-bookreview.md` (committed on the worktree branch).
