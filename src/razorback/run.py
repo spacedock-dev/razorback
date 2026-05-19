@@ -63,14 +63,23 @@ async def _execute_run_async(*, spec: Spec, runs_dir: Path) -> None:
         await channel.aclose()
         await drain_task
 
-    summary = {
-        "experiment": spec.experiment,
-        "job_name": job_name,
-        "n_total_trials": result.n_total_trials,
-        "n_completed_trials": result.stats.n_completed_trials,
-        "n_errored_trials": result.stats.n_errored_trials,
-    }
-    (run_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+    from razorback.spec.schema import DabBenchmarkBlock
+    if isinstance(spec.benchmark, DabBenchmarkBlock):
+        from razorback.benchmarks.dab.aggregate import aggregate_job_result
+        aggregate_job_result(
+            trial_results=result.trial_results,
+            trial_name_map=trial_name_map,
+            out_path=run_dir / "summary.json",
+        )
+    else:
+        summary = {
+            "experiment": spec.experiment,
+            "job_name": job_name,
+            "n_total_trials": result.n_total_trials,
+            "n_completed_trials": result.stats.n_completed_trials,
+            "n_errored_trials": result.stats.n_errored_trials,
+        }
+        (run_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
 
 
 def _hook_publisher(channel: EventChannel, event: TrialEvent):
