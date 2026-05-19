@@ -144,3 +144,11 @@ Implemented M3 ClaudeCliAgent end-to-end: registry + .env-only auth + setup/run/
 ### Summary
 
 Fresh-agent validation reproduces six of seven ACs verbatim against `spacedock-ensign/m3-claude-cli-agent` tip `e49ec8c`; AC-6's live acceptance run scores a perfect `bookreview.dataset_pass_at_1 = 1.0`. The single blocker is that the M3 Task-1 smoke test fails on clean rerun (5/6 integration, not 6/6) because its workdir-relocation helper still references the pre-Task-5 prepare.py layout. Gate: **REJECTED** pending a small fix; full validation report at `docs/razorback-implementation/validation/m3-claude-cli-agent.md`.
+
+### Feedback Cycles
+
+**Cycle 1 — REJECTED at validation (2026-05-19, auto-bounced to implementation).**
+Validator: `spacedock-ensign-m3-claude-cli-agent-validation` (kept alive for re-review).
+Blocker B-1: `tests/integration/test_claude_cli_smoke_bookreview.py::test_claude_cli_smoke_writes_numeric_reward` fails on clean `uv run pytest` (1 failed, 72 passed). Root cause: `_patch_task_for_dab_agent` helper references the pre-Task-5 `prepare.py` workdir layout via an `old_workdir.rename` block that no longer holds.
+Fix: delete the dead smoke test (its purpose is now covered by `test_rk_run_bookreview_claude.py` + the acceptance command, both green) OR drop the obsolete `old_workdir.rename` block.
+Routed to: implementation (fresh dispatch in same worktree, cycle1). Cycle cap 3; this is 1/3.
