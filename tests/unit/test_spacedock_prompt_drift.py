@@ -32,6 +32,7 @@ def test_run_refuses_when_prompt_contents_hash_does_not_match_pinned_hash(tmp_pa
         tools_allowed=[],
         prompts={"model": pinned_a, "analyze": pinned_analyze, "verify": pinned_verify},
         sealed_hash=sealed,
+        extra_env={"ANTHROPIC_API_KEY": "sk-test"},
         prompt_contents={
             "model": body_b.decode("utf-8"),   # drifted
             "analyze": "ANALYZE\n",
@@ -65,6 +66,7 @@ def test_run_passes_when_prompt_contents_hash_matches(tmp_path):
         tools_allowed=[],
         prompts={"model": pinned, "analyze": pinned_a, "verify": pinned_v},
         sealed_hash=sealed,
+        extra_env={"ANTHROPIC_API_KEY": "sk-test"},
         prompt_contents={"model": "MODEL PROMPT\n", "analyze": "A\n", "verify": "V\n"},
         prior_frozen_spec_path=None,
     )

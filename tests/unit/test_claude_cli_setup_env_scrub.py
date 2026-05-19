@@ -1,5 +1,5 @@
 # ABOUTME: AC-2 — setup() scrubs env, injects ONLY the chosen auth, never co-mingles.
-# ABOUTME: Post FU-1 AC-2: auth is read from os.environ inside the container (not constructor).
+# ABOUTME: Post FU-1: auth arrives via the `extra_env` constructor kwarg (harbor contract).
 
 from unittest.mock import AsyncMock, MagicMock
 
@@ -18,18 +18,11 @@ def _make_environment(version_rc=0):
     return env
 
 
-@pytest.fixture(autouse=True)
-def _clear_claude_auth_env(monkeypatch):
-    """Tests own their own env; clear any inherited claude credentials."""
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
-
-
-async def test_setup_with_only_api_key_carries_only_api_key(tmp_path, monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-1")
+async def test_setup_with_only_api_key_carries_only_api_key(tmp_path):
     agent = ClaudeCliAgent(
         logs_dir=tmp_path,
         model_name="claude-opus-4-5",
+        extra_env={"ANTHROPIC_API_KEY": "sk-1"},
     )
     await agent.setup(_make_environment())
     assert "ANTHROPIC_API_KEY" in agent._exec_env
@@ -37,44 +30,35 @@ async def test_setup_with_only_api_key_carries_only_api_key(tmp_path, monkeypatc
     assert agent._exec_env["ANTHROPIC_API_KEY"] == "sk-1"
 
 
-async def test_setup_with_only_oauth_carries_only_oauth(tmp_path, monkeypatch):
-    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "oauth-1")
+async def test_setup_with_only_oauth_carries_only_oauth(tmp_path):
     agent = ClaudeCliAgent(
         logs_dir=tmp_path,
         model_name="claude-opus-4-5",
+        extra_env={"CLAUDE_CODE_OAUTH_TOKEN": "oauth-1"},
     )
     await agent.setup(_make_environment())
     assert "CLAUDE_CODE_OAUTH_TOKEN" in agent._exec_env
     assert "ANTHROPIC_API_KEY" not in agent._exec_env
 
 
-async def test_setup_refuses_to_co_mingle(tmp_path, monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-1")
-    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "oauth-1")
-    agent = ClaudeCliAgent(
-        logs_dir=tmp_path,
-        model_name="claude-opus-4-5",
-    )
-    with pytest.raises(Exception) as exc:
-        await agent.setup(_make_environment())
-    assert "cannot both be set" in str(exc.value)
-
-
-async def test_setup_refuses_when_no_auth_present(tmp_path):
-    agent = ClaudeCliAgent(
-        logs_dir=tmp_path,
-        model_name="claude-opus-4-5",
-    )
+async def test_constructor_refuses_to_co_mingle(tmp_path):
     with pytest.raises(Exception):
-        await agent.setup(_make_environment())
+        ClaudeCliAgent(
+            logs_dir=tmp_path,
+            model_name="claude-opus-4-5",
+            extra_env={
+                "ANTHROPIC_API_KEY": "sk-1",
+                "CLAUDE_CODE_OAUTH_TOKEN": "oauth-1",
+            },
+        )
 
 
-async def test_setup_carries_proxy_block_into_exec_env(tmp_path, monkeypatch):
+async def test_setup_carries_proxy_block_into_exec_env(tmp_path):
     """The proxy block from run_experiment.py:1515-1525 must ride alongside the auth."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-1")
     agent = ClaudeCliAgent(
         logs_dir=tmp_path,
         model_name="claude-opus-4-5",
+        extra_env={"ANTHROPIC_API_KEY": "sk-1"},
     )
     await agent.setup(_make_environment())
     for k in ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY",
@@ -84,13 +68,13 @@ async def test_setup_carries_proxy_block_into_exec_env(tmp_path, monkeypatch):
     assert ".anthropic.com" in agent._exec_env["NO_PROXY"]
 
 
-async def test_setup_validates_claude_binary_inside_container(tmp_path, monkeypatch):
+async def test_setup_validates_claude_binary_inside_container(tmp_path):
     """setup() runs `claude --version` inside the container; non-zero exit → raise."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-1")
     env = _make_environment(version_rc=127)
     agent = ClaudeCliAgent(
         logs_dir=tmp_path,
         model_name="claude-opus-4-5",
+        extra_env={"ANTHROPIC_API_KEY": "sk-1"},
     )
     with pytest.raises(Exception):
         await agent.setup(env)

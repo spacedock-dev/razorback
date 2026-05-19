@@ -15,13 +15,6 @@ from razorback.agents.spacedock_solver import (
 from razorback.agents.seal import compute_sealed_hash, prompt_sha256
 
 
-@pytest.fixture(autouse=True)
-def _set_claude_auth_env(monkeypatch):
-    """SpacedockSolverAgent.setup() reads auth from container os.environ; stamp it."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
-    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
-
-
 def _make_environment(version_rc=0, git_rc=0):
     env = MagicMock()
 
@@ -66,6 +59,7 @@ def _agent_kwargs(tmp_path, **overrides):
         tools_allowed=["Bash", "Read"],
         prompts=prompts,
         sealed_hash=sealed,
+        extra_env={"ANTHROPIC_API_KEY": "sk-test"},
         prompt_contents={
             "model": body_m.decode(),
             "analyze": body_a.decode(),

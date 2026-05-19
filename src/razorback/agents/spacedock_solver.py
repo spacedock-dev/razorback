@@ -2,7 +2,6 @@
 # ABOUTME: __init__ recomputes sealed_hash and refuses on mismatch BEFORE any harbor I/O.
 
 import json
-import os
 import time
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -57,6 +56,7 @@ class SpacedockSolverAgent(BaseAgent):
         sealed_hash: str,
         prompt_contents: dict[str, str] | None = None,
         prior_frozen_spec_path: Path | str | None = None,
+        extra_env: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(
@@ -73,6 +73,17 @@ class SpacedockSolverAgent(BaseAgent):
         self._tools_allowed = list(tools_allowed)
         self._prompts = dict(prompts)
         self.sealed_hash = sealed_hash
+        # FU-1 AC-1: auth arrives via harbor's `extra_env` kwarg (resolved from
+        # AgentConfig.env at agent-factory time). env field is redacted on disk;
+        # the literal value never persists.
+        self._extra_env = dict(extra_env or {})
+        if (
+            "ANTHROPIC_API_KEY" in self._extra_env
+            and "CLAUDE_CODE_OAUTH_TOKEN" in self._extra_env
+        ):
+            raise SpacedockSolverAgentError(
+                "ANTHROPIC_API_KEY and CLAUDE_CODE_OAUTH_TOKEN cannot both be set."
+            )
         self._prompt_contents = dict(prompt_contents) if prompt_contents else {}
         self._exec_env: dict[str, str] = {}
         self._phase_stats: dict[str, dict] = {}
@@ -166,44 +177,15 @@ class SpacedockSolverAgent(BaseAgent):
     def supported_sampling() -> set[str]:
         return {"temperature"}
 
-    @staticmethod
-    def _collect_auth_from_environ() -> dict[str, str]:
-        """Read ANTHROPIC_API_KEY xor CLAUDE_CODE_OAUTH_TOKEN from os.environ.
-
-        Refuses co-mingled auth (both set) and missing auth (neither set). Reading
-        os.environ here is the in-container path; harbor stamps AgentConfig.env
-        into the container before invoking setup().
-        """
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-        oauth = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
-        if api_key and oauth:
-            raise SpacedockSolverAgentError(
-                "ANTHROPIC_API_KEY and CLAUDE_CODE_OAUTH_TOKEN cannot both be set."
-            )
-        if api_key:
-            return {"ANTHROPIC_API_KEY": api_key}
-        if oauth:
-            return {"CLAUDE_CODE_OAUTH_TOKEN": oauth}
-        raise SpacedockSolverAgentError(
-            "No claude auth in container env: "
-            "ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN must be set."
-        )
-
     async def setup(self, environment: BaseEnvironment) -> None:
-        """AC-6: filter MCP servers; build exec env; validate claude + git binaries; AC-3 prompt hashes.
-
-        FU-1 AC-1: auth is read from container os.environ (harbor stamps AgentConfig.env
-        into the container) — never from constructor kwargs (which would persist plaintext
-        in run-dir config.json/lock.json).
-        """
+        """AC-6: filter MCP servers; build exec env; validate claude + git binaries; AC-3 prompt hashes."""
         if self._tools_allowed:
             allowed = set(self._tools_allowed)
             self.mcp_servers = [s for s in (self.mcp_servers or []) if s.name in allowed]
 
-        resolved_env = self._collect_auth_from_environ()
         self._exec_env = {
             **PROXY_BLOCK_ENV,
-            **resolved_env,
+            **self._extra_env,
             "HOME": "/root",
         }
 
