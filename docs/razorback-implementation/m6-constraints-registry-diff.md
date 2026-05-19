@@ -1,9 +1,9 @@
 ---
 id: 9ekr46rwhh2hs1zsemvgzqv8
 title: M6 — Constraints, registry, baselines, runs diff
-status: backlog
+status: plan
 source: design §8
-started:
+started: 2026-05-19T08:51:27Z
 completed:
 verdict:
 score: 0.6

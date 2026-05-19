@@ -1,13 +1,13 @@
 ---
 id: 93fpren96j0by11d3y5fccs1
 title: M3 — ClaudeCliAgent end-to-end
-status: plan
+status: implementation
 source: design §8
 started: 2026-05-19T07:58:58Z
 completed:
 verdict:
 score: 0.85
-worktree:
+worktree: .worktrees/spacedock-ensign-m3-claude-cli-agent
 issue:
 pr:
 mod-block:
