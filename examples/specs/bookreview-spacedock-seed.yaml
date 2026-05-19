@@ -1,0 +1,23 @@
+version: 1
+experiment: m4-bookreview-spacedock
+agent:
+  kind: spacedock-solver
+  model: claude-opus-4-5
+  sampling:
+    temperature: 0.0
+    seed: 42
+  stages: [model, analyze, verify]
+  tools_allowed: [Bash, Read, Write, Edit, Glob, Grep]
+  prompts:
+    model: ./examples/specs/prompts/spacedock-model.md
+    analyze: ./examples/specs/prompts/spacedock-analyze.md
+    verify: ./examples/specs/prompts/spacedock-verify.md
+benchmark:
+  kind: dab
+  data_root: /Users/clkao/git/dataagentbench/data
+  datasets: [bookreview]
+trials: 1
+observers:
+  - kind: jsonl
+    path: events.jsonl
+  - kind: stdout

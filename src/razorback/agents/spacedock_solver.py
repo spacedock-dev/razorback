@@ -3,13 +3,14 @@
 
 import json
 import time
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
 
 from harbor.agents.base import BaseAgent
 from harbor.environments.base import BaseEnvironment
+from harbor.models.trial.paths import EnvironmentPaths
 
 from razorback.agents.claude_invoke import build_claude_argv
 from razorback.agents.proxy import PROXY_BLOCK_ENV
@@ -201,9 +202,13 @@ class SpacedockSolverAgent(BaseAgent):
         context,
     ) -> None:
         """AC-4/AC-5: staged execution, agent_freeze/.git commits, phase_stats.json."""
-        freeze_dir = Path(self.logs_dir) / "agent_freeze"
-        freeze_dir.mkdir(parents=True, exist_ok=True)
-        await self._init_agent_freeze_repo(environment, freeze_dir)
+        host_freeze_dir = Path(self.logs_dir) / "agent_freeze"
+        host_freeze_dir.mkdir(parents=True, exist_ok=True)
+        # The container sees harbor's logs_dir bind-mounted under env_paths
+        # (default /logs/agent). Use that path inside environment.exec calls.
+        env_logs_root = self._env_logs_root(environment)
+        container_freeze_dir = env_logs_root / "agent_freeze" if env_logs_root else host_freeze_dir
+        await self._init_agent_freeze_repo(environment, container_freeze_dir)
 
         self._phase_stats = {}
         for stage in self._stages:
@@ -214,10 +219,10 @@ class SpacedockSolverAgent(BaseAgent):
             )
             t0 = time.monotonic()
             result = await environment.exec(
-                cmd, cwd=str(freeze_dir), env=self._exec_env, timeout_sec=600,
+                cmd, cwd=str(container_freeze_dir), env=self._exec_env, timeout_sec=600,
             )
             wallclock = time.monotonic() - t0
-            await self._commit_stage(environment, freeze_dir, stage)
+            await self._commit_stage(environment, container_freeze_dir, stage)
             self._phase_stats[stage] = {
                 "tokens_in": 0,
                 "tokens_out": 0,
@@ -226,13 +231,30 @@ class SpacedockSolverAgent(BaseAgent):
             }
             if result.return_code != 0:
                 context.return_code = result.return_code
-                self._write_phase_stats_file(freeze_dir)
+                self._write_phase_stats_file(host_freeze_dir)
                 return
 
         context.return_code = 0
-        self._write_phase_stats_file(freeze_dir)
+        self._write_phase_stats_file(host_freeze_dir)
 
-    async def _init_agent_freeze_repo(self, environment, freeze_dir: Path) -> None:
+    @classmethod
+    def _env_logs_root(cls, environment) -> PurePosixPath | None:
+        """Return the container-side logs root for the agent if the environment exposes one.
+
+        Harbor's BaseEnvironment.env_paths gives the in-container view (default /logs/agent).
+        Local-shell fakes used in unit tests have no env_paths; for those we fall back
+        to the host path (which IS the container path in those tests).
+        """
+        try:
+            paths = environment.env_paths
+        except Exception:
+            return None
+        # Read harbor's per-environment path so we can compute the bind-mount path
+        # to use inside environment.exec calls. AC-7 forbids razorback from writing
+        # under that directory itself; we only write to the agent_freeze/ subtree.
+        return PurePosixPath(str(paths.agent_dir))
+
+    async def _init_agent_freeze_repo(self, environment, freeze_dir) -> None:
         cmds = [
             f"git -C {freeze_dir} init -q",
             f"git -C {freeze_dir} config user.email razorback@local",
@@ -246,10 +268,12 @@ class SpacedockSolverAgent(BaseAgent):
             if r.return_code != 0:
                 raise SpacedockSolverAgentError(
                     f"agent_freeze repo init failed at: {c}\n"
+                    f"rc={r.return_code} "
+                    f"stdout={getattr(r, 'stdout', '')!r} "
                     f"stderr={getattr(r, 'stderr', '')!r}"
                 )
 
-    async def _commit_stage(self, environment, freeze_dir: Path, stage: str) -> None:
+    async def _commit_stage(self, environment, freeze_dir, stage: str) -> None:
         cmds = [
             f"git -C {freeze_dir} add -A",
             f"git -C {freeze_dir} commit -q --allow-empty -m 'stage: {stage}'",
@@ -258,7 +282,10 @@ class SpacedockSolverAgent(BaseAgent):
             r = await environment.exec(c)
             if r.return_code != 0:
                 raise SpacedockSolverAgentError(
-                    f"agent_freeze stage commit failed at: {c}"
+                    f"agent_freeze stage commit failed at: {c}\n"
+                    f"rc={r.return_code} "
+                    f"stdout={getattr(r, 'stdout', '')!r} "
+                    f"stderr={getattr(r, 'stderr', '')!r}"
                 )
 
     def _render_stage_prompt(self, stage: str, body: str, instruction: str) -> str:
