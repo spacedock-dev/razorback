@@ -1,0 +1,15 @@
+version: 1
+experiment: ade-bench-claude-smoke
+agent:
+  kind: claude-cli
+  tools_allowed: []
+benchmark:
+  kind: ade-bench
+  tasks_root: tests/fixtures/ade_bench/tasks
+  tasks:
+    - adebench-fixture-001
+trials: 1
+observers:
+  - kind: jsonl
+    path: events.jsonl
+  - kind: stdout

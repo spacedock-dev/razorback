@@ -90,7 +90,12 @@ async def _execute_run_async(
         )
 
     spec_frozen_path.write_text(frozen_text)
-    write_manifest(run_dir / "manifest.json", experiment=spec.experiment, job_name=job_name)
+    write_manifest(
+        run_dir / "manifest.json",
+        experiment=spec.experiment,
+        job_name=job_name,
+        benchmark_kind=spec.benchmark.kind,
+    )
 
     channel = EventChannel()
     for obs_block in spec.observers:
@@ -132,12 +137,18 @@ async def _execute_run_async(
         await channel.aclose()
         await drain_task
 
-    from razorback.spec.schema import DabBenchmarkBlock
+    from razorback.spec.schema import AdeBenchBenchmarkBlock, DabBenchmarkBlock
     if isinstance(spec.benchmark, DabBenchmarkBlock):
         from razorback.benchmarks.dab.aggregate import aggregate_job_result
         aggregate_job_result(
             trial_results=result.trial_results,
             trial_name_map=trial_name_map,
+            out_path=run_dir / "summary.json",
+        )
+    elif isinstance(spec.benchmark, AdeBenchBenchmarkBlock):
+        from razorback.benchmarks.ade_bench.aggregate import aggregate_job_result as ade_aggregate
+        ade_aggregate(
+            trial_results=result.trial_results,
             out_path=run_dir / "summary.json",
         )
     else:

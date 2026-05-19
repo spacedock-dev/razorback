@@ -6,7 +6,11 @@ from pathlib import Path
 
 import typer
 
-from razorback.diff.diff import check_paired_seed_compatibility, compute_diff
+from razorback.diff.diff import (
+    check_paired_benchmark_kind,
+    check_paired_seed_compatibility,
+    compute_diff,
+)
 from razorback.diff.pairing import load_run_outcomes
 from razorback.errors import RazorbackError
 
@@ -28,6 +32,7 @@ def diff_command(
 ) -> None:
     """Paired diff between two run-dirs. JSON to stdout. §6.5."""
     try:
+        check_paired_benchmark_kind(run_a, run_b)
         check_paired_seed_compatibility(run_a, run_b)
         a = load_run_outcomes(run_a)
         b = load_run_outcomes(run_b)
