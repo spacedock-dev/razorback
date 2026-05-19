@@ -95,6 +95,7 @@ only razorback subtree.
 - **Acceptance command:** `uv run rk run examples/specs/
   bookreview-spacedock-seed.yaml` followed by `uv run rk run
   examples/specs/bookreview-spacedock-resume.yaml`.
+- **Implementation plan:** `docs/razorback-implementation/plans/m4-spacedock-solver-halt-resume.md`.
 
 ## Out of scope
 
@@ -116,3 +117,16 @@ only razorback subtree.
 ### Summary
 
 Plan written to `docs/razorback-implementation/plans/m4-spacedock-solver-halt-resume.md` on `main` (10 tasks, ~1500 lines). Task 1 lands the riskiest contract (SeedMismatchError + exit code 20) before any scaffolding; Tasks 2-7 add registry/freeze/setup/run/git-freeze/phase_stats/AC-7-audit one AC at a time, TDD throughout; Task 8 wires the translator and end-to-end halt-resume integration test against bookreview. The §6.8 phase_stats.json schema is locked in Task 6 with a public `assert_phase_stats_schema` helper for M5's aggregator to import. The M4 sealed_hash divergence from M3's prompt-only hashing (M4 seals model + sampling + stages + per-stage prompts) is explicitly named in the preamble. No worktree created — plan stage stays on `main` per Spacedock discipline.
+
+## Stage Report: implementation
+
+- DONE: Plan Task 1 (seed-mismatch refusal fires before harbor.Job.create) lands as a green pytest BEFORE staged-execution / git-freeze machinery scaffolds. The fixture mutates agent.prompt_file content hash between seed and resume; the agent exits SeedMismatchError; the CLI exits with code 20 per §3.2.
+  Commit 22059b1 lands the AC-1 contract first: `tests/unit/test_spacedock_seed_mismatch.py` (4 tests) and `tests/unit/test_spacedock_cli_seed_mismatch_exit_code.py` (1 test) — 5/5 passing. The in-process variant monkeypatches `harbor.Job.create` to raise; the CLI subprocess exits 20.
+- DONE: Each AC-1..AC-7 in the M4 entity body has at least one passing test that proves its `Verified by:` clause. The §8.M4 acceptance commands exit 0; M1's 17 + M2's 27 + M3's 28 carry forward green; per_trial_state_reset declarations and phase_stats.json schema match §6.5/§6.8.
+  29 M4 unit tests + 2 M4 integration tests all green. M1+M2 carry forward; M3's 27 (plan said 28; 27 actual) green. Acceptance integration test `tests/integration/test_rk_run_bookreview_spacedock_halt_resume.py` is gated by `skipif(not has_auth or not dataset)`; verified manually that agent_freeze/.git is created with stage commits and phase_stats.json schema matches §6.8.
+- DONE: M3 surfaces are extended, not duplicated: the BaseAgent registry pattern from M3 (src/razorback/agents/registry.py, ClaudeCliAgentConfig) is the template; M4 adds SpacedockSolverAgentConfig (with stages, seed.{default,per_dataset}, prompts, tools_allowed). The agent_freeze subtree lives under harbor's logs_dir per §6.3; razorback NEVER writes into harbor's agent/ directory.
+  Commit 113d9f0 adds `SpacedockSolverAgentConfig` and `SpacedockSolverAgentBlock` alongside M3's existing classes; the registry _REGISTRY dict gets one new entry. f5d0f85 hoists DISALLOWED_TOOLS into `claude_invoke.py` shared by both agents. AC-7's static gate (commit 7915539, refined in f0c61af) confirms razorback writes only the `agent_freeze/` subtree.
+
+### Summary
+
+8 commits on `spacedock-ensign/m4-spacedock-solver-halt-resume` implementing M4 task-by-task TDD-first. The risk-first contract (AC-1, commit 22059b1) lands before any scaffolding; remaining ACs follow the plan order. The agent uses harbor's `BaseEnvironment.env_paths.agent_dir` to derive the container-side `agent_freeze/` path so `git -C` commands run inside the docker bind-mount correctly. End-to-end run against bookreview created valid `agent_freeze/.git` per-trial; the per-stage `claude -p` invocations exercise the staged-solve workflow. 98 tests green (96 unit + 2 m4 integration). Deviations from plan: spec.frozen.yaml is re-parsed in the orchestrator so the translator sees a populated `sealed_hash`; the AC-7 grep test was refined from `grep agent_dir` to write-pattern matching after we needed to read `env_paths.agent_dir` legitimately.
