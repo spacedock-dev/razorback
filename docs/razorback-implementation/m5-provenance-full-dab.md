@@ -106,3 +106,21 @@ lands in `provenance.yaml`.
 - Per-stage cost attribution for non-staged agents (claude /
   codex emit one phase, not three) — already handled by §6.8's
   schema; no additional work here.
+
+## Plan
+
+Implementation plan: [`plans/m5-provenance-full-dab.md`](plans/m5-provenance-full-dab.md).
+Tasks 1-3 land the riskiest contracts (alias drift, missing-provenance refusal, harbor drift) before any resolver code. Tasks 4-10 add the resolver stack, freeze CLI, drift wiring, and 12-dataset aggregator generalization. Tasks 11-13 are the AC-6 acceptance run — cost-bounded, one trial per query across all 12 DAB datasets.
+
+## Stage Report: plan
+
+- DONE: Plan steps map 1:1 to the 7 ACs in the M5 entity body, each with the §-cite that governs it (§6.4 provenance freeze + AliasDriftError + harbor version drift, §6.5 12-dataset stratified macro-average, §3.2 exit codes 11/21). AC↔task map at the top of the plan.
+  See "AC ↔ Task Map" table in `plans/m5-provenance-full-dab.md` (7 rows, each cites §6.4 / §6.5 / §3.2 and names the implementing Task).
+- DONE: The riskiest contract for M5 — that the model-alias-drift check (AC-3) actually fires when the provider returns a different version than the frozen `model_resolved_version` — is plan Task 1 as a unit test with a mocked provider, BEFORE any provider-API resolver code lands. Same for harbor version drift (AC-4) and missing-provenance refusal (AC-1). Math-heavy aggregator extension (AC-5: 12-dataset stratified average) comes AFTER the freeze/refusal machinery.
+  Task 1 (AC-3 alias-drift unit test against mocked Anthropic SDK) → Task 2 (AC-1 refusal unit tests) → Task 3 (AC-4 harbor-drift unit test) → Tasks 4-7 (resolvers, retry, freeze CLI, run wiring) → Tasks 8-10 (aggregator + translator widening for AC-5). AC-6 integration test is Task 12.
+- DONE: The plan extends M2's aggregator surface from docs/razorback-implementation/plans/m2-dab-bookreview.md to the full 12 DAB datasets, citing M2's `aggregate.py` module path. The plan does NOT re-derive the bookreview math — it generalizes M2's pass@1 + per-dataset mean code to a cross-dataset macro-average. Cite which lines of M2's plan are extended.
+  "M2 reuse" subsection cites `_build_summary` at M2 plan lines 317-337 and `pass_at_k` at lines 287-297. Task 8 adds the 12-dataset fixture; Task 9 verifies translator iteration over `spec.benchmark.datasets`. No math changes to `src/razorback/benchmarks/dab/aggregate.py`.
+
+### Summary
+
+Plan written at `docs/razorback-implementation/plans/m5-provenance-full-dab.md` (14 tasks). Risk-first ordering: AC-3 alias drift, AC-1 missing-provenance refusal, and AC-4 harbor drift land as mocked unit tests in Tasks 1-3 before any resolver/CLI code. Resolver stack (Anthropic SDK `client.models.retrieve()` + docker/git/hash/harbor/prompt), `rk spec freeze` Typer command, and `rk run` drift wiring follow in Tasks 4-7. AC-5 is verified via a 12-dataset synthetic fixture + golden (hand-computed stratified pass@1 = 6.5/12 = 0.5417) against M2's untouched aggregator. AC-6 integration test (Task 12) drives all 12 DAB datasets through Claude end-to-end, gated by `RAZORBACK_RUN_FULL_DAB_TEST=1` to keep CI cheap; the headline "first DAB result" lands when the implementer runs it. Provider-API resolver concretized as `anthropic.Anthropic().models.retrieve(alias)` returning `model.id` + `model.created_at` — no divergence from §6.4's design shape; Codex/OpenAI deferred to M6/M7 per design doc.
