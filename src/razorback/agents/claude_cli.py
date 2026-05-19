@@ -1,30 +1,132 @@
-# ABOUTME: ClaudeCliAgent — wraps `claude -p`. Skeleton lands here for AC-1's required_env;
-# ABOUTME: setup/run flesh out in Task 4. supported_sampling stays the source of truth.
+# ABOUTME: ClaudeCliAgent (§6.2) — wraps `claude -p`. setup() validates auth & CLI presence;
+# ABOUTME: run() emits one claude invocation per trial; version() parses `claude --version`.
+
+import shlex
+import subprocess
+from pathlib import Path
+from typing import Any
 
 from harbor.agents.base import BaseAgent
+from harbor.environments.base import BaseEnvironment
+from harbor.models.agent.context import AgentContext
+
+from razorback.agents.proxy import PROXY_BLOCK_ENV
+from razorback.errors import RazorbackError
+
+
+class ClaudeCliAgentError(RazorbackError):
+    """Raised on ClaudeCliAgent contract violations (e.g. co-mingled auth)."""
+
+
+_DEFAULT_ALLOWED_TOOLS = ("Bash", "Read", "Write", "Edit", "Glob", "Grep")
+# Verbatim transcription of solve.sh:107-122 — disallowedTools list.
+_DEFAULT_DISALLOWED_TOOLS = (
+    "WebFetch", "WebSearch",
+    "Bash(curl *)", "Bash(wget *)", "Bash(git clone *)",
+    "Bash(huggingface-cli *)", "Bash(hf *)",
+    "Bash(pip install datasets*)", "Bash(pip install huggingface*)",
+    "Bash(pip install transformers*)", "Bash(pip install evaluate*)",
+    "Bash(pip3 install datasets*)", "Bash(pip3 install huggingface*)",
+    "Bash(pip3 install transformers*)", "Bash(pip3 install evaluate*)",
+)
 
 
 class ClaudeCliAgent(BaseAgent):
     SUPPORTS_WINDOWS = False
+    SUPPORTS_ATIF = False
+
+    def __init__(
+        self,
+        logs_dir: Path,
+        model_name: str | None = None,
+        logger=None,
+        mcp_servers=None,
+        skills_dir=None,
+        *,
+        resolved_auth_env: dict[str, str] | None = None,
+        tools_allowed: list[str] | None = None,
+        sampling_temperature: float | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(
+            logs_dir=logs_dir,
+            model_name=model_name,
+            logger=logger,
+            mcp_servers=mcp_servers,
+            skills_dir=skills_dir,
+            **kwargs,
+        )
+        # AC-2: refuse co-mingled auth at construction time, before harbor runs anything.
+        env = dict(resolved_auth_env or {})
+        if "ANTHROPIC_API_KEY" in env and "CLAUDE_CODE_OAUTH_TOKEN" in env:
+            raise ClaudeCliAgentError(
+                "ANTHROPIC_API_KEY and CLAUDE_CODE_OAUTH_TOKEN cannot both be set."
+            )
+        self._resolved_auth_env = env
+        self._tools_allowed = (
+            list(tools_allowed) if tools_allowed else list(_DEFAULT_ALLOWED_TOOLS)
+        )
+        self._sampling_temperature = sampling_temperature
+        self._exec_env: dict[str, str] = {}
+        self._version_cache: str | None = None
 
     @staticmethod
     def name() -> str:
         return "claude-cli"
 
     def version(self) -> str | None:
-        return None  # Task 4 wires `claude --version`.
+        """AC-4: parse `claude --version`'s stdout. Cached on the instance."""
+        if self._version_cache is not None:
+            return self._version_cache
+        try:
+            result = subprocess.run(
+                ["claude", "--version"], capture_output=True, text=True, timeout=10
+            )
+        except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+            return None
+        if result.returncode != 0:
+            return None
+        self._version_cache = result.stdout.strip()
+        return self._version_cache
 
     @classmethod
     def required_env(cls) -> dict:
-        """AC-1: declare the alternation. Translator (Task 5) reads this."""
-        return {"mode": "alternation", "names": ["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"]}
+        """AC-1: alternation declaration — ANTHROPIC_API_KEY OR CLAUDE_CODE_OAUTH_TOKEN."""
+        return {
+            "mode": "alternation",
+            "names": ["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"],
+        }
 
     @staticmethod
     def supported_sampling() -> set[str]:
-        return set()  # Task 4 returns {"temperature"}.
+        """AC-5: Anthropic models honor temperature only. No seed, no top_p."""
+        return {"temperature"}
 
-    async def setup(self, environment) -> None:
-        raise NotImplementedError  # Task 4
+    async def setup(self, environment: BaseEnvironment) -> None:
+        """AC-2 — build the exec env dict (auth + proxy block); validate `claude` binary."""
+        result = await environment.exec("claude --version")
+        if result.return_code != 0:
+            raise ClaudeCliAgentError(
+                "claude CLI not available inside the container "
+                f"(exit={result.return_code}, stderr={getattr(result, 'stderr', '')!r})"
+            )
+        self._exec_env = {**PROXY_BLOCK_ENV, **self._resolved_auth_env}
 
-    async def run(self, instruction, environment, context) -> None:
-        raise NotImplementedError  # Task 4
+    async def run(
+        self,
+        instruction: str,
+        environment: BaseEnvironment,
+        context: AgentContext,
+    ) -> None:
+        """One `claude -p <instruction>` per trial."""
+        cmd_parts = [
+            "claude", "-p", shlex.quote(instruction),
+            "--allowedTools", ",".join(self._tools_allowed),
+        ]
+        for disallowed in _DEFAULT_DISALLOWED_TOOLS:
+            cmd_parts.extend(["--disallowedTools", shlex.quote(disallowed)])
+        cmd_parts.extend(["--permission-mode", "bypassPermissions"])
+        if self.model_name:
+            cmd_parts.extend(["--model", self.model_name])
+        cmd = " ".join(cmd_parts)
+        await environment.exec(cmd, env=self._exec_env, timeout_sec=600)
