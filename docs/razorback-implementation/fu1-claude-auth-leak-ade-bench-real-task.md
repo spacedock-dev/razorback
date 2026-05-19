@@ -10,7 +10,7 @@ score: 0.95
 worktree: .worktrees/spacedock-ensign-fu1-claude-auth-leak-ade-bench-real-task
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 ---
 
 ## Problem
