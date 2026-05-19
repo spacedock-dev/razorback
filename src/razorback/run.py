@@ -26,13 +26,27 @@ def execute_run(*, spec: Spec, runs_dir: Path) -> None:
 
 
 async def _execute_run_async(*, spec: Spec, runs_dir: Path) -> None:
+    from razorback.spec.parse import parse_spec_text
+
     frozen_text = freeze_spec(spec)
     job_name = derive_job_name(frozen_text)
+    # Re-parse the frozen text so downstream gets a Spec that reflects the freeze
+    # (e.g. spacedock-solver `sealed_hash` and `prompt_contents` populated).
+    spec = parse_spec_text(frozen_text)
 
     run_dir = Path(runs_dir).resolve() / spec.experiment / job_name
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    (run_dir / "spec.frozen.yaml").write_text(frozen_text)
+    prior_frozen_spec_path: Path | None = None
+    spec_frozen_path = run_dir / "spec.frozen.yaml"
+    if spec_frozen_path.exists():
+        # Capture the prior seed's frozen spec to a separate path so writing the
+        # resume's frozen_text below does not clobber it before the AC-1 sealed-hash
+        # comparison runs.
+        prior_frozen_spec_path = run_dir / "spec.frozen.prior.yaml"
+        prior_frozen_spec_path.write_bytes(spec_frozen_path.read_bytes())
+
+    spec_frozen_path.write_text(frozen_text)
     write_manifest(run_dir / "manifest.json", experiment=spec.experiment, job_name=job_name)
 
     channel = EventChannel()
@@ -52,7 +66,13 @@ async def _execute_run_async(*, spec: Spec, runs_dir: Path) -> None:
         jobs_dir=run_dir.parent,
         tasks_root=tasks_root,
         project_root=project_root,
+        prior_frozen_spec_path=prior_frozen_spec_path,
     )
+
+    # AC-1: instantiate the spacedock-solver agent BEFORE harbor.Job.create so
+    # SeedMismatchError surfaces (and the CLI exits with code 20) without spinning
+    # up docker. The construction is cheap and validates the sealed_hash.
+    _refuse_resume_if_spacedock_mismatch(job_config, run_dir.parent / job_name / "agent_freeze")
 
     drain_task = asyncio.create_task(channel.drain())
 
@@ -86,6 +106,20 @@ async def _execute_run_async(*, spec: Spec, runs_dir: Path) -> None:
             "n_errored_trials": result.stats.n_errored_trials,
         }
         (run_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+
+
+def _refuse_resume_if_spacedock_mismatch(job_config, agent_logs_dir: Path) -> None:
+    """AC-1: pre-construct a SpacedockSolverAgent so its sealed_hash check fires
+    BEFORE harbor.Job.create. Other agent kinds are no-ops here."""
+    for agent_cfg in job_config.agents:
+        if agent_cfg.import_path != "razorback.agents.spacedock_solver:SpacedockSolverAgent":
+            continue
+        from razorback.agents.spacedock_solver import SpacedockSolverAgent
+        SpacedockSolverAgent(
+            logs_dir=agent_logs_dir,
+            model_name=agent_cfg.model_name,
+            **agent_cfg.kwargs,
+        )
 
 
 def _hook_publisher(channel: EventChannel, event: TrialEvent):

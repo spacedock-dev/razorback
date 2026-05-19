@@ -1,0 +1,21 @@
+version: 1
+experiment: m4-seed-fixture
+agent:
+  kind: spacedock-solver
+  model: claude-opus-4-5
+  sampling:
+    temperature: 0.0
+    top_p: null
+    seed: 42
+  stages: [model, analyze, verify]
+  tools_allowed: [Bash, Read, Write, Edit, Glob, Grep]
+  prompts:
+    model: "SEED_MODEL_HASH_PLACEHOLDER"
+    analyze: "SEED_ANALYZE_HASH_PLACEHOLDER"
+    verify: "SEED_VERIFY_HASH_PLACEHOLDER"
+  sealed_hash: "SEED_SEALED_HASH_PLACEHOLDER"
+benchmark:
+  kind: dab
+  data_root: /Users/clkao/git/dataagentbench/data
+  datasets: [bookreview]
+trials: 1

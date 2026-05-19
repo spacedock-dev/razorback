@@ -23,3 +23,8 @@ class RazorbackError(Exception):
 
 class SpecError(RazorbackError):
     exit_code: int = ExitCode.SPEC_ERROR
+
+
+class SeedMismatchError(RazorbackError):
+    """Halt-resume sealed-input hashes do not match the seed's frozen spec (§3.2)."""
+    exit_code: int = ExitCode.SEED_MISMATCH
