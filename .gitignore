@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Smoke-test scratch dir
+.smoke-tmp/
+
+# Run dirs written by `rk run`
+_runs/
