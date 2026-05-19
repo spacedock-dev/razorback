@@ -2,7 +2,10 @@
 # ABOUTME: Wilson CI per (query, arm); exact-McNemar per query; bootstrap on stratified delta; power MDE.
 
 from collections import defaultdict
+from pathlib import Path
 from typing import Sequence
+
+import yaml
 
 from razorback.diff.pairing import pair_outcomes
 from razorback.diff.stats import (
@@ -11,6 +14,30 @@ from razorback.diff.stats import (
     power_mde_at_fixed_n,
     wilson_ci,
 )
+from razorback.errors import SeedMismatchError
+
+
+def check_paired_seed_compatibility(run_a: Path, run_b: Path) -> None:
+    """Refuse with SeedMismatchError when only one of the two runs pins agent.seed.default.
+
+    §6.5: "`runs diff` refuses when only one run has `agent.seed.default` set ...
+    Both sides must share the same seed run-dir."
+    """
+    a_spec = yaml.safe_load((Path(run_a) / "spec.frozen.yaml").read_text()) or {}
+    b_spec = yaml.safe_load((Path(run_b) / "spec.frozen.yaml").read_text()) or {}
+    a_seeded = _has_seed_default(a_spec)
+    b_seeded = _has_seed_default(b_spec)
+    if a_seeded != b_seeded:
+        raise SeedMismatchError(
+            "paired diff requires both runs share the same seed run-dir; "
+            f"A has agent.seed.default={a_seeded}, B has agent.seed.default={b_seeded}."
+        )
+
+
+def _has_seed_default(spec: dict) -> bool:
+    agent = spec.get("agent") or {}
+    seed = agent.get("seed") or {}
+    return isinstance(seed, dict) and "default" in seed
 
 DIFF_VERSION = 1
 
