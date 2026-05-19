@@ -1,5 +1,5 @@
 # ABOUTME: Pydantic schema for the razorback spec.
-# ABOUTME: Top-level forbids unknown keys; benchmark is a discriminated union (local | dab).
+# ABOUTME: Top-level forbids unknown keys; agent and benchmark are discriminated unions.
 
 from pathlib import Path
 from typing import Annotated, Literal, Union
@@ -7,9 +7,31 @@ from typing import Annotated, Literal, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class AgentBlock(BaseModel):
+class SamplingBlock(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    kind: str
+    temperature: float = 0.0
+    top_p: float | None = None
+    seed: int | None = None
+
+
+class NopAgentBlock(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["nop"]
+
+
+class ClaudeCliAgentBlock(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["claude-cli"]
+    model: str = "claude-opus-4-5"
+    sampling: SamplingBlock = Field(default_factory=SamplingBlock)
+    tools_allowed: list[str] = Field(default_factory=list)
+    prompt_file: Path | None = None
+
+
+AgentBlock = Annotated[
+    Union[NopAgentBlock, ClaudeCliAgentBlock],
+    Field(discriminator="kind"),
+]
 
 
 class LocalBenchmarkBlock(BaseModel):

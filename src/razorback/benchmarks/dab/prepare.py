@@ -26,18 +26,35 @@ _DATASET_SAFE = (
     "query_dataset",
 )
 
+# Default image + workdir. dab-agent:latest is the DAB-built image (built by
+# benchmark/setup.sh) that ships claude + /workspace. M3's smoke validated this
+# triangle; production runs assume the image is pre-baked.
+_DEFAULT_DOCKER_IMAGE = "dab-agent:latest"
+_DEFAULT_CONTAINER_WORKDIR = "/workspace"
+_STEP_NAME = "main"
+
 
 def prepare_dataset_tasks(
     *,
     data_root: Path,
     dataset: str,
     tasks_root: Path,
+    task_env: dict[str, str] | None = None,
+    docker_image: str = _DEFAULT_DOCKER_IMAGE,
+    container_workdir: str = _DEFAULT_CONTAINER_WORKDIR,
 ) -> list[TaskManifestEntry]:
     """Materialize harbor task dirs for every query in `dataset`.
 
     data_root: the DAB data root (e.g. `/Users/clkao/git/dataagentbench/data`).
     dataset:   short name, e.g. "bookreview" (resolved as `data_root / f"query_{dataset}"`).
     tasks_root: razorback-owned dir (must live under /Users/... for Colima); deleted and re-created.
+    task_env: optional environment variables to stamp into task.toml's
+        [environment.env] block. M3's translator threads the proxy lock-down
+        through here so harbor's docker env carries it into every trial.
+    docker_image: container image referenced by task.toml's [environment].docker_image.
+        Defaults to dab-agent:latest (the DAB-built image that ships claude).
+    container_workdir: container path harbor lands the workdir/ contents and uses
+        as cwd for the agent. Defaults to /workspace (the dab-agent WORKDIR).
 
     Returns one entry per query directory found.
     """
@@ -68,6 +85,9 @@ def prepare_dataset_tasks(
             dataset_dir=dataset_dir,
             query_dir=query_dir,
             task_dir=task_dir,
+            task_env=task_env or {},
+            docker_image=docker_image,
+            container_workdir=container_workdir,
         )
         manifest.append({
             "dataset": dataset,
@@ -84,31 +104,51 @@ def _materialize_task_dir(
     dataset_dir: Path,
     query_dir: Path,
     task_dir: Path,
+    task_env: dict[str, str],
+    docker_image: str,
+    container_workdir: str,
 ) -> None:
     task_dir.mkdir(parents=True)
-    (task_dir / "task.toml").write_text(_task_toml(task_name))
+    (task_dir / "task.toml").write_text(
+        _task_toml(
+            task_name=task_name,
+            task_env=task_env,
+            docker_image=docker_image,
+            container_workdir=container_workdir,
+        )
+    )
 
-    instruction = _instruction(query_dir=query_dir, dataset_dir=dataset_dir)
+    instruction = _instruction(
+        query_dir=query_dir,
+        dataset_dir=dataset_dir,
+        container_workdir=container_workdir,
+    )
     (task_dir / "instruction.md").write_text(instruction)
 
     env_dir = task_dir / "environment"
     env_dir.mkdir()
-    (env_dir / "Dockerfile").write_text(_dockerfile())
+    # Dockerfile is unused when [environment].docker_image is set (harbor uses
+    # the prebuilt compose path). Keep an empty placeholder so harbor's task
+    # validator (which checks environment/ exists) is satisfied.
+    (env_dir / "Dockerfile").write_text(_placeholder_dockerfile())
 
     tests_dir = task_dir / "tests"
     tests_dir.mkdir()
-
-    # The verifier and the dataset's validate.py live in /tests/ inside the container.
-    # /tests/ is NOT visible to the agent (which only sees /work/), so AC-2 holds.
     import razorback.benchmarks.dab.verify as verify_module
     shutil.copy2(Path(verify_module.__file__), tests_dir / "verify.py")
     shutil.copy2(query_dir / "validate.py", tests_dir / "validate.py")
 
     test_sh = tests_dir / "test.sh"
-    test_sh.write_text(_test_sh())
+    test_sh.write_text(_test_sh(container_workdir=container_workdir))
     test_sh.chmod(test_sh.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
-    workdir = task_dir / "workdir"
+    # Harbor 0.6.6's single-step trial path does NOT auto-upload task_dir/workdir;
+    # only steps/<step>/workdir is uploaded (trial.py:482-496). Use a one-step
+    # task with name="main" so the dataset reaches the container.
+    step_dir = task_dir / "steps" / _STEP_NAME
+    step_dir.mkdir(parents=True)
+    (step_dir / "instruction.md").write_text(instruction)
+    workdir = step_dir / "workdir"
     workdir.mkdir()
     for name in _DATASET_SAFE:
         src = dataset_dir / name
@@ -134,53 +174,64 @@ def _materialize_task_dir(
                 stray.unlink()
 
 
-def _task_toml(task_name: str) -> str:
-    return (
-        'schema_version = "1.2"\n'
-        '\n'
-        '[task]\n'
-        f'name = "razorback/{task_name}"\n'
-        f'description = "DAB {task_name} as a harbor task."\n'
+def _task_toml(
+    *,
+    task_name: str,
+    task_env: dict[str, str],
+    docker_image: str,
+    container_workdir: str,
+) -> str:
+    body = (
+        'schema_version = "1.2"\n\n'
+        f'[task]\nname = "razorback/{task_name}"\n'
+        f'description = "DAB {task_name} as a harbor task."\n\n'
+        "[environment]\n"
+        f'docker_image = "{_toml_escape(docker_image)}"\n'
+        f'workdir = "{_toml_escape(container_workdir)}"\n'
     )
+    if task_env:
+        body += "\n[environment.env]\n"
+        for k, v in task_env.items():
+            body += f'{k} = "{_toml_escape(v)}"\n'
+    body += f'\n[[steps]]\nname = "{_STEP_NAME}"\n'
+    return body
 
 
-def _instruction(*, query_dir: Path, dataset_dir: Path) -> str:
+def _toml_escape(value: str) -> str:
+    """Escape backslashes and double-quotes for TOML basic strings."""
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _instruction(*, query_dir: Path, dataset_dir: Path, container_workdir: str) -> str:
     query_text = (query_dir / "query.json").read_text()
     db_description = (dataset_dir / "db_description.txt").read_text()
     return (
         "# Task\n\n"
-        f"Answer the following query using the databases described below.\n\n"
+        "Answer the following query using the databases described below.\n\n"
         f"## Query\n\n{query_text}\n\n"
         f"## Databases\n\n{db_description}\n\n"
         "## Output contract\n\n"
-        "Write your final answer to `/work/answers.json` as a JSON object of the form\n"
+        f"Write your final answer to `{container_workdir}/answers.json` as a JSON object of the form\n"
         '`{"answer": "<your answer as a single string>"}`. The verifier reads this file.\n'
     )
 
 
-def _dockerfile() -> str:
-    # Minimal image: bookreview tasks read SQLite directly; postgres is out of M2 scope
-    # (the nop agent never queries it). Future milestones swap in DAB's full image.
-    return (
-        "FROM python:3.12-slim\n"
-        "RUN apt-get update && apt-get install -y --no-install-recommends sqlite3 "
-        "&& rm -rf /var/lib/apt/lists/*\n"
-        "WORKDIR /work\n"
-        'CMD ["sleep", "infinity"]\n'
-    )
+def _placeholder_dockerfile() -> str:
+    """Empty placeholder so harbor's task validator sees an environment/ dir.
+
+    The actual image is selected via [environment].docker_image in task.toml,
+    so this Dockerfile is never built when the prebuilt image is configured.
+    """
+    return "# Unused — [environment].docker_image selects a prebuilt image.\n"
 
 
-def _test_sh() -> str:
-    # The verifier reads /work/answers.json, calls /tests/verify.py with the per-query
-    # validate.py already copied alongside it. No env vars, no bind mounts —
-    # everything the verifier needs is in /tests/ (where harbor auto-copies the task's
-    # tests/ dir).
+def _test_sh(*, container_workdir: str) -> str:
     return (
         '#!/bin/sh\n'
         'set -eu\n'
         'mkdir -p /logs/verifier\n'
         'python /tests/verify.py \\\n'
         '  --validate-py /tests/validate.py \\\n'
-        '  --answers /work/answers.json \\\n'
+        f'  --answers {container_workdir}/answers.json \\\n'
         '  --reward-out /logs/verifier/reward.json\n'
     )
