@@ -136,9 +136,25 @@ def materialize_git_task(
     if _fake_git_source is not None:
         shutil.copytree(_fake_git_source, target_dir)
     else:
-        raise NotImplementedError(
-            "Task 2 wires the harbor TaskClient real-fetch branch."
+        import asyncio
+
+        from harbor.tasks.client import TaskClient
+
+        client = TaskClient()
+        asyncio.run(
+            client.download_tasks(
+                task_ids=[task_id],
+                overwrite=True,
+                output_dir=cache_root,
+            )
         )
+        # Harbor lands the task at cache_root / shortuuid.uuid(str(task_id)) /
+        # source_path.name (see harbor.tasks.client._download_git_tasks).
+        # target_dir already matches that path.
+        if not (target_dir / "task.toml").exists():
+            raise FileNotFoundError(
+                f"materialize_git_task: harbor fetched but no task.toml at {target_dir}"
+            )
 
     rewrite_docker_image(target_dir / "task.toml", docker_image)
     return target_dir
