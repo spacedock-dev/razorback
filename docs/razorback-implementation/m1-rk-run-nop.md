@@ -130,3 +130,18 @@ one line per fired event in fire order; the corresponding
 ### Summary
 
 Plan written via the superpowers:writing-plans skill, 15 tasks ordered riskiest-contract-first. Task 1 runs the live nop+hello-world+verifier round-trip before any razorback code lands, so if `reward.txt` doesn't survive Colima bind-mounts we know on day one and escalate before scaffolding. Each AC maps to at least one TDD-shaped task with failing-test → green-test → commit cadence; the §8.M1 acceptance command appears as Task 14's interactive validation alongside the subprocess-driven integration test in Tasks 11–12.
+
+## Stage Report: implementation
+
+- DONE: Plan Task 1 (live nop+hello-world+verifier round-trip) is exercised on the operator's machine BEFORE any razorback scaffolding code is written. The mechanism check must pass — a real run-dir with reward.txt actually deposited on the host — before tasks 2+ start. If it fails on the bind-mount/Colima path, STOP and escalate to the FO instead of working around.
+  Mechanism smoke ran first (commit 29eb878). First execution surfaced the real Colima risk: `bash` not in `alpine:3.20` PATH → harbor's `bash -c` exec returns OCI 127 → nothing lands in the verifier bind mount. Fixed at the task-manifest layer (`RUN apk add --no-cache bash` in `examples/tasks/hello-world/environment/Dockerfile`) — within the plan's Step 4 option (a). After fix: events fired = `[start, environment_start, agent_start, verification_start, end]`, `n_completed=1`, `n_errored=0`, `reward.txt` (3B `'1.0'`) and `test-stdout.txt` (17B) visible on host.
+- DONE: Each AC-N in the M1 entity body has at least one passing test that proves its `Verified by:` clause from a clean checkout of the worktree branch — confirmed by `uv run pytest` exiting 0 and the §8.M1 acceptance command `uv run rk run examples/specs/nop.yaml` exiting 0 with a run-dir whose `_runs/<experiment>/<job_name>/` contains spec.frozen.yaml, manifest.json, events.jsonl, summary.json, and harbor's lock.json + per-trial subtree.
+  17/17 pytest passed (15 unit + 2 integration). `uv run rk run examples/specs/nop.yaml` exits 0 with `_runs/m1-nop/2ad8314cc61b194f/` containing spec.frozen.yaml, manifest.json, events.jsonl (5 rows), summary.json (`n_errored_trials: 0`), lock.json, and `hello-world__62AYkys/{config.json, result.json, agent/, verifier/, artifacts/}`.
+- DONE: Commits follow the plan's `m1: <short summary>` format, one focused commit per plan task, with the failing test landing before the implementation that makes it green. The worktree branch tip is ready for fresh-agent validation review without follow-up cleanup.
+  13 atomic commits on `spacedock-ensign/m1-rk-run-nop` (29eb878..2063869), each `m1: <summary>` and one-per-plan-task. Tasks 14 (interactive acceptance) and Task 15 (cross-reference already landed in the plan-stage commit) deliberately produce no commit per the plan. Worktree is clean.
+
+### Summary
+
+M1 lands `rk run` against harbor's nop agent end-to-end. The pre-M1 verifier-on-Colima risk surfaced exactly where it was predicted (Task 1, mechanism-first): alpine's missing bash broke every `bash -c` exec harbor issues. Fix was a single-line `apk add bash` in the task Dockerfile, not a design change. Every AC has a green test from a clean branch checkout, with the §8.M1 command exiting 0 and writing the §6.3 layout.
+
+One scoped plan deviation: Task 1's smoke writes under `<repo>/.smoke-tmp/` rather than `~/.cache/razorback-smoke/` — the harness sandbox denies `~/.cache` writes, but both paths are equally Colima-mountable under `/Users/clkao/`. `.smoke-tmp/` is gitignored and the cwd is still under `/Users/clkao/`, so harbor's bind mount works as the plan intended.
