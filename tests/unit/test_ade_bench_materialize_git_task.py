@@ -87,3 +87,42 @@ def test_materialized_dir_matches_harbor_shortuuid_layout(tmp_path: Path) -> Non
     )
     expected = cache_root / shortuuid.uuid(str(task_id)) / "fixture_git_task_with_image"
     assert materialized == expected
+
+
+def test_source_task_toml_unchanged_after_materialization(tmp_path: Path) -> None:
+    from razorback.benchmarks.ade_bench.tasks import materialize_git_task
+
+    source = (FIXTURES / "fixture_git_task_with_image").resolve()
+    original_bytes = (source / "task.toml").read_bytes()
+    original_dockerfile = (source / "environment" / "Dockerfile").read_bytes()
+    materialize_git_task(
+        git_url="file://" + str(source),
+        git_commit_id="deadbeef" * 5,
+        source_path=Path("fixture_git_task_with_image"),
+        docker_image="dab-agent:latest",
+        cache_root=tmp_path / "fu2-cache",
+        _fake_git_source=source,
+    )
+    assert (source / "task.toml").read_bytes() == original_bytes
+    assert (
+        (source / "environment" / "Dockerfile").read_bytes() == original_dockerfile
+    )
+
+
+def test_two_materializations_with_different_overrides_dont_drift_source(
+    tmp_path: Path,
+) -> None:
+    from razorback.benchmarks.ade_bench.tasks import materialize_git_task
+
+    source = (FIXTURES / "fixture_git_task_no_image").resolve()
+    original_bytes = (source / "task.toml").read_bytes()
+    for image in ("dab-agent:latest", "custom-agent:v2"):
+        materialize_git_task(
+            git_url="file://" + str(source),
+            git_commit_id="cafebabe" * 5,
+            source_path=Path("fixture_git_task_no_image"),
+            docker_image=image,
+            cache_root=tmp_path / f"cache-{image.split(':')[0]}",
+            _fake_git_source=source,
+        )
+    assert (source / "task.toml").read_bytes() == original_bytes
