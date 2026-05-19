@@ -102,6 +102,7 @@ class AdeBenchBenchmarkBlock(BaseModel):
     kind: Literal["ade-bench"]
     tasks_root: Path
     tasks: list[str | AdeBenchTaskEntry] = Field(min_length=1)
+    docker_image_override: str | None = None
 
 
 BenchmarkBlock = Annotated[
