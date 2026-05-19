@@ -45,15 +45,25 @@ def check_paired_benchmark_kind(run_a: Path, run_b: Path) -> None:
     """AC-6 — refuse with BenchmarkMismatchError when run-dirs span different benchmarks.
 
     Reads `manifest.json` on each side. If both carry `benchmark_kind` and they differ,
-    raises. If one or both are missing the field, proceeds (M5/M6 fixtures predate it).
+    raises. If one or both are missing the file or field, proceeds (M5/M6 fixtures predate it).
     """
     import json as _json
-    a_manifest = _json.loads((Path(run_a) / "manifest.json").read_text())
-    b_manifest = _json.loads((Path(run_b) / "manifest.json").read_text())
-    a_kind = a_manifest.get("benchmark_kind")
-    b_kind = b_manifest.get("benchmark_kind")
+    a_kind = _read_benchmark_kind(Path(run_a))
+    b_kind = _read_benchmark_kind(Path(run_b))
     if a_kind and b_kind and a_kind != b_kind:
         raise BenchmarkMismatchError(run_a_kind=a_kind, run_b_kind=b_kind)
+
+
+def _read_benchmark_kind(run_dir: Path) -> str | None:
+    import json as _json
+    manifest_path = run_dir / "manifest.json"
+    if not manifest_path.exists():
+        return None
+    try:
+        manifest = _json.loads(manifest_path.read_text())
+    except Exception:
+        return None
+    return manifest.get("benchmark_kind")
 
 DIFF_VERSION = 1
 
