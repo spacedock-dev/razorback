@@ -171,7 +171,7 @@ def _build_ade_bench(
     *, spec: Spec, job_name: str, jobs_dir: Path, agent_cfg: AgentConfig,
 ) -> JobConfig:
     assert isinstance(spec.benchmark, AdeBenchBenchmarkBlock)
-    task_dirs = resolve_task_dirs(
+    resolved = resolve_task_dirs(
         tasks_root=spec.benchmark.tasks_root,
         tasks=spec.benchmark.tasks,
     )
@@ -181,7 +181,14 @@ def _build_ade_bench(
         n_concurrent_trials=1,
         n_attempts=spec.trials,
         agents=[agent_cfg],
-        tasks=[TaskConfig(path=p) for p in task_dirs],
+        tasks=[
+            TaskConfig(
+                path=r.path,
+                git_url=r.git_url,
+                git_commit_id=r.git_commit_id,
+            )
+            for r in resolved
+        ],
         verifier=VerifierConfig(disable=False),
         retry=RetryConfig(max_retries=0),
         environment=EnvironmentConfig(delete=False),
