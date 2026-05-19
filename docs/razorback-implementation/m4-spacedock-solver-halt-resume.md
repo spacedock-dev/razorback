@@ -1,16 +1,16 @@
 ---
 id: 8c53p5jxwwckfkqzm3mg5drs
 title: M4 — SpacedockSolverAgent with halt-resume
-status: validation
+status: done
 source: design §8
 started: 2026-05-19T08:23:23Z
-completed:
-verdict:
+completed: 2026-05-19T12:34:57Z
+verdict: PASSED
 score: 0.7
-worktree: .worktrees/spacedock-ensign-m4-spacedock-solver-halt-resume
+worktree: 
 issue:
 pr:
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 ## Problem
