@@ -1,16 +1,16 @@
 ---
 id: 9ekr46rwhh2hs1zsemvgzqv8
 title: M6 — Constraints, registry, baselines, runs diff
-status: validation
+status: done
 source: design §8
 started: 2026-05-19T08:51:27Z
-completed:
-verdict:
+completed: 2026-05-19T13:04:06Z
+verdict: PASSED
 score: 0.6
-worktree: .worktrees/spacedock-ensign-m6-constraints-registry-diff
+worktree: 
 issue:
 pr:
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 ## Problem
