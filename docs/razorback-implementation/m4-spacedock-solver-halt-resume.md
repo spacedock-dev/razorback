@@ -10,7 +10,7 @@ score: 0.7
 worktree: .worktrees/spacedock-ensign-m4-spacedock-solver-halt-resume
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 ---
 
 ## Problem
