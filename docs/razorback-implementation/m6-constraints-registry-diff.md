@@ -1,7 +1,7 @@
 ---
 id: 9ekr46rwhh2hs1zsemvgzqv8
 title: M6 — Constraints, registry, baselines, runs diff
-status: implementation
+status: validation
 source: design §8
 started: 2026-05-19T08:51:27Z
 completed:
