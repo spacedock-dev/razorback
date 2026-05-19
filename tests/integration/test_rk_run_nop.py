@@ -84,3 +84,19 @@ def test_rk_run_nop_end_to_end(runs_root):
     summary = json.loads((run_dir / "summary.json").read_text())
     assert summary["n_errored_trials"] == 0
     assert summary["n_completed_trials"] >= 1
+
+
+def test_rk_run_unknown_top_level_key_exits_10(colima_safe_tmp_path):
+    bad = colima_safe_tmp_path / "bad.yaml"
+    bad.write_text(
+        "version: 1\nexperiment: x\nagent:\n  kind: nop\nbenchmark:\n  kind: local\nunknown_key: foo\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-m", "razorback.cli", "run", str(bad)],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 10, f"stdout={result.stdout}\nstderr={result.stderr}"
+    assert "SpecError" in result.stderr
