@@ -130,8 +130,10 @@ def _build_agent_config(
                 "claude-cli agent requires project_root for .env auth discovery."
             )
         resolution = resolve_claude_auth(project_root=project_root, home=home)
+        # FU-1 AC-1: forward auth ONLY via AgentConfig.env (harbor redacts on disk
+        # via templatize_sensitive_env). kwargs is plaintext-on-disk and must not
+        # carry credentials.
         kwargs: dict[str, Any] = {
-            "resolved_auth_env": dict(resolution.env),
             "tools_allowed": list(spec.agent.tools_allowed),
             "sampling_temperature": spec.agent.sampling.temperature,
         }

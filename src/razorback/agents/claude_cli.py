@@ -1,6 +1,7 @@
 # ABOUTME: ClaudeCliAgent (§6.2) — wraps `claude -p`. setup() validates auth & CLI presence;
 # ABOUTME: run() emits one claude invocation per trial; version() parses `claude --version`.
 
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -30,7 +31,6 @@ class ClaudeCliAgent(BaseAgent):
         mcp_servers=None,
         skills_dir=None,
         *,
-        resolved_auth_env: dict[str, str] | None = None,
         tools_allowed: list[str] | None = None,
         sampling_temperature: float | None = None,
         **kwargs: Any,
@@ -43,13 +43,6 @@ class ClaudeCliAgent(BaseAgent):
             skills_dir=skills_dir,
             **kwargs,
         )
-        # AC-2: refuse co-mingled auth at construction time, before harbor runs anything.
-        env = dict(resolved_auth_env or {})
-        if "ANTHROPIC_API_KEY" in env and "CLAUDE_CODE_OAUTH_TOKEN" in env:
-            raise ClaudeCliAgentError(
-                "ANTHROPIC_API_KEY and CLAUDE_CODE_OAUTH_TOKEN cannot both be set."
-            )
-        self._resolved_auth_env = env
         self._tools_allowed = (
             list(tools_allowed) if tools_allowed else list(DEFAULT_ALLOWED_TOOLS)
         )
@@ -90,14 +83,43 @@ class ClaudeCliAgent(BaseAgent):
         return {"temperature"}
 
     async def setup(self, environment: BaseEnvironment) -> None:
-        """AC-2 — build the exec env dict (auth + proxy block); validate `claude` binary."""
+        """AC-2 — build the exec env dict (auth + proxy block); validate `claude` binary.
+
+        FU-1 AC-2: auth is read from the container's os.environ (harbor stamps
+        AgentConfig.env into the container before invoking setup). The host-side
+        .env discovery (razorback.agents.auth) is unchanged.
+        """
         result = await environment.exec("claude --version")
         if result.return_code != 0:
             raise ClaudeCliAgentError(
                 "claude CLI not available inside the container "
                 f"(exit={result.return_code}, stderr={getattr(result, 'stderr', '')!r})"
             )
-        self._exec_env = {**PROXY_BLOCK_ENV, **self._resolved_auth_env}
+        resolved_env = self._collect_auth_from_environ()
+        self._exec_env = {**PROXY_BLOCK_ENV, **resolved_env}
+
+    @staticmethod
+    def _collect_auth_from_environ() -> dict[str, str]:
+        """Read ANTHROPIC_API_KEY xor CLAUDE_CODE_OAUTH_TOKEN from os.environ.
+
+        Refuses co-mingled auth (both set) and missing auth (neither set). Reading
+        os.environ here is the in-container path; harbor stamps AgentConfig.env
+        into the container before invoking setup().
+        """
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        oauth = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
+        if api_key and oauth:
+            raise ClaudeCliAgentError(
+                "ANTHROPIC_API_KEY and CLAUDE_CODE_OAUTH_TOKEN cannot both be set."
+            )
+        if api_key:
+            return {"ANTHROPIC_API_KEY": api_key}
+        if oauth:
+            return {"CLAUDE_CODE_OAUTH_TOKEN": oauth}
+        raise ClaudeCliAgentError(
+            "No claude auth in container env: "
+            "ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN must be set."
+        )
 
     async def run(
         self,
