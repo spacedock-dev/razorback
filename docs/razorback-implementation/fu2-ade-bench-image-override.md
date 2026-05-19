@@ -1,7 +1,7 @@
 ---
 id: bbc6xyn89fqde0vxqc50yw7m
 title: FU-2 — ade-bench image override (real LLM-scored result)
-status: implementation
+status: validation
 source: post-FU1 follow-up (CL 2026-05-19)
 started: 2026-05-19T17:59:13Z
 completed:
