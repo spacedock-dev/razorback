@@ -1,16 +1,16 @@
 ---
 id: 3w29a8smhbb32w4r07b81sst
 title: FU-1 — M3 auth leak + ade-bench dab-agent image + real-task git fetch
-status: validation
+status: done
 source: post-sprint follow-up (CL 2026-05-19)
 started: 2026-05-19T14:58:09Z
-completed:
-verdict:
+completed: 2026-05-19T17:57:02Z
+verdict: PASSED
 score: 0.95
-worktree: .worktrees/spacedock-ensign-fu1-claude-auth-leak-ade-bench-real-task
+worktree: 
 issue:
 pr:
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 ## Problem
