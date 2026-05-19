@@ -10,7 +10,7 @@ score: 0.95
 worktree: .worktrees/spacedock-ensign-fu2-ade-bench-image-override
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 ---
 
 ## Problem
