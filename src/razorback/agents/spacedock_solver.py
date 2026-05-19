@@ -8,7 +8,7 @@ import yaml
 
 from harbor.agents.base import BaseAgent
 
-from razorback.agents.seal import compute_sealed_hash
+from razorback.agents.seal import compute_sealed_hash, prompt_sha256
 from razorback.errors import RazorbackError, SeedMismatchError
 
 
@@ -111,6 +111,23 @@ class SpacedockSolverAgent(BaseAgent):
             if prior_prompts.get(name) != my_hash:
                 return f"prompts.{name}"
         return "sealed_hash"
+
+    def verify_prompt_contents(self) -> None:
+        """AC-3: re-hash each prompt body; refuse if it does not match the pinned sha256."""
+        for stage, pinned in self._prompts.items():
+            if not pinned.startswith("sha256:"):
+                continue
+            body = self._prompt_contents.get(stage)
+            if body is None:
+                raise SpacedockSolverAgentError(
+                    f"prompt_contents.{stage} is missing; cannot verify against pinned {pinned}"
+                )
+            recomputed = prompt_sha256(body.encode("utf-8"))
+            if recomputed != pinned:
+                raise SpacedockSolverAgentError(
+                    f"prompts.{stage} hash drift: pinned {pinned}, recomputed {recomputed}. "
+                    "The frozen spec's prompt_contents has been tampered with after freeze."
+                )
 
     @staticmethod
     def name() -> str:
