@@ -90,7 +90,12 @@ async def _execute_run_async(
         )
 
     spec_frozen_path.write_text(frozen_text)
-    write_manifest(run_dir / "manifest.json", experiment=spec.experiment, job_name=job_name)
+    write_manifest(
+        run_dir / "manifest.json",
+        experiment=spec.experiment,
+        job_name=job_name,
+        benchmark_kind=spec.benchmark.kind,
+    )
 
     channel = EventChannel()
     for obs_block in spec.observers:

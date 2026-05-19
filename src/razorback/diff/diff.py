@@ -7,6 +7,7 @@ from typing import Sequence
 
 import yaml
 
+from razorback.diff.errors import BenchmarkMismatchError
 from razorback.diff.pairing import pair_outcomes
 from razorback.diff.stats import (
     exact_mcnemar_p,
@@ -38,6 +39,21 @@ def _has_seed_default(spec: dict) -> bool:
     agent = spec.get("agent") or {}
     seed = agent.get("seed") or {}
     return isinstance(seed, dict) and "default" in seed
+
+
+def check_paired_benchmark_kind(run_a: Path, run_b: Path) -> None:
+    """AC-6 — refuse with BenchmarkMismatchError when run-dirs span different benchmarks.
+
+    Reads `manifest.json` on each side. If both carry `benchmark_kind` and they differ,
+    raises. If one or both are missing the field, proceeds (M5/M6 fixtures predate it).
+    """
+    import json as _json
+    a_manifest = _json.loads((Path(run_a) / "manifest.json").read_text())
+    b_manifest = _json.loads((Path(run_b) / "manifest.json").read_text())
+    a_kind = a_manifest.get("benchmark_kind")
+    b_kind = b_manifest.get("benchmark_kind")
+    if a_kind and b_kind and a_kind != b_kind:
+        raise BenchmarkMismatchError(run_a_kind=a_kind, run_b_kind=b_kind)
 
 DIFF_VERSION = 1
 

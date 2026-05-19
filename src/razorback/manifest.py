@@ -8,11 +8,19 @@ from pathlib import Path
 RUN_DIR_VERSION = 1
 
 
-def write_manifest(path: Path, *, experiment: str, job_name: str) -> None:
-    payload = {
+def write_manifest(
+    path: Path,
+    *,
+    experiment: str,
+    job_name: str,
+    benchmark_kind: str | None = None,
+) -> None:
+    payload: dict = {
         "run_dir_version": RUN_DIR_VERSION,
         "experiment": experiment,
         "job_name": job_name,
         "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
+    if benchmark_kind is not None:
+        payload["benchmark_kind"] = benchmark_kind
     Path(path).write_text(json.dumps(payload, indent=2) + "\n")
