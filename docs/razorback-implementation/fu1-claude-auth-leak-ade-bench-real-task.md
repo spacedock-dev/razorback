@@ -1,7 +1,7 @@
 ---
 id: 3w29a8smhbb32w4r07b81sst
 title: FU-1 — M3 auth leak + ade-bench dab-agent image + real-task git fetch
-status: implementation
+status: validation
 source: post-sprint follow-up (CL 2026-05-19)
 started: 2026-05-19T14:58:09Z
 completed:
