@@ -6,7 +6,12 @@ from typing import Any
 
 from harbor.models.agent.name import AgentName
 from harbor.models.job.config import JobConfig, RetryConfig
-from harbor.models.trial.config import AgentConfig, TaskConfig, VerifierConfig
+from harbor.models.trial.config import (
+    AgentConfig,
+    EnvironmentConfig,
+    TaskConfig,
+    VerifierConfig,
+)
 
 from razorback.agents.auth import resolve_claude_auth
 from razorback.agents.proxy import PROXY_BLOCK_ENV
@@ -93,6 +98,10 @@ def _build_local(*, spec: Spec, job_name: str, jobs_dir: Path, agent_cfg: AgentC
         tasks=[TaskConfig(path=Path(p).resolve()) for p in spec.benchmark.task_paths],
         verifier=VerifierConfig(disable=False),
         retry=RetryConfig(max_retries=0),
+        # delete=False preserves the prebuilt dab-agent:latest image across runs.
+        # Default delete=True invokes `docker compose down --rmi all`, which removes
+        # the prebuilt image and forces a rebuild before every subsequent run.
+        environment=EnvironmentConfig(delete=False),
     )
 
 
@@ -129,5 +138,9 @@ def _build_dab(
         tasks=tasks,
         verifier=VerifierConfig(disable=False),
         retry=RetryConfig(max_retries=0),
+        # delete=False preserves the prebuilt dab-agent:latest image across runs.
+        # Default delete=True invokes `docker compose down --rmi all`, which removes
+        # the prebuilt image and forces a rebuild before every subsequent run.
+        environment=EnvironmentConfig(delete=False),
     )
     return cfg, trial_name_map
