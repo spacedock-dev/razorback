@@ -1,13 +1,13 @@
 ---
 id: e34q91ykfa8g281cdf523b1v
 title: Phase 1 — rk run v2 wrapper
-status: validation
+status: done
 source: plan Phase 1 + spec §3.2 + §8.1 (v2 spec at docs/superpowers/specs/2026-05-19-razorback-on-harbor.md)
 started: 2026-05-20T06:23:05Z
-completed:
-verdict:
+completed: 2026-05-20T07:54:29Z
+verdict: PASSED
 score: 0.9
-worktree: .worktrees/spacedock-ensign-phase1-rk-run-v2-wrapper
+worktree: 
 issue:
 pr:
 mod-block:
