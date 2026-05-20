@@ -714,6 +714,22 @@ unchanged. Verified by AC-0.3/4/6's source probe at
 ("Field-by-field gap" table, `trials: int` → `n_attempts: int` row,
 and the "open question" filed in the probe summary).
 
+**`observers` → harbor event-stream translation.** Razorback's
+`observers: list[ObserverBlock]` (kinds `jsonl`, `stdout`) has no slot
+in harbor's `JobConfig` (`harbor/models/job/config.py:244-302`).
+Razorback's observers translate by **consuming harbor's per-job event
+stream** post-`harbor run`: harbor's publisher infrastructure
+(`harbor/publisher/`) emits trial events to a per-job event log inside
+the run-dir; razorback's `jsonl` observer reifies the events to a
+named JSONL file, and the `stdout` observer prints a summary line per
+trial. The translation is **read-side, not injected into `JobConfig`**
+— razorback's observer blocks stay in `spec.frozen.yaml` for
+provenance and are interpreted by `rk run`'s post-invocation reader,
+not by harbor. Verified by AC-0.3/4/6's source probe at
+`docs/superpowers/plans/2026-05-19-harbor-source-probe.md`
+("Field-by-field gap" table, `observers` row, and the observers open
+question in the probe summary).
+
 ---
 
 ## 7. Run-dir contract
