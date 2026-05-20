@@ -321,3 +321,18 @@ infrastructure for both is in place: the spec examples exist, the
 translator dispatches `harbor_dab` correctly under a mocked plugin
 subprocess, and the AC-6 pre-registration is committed so the run-dir
 commit ordering rule is unambiguous when T15 finally runs.
+
+## Stage Report: validation
+
+- DONE: AC coverage scan across AC-1 through AC-9.
+  AC-1 PARTIAL-PASS (translator path verified under mocked subprocess; live `rk run` blocks on Phase 1). AC-2 PARTIAL-PASS (workspace install discoverable; standalone wheel-install not run). AC-3 PASS (12-row catalog + per-task materializer + 6/6 prepare tests). AC-4 DEFERRED to T14 (needs `rk run` + Docker). AC-5 DEFERRED to T15 (needs $30-60 captain approval). AC-6 PASS (commit 8c928bd predates any T15 run-dir). AC-7 PASS (in-tree dispatch regression test green; 29 pre-existing dab tests green). AC-8 PASS (stratum payload + verifier copy verified). AC-9 PASS (DatasetNotHydratedError + exit-2 + integration test).
+- DONE: Test suites run from worktree.
+  46/46 plugin tests (0.78s), 9/9 harbor_dab tests (0.09s), 38/38 dab+harbor_dab tests (0.28s), 264/264 full razorback unit tests (11.91s). No regressions. Full table in validation report.
+- DONE: Code review against 2b802f8..0847b36.
+  No blocking findings. Six non-blocking notes: subprocess uses `uv run` (workspace coupling), trial-name-map rsplit fragile to future dataset names with `-q`, `pg_dbs[0]` picks first postgres DB silently, `from __future__ import annotations` inconsistency, validate CLI is name-only (not task.toml-schema), double-level out-dir nesting is a small readability footgun. Full text in validation report.
+- DONE: Gate decision.
+  PARTIAL-PASS — approve to `done`. Deferred ACs (4, 5) gated on external events (Phase 1 ship + captain $30-60 approval). T14 and T15 already tracked as pending tasks #32 and #35.
+
+### Summary
+
+Phase 2 ships the DAB harbor adapter as a sibling package under `packages/razorback-plugin-dab/` plus razorback core's `HarborDabBenchmarkBlock` + `_build_harbor_dab` translator. All 9 ACs are met or appropriately deferred. The 46 plugin + 9 harbor_dab + 264 razorback unit tests are green with no regressions. AC-4 and AC-5 are correctly deferred to T14 (needs `rk run` from Phase 1) and T15 (needs captain greenlight for the $30-60 Claude-API matrix run); the matrix run was NOT executed during validation per the dispatch's cost ceiling. Validation report at `docs/razorback-implementation/validation/phase2-dab-harbor-adapter.md`. Recommend approve to `done` with verdict PARTIAL-PASS.
