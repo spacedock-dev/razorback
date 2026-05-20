@@ -182,6 +182,17 @@ def run_command(
         typer.echo(f"{type(exc).__name__}: {exc}", err=True)
         raise typer.Exit(exc.exit_code)
 
+    # Harbor's AgentConfig._serialize_env templatizes sensitive env values that
+    # match os.environ ("FOO" -> "${FOO}"); values that don't match are redacted
+    # irrecoverably (sk-a****gAA). razorback resolves OAuth from
+    # ~/.claude/benchmark-token, which never lives in os.environ — so mirror
+    # AgentConfig.env into os.environ before serializing so the on-disk
+    # _job_config.yaml carries templates that the harbor subprocess can
+    # resolve via the inherited harbor_env below.
+    for agent_cfg in job_config.agents:
+        for env_key, env_val in (agent_cfg.env or {}).items():
+            os.environ[env_key] = env_val
+
     job_config_yaml = run_dir / "_job_config.yaml"
     job_config_yaml.write_text(job_config.model_dump_json(indent=2))
 
