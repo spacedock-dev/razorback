@@ -165,6 +165,18 @@ benchmark.
   classes, trial dataclasses, or internal enums.
 - Stable exit codes. Each subcommand enumerates them; workflow
   operators branch on the codes.
+- Path canonicalization. Commands that emit a spec for harbor to
+  consume (`rk run`, the freeze writer) resolve `jobs_dir` to an
+  absolute, symlink-resolved path before passing it to harbor. This
+  ensures that `harbor jobs resume -p <run-dir>` and `harbor jobs
+  resume` against the config resolve to the same directory; harbor's
+  resume reads the config's `jobs_dir` to enumerate trial subdirs
+  (`harbor/cli/jobs.py:1444-1477`), and a mismatch between the `-p`
+  argument's on-disk location and the config's `jobs_dir` causes the
+  resume to silently scan a different directory than the operator
+  intended (see AC-0.5 probe at
+  `docs/superpowers/plans/2026-05-19-harbor-resume-probe.md`,
+  commit `1569853`, "Caveat from the first (invalid) attempt").
 - The CLI is the operator's uniform surface. Subcommands that
   delegate to harbor (`rk run`) stay under `rk *` so the operator
   does not context-switch between two CLIs.
@@ -741,16 +753,22 @@ This section describes razorback's modules. Operators do not read it.
 `rk run` is a thin wrapper. It:
 
 1. Reads the frozen spec.
-2. Re-resolves the model alias against the provider API; refuses
+2. Canonicalizes the frozen spec's `jobs_dir` to an absolute,
+   symlink-resolved path (`Path(jobs_dir).expanduser().resolve()`)
+   before invoking harbor. This keeps `harbor jobs resume -p
+   <run-dir>` and `harbor jobs resume` against the config in
+   agreement on which directory to scan. See §3.1 design-rule on
+   path canonicalization.
+3. Re-resolves the model alias against the provider API; refuses
    with `AliasDriftError` if the resolved version differs from
    `provenance.yaml.model_resolved_version` unless
    `--allow-alias-drift` is passed.
-3. Invokes `harbor run` in-process (via harbor's Python API) or by
+4. Invokes `harbor run` in-process (via harbor's Python API) or by
    subprocess (via the harbor CLI), passing the frozen spec through
    unchanged.
-4. Surfaces harbor's exit code as-is (exit 30 reserved for harbor
+5. Surfaces harbor's exit code as-is (exit 30 reserved for harbor
    runtime failures; razorback's own exit codes do not collide).
-5. Writes `spec.frozen.yaml` and `provenance.yaml` into the
+6. Writes `spec.frozen.yaml` and `provenance.yaml` into the
    harbor-produced run-dir.
 
 Implementation note: razorback does not own JobConfig construction
