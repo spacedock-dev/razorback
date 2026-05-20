@@ -1,16 +1,17 @@
 ---
 id: f7aysbtft576c30q9zxaz62z
 title: PKG-14 — harbor-DAB plugin reuses LFS data + postgres DB volume across trials
-status: validation
+status: done
 source: Captain question 2026-05-20 during PKG-13 ENOSPC blocker; captain follow-up 2026-05-20 on cross-variant DB reuse; disk + time math for Goal 1 matrix
 started: 2026-05-20T21:03:28Z
-completed:
-verdict:
+completed: 2026-05-20T22:39:02Z
+verdict: PASSED
 score: 0.9
-worktree: .worktrees/spacedock-ensign-pkg14-harbor-dab-lfs-bindmount-reuse
+worktree: 
 issue:
 pr:
 mod-block:
+archived: 2026-05-20T22:39:02Z
 ---
 
 ## Problem
