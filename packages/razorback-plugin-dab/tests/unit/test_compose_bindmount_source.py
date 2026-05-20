@@ -63,3 +63,50 @@ def test_postgres_source_is_not_per_task_workdir(tmp_path: Path):
     assert "steps/main/workdir" not in src, (
         f"AC-1: source must not be the agent workdir: {src}"
     )
+
+
+def test_postgres_init_volume_is_read_only(tmp_path: Path):
+    data_root = tmp_path / "data"
+    cfg = _bookreview_cfg(data_root)
+    yaml_text = generate_compose(
+        db_config=cfg,
+        dataset_name="bookreview",
+        data_root=data_root,
+    )
+    compose = yaml.safe_load(yaml_text)
+    pg_volumes = compose["services"]["dab-postgres"]["volumes"]
+    init_mounts = [v for v in pg_volumes if "/docker-entrypoint-initdb.d/" in v]
+    assert init_mounts, "expected init volume for AC-3 :ro assertion"
+    for entry in init_mounts:
+        assert entry.endswith(":ro"), (
+            f"AC-3: postgres init bind-mount must be read-only; got {entry!r}"
+        )
+
+
+def test_mongo_init_volume_is_read_only(tmp_path: Path):
+    data_root = tmp_path / "data"
+    qdir = data_root / "query_agnews" / "query_dataset" / "agnews_articles"
+    qdir.mkdir(parents=True)
+    (qdir / "metadata.bson").write_bytes(b"\x00" * 64)
+    cfg = {
+        "db_clients": {
+            "articles": {
+                "db_type": "mongo",
+                "db_name": "agnews_db",
+                "dump_folder": "query_dataset/agnews_articles",
+            }
+        }
+    }
+    yaml_text = generate_compose(
+        db_config=cfg,
+        dataset_name="agnews",
+        data_root=data_root,
+    )
+    compose = yaml.safe_load(yaml_text)
+    mongo_volumes = compose["services"]["dab-mongo"]["volumes"]
+    init_mounts = [v for v in mongo_volumes if "/docker-entrypoint-initdb.d/" in v]
+    assert init_mounts, "expected init volume for AC-3 :ro assertion"
+    for entry in init_mounts:
+        assert entry.endswith(":ro"), (
+            f"AC-3: mongo dump bind-mount must be read-only; got {entry!r}"
+        )
