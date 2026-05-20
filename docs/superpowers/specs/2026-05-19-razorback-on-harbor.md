@@ -598,6 +598,23 @@ passes through to harbor.
 
 ### 6.1 Top-level shape
 
+**Benchmark-block translation contract.** Razorback's `benchmark:`
+block names a benchmark by `dataset:` + `tasks:` (or `path:`); `rk
+run` translates the block into harbor's `JobConfig.tasks: list[TaskConfig]`
+/ `JobConfig.datasets: list[DatasetConfig]` shape before invoking
+`harbor run`. Harbor benchmark adapters are **offline task
+generators**, not runtime dispatch targets: a harbor adapter is a
+standalone package invoked as `uv run <adapter-folder>` that emits
+task directories on disk (`<output>/<task-id>/{task.toml,
+instruction.md, environment/Dockerfile, tests/test.sh, ...}`); harbor
+consumes the emitted directories at run time via `tasks[].path` or
+`datasets[].path`. Razorback ships no adapter (per §1.3); the `rk
+run` translator's job is to resolve razorback's `benchmark:` block
+into a concrete list of task paths the adapter has already emitted on
+disk. Empirically verified by AC-0.2's probe at
+`docs/superpowers/plans/2026-05-19-harbor-entry-point-probe.md`
+("Adapter dispatch probe" section).
+
 ```yaml
 version: 1
 experiment: dab-paper-reproduction
