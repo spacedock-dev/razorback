@@ -158,6 +158,25 @@ class SpacedockSolverAgent(BaseAgent):
     def supported_sampling() -> set[str]:
         return {"temperature"}
 
+    def _build_inner_agent(self) -> BaseAgent:
+        """Dispatch to the per-runtime adapter sub-module (spec §8.4)."""
+        from razorback.agents._runtime import claude as _claude
+        from razorback.agents._runtime import codex as _codex
+        from razorback.agents._runtime import pi as _pi
+
+        builders = {
+            "claude": _claude.build_inner_agent,
+            "codex": _codex.build_inner_agent,
+            "pi": _pi.build_inner_agent,
+        }
+        builder = builders[self._runtime]
+        return builder(
+            logs_dir=self.logs_dir,
+            model=self._model,
+            harbor_agent_kwargs=self._harbor_agent_kwargs,
+            extra_env=self._extra_env,
+        )
+
     async def setup(self, environment: BaseEnvironment) -> None:
         """Stub setup; full lifecycle wiring lands in Task 5."""
         raise NotImplementedError("setup() lands in Task 5")
