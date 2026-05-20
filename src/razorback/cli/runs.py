@@ -12,9 +12,35 @@ from razorback.diff.diff import (
     compute_diff,
 )
 from razorback.diff.pairing import load_run_outcomes
-from razorback.errors import RazorbackError
+from razorback.errors import ExitCode, RazorbackError
+from razorback.runs.inspect import list_run_dirs, read_run_dir
 
 runs_app = typer.Typer(help="Inspect and diff razorback run-dirs.", no_args_is_help=True)
+
+
+@runs_app.command("list")
+def list_command(
+    root: Path = typer.Option(
+        Path(".runs"), "--root", exists=True, file_okay=False, dir_okay=True
+    ),
+    experiment: str | None = typer.Option(None, "--experiment"),
+) -> None:
+    """List razorback run-dirs under <root>. §3.2."""
+    entries = list_run_dirs(root, experiment=experiment)
+    typer.echo(json.dumps(entries, indent=2))
+
+
+@runs_app.command("show")
+def show_command(
+    run_dir: Path = typer.Argument(...),
+) -> None:
+    """Show one run-dir's manifest envelope + summary. §3.2."""
+    try:
+        payload = read_run_dir(run_dir)
+    except FileNotFoundError as exc:
+        typer.echo(f"run-dir missing required input: {exc}", err=True)
+        raise typer.Exit(ExitCode.USAGE)
+    typer.echo(json.dumps(payload, indent=2))
 
 
 @runs_app.command("diff")
