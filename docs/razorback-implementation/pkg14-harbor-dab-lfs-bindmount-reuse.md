@@ -136,3 +136,55 @@ Verified by: a unit test exercises both modes and confirms the compose's volume 
 ### Summary
 
 Wrote a TDD-first, 18-task plan covering all 11 PKG-14 ACs, split into Cluster A (data_root bind-mount, T2–T9) and Cluster B (dataset-keyed NAMED postgres volume, T10–T16), with two full-suite regression gates (T12, T17) and three validation-stage specs (T7 live EROFS, T13 cross-variant skip-init.d, T18 honest events.jsonl). Plan explicitly depends on PKG-16's `_initdb/` staging landing first and threads `materialize_mode` so PKG-16's copy path is preserved as opt-in. Riskiest contracts (compose source resolution at AC-1, `:ro` enforcement at AC-3, NAMED volume keying at AC-7) get RED tests before any implementation change.
+
+## Stage Report: implementation
+
+- DONE: Read PKG-14 entity (11 ACs) + plan at docs/razorback-implementation/plans/pkg14-harbor-dab-lfs-bindmount-reuse.md (18 tasks, 2 clusters, TDD-first, risk-first).
+  Entity + plan read; AC↔task map and risk-first ordering confirmed before any code change.
+- DONE: IMPORTANT: PKG-16 is in validation in parallel; main may advance with PKG-16's _initdb/ staging while you work. Plan threads `materialize_mode` to accommodate both paths. If PKG-16 lands on main while you work, rebase your branch on top before committing further.
+  PKG-16 had NOT landed on main during implementation (still in validation). Implemented PKG-14 standalone: bind mode points compose directly at data_root (AC-1) and skips copying postgres/mongo dumps into the per-task workdir via a new `_dump_basenames` classifier in prepare.py — semantically equivalent to wrapping PKG-16's `_initdb/` copy block in `if materialize_mode == "copy"`, but adapted to current main's workdir-includes-dump shape. Copy mode preserves the current workdir behavior. Branch did not rebase because PKG-16 was not yet merged at commit time.
+- DONE: Cluster A (T2-T9): data_root bind-mount. T2 RED test (AC-1) BEFORE T3 GREEN. T6 unit :ro assertion (AC-3) BEFORE T7 live EROFS integration test.
+  T2 RED → 67a8e86; T3 GREEN compose.py absolute path → 2d79157; T4 prepare.py materialize_mode + dump-exclusion + AC-2 ≤10MB test → e2d2593; T6 :ro unit → 4344a72; T7 EROFS integration (docker-gated, SKIPPED locally) → ae0b166; T8 CLI --materialize flag → ff0915b; T9 hydration LFS-pointer test → b1a0922.
+- DONE: Cluster B (T10-T16): per-dataset NAMED postgres volume. T10 RED test (AC-7) BEFORE T11 GREEN. T13 emits the AC-8 two-trial cross-variant smoke spec for validation stage.
+  T10 RED → 7f6939d; T11 GREEN dataset-keyed NAMED volume + `_check_compose_volumes` filters named volumes + test_prepare_per_query.py updated → d922d59; T13 cross-variant spec + assertion script → 15e8917; T14 schema_version on DabDataset → 8b3b4dc; T15 AC-10 combined contract test → 2c6c4d0; T16 --postgres-volume-mode + tests → cda4ea5.
+- DONE: T12 full pytest sweep regression gate BETWEEN clusters. T17 final sweep gate. Both must pass before moving on.
+  T12 sweep: 90 passed, 2 skipped (between Cluster A and Cluster B). T17 sweep: 96 passed, 2 skipped (plugin) + 25 passed razorback-core harbor-relevant tests.
+- DONE: T18 honest events.jsonl spec emission for AC-6 (validation stage runs it).
+  examples/specs/pkg14-bookreview-honest-events-smoke.yaml committed → ab64fa8.
+- DONE: Riskiest contracts: AC-1 (compose source resolution), AC-3 (:ro enforcement), AC-7 (NAMED volume keying) all get RED tests before implementation.
+  T2 (AC-1 RED) → 67a8e86; T6 (AC-3 :ro unit) precedes T7 (live EROFS); T10 (AC-7 RED) → 7f6939d. RED commits all precede GREEN commits.
+- DONE: Write impl-stage stage report at the bottom of the entity file with per-task DONE/SKIPPED/FAILED entries.
+  This section.
+
+### Summary
+
+Implemented all 11 PKG-14 ACs across 17 worktree commits: 7 feature commits + 8 test commits + 2 spec commits, TDD-first with RED-before-GREEN for AC-1 and AC-7 risk gates. Final plugin pytest: 96 passed, 2 skipped (docker-gated AC-3 EROFS integration test + a pre-existing sidecar skip). 25 razorback-core harbor-related tests also pass. PKG-16 had not landed during this implementation, so PKG-14 was implemented standalone: bind mode points compose at data_root absolute paths AND excludes postgres/mongo dump files from the per-task workdir via a new `_dump_basenames` classifier — achieving AC-2 (≤10MB task-dir) directly without depending on PKG-16's `_initdb/` staging. When PKG-16 merges, only the `prepare.py` workdir-copy block needs reconciliation; the compose.py and CLI surfaces are independent.
+
+## Stage Report: validation cycle-2
+
+- DONE: Read PKG-14 entity (11 ACs) + plan (18 tasks) + implementation stage report (17 commits + impl-report commit c6edb7b on worktree branch). 96 plugin tests + 25 razorback-core tests passing per impl report.
+  Entity read; plan @ docs/razorback-implementation/plans/pkg14-harbor-dab-lfs-bindmount-reuse.md (1372 lines); impl stage report at the end of the entity confirms all 11 ACs + 17 commits on worktree branch.
+- DONE: AC-1 verification: generated docker-compose.yaml references data_root absolute paths; per-task workdir/query_dataset/books_info.sql does NOT exist by default.
+  Synthetic fixture: dab-postgres volume src = `/tmp/.../data/query_bookreview/query_dataset/books_info.sql`. workdir/query_dataset exists but only with sqlite live DB (review_query.db); sql dump excluded via `_dump_basenames()` in prepare.py:327. Tests `test_compose_bindmount_source.py::*` PASSED.
+- DONE: AC-2 verification: bind-mode task-dir ≤10MB.
+  Synthetic fixture: 0.008 MB. Real-data verification deferred to Goal 1 (sandbox blocks /Users/clkao/git/dataagentbench/data). `test_prepare_bind_materialize.py::test_bind_mode_task_dir_under_10mb` PASSED.
+- DONE: AC-3 verification: bind-mount `:ro` flag at unit level; live EROFS test SKIPPED.
+  Init bind `:ro` confirmed in synthetic fixture. `test_compose_bindmount_source.py::test_postgres_init_volume_is_read_only` + `::test_mongo_init_volume_is_read_only` PASSED. Live `tests/integration/test_lfs_readonly_contract.py::test_bind_mounted_source_is_read_only` SKIPPED (docker daemon unreachable in sandbox; self-skips correctly).
+- DONE: AC-7 + AC-8 cross-variant smoke (captain's killer requirement) — STRUCTURAL PASS.
+  Synthetic two-variant prepare: both `direct-minimal` and `spacedock` produced compose files with IDENTICAL volume name `dab-postgres-data-bookreview-v1` and explicit `name:` field (resists project-prefix). `scripts/pkg14_assert_skip_initdb.sh` unit-tested positive (exit 0 on canonical good logs) + negative (exit 1 on trial 2 ran init.d). LIVE two-trial docker run DEFERRED to Goal 1's first bookreview trial pair.
+- DONE: AC-9 fixture: schema_version=v2 bump produces a distinct volume name.
+  `_postgres_volume_name(schema_version="v2")` → `dab-postgres-data-bookreview-v2` (vs v1). DabDataset dataclass exposes `schema_version` field defaulting to `"v1"`. `test_compose_dataset_volume.py::test_schema_version_v2_yields_distinct_volume_name` PASSED.
+- DONE: AC-11 mode override: --postgres-volume-mode={reuse,fresh} produces correct names.
+  `reuse` → `dab-postgres-data-bookreview-v1`; `fresh` (task_id=bookreview-q1) → `dab-postgres-data-bookreview-v1-bookreview-q1`. CLI validates input (exit code 2 on invalid). Tests `test_cli_surface.py::test_cli_postgres_volume_mode_*` PASSED.
+- DONE: AC-4 + AC-5 + AC-6 + AC-10 sanity checks per their Verified-by clauses.
+  AC-4: copy mode keeps `books_info.sql` in workdir; bind mode excludes it. AC-5: synthetic LFS pointer at data_root raises DatasetNotHydratedError; CLI hydration check wired at cli.py:91-96. AC-6: spec emitted at examples/specs/pkg14-bookreview-honest-events-smoke.yaml (live run DEFERRED to Goal 1). AC-10: NAMED PGDATA volume + `:ro` init bind-mount coexist in same compose. All gated unit tests PASSED.
+- DONE: Run uv run pytest packages/razorback-plugin-dab/ + uv run pytest (whole-repo).
+  Plugin: 95 passed, 2 skipped, 1 failed (test_compose_parses.py — sandbox docker CLI permission error, NOT a PKG-14 regression; PKG-13-era test that has never run in this sandbox). Whole-repo: 13 failures all `PermissionError` from rk-run-spawned subprocesses (same envelope as PKG-13/PKG-17); 3 collection errors from `Path("/Users/clkao/git/dataagentbench/data/...").exists()` raising PermissionError before `skipif` triggers (pre-existing, not PKG-14). No PKG-14 regression in either sweep.
+- DONE: Run superpowers:requesting-code-review on worktree branch.
+  Performed inline (14 files, +839/-15 LOC). Zero Critical, zero Important issues. 4 Minor follow-ups flagged (none gating): (1) `_postgres_volume_name(task_id=None)` under fresh mode falls back to `"anon"` — works for current callers, footgun for future; (2) AC-6 spec is direct-minimal only — acceptable since AC-8 spec covers cross-variant; (3) AC-11 fresh-mode test doesn't cover task_id=None edge; (4) when PKG-16 lands, `_dump_basenames` can be removed in favor of wrapping PKG-16's `_initdb/` block — minor reconciliation, no semantic change.
+- DONE: Write validation report at docs/razorback-implementation/validation/pkg14-harbor-dab-lfs-bindmount-reuse.md with PASS/FAIL per AC, exact commands + outputs, code review findings classified, gate decision.
+  Written. Gate: APPROVE → done. 8 ACs PASS at sandbox level; 3 ACs (AC-3 live EROFS, AC-6 honest events, AC-8 cross-variant skip-init) DEFERRED to Goal 1's first bookreview trial pair where docker + real data are available.
+
+### Summary
+
+PKG-14 implementation (11 ACs across 17 commits) passes validation at every level reachable from the sandbox: 95/98 plugin tests green (1 failure is sandbox-docker permission, not a regression); 8 of 11 ACs unit/contract-verified via synthetic fixtures matching the existing test harness; 3 ACs deferred to Goal 1's first bookreview trials because they require live docker + real LFS data, neither of which is reachable from the validation sandbox. Code review found zero Critical and zero Important issues; 4 Minor follow-ups flagged. Gate: APPROVE → done. The captain's killer requirement (cross-variant DB reuse via stable dataset-keyed NAMED volume) is satisfied at the structural level (identical volume name across direct-minimal and spacedock variants, explicit `name:` field) — live confirmation lands on Goal 1's first bookreview trial pair, with assertion script `scripts/pkg14_assert_skip_initdb.sh` standing ready.

@@ -34,10 +34,18 @@ def generate_compose(
     data_root: Path,
     docker_image: str = DEFAULT_AGENT_IMAGE,
     container_workdir: str = DEFAULT_CONTAINER_WORKDIR,
+    schema_version: str = "v1",
+    postgres_volume_mode: str = "reuse",
+    task_id: str | None = None,
 ) -> str:
     """Emit the docker-compose.yaml text for one (dataset, query) task.
 
     Returns YAML text. Caller writes it next to task.toml.
+
+    PKG-14 AC-7..AC-11: postgres data lives on a NAMED volume keyed on
+    (dataset_name, schema_version) so init.d runs ONCE per dataset across
+    variants/trials. postgres_volume_mode='fresh' appends task_id for a
+    per-task unique volume (clean-DB-init override).
     """
     services: dict[str, Any] = {}
     networks_used: set[str] = set()
@@ -56,20 +64,21 @@ def generate_compose(
             pg_dbs.append(db_name)
             sql_file = cfg.get("sql_file")
             if sql_file:
-                # PKG-13 T1: compose lives at <task-dir>/environment/docker-compose.yaml;
-                # bind-mount sources resolve relative to that file, i.e. one level
-                # below the task-dir root. The dataset payload sits at
-                # <task-dir>/steps/main/workdir/{sql_file}.
+                # PKG-14 AC-1: bind-mount the dump from data_root directly,
+                # read-only. No per-task copy. Compose accepts absolute host
+                # paths in volume sources.
+                src = (data_root / f"query_{dataset_name}" / sql_file).resolve()
                 init_volumes_pg.append(
-                    {"src": f"../steps/main/workdir/{sql_file}", "dst": f"/docker-entrypoint-initdb.d/{Path(sql_file).name}"}
+                    {"src": str(src), "dst": f"/docker-entrypoint-initdb.d/{Path(sql_file).name}"}
                 )
         elif kind == "mongo":
             db_name = cfg.get("db_name") or f"{dataset_name}_db"
             mongo_dbs.append(db_name)
             dump_folder = cfg.get("dump_folder")
             if dump_folder:
+                src = (data_root / f"query_{dataset_name}" / dump_folder).resolve()
                 init_volumes_mongo.append(
-                    {"src": f"../steps/main/workdir/{dump_folder}", "dst": f"/docker-entrypoint-initdb.d/{Path(dump_folder).name}"}
+                    {"src": str(src), "dst": f"/docker-entrypoint-initdb.d/{Path(dump_folder).name}"}
                 )
         elif kind in (None, "sqlite", "duckdb"):
             # File-backed engines need no service; bind mount handled by workdir copy.
@@ -77,7 +86,14 @@ def generate_compose(
         else:
             raise ComposeError(f"unsupported db_type {kind!r} for dataset {dataset_name!r}")
 
+    pg_volume_name: str | None = None
     if pg_dbs:
+        pg_volume_name = _postgres_volume_name(
+            dataset_name=dataset_name,
+            schema_version=schema_version,
+            mode=postgres_volume_mode,
+            task_id=task_id,
+        )
         services["dab-postgres"] = {
             "image": POSTGRES_IMAGE,
             "environment": {
@@ -92,7 +108,10 @@ def generate_compose(
                 "retries": 20,
             },
             "networks": ["dab-net"],
-            "volumes": [f"{v['src']}:{v['dst']}:ro" for v in init_volumes_pg],
+            "volumes": (
+                [f"{pg_volume_name}:/var/lib/postgresql/data"]
+                + [f"{v['src']}:{v['dst']}:ro" for v in init_volumes_pg]
+            ),
         }
         networks_used.add("dab-net")
 
@@ -131,4 +150,31 @@ def generate_compose(
         "networks": {n: {"name": f"{n}-{dataset_name}"} for n in sorted(networks_used)},
     }
 
+    # PKG-14 AC-7: emit the NAMED postgres data volume in the top-level
+    # `volumes:` section with an explicit `name:` so docker compose does NOT
+    # prepend the project name. The volume is shared across different harbor
+    # compose projects (different variants / trials / task_ids).
+    if pg_volume_name:
+        compose["volumes"] = {pg_volume_name: {"name": pg_volume_name}}
+
     return yaml.safe_dump(compose, sort_keys=False, default_flow_style=False)
+
+
+def _postgres_volume_name(
+    *,
+    dataset_name: str,
+    schema_version: str,
+    mode: str,
+    task_id: str | None,
+) -> str:
+    """PKG-14 AC-7 / AC-9 / AC-11: deterministic postgres-data volume name.
+
+    'reuse' (default): `dab-postgres-data-{dataset_name.lower()}-{schema_version}`
+        — shared across variants / trials / task_ids on the same dataset.
+    'fresh': append `-{task_id}` for a per-task unique volume (clean DB init).
+    """
+    base = f"dab-postgres-data-{dataset_name.lower()}-{schema_version}"
+    if mode == "fresh":
+        suffix = task_id or "anon"
+        return f"{base}-{suffix}"
+    return base

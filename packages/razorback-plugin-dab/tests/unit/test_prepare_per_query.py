@@ -75,10 +75,10 @@ def test_task_dir_layout(tmp_path: Path):
 
 
 def test_compose_bind_mount_sources_resolve_to_real_files(tmp_path: Path):
-    """PKG-13 T1 / AC-4: bind-mount sources in the generated compose, when
-    resolved relative to the compose file's parent (environment/), must
-    point at existing files. With compose at environment/docker-compose.yaml,
-    the sql_file source must be ../steps/main/workdir/<sql_file>.
+    """PKG-13 T1 / AC-4 + PKG-14 AC-1: bind-mount sources in the generated
+    compose must point at existing files. Under PKG-14 bind mode (the default)
+    the source is the absolute data_root path. NAMED volumes (postgres data
+    volume) are skipped — docker creates them on demand.
     """
     data_root = _build_synthetic_data_root(tmp_path)
     out = tmp_path / "tasks"
@@ -87,11 +87,15 @@ def test_compose_bind_mount_sources_resolve_to_real_files(tmp_path: Path):
     )
     compose_path = manifest[0]["task_dir"] / "environment" / "docker-compose.yaml"
     compose = yaml.safe_load(compose_path.read_text())
+    named_volumes = set((compose.get("volumes") or {}).keys())
     pg_volumes = compose["services"]["dab-postgres"]["volumes"]
-    assert pg_volumes, "expected at least one postgres init volume"
-    for entry in pg_volumes:
+    init_volumes = [v for v in pg_volumes if v.split(":", 1)[0] not in named_volumes]
+    assert init_volumes, "expected at least one postgres init volume"
+    for entry in init_volumes:
         src = entry.split(":", 1)[0]
-        resolved = (compose_path.parent / src).resolve()
+        assert "_initdb" not in src
+        assert "steps/main/workdir" not in src
+        resolved = Path(src) if src.startswith("/") else (compose_path.parent / src).resolve()
         assert resolved.exists(), f"bind-mount source missing: {resolved}"
 
 

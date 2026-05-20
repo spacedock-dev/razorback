@@ -56,11 +56,34 @@ def prepare_dataset_tasks(
     hints: bool = False,
     docker_image: str = DEFAULT_AGENT_IMAGE,
     container_workdir: str = DEFAULT_CONTAINER_WORKDIR,
+    materialize_mode: str = "bind",
+    postgres_volume_mode: str = "reuse",
 ) -> list[TaskManifestEntry]:
     """Materialize one harbor task dir per query under tasks_root/<dataset>-q<n>/.
 
     Returns one TaskManifestEntry per emitted task.
+
+    materialize_mode:
+        "bind" (default) — postgres/mongo dump files stay at data_root and are
+            bind-mounted read-only into the dab-postgres / dab-mongo container.
+            The per-task workdir excludes those dump files (≤10MB task-dir).
+        "copy" — dump files are copied into the per-task workdir alongside
+            the other dataset payload. Preserved for provenance-strict runs.
+
+    postgres_volume_mode:
+        "reuse" (default) — postgres data volume is keyed on (dataset,
+            schema_version) so init.d runs ONCE per dataset across variants
+            and trials.
+        "fresh" — per-task unique volume; init.d runs every trial.
     """
+    if materialize_mode not in ("bind", "copy"):
+        raise ValueError(
+            f"materialize_mode must be 'bind' or 'copy'; got {materialize_mode!r}"
+        )
+    if postgres_volume_mode not in ("reuse", "fresh"):
+        raise ValueError(
+            f"postgres_volume_mode must be 'reuse' or 'fresh'; got {postgres_volume_mode!r}"
+        )
     data_root = Path(data_root)
     dataset_dir = data_root / f"query_{dataset}"
     if not dataset_dir.exists():
@@ -99,6 +122,8 @@ def prepare_dataset_tasks(
             db_config=db_config,
             dataset_meta=dataset_meta,
             query_id=query_id,
+            materialize_mode=materialize_mode,
+            postgres_volume_mode=postgres_volume_mode,
         )
         manifest.append({
             "dataset": dataset,
@@ -122,6 +147,8 @@ def _materialize_task_dir(
     db_config: dict,
     dataset_meta: catalog.DabDataset,
     query_id: int,
+    materialize_mode: str = "bind",
+    postgres_volume_mode: str = "reuse",
 ) -> None:
     task_dir.mkdir(parents=True)
 
@@ -160,6 +187,9 @@ def _materialize_task_dir(
             data_root=dataset_dir.parent,
             docker_image=docker_image,
             container_workdir=container_workdir,
+            schema_version=getattr(dataset_meta, "schema_version", "v1"),
+            postgres_volume_mode=postgres_volume_mode,
+            task_id=task_name,
         )
         (env_dir / "docker-compose.yaml").write_text(compose_text)
         _write_compose_services_sidecar(env_dir / "docker-compose.yaml")
@@ -199,14 +229,31 @@ def _materialize_task_dir(
         render_workspace_readme(variant=workspace_variant, container_workdir=container_workdir)
     )
 
+    # PKG-14 AC-1 + AC-2: under bind mode, postgres/mongo dump files are
+    # NOT copied into the agent workdir — they are bind-mounted into the
+    # dab-postgres / dab-mongo container directly from data_root. Sqlite /
+    # duckdb live DB files stay in the workdir (the agent reads them).
+    if materialize_mode == "bind":
+        excluded_workdir_names = _dump_basenames(db_config)
+    else:
+        excluded_workdir_names = set()
+
     for name in _DATASET_SAFE:
         src = dataset_dir / name
         if not src.exists():
             continue
         dst = workdir / name
         if src.is_dir():
-            shutil.copytree(src, dst)
+            shutil.copytree(
+                src,
+                dst,
+                ignore=lambda _dir, names: [
+                    n for n in names if n in excluded_workdir_names
+                ],
+            )
         else:
+            if src.name in excluded_workdir_names:
+                continue
             shutil.copy2(src, dst)
 
     for name in _QUERY_SAFE:
@@ -275,6 +322,32 @@ def _task_toml(
             "retries = 6\n"
         )
     return body
+
+
+def _dump_basenames(db_config: dict | None) -> set[str]:
+    """Return basenames of every postgres sql_file / mongo dump_folder in db_config.
+
+    Used under materialize_mode='bind' to skip copying dump files into the
+    per-task agent workdir — they are bind-mounted into the dab-postgres /
+    dab-mongo container directly from data_root instead (PKG-14 AC-1, AC-2).
+    Sqlite (db_path) and duckdb (db_path) live-DB files are NOT in this set —
+    they stay in the workdir for the agent to read.
+    """
+    names: set[str] = set()
+    clients = (db_config or {}).get("db_clients") or {}
+    for cfg in clients.values():
+        if not isinstance(cfg, dict):
+            continue
+        kind = cfg.get("db_type")
+        if kind == "postgres":
+            sql_file = cfg.get("sql_file")
+            if sql_file:
+                names.add(Path(sql_file).name)
+        elif kind == "mongo":
+            dump_folder = cfg.get("dump_folder")
+            if dump_folder:
+                names.add(Path(dump_folder).name)
+    return names
 
 
 def _postgres_db_name(db_config: dict | None, *, dataset_name: str) -> str | None:
@@ -373,8 +446,12 @@ def _check_compose_volumes(compose_path: Path) -> None:
     Raises ComposeError if any source resolves to a missing host path.
     Closes AC-4: catches future regressions where the compose bind-mount
     source path resolves to a missing host file at compose-up time.
+
+    NAMED volumes declared in the top-level `volumes:` section are skipped —
+    docker creates them on demand and they have no host-path semantics.
     """
     compose = yaml.safe_load(compose_path.read_text()) or {}
+    named_volumes = set((compose.get("volumes") or {}).keys())
     base = compose_path.parent
     missing: list[str] = []
     for svc_name, svc in (compose.get("services") or {}).items():
@@ -382,6 +459,8 @@ def _check_compose_volumes(compose_path: Path) -> None:
             if not isinstance(entry, str):
                 continue
             src = entry.split(":", 1)[0]
+            if src in named_volumes:
+                continue
             if src.startswith("/"):
                 resolved = Path(src)
             else:

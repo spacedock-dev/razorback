@@ -63,3 +63,19 @@ def test_missing_db_config_raises(tmp_path: Path) -> None:
 
     with pytest.raises(DatasetNotHydratedError):
         check_hydrated(data_root=data_root, dataset_name="bookreview")
+
+
+def test_lfs_pointer_at_data_root_fails_before_bind_mount(tmp_path: Path) -> None:
+    """PKG-14 AC-5: under bind mode the agent NEVER copies the dataset; the
+    only safety against an LFS-pointer source is the hydration check itself.
+    Verify it still fires when the host file at data_root is a pointer that
+    PKG-14's compose would otherwise bind-mount straight into postgres."""
+    data_root = tmp_path / "data"
+    query_dir = data_root / "query_bookreview"
+    (query_dir / "query_dataset").mkdir(parents=True)
+    _write_db_config(query_dir, sql_file="query_dataset/books_info.sql")
+    pointer = query_dir / "query_dataset" / "books_info.sql"
+    pointer.write_bytes(LFS_POINTER_MARKER + b"\noid sha256:cafebabe\nsize 99999\n")
+
+    with pytest.raises(DatasetNotHydratedError):
+        check_hydrated(data_root=data_root, dataset_name="bookreview")
