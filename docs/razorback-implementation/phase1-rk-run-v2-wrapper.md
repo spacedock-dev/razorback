@@ -216,3 +216,12 @@ Fix: mirror the resolved OAuth token (and ANTHROPIC_API_KEY) into `os.environ` B
 AC-2/3/4/5/6/7/8 PASS independently — only AC-1 needs the fix + test strengthening.
 
 Routed back to implementation worker `spacedock-ensign-phase1-rk-run-v2-wrapper-implementation`.
+
+## Stage Report: implementation (cycle 3 — OAuth templatize fix)
+
+- DONE: AC-1 walking-skeleton holds with strengthened test asserting mean reward=1.0.
+  Integration test `tests/integration/test_rk_run_v2_deterministic_smoke.py` passes in 4:59 wallclock (vs the 6:30 baseline window) with `mean=1.0`; all three trials report reward=1.0. Commit d663703 strengthens the assertion (failed at mean=0.0 against pre-fix code, exactly reproducing the validator finding); commit 39a4391 mirrors `AgentConfig.env` into `os.environ` immediately before `job_config.model_dump_json` so harbor's `templatize_sensitive_env` sees a match and emits `${CLAUDE_CODE_OAUTH_TOKEN}` rather than the redacted `sk-a****gAA`. The harbor subprocess inherits the real token via the existing `harbor_env = {**os.environ, ...}` pattern at cli/run.py:200.
+
+### Summary
+
+The validator's root-cause analysis was correct and the fix is the smallest one available: harbor's `AgentConfig._serialize_env` field_serializer only round-trips env values that match `os.environ` byte-for-byte; razorback resolves OAuth from `~/.claude/benchmark-token` via dotenv, so the value never lived in `os.environ` and was irrecoverably redacted on disk. The 11-line `cli/run.py` change mirrors the resolved `AgentConfig.env` into `os.environ` before `model_dump_json` is called, preserving harbor's disk-redaction discipline (the on-disk YAML now carries `${CLAUDE_CODE_OAUTH_TOKEN}` templates, not the literal token). The strengthened AC-1 assertion checks `metrics[0].mean == 1.0`; under the pre-fix code it failed at `mean=0.0` (matching the validator's reproduction). After the fix it passes at `mean=1.0`. 198 unit tests still green.
