@@ -1,0 +1,73 @@
+# ABOUTME: AC-4 — postgres-backed dataset emits services.dab-postgres with image postgres:17.
+# ABOUTME: Bookreview-shaped fixture (postgres + sqlite).
+
+from pathlib import Path
+
+import yaml
+
+from razorback_plugin_dab.generate.compose import generate_compose
+
+
+_BOOKREVIEW_LIKE = {
+    "db_clients": {
+        "books_database": {
+            "db_type": "postgres",
+            "db_name": "bookreview_db",
+            "sql_file": "query_dataset/books_info.sql",
+        },
+        "review_database": {
+            "db_type": "sqlite",
+            "db_path": "query_dataset/review_query.db",
+        },
+    }
+}
+
+
+def test_postgres_service_emitted(tmp_path: Path):
+    compose_text = generate_compose(
+        db_config=_BOOKREVIEW_LIKE,
+        dataset_name="bookreview",
+        data_root=tmp_path,
+    )
+    compose = yaml.safe_load(compose_text)
+    services = compose["services"]
+    assert "dab-postgres" in services
+    pg = services["dab-postgres"]
+    assert pg["image"] == "postgres:17"
+    assert pg["environment"]["POSTGRES_DB"] == "bookreview_db"
+    assert pg["environment"]["POSTGRES_USER"] == "dabench"
+    assert "pg_isready" in pg["healthcheck"]["test"][1]
+    assert "dab-net" in pg["networks"]
+
+
+def test_main_service_depends_on_postgres(tmp_path: Path):
+    compose_text = generate_compose(
+        db_config=_BOOKREVIEW_LIKE,
+        dataset_name="bookreview",
+        data_root=tmp_path,
+    )
+    compose = yaml.safe_load(compose_text)
+    main = compose["services"]["main"]
+    assert "dab-postgres" in main["depends_on"]
+    assert main["depends_on"]["dab-postgres"]["condition"] == "service_healthy"
+    assert "dab-net" in main["networks"]
+
+
+def test_sqlite_does_not_spawn_service(tmp_path: Path):
+    compose_text = generate_compose(
+        db_config=_BOOKREVIEW_LIKE,
+        dataset_name="bookreview",
+        data_root=tmp_path,
+    )
+    compose = yaml.safe_load(compose_text)
+    assert "dab-sqlite" not in compose["services"]
+
+
+def test_dab_net_declared(tmp_path: Path):
+    compose_text = generate_compose(
+        db_config=_BOOKREVIEW_LIKE,
+        dataset_name="bookreview",
+        data_root=tmp_path,
+    )
+    compose = yaml.safe_load(compose_text)
+    assert "dab-net" in compose["networks"]

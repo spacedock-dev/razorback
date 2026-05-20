@@ -1,7 +1,7 @@
 [project]
-name = "razorback"
+name = "razorback-plugin-dab"
 version = "0.1.0"
-description = "A benchmark runner for agentic research workflows, built on harbor."
+description = "DAB harbor task generator (sibling plugin to razorback)."
 readme = "README.md"
 authors = [
     { name = "CL Kao", email = "clkao@datarecce.io" }
@@ -12,21 +12,15 @@ dependencies = [
     "typer>=0.16.0",
     "pydantic>=2.11.7",
     "pyyaml>=6.0.2",
-    "python-dotenv>=1.0",
-    "anthropic>=0.42",
-    "scipy>=1.14",
-    "numpy>=2.1",
 ]
 
 [project.scripts]
-rk = "razorback.cli:app"
+razorback-plugin-dab = "razorback_plugin_dab.cli:app"
 
 [dependency-groups]
 dev = [
     "pytest>=8.0",
-    "pytest-asyncio>=0.24",
     "pytest-timeout>=2.3",
-    "razorback-plugin-dab",
 ]
 
 [build-system]
@@ -35,10 +29,3 @@ build-backend = "uv_build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-asyncio_mode = "auto"
-
-[tool.uv.workspace]
-members = ["packages/razorback-plugin-dab"]
-
-[tool.uv.sources]
-razorback-plugin-dab = { workspace = true }

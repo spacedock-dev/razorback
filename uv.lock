@@ -11,8 +11,14 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-05-12T12:44:10.782869Z"
+exclude-newer = "2026-05-13T06:40:57.888704Z"
 exclude-newer-span = "P7D"
+
+[manifest]
+members = [
+    "razorback",
+    "razorback-plugin-dab",
+]
 
 [[package]]
 name = "aiohappyeyeballs"
@@ -1999,6 +2005,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-timeout" },
+    { name = "razorback-plugin-dab" },
 ]
 
 [package.metadata]
@@ -2017,6 +2024,38 @@ requires-dist = [
 dev = [
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-asyncio", specifier = ">=0.24" },
+    { name = "pytest-timeout", specifier = ">=2.3" },
+    { name = "razorback-plugin-dab", editable = "packages/razorback-plugin-dab" },
+]
+
+[[package]]
+name = "razorback-plugin-dab"
+version = "0.1.0"
+source = { editable = "packages/razorback-plugin-dab" }
+dependencies = [
+    { name = "harbor" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+    { name = "typer" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-timeout" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "harbor", specifier = "==0.6.6" },
+    { name = "pydantic", specifier = ">=2.11.7" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
+    { name = "typer", specifier = ">=0.16.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-timeout", specifier = ">=2.3" },
 ]
 
