@@ -1,0 +1,25 @@
+# ABOUTME: PKG-16 AC-3 — honest re-smoke after workdir SQL-dump removal, opus-4.7.
+# ABOUTME: Per-run $5 cap via --max-budget-usd-running; subscription auth.
+version: 1
+experiment: pkg16-bookreview-claude-harbor-dab-n3-opus47-honest
+agent:
+  kind: claude-cli
+  model: claude-opus-4-7
+  sampling:
+    temperature: 0.0
+  tools_allowed: [Bash, Read, Write, Edit, Glob, Grep]
+benchmark:
+  kind: harbor_dab
+  data_root: /Users/clkao/git/dataagentbench/data
+  datasets:
+    - bookreview
+  workspace_variant: direct-minimal
+  hints: false
+trials: 3
+experiment_meta:
+  max_budget_usd: 5.0
+  estimated_cost_usd: 1.5
+observers:
+  - kind: jsonl
+    path: events.jsonl
+  - kind: stdout
