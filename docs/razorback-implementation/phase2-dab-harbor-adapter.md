@@ -1,13 +1,13 @@
 ---
 id: 51f3z613j7xns0r38nma537r
 title: Phase 2 — DAB harbor adapter (sibling package)
-status: plan
+status: implementation
 source: plan Phase 2 + spec §2 + §8.4 (v2 spec at docs/superpowers/specs/2026-05-19-razorback-on-harbor.md)
 started: 2026-05-20T06:23:05Z
 completed:
 verdict:
 score: 0.85
-worktree:
+worktree: .worktrees/spacedock-ensign-phase2-dab-harbor-adapter
 issue:
 pr:
 mod-block:
