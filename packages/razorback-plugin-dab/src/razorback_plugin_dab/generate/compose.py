@@ -68,8 +68,16 @@ def generate_compose(
             mongo_dbs.append(db_name)
             dump_folder = cfg.get("dump_folder")
             if dump_folder:
+                dump_basename = Path(dump_folder).name
                 init_volumes_mongo.append(
-                    {"src": f"../steps/main/workdir/{dump_folder}", "dst": f"/docker-entrypoint-initdb.d/{Path(dump_folder).name}"}
+                    {"src": f"../steps/main/workdir/{dump_folder}", "dst": f"/docker-entrypoint-initdb.d/{dump_basename}"}
+                )
+                # PKG-15 AC-1: mongo:8 ignores .bson under /docker-entrypoint-initdb.d/
+                # but auto-runs .sh files. The shim mongorestore's the dump folder
+                # on first start. prepare.py writes the shim text alongside the
+                # compose file; the 00- prefix orders it ahead of any future .sh.
+                init_volumes_mongo.append(
+                    {"src": f"./restore-{db_name}.sh", "dst": f"/docker-entrypoint-initdb.d/00-restore-{db_name}.sh"}
                 )
         elif kind in (None, "sqlite", "duckdb"):
             # File-backed engines need no service; bind mount handled by workdir copy.

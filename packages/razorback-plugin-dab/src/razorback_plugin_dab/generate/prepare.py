@@ -167,6 +167,7 @@ def _materialize_task_dir(
         )
         (env_dir / "docker-compose.yaml").write_text(compose_text)
         _write_compose_services_sidecar(env_dir / "docker-compose.yaml")
+        _write_mongo_restore_shims(env_dir=env_dir, db_config=db_config, dataset_name=dataset_meta.name)
 
     tests_dir = task_dir / "tests"
     tests_dir.mkdir()
@@ -428,6 +429,34 @@ def _hardened_template(*, dataset: str, query_id: int) -> str | None:
         2: "bookreview_q2_q3.py",
         3: "bookreview_q2_q3.py",
     }.get(query_id)
+
+
+def _write_mongo_restore_shims(
+    *, env_dir: Path, db_config: dict, dataset_name: str,
+) -> None:
+    """Emit one restore.sh per mongo client alongside the compose file.
+
+    PKG-15 AC-1: compose.py mounts these into the mongo container's
+    /docker-entrypoint-initdb.d/. Shim text comes from mongo_init; we
+    chmod +x so mongo's init.d phase actually executes it.
+    """
+    from razorback_plugin_dab.generate.mongo_init import render_mongo_restore_sh
+
+    for cfg in (db_config.get("db_clients") or {}).values():
+        if not isinstance(cfg, dict) or cfg.get("db_type") != "mongo":
+            continue
+        db_name = cfg.get("db_name") or f"{dataset_name}_db"
+        dump_folder = cfg.get("dump_folder")
+        if not dump_folder:
+            continue
+        shim_path = env_dir / f"restore-{db_name}.sh"
+        shim_path.write_text(
+            render_mongo_restore_sh(
+                db_name=db_name,
+                dump_folder_basename=Path(dump_folder).name,
+            )
+        )
+        shim_path.chmod(shim_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
 def _write_compose_services_sidecar(compose_path: Path) -> None:
