@@ -75,10 +75,10 @@ def test_task_dir_layout(tmp_path: Path):
 
 
 def test_compose_bind_mount_sources_resolve_to_real_files(tmp_path: Path):
-    """PKG-13 T1 / AC-4: bind-mount sources in the generated compose, when
-    resolved relative to the compose file's parent (environment/), must
-    point at existing files. With compose at environment/docker-compose.yaml,
-    the sql_file source must be ../steps/main/workdir/<sql_file>.
+    """PKG-16 AC-1 + AC-2: the postgres init bind-mount source must resolve
+    to an existing file AND must not point into the agent workdir. Dumps
+    are staged under environment/_initdb/ so the agent container never
+    sees them.
     """
     data_root = _build_synthetic_data_root(tmp_path)
     out = tmp_path / "tasks"
@@ -93,6 +93,9 @@ def test_compose_bind_mount_sources_resolve_to_real_files(tmp_path: Path):
         src = entry.split(":", 1)[0]
         resolved = (compose_path.parent / src).resolve()
         assert resolved.exists(), f"bind-mount source missing: {resolved}"
+        assert "steps/main/workdir" not in str(resolved), (
+            f"PKG-16 AC-1: dump must not be sourced from agent workdir: {resolved}"
+        )
 
 
 def test_task_toml_schema_and_no_dead_docker_compose_key(tmp_path: Path):
