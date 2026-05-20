@@ -195,3 +195,24 @@ def test_aggregate_run_dir_idempotent(tmp_path: Path):
     assert (work / "summary.json").read_text() == first_summary
     assert (work / "per_trial_outcomes.json").read_text() == first_outcomes
     assert (work / "events.jsonl").read_text() == first_events
+
+
+def test_compute_provenance_hash_is_stable_for_identical_input(tmp_path: Path):
+    from razorback.runs.aggregate import compute_provenance_hash
+
+    p = tmp_path / "provenance.yaml"
+    p.write_text("harbor_version: 0.6.6\nmodel_resolved_version: claude-opus-4-5\n")
+    h1 = compute_provenance_hash(p)
+    h2 = compute_provenance_hash(p)
+    assert h1 == h2
+    assert len(h1) == 64
+
+
+def test_compute_provenance_hash_changes_when_content_changes(tmp_path: Path):
+    from razorback.runs.aggregate import compute_provenance_hash
+
+    a = tmp_path / "a.yaml"
+    b = tmp_path / "b.yaml"
+    a.write_text("harbor_version: 0.6.6\n")
+    b.write_text("harbor_version: 0.6.7\n")
+    assert compute_provenance_hash(a) != compute_provenance_hash(b)

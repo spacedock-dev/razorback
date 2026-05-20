@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -347,3 +348,8 @@ def aggregate_run_dir(
     aggregate_summary(run_dir)
     concatenate_events(run_dir)
     write_per_trial_outcomes(run_dir)
+
+
+def compute_provenance_hash(provenance_path: Path) -> str:
+    """sha256 hex digest of provenance.yaml bytes."""
+    return hashlib.sha256(provenance_path.read_bytes()).hexdigest()
