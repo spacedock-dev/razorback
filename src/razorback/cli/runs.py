@@ -13,6 +13,7 @@ from razorback.diff.diff import (
 )
 from razorback.diff.pairing import load_run_outcomes
 from razorback.errors import ExitCode, RazorbackError
+from razorback.runs.cost import aggregate_costs
 from razorback.runs.inspect import list_run_dirs, read_run_dir
 
 runs_app = typer.Typer(help="Inspect and diff razorback run-dirs.", no_args_is_help=True)
@@ -28,6 +29,20 @@ def list_command(
     """List razorback run-dirs under <root>. §3.2."""
     entries = list_run_dirs(root, experiment=experiment)
     typer.echo(json.dumps(entries, indent=2))
+
+
+@runs_app.command("cost")
+def cost_command(
+    root: Path = typer.Option(Path(".runs"), "--root", file_okay=False, dir_okay=True),
+    experiment: str | None = typer.Option(None, "--experiment"),
+) -> None:
+    """Sum cost across run-dirs under <root>. §3.2."""
+    try:
+        doc = aggregate_costs(root, experiment=experiment)
+    except FileNotFoundError as exc:
+        typer.echo(f"rk runs cost: root not found: {exc}", err=True)
+        raise typer.Exit(ExitCode.USAGE)
+    typer.echo(json.dumps(doc, indent=2))
 
 
 @runs_app.command("show")
