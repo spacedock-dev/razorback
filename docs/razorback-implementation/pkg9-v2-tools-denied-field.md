@@ -107,3 +107,185 @@ PKG-9 v2 tests.
   separately under Phase 4a per the reconciliation plan.
 - Codex and pi `tools_denied` translation. Per AC-0.7's D2 default,
   these ship as NotImplemented stubs until a consumer surfaces.
+
+## Implementation plan
+
+Two-track plan. Track A (spec-side, schema addition) is independent
+of Phase 3 timing and can ship anytime after `b5` / `ra`. Track B
+(runtime-side, PreToolUse hook installation) lives in the v2
+`SpacedockSolverAgent`'s claude runtime adapter sub-module and is
+gated on Phase 3 (`d5`) landing. The two tracks share AC-1's spec
+field shape but their commits are decoupled. The integration test
+in AC-3 fires only after both tracks are merged.
+
+### Dependency on Phase 3 (`d5`)
+
+The runtime enforcement path (AC-2, AC-3) depends on Phase 3's
+`SpacedockSolverAgent` v2 surface (the v2 class at
+`src/razorback/agents/spacedock_solver_v2.py` plus the per-runtime
+adapter sub-modules at `src/razorback/agents/_runtime/{claude,
+codex,pi}.py`, per phase3 spec §4 + §8.4). The hook-installation
+code reads `tools_denied` off the validated agent block and emits
+PreToolUse permissions into the claude runtime's settings.json
+during the adapter's kwarg-construction path. PKG-9 v2 plan can
+land on `main` now; PKG-9 v2 implementation must wait for Phase 3
+implementation so that the runtime sub-modules exist to host
+Track B's hook-installation function.
+
+Track A (spec-side) does **not** wait for Phase 3. It edits the v2
+agent block schema only; the schema can ship before the v2 agent
+class consumes it because pydantic accepts unused fields without
+runtime side effects.
+
+### Track A — spec format addition (independent)
+
+Scope: AC-1 + AC-4. Touches the v2 agent block schema and its
+parse/freeze paths.
+
+**A1. Add `tools_denied` to the v2 `SpacedockSolverAgentBlock`
+schema.** Cite spec §6.2 in the field's docstring. Field type
+`list[str] = Field(default_factory=list)`. Place it adjacent to
+`tools_allowed` for readability. Reject wrong-type input via
+pydantic's standard `list[str]` coercion (a string raises
+`ValidationError`, which the parse layer wraps as `SpecError` /
+exit 10 per the existing parse-error contract). The schema file is
+`src/razorback/spec/schema.py`; the v2 block lives in the v2 shape
+landed by `b5` / `ra` / Phase 1 (the v1 block at line 31 stays
+unchanged; v2 fixes the `kind: spacedock_solver` field per phase3
+entity, and v2 is where the new field attaches).
+
+**A2. Verify the field is accepted on round-trip through `rk
+freeze`.** `rk freeze` re-emits the spec as `spec.frozen.yaml`;
+`tools_denied`'s list ordering and entries must survive the yaml
+round-trip byte-identically (AC-4). The freeze path at
+`src/razorback/spec/freeze.py` re-serializes via the same pydantic
+model, so the field rides through automatically; the test asserts
+this rather than the implementation adding new freeze code.
+
+**A3. Unit tests for Track A.** Three tests in
+`tests/unit/test_tools_denied_parse.py`:
+  - (a) Five-entry `tools_denied` list parses and the model's
+    `.tools_denied` attribute equals the input list.
+  - (b) `tools_denied: "string"` (wrong type) raises `SpecError`
+    (exit 10) with a message naming the field. Drive through the
+    parse layer (not the raw pydantic model) so the
+    `SpecError` wrap is exercised.
+  - (c) Omitting `tools_denied` defaults to `[]`.
+A fourth test in the same file covers AC-4: freeze a spec with a
+five-entry list, reload the frozen yaml, and assert byte-identical
+list contents (ordering preserved).
+
+### Track B — runtime enforcement path (gated on Phase 3)
+
+Scope: AC-2 + AC-3. Touches the claude runtime adapter sub-module
+under the v2 agent class. **Does not start until Phase 3 ships
+the `_runtime/claude.py` skeleton from phase3 entity AC-3 + AC-5.**
+
+**B1. Read `tools_denied` from the validated agent block inside
+the claude adapter sub-module.** The claude sub-module is the
+narrow seam between v2 agent kwargs and harbor's installed
+`ClaudeCode` agent; its job is per-runtime kwarg construction
+(spec §8.4). The hook-installation step appends a PreToolUse
+permissions section to the claude-runtime settings.json (or the
+equivalent harbor-side kwarg that carries claude's
+`settings.json` content) whose entries are the verbatim
+`tools_denied` strings. Cite spec §6.2 in the implementation
+comment per AC-2.
+
+**B2. Codex and pi sub-modules: NotImplemented translation.**
+Per AC-0.7's D2 default and phase3 entity AC-3, `_runtime/codex.py`
+and `_runtime/pi.py` ship as NotImplemented stubs. PKG-9 v2's
+hook-installation function is defined only in `_runtime/claude.py`;
+the codex / pi stubs raise `NotImplementedError` on entry per
+their phase3 shape and do not need a `tools_denied` branch added.
+The plan acknowledges this so reviewers do not flag the gap.
+
+**B3. Unit test for Track B (AC-2).** In
+`tests/unit/test_tools_denied_claude_hook.py`: construct a
+`SpacedockSolverAgent` v2 with `runtime: claude` and a
+`tools_denied` list of the four DAB-recommended denials per AC-2
+(`Bash(pip install datasets*)`, `Bash(pip install
+dataagentbench*)`, `Bash(huggingface-cli login*)`, `Bash(curl
+https://huggingface.co/*)`); assert the generated settings.json
+(or equivalent kwarg passed to the inner `ClaudeCode` agent)
+carries a PreToolUse permissions section whose entries equal the
+four strings verbatim, in order.
+
+**B4. Integration test for Track B (AC-3, the live runtime
+probe).** In `tests/integration/test_tools_denied_live.py`: run a
+fixture spec (a minimal solver workflow under
+`tests/fixtures/specs/`) whose `agent.prompts.model` instructs the
+agent to attempt `pip install datasets` on the first turn; the
+agent block carries `tools_denied: ['Bash(pip install
+datasets*)']`. Drive via `uv run rk run <frozen>.frozen.yaml`.
+Assert the run-dir's `events.jsonl` (the harbor publisher's event
+stream, surfaced by razorback's `jsonl` observer per spec §6.3's
+observer translation) carries at least one PreToolUse denial
+event whose rule field references the hook pattern, and assert
+the agent's tool-execution log does not record the install having
+run. The fixture spec lives at
+`tests/fixtures/specs/tools_denied_live.yaml`. Live LLM cost is
+bounded by `agent.max_turns: 3` and `agent.max_budget_usd: 0.10`.
+
+### Cross-track: carry-forward (AC-5)
+
+`uv run pytest` exits 0 from a clean checkout of the worktree
+branch tip. This is verified once Track A and Track B both land
+and the integration test is wired. Track A's commit can verify
+carry-forward against the existing test suite minus the unfinished
+Track B; Track B's commit verifies the full suite.
+
+### Test plan summary (AC ↔ test map)
+
+| AC | Test | Path |
+|---|---|---|
+| AC-1 | parse acceptance + wrong-type + default empty | `tests/unit/test_tools_denied_parse.py` |
+| AC-2 | claude-runtime PreToolUse hook generation | `tests/unit/test_tools_denied_claude_hook.py` |
+| AC-3 | live runtime probe (denied pip install) | `tests/integration/test_tools_denied_live.py` |
+| AC-4 | freeze round-trip preserves list byte-identically | `tests/unit/test_tools_denied_parse.py` |
+| AC-5 | `uv run pytest` exits 0 | suite-wide carry-forward |
+
+### Files touched
+
+Track A (spec-side):
+- `src/razorback/spec/schema.py` (add field to v2 agent block)
+- `tests/unit/test_tools_denied_parse.py` (new, four cases)
+
+Track B (runtime-side, after Phase 3):
+- `src/razorback/agents/_runtime/claude.py` (PreToolUse hook
+  emission from `tools_denied`)
+- `tests/unit/test_tools_denied_claude_hook.py` (new)
+- `tests/integration/test_tools_denied_live.py` (new)
+- `tests/fixtures/specs/tools_denied_live.yaml` (new fixture)
+
+### Risks and notes
+
+- **PreToolUse settings.json shape.** The exact field name harbor's
+  `ClaudeCode` agent uses to carry claude-cli settings.json content
+  (or the equivalent path / inline kwarg) is a Phase 3 discovery.
+  Track B's implementation cites the Phase 3 contract; if the
+  contract turns out to require razorback to write a settings.json
+  file under the run-dir's workspace before harbor's agent boots,
+  the hook-installation function moves into the v2 class's
+  `setup()` rather than the adapter sub-module's `__init__`
+  kwarg-construction step. Either way the field is read once at
+  agent-construction time; the contract decision lives with Phase 3.
+- **Empty list semantics.** `tools_denied: []` (default) means no
+  PreToolUse hooks installed. The claude adapter must skip the
+  permissions section entirely rather than emit an empty section
+  (some harbor versions reject empty permission blocks).
+- **Style.** No em-dashes per commit `a2e9c49`; the plan uses
+  commas, periods, and parentheses for the equivalent emphasis.
+
+## Stage Report: plan
+
+- DONE: Plan covers (a) spec format addition for tools_denied agent block field in §6.2, (b) runtime enforcement path in SpacedockSolverAgent (Phase 3 surface, cite by section/concept, not exact API), (c) test plan that fails-on-denied-tool-invocation.
+  Track A covers (a) via A1 (schema field on v2 `SpacedockSolverAgentBlock`) + A3 unit tests citing spec §6.2; Track B covers (b) via B1 in the claude adapter sub-module (citing spec §8.4 + §6.2, not exact harbor kwarg names); Track B's B4 integration test asserts a PreToolUse denial event in `events.jsonl` for a denied `pip install datasets` invocation.
+- DONE: Plan acknowledges that runtime enforcement depends on Phase 3 (d5) SpacedockSolverAgent v2; name this as a dependency on the implementation timing. pkg9-v2 plan can land but pkg9-v2 implementation must follow phase3 implementation.
+  "Dependency on Phase 3 (`d5`)" subsection plus the Track B header both state the implementation-timing gate; plan landing is unblocked.
+- DONE: Spec format extension itself is independent of Phase 3 timing (it's a schema addition). Plan separates the spec-side work (can ship anytime after b5/ra) from the runtime-side work (gated on phase3).
+  Two-track structure (Track A independent, Track B gated) with distinct file lists, tests, and commit cadence in "Files touched".
+
+### Summary
+
+Wrote an inline two-track plan for PKG-9 v2 in the entity body: Track A adds `tools_denied: list[str]` to the v2 `SpacedockSolverAgentBlock` schema (independent of Phase 3 timing, can ship after b5/ra), Track B installs the list as PreToolUse hooks in the claude runtime adapter sub-module (gated on Phase 3 (`d5`) for the `_runtime/claude.py` surface to exist). The test plan maps the five ACs to four test files; AC-3's live probe asserts a PreToolUse denial event in `events.jsonl` for a denied `pip install datasets` attempt.
