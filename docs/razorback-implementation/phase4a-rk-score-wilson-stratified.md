@@ -1,7 +1,7 @@
 ---
 id: xmnmxmphkmvdysatn39awsyp
 title: Phase 4a — rk score Wilson CIs + stratified mean + against-constant
-status: implementation
+status: validation
 source: plan Phase 4a + spec §3.2 + §8.3a (v2 spec at docs/superpowers/specs/2026-05-19-razorback-on-harbor.md)
 started: 2026-05-20T07:12:27Z
 completed:
