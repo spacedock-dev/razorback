@@ -23,12 +23,16 @@ from razorback.spec.schema import (
     LocalBenchmarkBlock,
     NopAgentBlock,
     SpacedockSolverAgentBlock,
+    SpacedockSolverV2AgentBlock,
     Spec,
 )
 
 
 SPACEDOCK_SOLVER_IMPORT_PATH = (
     "razorback.agents.spacedock_solver:SpacedockSolverAgent"
+)
+SPACEDOCK_SOLVER_V2_IMPORT_PATH = (
+    "razorback.agents.spacedock_solver_v2:SpacedockSolverAgent"
 )
 CLAUDE_CLI_IMPORT_PATH = "razorback.agents.claude_cli:ClaudeCliAgent"
 
@@ -123,6 +127,54 @@ def _build_agent_config(
         }
         agent_cfg = AgentConfig(
             import_path=SPACEDOCK_SOLVER_IMPORT_PATH,
+            model_name=spec.agent.model,
+            kwargs=kwargs,
+            env=dict(resolution.env),
+        )
+        task_env = dict(PROXY_BLOCK_ENV)
+        return agent_cfg, task_env
+
+    if isinstance(spec.agent, SpacedockSolverV2AgentBlock):
+        if project_root is None:
+            raise SpecError(
+                "spacedock_solver_v2 requires project_root for .env auth discovery."
+            )
+        if spec.agent.sealed_hash is None:
+            raise SpecError(
+                "spacedock_solver_v2 spec must be frozen (agent.sealed_hash missing)."
+            )
+        resolution = resolve_claude_auth(project_root=project_root, home=home)
+        harbor_agent_kwargs: dict[str, Any] = {
+            "max_turns": spec.agent.max_turns,
+            "tools_allowed": list(spec.agent.tools_allowed),
+            "tools_denied": list(spec.agent.tools_denied),
+        }
+        if spec.agent.append_system_prompt is not None:
+            harbor_agent_kwargs["append_system_prompt"] = spec.agent.append_system_prompt
+        kwargs: dict[str, Any] = {
+            "runtime": spec.agent.runtime,
+            "model": spec.agent.model,
+            "sampling": {
+                "temperature": spec.agent.sampling.temperature,
+                "top_p": spec.agent.sampling.top_p,
+                "seed": spec.agent.sampling.seed,
+            },
+            "solver_workflow": str(spec.agent.solver_workflow),
+            "solver_workflow_content_hash": spec.agent.solver_workflow_content_hash,
+            "prompt_content_hashes": dict(spec.agent.prompt_content_hashes),
+            "spacedock_skill_version": spec.agent.spacedock_skill_version,
+            "harbor_agent_kwargs": harbor_agent_kwargs,
+            "max_turns": spec.agent.max_turns,
+            "tools_allowed": list(spec.agent.tools_allowed),
+            "tools_denied": list(spec.agent.tools_denied),
+            "resume_from_freeze": (
+                str(spec.agent.resume_from_freeze)
+                if spec.agent.resume_from_freeze
+                else None
+            ),
+        }
+        agent_cfg = AgentConfig(
+            import_path=SPACEDOCK_SOLVER_V2_IMPORT_PATH,
             model_name=spec.agent.model,
             kwargs=kwargs,
             env=dict(resolution.env),
