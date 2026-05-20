@@ -457,29 +457,41 @@ Empirically verified by AC-0.5's probe at
 
 ### 4.5 Registration with harbor
 
-`SpacedockSolverAgent` registers with harbor via harbor's agent-plugin
-discovery mechanism. The expected shape is a `pyproject.toml` entry-point
-group that harbor scans at `harbor run` time; razorback's package
-declares:
+`SpacedockSolverAgent` registers with harbor via harbor's
+**`import_path` dispatch mechanism** (`harbor/agents/factory.py:95-133`,
+`AgentFactory.create_agent_from_import_path`). Harbor does **not**
+enumerate setuptools / PEP-621 entry-point groups for agents; the
+dispatch surface is a Python dotted import-path string on the harbor
+`JobConfig`. Specifically, `AgentConfig.import_path: "module.path:ClassName"`
+(`harbor/models/trial/config.py:44-63`) names the class harbor loads
+and instantiates per trial. The class must subclass
+`harbor.agents.base.BaseAgent` and implement `name()`, `version()`,
+`setup()`, `run()`.
 
-```toml
-[project.entry-points."harbor.agents.installed"]
-spacedock_solver = "razorback.agents.spacedock_solver:SpacedockSolverAgent"
-```
+Razorback's `rk run` is a thin **spec translator**. It rewrites
+razorback's spec.yaml shape into a harbor `JobConfig`:
 
-Users write `agent.kind: spacedock_solver` in their spec and harbor
-routes to razorback's class. No harbor monorepo PR is required.
+- razorback's singular `agent: { kind: spacedock_solver, ... }` block
+  becomes harbor's plural
+  `agents: [{ import_path: "razorback.agents.spacedock_solver:SpacedockSolverAgent", kwargs: { ... } }]`.
+- razorback-only fields on the agent block (`model`, `sampling`,
+  `solver_workflow`, `tools_allowed`, `tools_denied`, etc.) flow
+  through harbor's `AgentConfig.kwargs` dict, which `AgentFactory`
+  splats into the class constructor (`harbor/agents/factory.py:161,170`).
 
-**Open question.** The exact entry-point group name and registration
-shape depends on harbor's published plugin contract. Razorback's
-`harbor publish` / `cli/template-adapter` surface implies such a
-mechanism exists, but the contract must be confirmed against the
-pinned harbor version before implementation. **Fallback if no
-plugin contract exists:** razorback's CLI grows a thin spec-translation
-pre-pass (`rk run` rewrites `agent.kind: spacedock_solver` to
-`agent.kind: claude_code` with appropriate kwargs, then invokes
-`harbor run`). This trades the wire-through cleanness for keeping the
-solver-agent abstraction owned by razorback.
+No setuptools entry-point declaration is needed in razorback's
+`pyproject.toml`. Harbor finds `SpacedockSolverAgent` by import path
+because razorback's package is installed into the same Python
+environment as harbor; harbor calls `importlib.import_module` against
+the `module.path` half of `import_path` and `getattr`s the `ClassName`
+half (`harbor/agents/factory.py:95-133`).
+
+Empirically verified by AC-0.2's probe at
+`docs/superpowers/plans/2026-05-19-harbor-entry-point-probe.md`
+("Agent dispatch probe" section): an external pip-installed package
+with `import_path: probe_agent:ProbeAgent` had its `setup()` and
+`run()` invoked by harbor without any entry-point declaration in the
+package's `pyproject.toml`.
 
 ---
 
@@ -586,6 +598,23 @@ passes through to harbor.
 
 ### 6.1 Top-level shape
 
+**Benchmark-block translation contract.** Razorback's `benchmark:`
+block names a benchmark by `dataset:` + `tasks:` (or `path:`); `rk
+run` translates the block into harbor's `JobConfig.tasks: list[TaskConfig]`
+/ `JobConfig.datasets: list[DatasetConfig]` shape before invoking
+`harbor run`. Harbor benchmark adapters are **offline task
+generators**, not runtime dispatch targets: a harbor adapter is a
+standalone package invoked as `uv run <adapter-folder>` that emits
+task directories on disk (`<output>/<task-id>/{task.toml,
+instruction.md, environment/Dockerfile, tests/test.sh, ...}`); harbor
+consumes the emitted directories at run time via `tasks[].path` or
+`datasets[].path`. Razorback ships no adapter (per §1.3); the `rk
+run` translator's job is to resolve razorback's `benchmark:` block
+into a concrete list of task paths the adapter has already emitted on
+disk. Empirically verified by AC-0.2's probe at
+`docs/superpowers/plans/2026-05-19-harbor-entry-point-probe.md`
+("Adapter dispatch probe" section).
+
 ```yaml
 version: 1
 experiment: dab-paper-reproduction
@@ -619,7 +648,10 @@ environment:
   # passes through to harbor's environment config
   kind: docker
 
-trials: 5
+trials: 5                       # razorback-internal field; rk run translates
+                                # to harbor's JobConfig by replicating tasks[]
+                                # entries (NOT harbor's n_attempts, which is
+                                # per-trial retry count — see §6.3)
 concurrency:
   trials: 4
 
@@ -665,6 +697,38 @@ JobConfig translation time.
 
 Other blocks (`benchmark`, `environment`, `trials`, `concurrency`)
 pass through to harbor; harbor validates them at `harbor run` time.
+
+**`trials` → harbor field-name translation.** Razorback's `trials: int`
+field means "number of independent trials per task" — N executions of
+the same task with fresh per-trial state. Harbor's `JobConfig.n_attempts:
+int` (`harbor/models/job/config.py:244-302`) is **not** the same
+concept — it is the per-trial retry count after agent failure.
+`rk run`'s translator implements razorback's `trials: N` semantics by
+duplicating `JobConfig.tasks[]` entries N times (or by invoking
+`harbor run` N times against a single-pass JobConfig, whichever harbor
+supports more cleanly at the pinned version); it does **not** set
+`JobConfig.n_attempts = spec.trials`. The frozen spec keeps razorback's
+`trials:` field name; harbor's `JobConfig` carries `n_attempts:`
+unchanged. Verified by AC-0.3/4/6's source probe at
+`docs/superpowers/plans/2026-05-19-harbor-source-probe.md`
+("Field-by-field gap" table, `trials: int` → `n_attempts: int` row,
+and the "open question" filed in the probe summary).
+
+**`observers` → harbor event-stream translation.** Razorback's
+`observers: list[ObserverBlock]` (kinds `jsonl`, `stdout`) has no slot
+in harbor's `JobConfig` (`harbor/models/job/config.py:244-302`).
+Razorback's observers translate by **consuming harbor's per-job event
+stream** post-`harbor run`: harbor's publisher infrastructure
+(`harbor/publisher/`) emits trial events to a per-job event log inside
+the run-dir; razorback's `jsonl` observer reifies the events to a
+named JSONL file, and the `stdout` observer prints a summary line per
+trial. The translation is **read-side, not injected into `JobConfig`**
+— razorback's observer blocks stay in `spec.frozen.yaml` for
+provenance and are interpreted by `rk run`'s post-invocation reader,
+not by harbor. Verified by AC-0.3/4/6's source probe at
+`docs/superpowers/plans/2026-05-19-harbor-source-probe.md`
+("Field-by-field gap" table, `observers` row, and the observers open
+question in the probe summary).
 
 ---
 
@@ -953,11 +1017,18 @@ release cadence.
 
 ### 9.2 Harbor's agent-plugin discovery contract
 
-`SpacedockSolverAgent` registers via `[project.entry-points."harbor.agents.installed"]`.
-This is the documented harbor extension contract. If harbor changes the
-entry-point group name or the registration shape, razorback's
-`pyproject.toml` updates and the change propagates to users via a
-razorback release.
+`SpacedockSolverAgent` registers via harbor's `AgentConfig.import_path`
+dispatch (`harbor/agents/factory.py:95-133`). The dispatch surface is
+not setuptools entry-point groups — `rk run` emits a harbor
+`JobConfig` with
+`agents: [{ import_path: "razorback.agents.spacedock_solver:SpacedockSolverAgent", kwargs: {...} }]`
+and harbor's `AgentFactory` resolves the class by Python import. If
+harbor changes its `AgentConfig` schema or its factory's resolution
+shape, razorback's `rk run` translator updates and the change
+propagates to users via a razorback release. No razorback
+`pyproject.toml` entry-point declaration exists or is needed; see
+§4.5 for the mechanism and AC-0.2's probe doc for empirical
+verification.
 
 ### 9.3 Skills as a runtime-specific concept
 

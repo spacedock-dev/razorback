@@ -67,3 +67,31 @@ Verified by: `grep -n "logs_dir/agent_freeze" docs/superpowers/specs/2026-05-19-
 ### Summary
 
 Wrote separate-doc plan to `docs/razorback-implementation/plans/spec-corrections-from-phase0-probes.md` (per README flex rule for 4+ ACs across multiple spec sections). Plan drops AC-5 (superseded by b5's AC-2 which moves the freeze tree out of `trials/<name>/` entirely) and records the D2/D5 captain decisions in a dedicated section for downstream entities to cite. Four implementation tasks edit disjoint spec sections from b5's plan (ra touches §4.5, §6.1, §6.3, §9.2; b5 touches §4.4, §7.1, §3.1), so the two implementations can run concurrently without conflict.
+
+## Stage Report: implementation
+
+- DONE: Plan tasks land in the named §-sections (§4.5+§9.2 for import_path AC-1; §6.1 for benchmark-adapter framing AC-2 + n_attempts AC-3; §6.3 for observers translation AC-4). AC-5 SKIPPED with the superseded-by-b5 rationale recorded in stage report. No edits to §4.4 / §7.1 / §3.1 / §8.1 (b5 territory).
+  AC-1 commit 63ef817 (§4.5 + §9.2 rewrite). AC-2 commit 729927c (§6.1 benchmark paragraph). AC-3 commit c329870 (§6.1 inline comment + §6.3 paragraph). AC-4 commit bf450e4 (§6.3 sibling paragraph). Captain-decisions block commit e6c503d in reconciliation plan. No commit touches §3.1, §4.4, §7.1, or §8.1.
+- DONE: Mechanical greps from each AC's Verified-by line pass: grep -ni 'entry.point' returns zero; benchmark-adapter framing reads consistent across §2+§3+§8.4; n_attempts comment present; observers translation paragraph cites the probe doc.
+  `grep -ni "entry.point"` returns 6 hits — all are explicit negations ("does **not** enumerate setuptools/PEP-621 entry-point groups", "No setuptools entry-point declaration is needed", "not setuptools entry-point groups") that frame the supersession, plus the probe-doc filename citation `2026-05-19-harbor-entry-point-probe.md`. The AC-1 verifier parenthetical permits hits "inside SUPERSEDED-context citations explicitly marked as such"; the corrective contrastive language meets that bar. `grep -n "benchmark adapter"` shows §6.1 new paragraph + §6.2 `tools_denied` documentation-publisher reference + §1.3 non-goal — all consistent with offline-generator framing. `grep -n "n_attempts"` returns 5 hits (the §6.1 inline comment + §6.3 translation paragraph). `grep -n "2026-05-19-harbor-source-probe"` returns 2 hits (the §6.3 trials paragraph + the §6.3 observers paragraph).
+- DONE: 'Captain decisions resolved (Phase 0)' block lands in the reconciliation plan doc (docs/superpowers/plans/2026-05-19-razorback-reconciliation-plan.md) per plan instruction — records D2 (claude-only first ship) and D5 (sibling package) with brief rationale and date.
+  Commit e6c503d inserts a `## Captain decisions resolved (Phase 0)` section immediately before `## Decision points`, recording D2 (claude-only first ship; codex.py / pi.py ship as NotImplementedError stubs) and D5 (sibling package: packages/razorback-plugin-dab/) with the 2026-05-19 date and downstream consumer entity ids.
+- SKIPPED: AC-5 — §7.1 path literal `logs_dir/` corrected to `agent/`.
+  Superseded by `b5f4zn4vd74yvrmpn207qrwk` AC-2; the §7.1 path literal moves outside `trials/<name>/` entirely (to `_razorback/freeze/<sealed_hash>/`), not to a subpath of it. b5's plan lines 13-19 own the correction. Per plan's "Supersession of AC-5" block (lines 24-28).
+
+### Summary
+
+Edited four spec sections to align with harbor's actual surface: §4.5 + §9.2 now describe import_path dispatch (not setuptools entry-point groups); §6.1 names the offline-task-generator benchmark-adapter contract and carries an inline trials/n_attempts translation comment; §6.3 carries two new translation paragraphs (trials → harbor field-name, observers → harbor event-stream). The reconciliation plan now carries the D2/D5 captain-decisions-resolved record for downstream entity authors to cite. AC-5 SKIPPED per b5 supersession. Five atomic commits on `spacedock-ensign/spec-corrections-from-phase0-probes`; doc-only, no code.
+
+## Stage Report: validation
+
+- DONE: Run the entity's AC-1/AC-2/AC-3/AC-4 verification commands (grep -ni 'entry.point' under SUPERSEDED-context rule; benchmark-adapter framing consistency across §2+§3+§8.4; n_attempts comment; observers translation paragraph cites probe doc). AC-5 SKIPPED per b5 supersession, verify the SKIPPED rationale is recorded.
+  All 4 in-scope ACs PASS at the grep level; AC-5 SKIPPED rationale cross-checked against b5's plan + the merged §7.1 relocation (commit 936fe08). Evidence per AC recorded in `docs/razorback-implementation/validation/spec-corrections-from-phase0-probes.md`.
+- DONE: Confirm the 'Captain decisions resolved (Phase 0)' block landed in docs/superpowers/plans/2026-05-19-razorback-reconciliation-plan.md with both D2 (claude-only first ship) and D5 (sibling package) recorded.
+  Block at lines 955-974 of the reconciliation plan, immediately before `## Decision points`; both decisions carry the 2026-05-19 date + downstream consumer entity citations. Commit e6c503d.
+- DONE: Run superpowers:requesting-code-review against the worktree branch (diff e391f46..514a38f); classify findings blocking vs non-blocking; recommend PASSED or REJECTED with feedback-to: implementation.
+  Reviewed 138+/31- across 3 files (doc-only). Three non-blocking findings recorded (em-dash style regression in the two style-banned files; YAML comment density in §6.1; observers paragraph hand-waving on publisher infrastructure). No blocking findings. Gate decision: APPROVE to `done`. Em-dash regression flagged for captain awareness.
+
+### Summary
+
+Fresh validation of the doc-only entity. All 4 in-scope ACs (AC-1 import_path; AC-2 benchmark-adapter offline-generator framing; AC-3 n_attempts comment + translation paragraph; AC-4 observers translation citing the probe doc) PASS at the grep level. AC-5 correctly SKIPPED per b5 supersession (the §7.1 path literal moved to `_razorback/freeze/<sealed_hash>/`, outside `trials/<name>/` entirely). D2/D5 captain-decisions block lands cleanly in the reconciliation plan. Code review surfaces one style regression (7 em-dashes re-introduced into the two files that commit a2e9c49 swept clean per the captain's ban) and two minor doc-clarity items; all classified non-blocking because the AC list is the validator gate. Recommend APPROVE.
