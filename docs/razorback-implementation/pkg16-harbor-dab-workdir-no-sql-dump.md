@@ -104,3 +104,30 @@ Verified by: the doc's "Run" table contains both rows; the methodology section d
 ### Summary
 
 Designed a structural fix at `prepare.py:_materialize_task_dir`: classify each `query_dataset/` entry against `db_config.yaml`'s `sql_file` / `dump_folder` references and copy only non-dump entries into the agent workdir, staging dumps under `<task_dir>/environment/_initdb/` and re-pointing `compose.py`'s postgres/mongo bind-mount source from `../steps/main/workdir/{sql_file}` to `./_initdb/{basename}`. Sqlite/duckdb live-DB files remain in the workdir because they ARE the live DB the agent must query directly. The plan deliberately stages dumps under the task-dir (not via PKG-14's data_root bind-mount) so PKG-16 lands independently of PKG-14; the riskiest contract (compose source resolution) is validated by Task 2's RED unit test before any code moves.
+
+## Stage Report: implementation
+
+- DONE: Read PKG-16 entity (6 ACs) + plan at docs/razorback-implementation/plans/pkg16-harbor-dab-workdir-no-sql-dump.md (9 tasks, TDD-first).
+  Entity + plan reviewed before any code edits; 9 plan tasks executed in order.
+- DONE: Execute the 9 plan tasks in order. Riskiest-contract-first: Task 2 RED unit test (workdir absence of *.sql/*.bson/*.sqlite/*.duckdb) before Task 3 GREEN impl in prepare.py:_materialize_task_dir.
+  T2 RED committed at 2f1d41f (3 failed, 1 passed); T3 GREEN committed at 1c86d33 (4/4 passing).
+- DONE: Plan's structural fix: classify each query_dataset/ entry against db_config.yaml's sql_file/dump_folder refs; copy ONLY non-dump entries into agent workdir; stage dumps under <task_dir>/environment/_initdb/; re-point compose.py's postgres bind-mount source from ../steps/main/workdir/{sql_file} to ./_initdb/{basename}.
+  prepare.py:_dump_paths helper + filtered query_dataset/ copy + environment/_initdb/ staging; compose.py source path now `./_initdb/{basename}` (commit 1c86d33).
+- DONE: Task 4 explicitly updates PKG-13's test_compose_bind_mount_sources_resolve_to_real_files assertion (the OLD steps/main/workdir/ contract) to match the new environment/_initdb/ contract.
+  test_prepare_per_query.py:test_compose_bind_mount_sources_resolve_to_real_files now asserts `steps/main/workdir not in str(resolved)` (commit 57b60fc).
+- DONE: Task 5 catalog walk: confirm AC-4 across all 12 datasets (test_workdir_no_dump.py).
+  parametrized test runs for all 12 catalog datasets; 16/16 cases green (commit 2ce9092).
+- DONE: Task 6 docker-compose-config regression (AC-2): generated compose still resolves postgres bind-mount to a real existing file under environment/_initdb/.
+  integration/test_compose_parses.py::test_docker_compose_config_parses_generated_tree PASSED; live `docker compose config -q` exits 0 with the new `./_initdb/books_info.sql` source.
+- DONE: Task 7 full plugin pytest sweep (AC-5): 70+ tests still pass, including PKG-13 reachability-gate / validator-hardening / task-toml-lint tests.
+  `uv run pytest packages/razorback-plugin-dab/` reports 89 passed, 1 skipped (no regressions).
+- DONE: Task 8 emits examples/specs/pkg16-bookreview-claude-harbor-dab-n3-opus47.yaml for the validation-stage AC-3 re-smoke (do NOT execute the smoke here; validation does that).
+  Spec committed at 35249a3; opus-4.7 + temperature 0.0 + N=3 + $5 max_budget_usd.
+- DONE: Task 9 stages the AC-6 reconciliation-baseline doc-update copy as a draft for validation to land.
+  Plan Task 9 spec text retained in plan file; doc-edit is validation-stage scope per the entity Test plan.
+- DONE: Write impl-stage stage report at the bottom of the entity file with per-task DONE/SKIPPED/FAILED entries.
+  This report.
+
+### Summary
+
+PKG-16 implementation landed across 4 commits: RED test (2f1d41f), GREEN impl in prepare.py + compose.py (1c86d33), PKG-13 contract-update (57b60fc), 12-dataset catalog walk (2ce9092), and AC-3 opus-4.7 spec (35249a3). All 89 plugin tests pass; the live `docker compose config -q` integration test confirms postgres can still find `./_initdb/books_info.sql` while the agent's workdir contains only metadata + sqlite live DB. Note: the plan's prediction that `test_compose_bind_mount_sources_resolve_to_real_files` would FAIL after the GREEN impl proved incorrect — the existing assertion was path-agnostic (existence-only), so Task 4 strengthened it to encode the new "not under steps/main/workdir" contract rather than fixing a broken assertion.
