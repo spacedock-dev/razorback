@@ -81,3 +81,20 @@ def test_deterministic_smoke_runs_end_to_end(colima_safe_tmp_path: Path):
         f"mean={mean} for eval={eval_key}. Per-trial rewards: "
         f"{eval_block.get('reward_stats')}"
     )
+
+    # PKG-17 §AC-2: rk run writes summary.json post-harbor.
+    summary_path = run_dir / "summary.json"
+    assert summary_path.is_file(), (
+        f"PKG-17 AC-2 violation: no summary.json under {run_dir}"
+    )
+    summary = json.loads(summary_path.read_text())
+    assert summary["n_trials_completed"] == 3
+    assert summary["n_trials_errored"] == 0
+    # PKG-17 §AC-1: manifest.json carries per_trial_paths + counts.
+    manifest = json.loads((run_dir / "manifest.json").read_text())
+    assert manifest["n_trials_completed"] == 3
+    assert len(manifest["per_trial_paths"]) == 3
+    # PKG-17 §AC-3: events.jsonl present.
+    assert (run_dir / "events.jsonl").is_file()
+    # PKG-17 §AC-4: per_trial_outcomes.json present.
+    assert (run_dir / "per_trial_outcomes.json").is_file()

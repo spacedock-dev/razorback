@@ -95,7 +95,12 @@ def _read_json(path: Path) -> dict | None:
 
 
 def _resolve_stratum(trial_dir: Path) -> dict | None:
-    """Reuse the same precedence rk score/load.py:110-146 walks."""
+    """Reuse the same precedence rk score/load.py:110-146 walks.
+
+    Falls back to parsing the trial dir name (e.g. `bookreview-q1__a` →
+    {dataset: bookreview, query_id: 1}) so DAB trials without per-trial
+    stratum.json sidecars (e.g. nop agent runs) still aggregate cleanly.
+    """
     candidates = [
         trial_dir / "agent" / "stratum.json",
         trial_dir / "logs" / "verifier" / "stratum.json",
@@ -108,7 +113,21 @@ def _resolve_stratum(trial_dir: Path) -> dict | None:
         payload = _read_json(candidate)
         if payload is not None:
             return payload.get("stratum")
-    return None
+    return _parse_stratum_from_trial_name(trial_dir.name)
+
+
+def _parse_stratum_from_trial_name(trial_name: str) -> dict | None:
+    """Recover (dataset, query_id) from `<dataset>-q<n>__<suffix>` naming."""
+    head = trial_name.split("__", 1)[0]
+    if "-q" not in head:
+        return None
+    dataset, _, qpart = head.rpartition("-q")
+    if not dataset or not qpart:
+        return None
+    try:
+        return {"dataset": dataset, "query_id": int(qpart)}
+    except ValueError:
+        return None
 
 
 def _trial_cost(trial_dir: Path) -> float | None:
@@ -270,9 +289,13 @@ def concatenate_events(run_dir: Path) -> None:
                 payload = {"raw": stripped}
             payload = {"trial_id": trial_dir.name, "line_offset": offset, **payload}
             out_lines.append(json.dumps(payload))
-    (run_dir / "events.jsonl").write_text(
-        ("\n".join(out_lines) + "\n") if out_lines else ""
-    )
+    top_level = run_dir / "events.jsonl"
+    if out_lines:
+        top_level.write_text("\n".join(out_lines) + "\n")
+    elif not top_level.exists():
+        # No per-trial events to merge and no harbor-written top-level events.jsonl:
+        # leave a zero-byte placeholder so consumers (rk audit) find the artifact.
+        top_level.write_text("")
 
 
 OUTCOMES_VERSION = 1
