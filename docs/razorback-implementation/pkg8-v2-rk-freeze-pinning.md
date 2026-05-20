@@ -96,3 +96,16 @@ byte-identical.
   Separate concern; the runtime owns cache invalidation.
 - The hash resolver for SpacedockSolverAgent's halt-resume sealed
   hash (spec §4.3 names this as the class's job, not `rk freeze`'s).
+
+## Stage Report: plan
+
+- DONE: Plan covers rk freeze extension: captures installed harbor + DAB-adapter + agent versions into the frozen manifest. Cite spec §3.2 + §8.2.
+  Plan at `docs/razorback-implementation/plans/pkg8-v2-rk-freeze-pinning.md` Tasks 2-4 implement `resolve_plugin_inventory` (entry-point scan across `harbor.agents` + `harbor.benchmarks` + `razorback.plugins`) and `resolve_solver_workflow_hash` (recursive content hash), wired into `freeze_cmd.py`; AC-1 + AC-2 sections both cite §3.2 and §8.2 verbatim.
+- DONE: Plan coordinates with r4 phase4a-rk-run-budget-gate which expects a new spec slot `experiment_meta.estimated_cost_usd` populated by rk freeze. Address whether pkg8-v2 owns the experiment_meta schema additions or whether they live separately.
+  Plan §"Coordination with r4" decides r4 owns the schema and PKG-8 only pass-through-carries it via existing `spec.model_dump` (no PKG-8 schema or resolver change); a `freeze_cmd.py` docstring line names the field as a pass-through-only static input so future readers do not assume `rk freeze` computes it.
+- DONE: Plan integrates with existing freeze-resolver logic per module inventory: provenance/resolvers.py (KEEP-EXTRACT) handles model/image/CLI/git-sha; the new plugin-pinning block sits alongside.
+  Plan §"Inventory anchors" cites `resolvers.py:1-139`, `freeze_cmd.py:27-96`, `provenance_yaml.py:14-21`, `drift.py`, and `cli/run.py` line ranges; Tasks 2-5 sit alongside (do not replace) the existing six resolvers and the existing alias-drift / harbor-drift checks; Task 8 explicitly regression-tests alias-drift co-firing with plugin-drift.
+
+### Summary
+
+Plan written as a separate document (5 ACs ≥ 4-AC threshold). Risk-first ordering: two new resolvers + unit tests land before orchestration wiring and drift-check wiring per CL's "Validating new mechanisms" rule. Key cross-cutting decision: PKG-8 explicitly does NOT own the `experiment_meta.estimated_cost_usd` schema slot. The r4 plan already adds it, and PKG-8 has no first-principles cost model to populate it; `rk freeze` carries it through pass-through-only via the existing `spec.model_dump` path.

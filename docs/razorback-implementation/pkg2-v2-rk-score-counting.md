@@ -96,3 +96,16 @@ key rename or removal within the major version.
   `--format markdown` is a polish flag, defer until consumer demand.
 - Per-trial cost/latency accounting. Spec §3.2 names `rk runs cost`
   as the cost-summary surface; PKG-2 v2 stays in the score domain.
+
+## Stage Report: plan
+
+- DONE: Plan covers rk score counting honesty: errored-vs-completed denominator, all-errored null-result handling, error_reason taxonomy. Cite spec §3.2 + §8.3a + §9.2.
+  Plan landed at `docs/razorback-implementation/plans/pkg2-v2-rk-score-counting.md` with the three rule sections (Counting rule, Null-result rule, Error-reason rule) citing spec §3.2 + §8.3a + §9.2 verbatim.
+- DONE: Plan coordinates with xm phase4a-rk-score-wilson-stratified plan, AC-3 counting honesty is folded into xm's reducer. pkg2-v2 owns the counting rules + tests; xm consumes via the reducer signature. Cite xm's plan doc.
+  Plan's AC ↔ task map cites xm's Task 1 (TrialRecord shape) + Task 2 + Task 3; Task 4 of this fragment is a coordination check verifying xm's plan reflects the rules. The shared signature is `reduce_trials(records, *, alpha) -> ScoreReport`.
+- DONE: Test plan: error-state taxonomy fixtures (PASS, FAIL, ERROR, OTHER), denominator edge cases (all errored, all complete, mixed).
+  Task 1 builds the four-trial fixture at `tests/fixtures/score/error_taxonomy/`; Task 2 ships denominator-edge-case tests (mixed, all-completed, all-errored, all-errored-run-level, macro-average-drops-null); Task 3 ships the error-reason taxonomy tests (single-class, mixed-class dominant, alphabetical tie-break, run-level dominant, mixed-stratum-no-error_reason, UnknownError fallback).
+
+### Summary
+
+Wrote the counting-honesty plan as a contract-shape fragment of xm's Phase 4a `rk score` plan. The plan pins three rules (counting, null-result, error-reason) and one wire-shape section (renderer-side JSON keys with present-with-null-default discipline) that xm's modules consume; the four tasks own the fixtures + tests, with xm owning the modules. Notable decision: the `error_reason` field defaults to JSON null on no-error and mixed paths (always present in the key set) so xm's Task 9 schema snapshot is stable, and the dominant-class rule uses alphabetical tie-break rather than an enumerated `error_classes` list to keep the wire scalar.
