@@ -7,9 +7,9 @@ from unittest.mock import patch
 
 import pytest
 
-from razorback.compat import spec_to_job_config
 from razorback.errors import SpecError
 from razorback.spec.parse import parse_spec_text
+from razorback.translate import spec_to_job_config
 
 
 def _spec_text(data_root: Path, datasets: str = "[bookreview]") -> str:
