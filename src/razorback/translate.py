@@ -245,6 +245,7 @@ def _build_ade_bench(
     # Phase 1 keeps the in-tree ade-bench path until Phase 8's port-out.
     from razorback.benchmarks.ade_bench.tasks import (
         materialize_git_task,
+        materialize_local_task,
         resolve_task_dirs,
     )
     from razorback.benchmarks.dab.prepare import _DEFAULT_DOCKER_IMAGE
@@ -262,7 +263,20 @@ def _build_ade_bench(
 
     tasks: list[TaskConfig] = []
     for r in resolved:
-        if r.git_url is not None and r.git_commit_id is not None:
+        if r.local_slug is not None:
+            if spec.benchmark.ade_bench_root is None:
+                raise SpecError(
+                    "ade-bench local task entry requires ade_bench_root on the "
+                    "benchmark block (PKG-19)"
+                )
+            materialized = materialize_local_task(
+                ade_bench_root=Path(spec.benchmark.ade_bench_root).expanduser(),
+                task_slug=r.local_slug,
+                docker_image=docker_image,
+                cache_root=cache_root,
+            )
+            tasks.append(TaskConfig(path=materialized))
+        elif r.git_url is not None and r.git_commit_id is not None:
             materialized = materialize_git_task(
                 git_url=r.git_url,
                 git_commit_id=r.git_commit_id,

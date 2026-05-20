@@ -57,25 +57,29 @@ class ResolvedTask:
     """A task entry resolved for harbor.TaskConfig construction.
 
     Legacy slug entries set only `path` (the absolute task directory under
-    tasks_root). FU-1 git-task entries set all three fields; `path` is the
-    in-repo relative path that harbor's GitTaskId materializes on demand.
+    tasks_root). FU-1 git-task entries set `path`, `git_url`, `git_commit_id`
+    so harbor's GitTaskId materializes on demand. PKG-19 local entries set
+    `local_slug` to opt into the `materialize_local_task` path.
     """
     path: Path
     git_url: str | None = None
     git_commit_id: str | None = None
+    local_slug: str | None = None
 
 
 def resolve_task_dirs(
     *,
     tasks_root: Path,
-    tasks: list[str | AdeBenchTaskEntry],
+    tasks: list[str | AdeBenchTaskEntry | AdeBenchLocalTaskEntry],
 ) -> list[ResolvedTask]:
     """Resolve each task entry to a TaskConfig-ready record.
 
     Legacy slug entries are checked for `<tasks_root>/<slug>/task.toml`
     existence (raises FileNotFoundError on miss). Git-task entries are
     forwarded as-is — harbor's GitTaskId.get_local_path() handles fetch +
-    materialization at run-time.
+    materialization at run-time. PKG-19 `AdeBenchLocalTaskEntry` entries
+    defer to the translator, which calls `materialize_local_task` against
+    `spec.benchmark.ade_bench_root`.
     """
     resolved: list[ResolvedTask] = []
     root = Path(tasks_root).resolve()
@@ -89,6 +93,10 @@ def resolve_task_dirs(
                     f"(missing task.toml); tasks_root={root}"
                 )
             resolved.append(ResolvedTask(path=task_dir))
+        elif isinstance(entry, AdeBenchLocalTaskEntry):
+            resolved.append(
+                ResolvedTask(path=root, local_slug=entry.slug)
+            )
         else:
             resolved.append(
                 ResolvedTask(
