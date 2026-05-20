@@ -1,13 +1,13 @@
 ---
 id: dkefq66fjps62nfea530mkvn
 title: PKG-2 v2 — rk score counting honesty
-status: validation
+status: done
 source: spec §3.2 + §8.3a + §9.2 (v2 spec at docs/superpowers/specs/2026-05-19-razorback-on-harbor.md)
 started: 2026-05-20T07:26:09Z
-completed:
-verdict:
+completed: 2026-05-20T16:32:40Z
+verdict: PASSED
 score:
-worktree: .worktrees/spacedock-ensign-pkg2-v2-rk-score-counting
+worktree: 
 issue:
 pr:
 mod-block:
