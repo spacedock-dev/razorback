@@ -57,6 +57,7 @@ def prepare_dataset_tasks(
     docker_image: str = DEFAULT_AGENT_IMAGE,
     container_workdir: str = DEFAULT_CONTAINER_WORKDIR,
     materialize_mode: str = "bind",
+    postgres_volume_mode: str = "reuse",
 ) -> list[TaskManifestEntry]:
     """Materialize one harbor task dir per query under tasks_root/<dataset>-q<n>/.
 
@@ -68,10 +69,20 @@ def prepare_dataset_tasks(
             The per-task workdir excludes those dump files (≤10MB task-dir).
         "copy" — dump files are copied into the per-task workdir alongside
             the other dataset payload. Preserved for provenance-strict runs.
+
+    postgres_volume_mode:
+        "reuse" (default) — postgres data volume is keyed on (dataset,
+            schema_version) so init.d runs ONCE per dataset across variants
+            and trials.
+        "fresh" — per-task unique volume; init.d runs every trial.
     """
     if materialize_mode not in ("bind", "copy"):
         raise ValueError(
             f"materialize_mode must be 'bind' or 'copy'; got {materialize_mode!r}"
+        )
+    if postgres_volume_mode not in ("reuse", "fresh"):
+        raise ValueError(
+            f"postgres_volume_mode must be 'reuse' or 'fresh'; got {postgres_volume_mode!r}"
         )
     data_root = Path(data_root)
     dataset_dir = data_root / f"query_{dataset}"
@@ -112,6 +123,7 @@ def prepare_dataset_tasks(
             dataset_meta=dataset_meta,
             query_id=query_id,
             materialize_mode=materialize_mode,
+            postgres_volume_mode=postgres_volume_mode,
         )
         manifest.append({
             "dataset": dataset,
@@ -136,6 +148,7 @@ def _materialize_task_dir(
     dataset_meta: catalog.DabDataset,
     query_id: int,
     materialize_mode: str = "bind",
+    postgres_volume_mode: str = "reuse",
 ) -> None:
     task_dir.mkdir(parents=True)
 
@@ -174,6 +187,9 @@ def _materialize_task_dir(
             data_root=dataset_dir.parent,
             docker_image=docker_image,
             container_workdir=container_workdir,
+            schema_version=getattr(dataset_meta, "schema_version", "v1"),
+            postgres_volume_mode=postgres_volume_mode,
+            task_id=task_name,
         )
         (env_dir / "docker-compose.yaml").write_text(compose_text)
         _write_compose_services_sidecar(env_dir / "docker-compose.yaml")
@@ -430,8 +446,12 @@ def _check_compose_volumes(compose_path: Path) -> None:
     Raises ComposeError if any source resolves to a missing host path.
     Closes AC-4: catches future regressions where the compose bind-mount
     source path resolves to a missing host file at compose-up time.
+
+    NAMED volumes declared in the top-level `volumes:` section are skipped —
+    docker creates them on demand and they have no host-path semantics.
     """
     compose = yaml.safe_load(compose_path.read_text()) or {}
+    named_volumes = set((compose.get("volumes") or {}).keys())
     base = compose_path.parent
     missing: list[str] = []
     for svc_name, svc in (compose.get("services") or {}).items():
@@ -439,6 +459,8 @@ def _check_compose_volumes(compose_path: Path) -> None:
             if not isinstance(entry, str):
                 continue
             src = entry.split(":", 1)[0]
+            if src in named_volumes:
+                continue
             if src.startswith("/"):
                 resolved = Path(src)
             else:
