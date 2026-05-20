@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import stat
+import tomllib
 from pathlib import Path
 from typing import TypedDict
 
@@ -14,11 +16,17 @@ from razorback_plugin_dab import datasets as catalog
 from razorback_plugin_dab.generate.compose import (
     DEFAULT_AGENT_IMAGE,
     DEFAULT_CONTAINER_WORKDIR,
+    POSTGRES_USER,
+    ComposeError,
     generate_compose,
 )
 from razorback_plugin_dab.generate.stratum import write_stratum_file
 from razorback_plugin_dab.generate.tools_denied import write_settings_json
 from razorback_plugin_dab.generate.workspace_readme import render_workspace_readme
+
+
+class TaskTomlError(RuntimeError):
+    """Generated task.toml has keys harbor will silently drop (schema drift)."""
 
 
 class TaskManifestEntry(TypedDict):
@@ -117,24 +125,15 @@ def _materialize_task_dir(
 ) -> None:
     task_dir.mkdir(parents=True)
 
-    (task_dir / "task.toml").write_text(
-        _task_toml(
-            task_name=task_name,
-            docker_image=docker_image,
-            container_workdir=container_workdir,
-            has_compose=bool(db_config),
-        )
+    postgres_db = _postgres_db_name(db_config, dataset_name=dataset_meta.name)
+    task_toml_text = _task_toml(
+        task_name=task_name,
+        docker_image=docker_image,
+        container_workdir=container_workdir,
+        postgres_db=postgres_db,
     )
-
-    if db_config:
-        compose_text = generate_compose(
-            db_config=db_config,
-            dataset_name=dataset_meta.name,
-            data_root=dataset_dir.parent,
-            docker_image=docker_image,
-            container_workdir=container_workdir,
-        )
-        (task_dir / "docker-compose.yaml").write_text(compose_text)
+    _check_task_toml_environment_keys(task_toml_text, task_name=task_name)
+    (task_dir / "task.toml").write_text(task_toml_text)
 
     instruction = _instruction(
         query_dir=query_dir,
@@ -151,13 +150,32 @@ def _materialize_task_dir(
     )
     write_settings_json(env_dir / "settings.json", task_name=task_name)
 
+    if db_config:
+        # PKG-13 T1: harbor's compose discovery hard-codes
+        # environment_dir / docker-compose.yaml as the task-author override
+        # slot. Writing anywhere else means harbor never loads the file.
+        compose_text = generate_compose(
+            db_config=db_config,
+            dataset_name=dataset_meta.name,
+            data_root=dataset_dir.parent,
+            docker_image=docker_image,
+            container_workdir=container_workdir,
+        )
+        (env_dir / "docker-compose.yaml").write_text(compose_text)
+        _write_compose_services_sidecar(env_dir / "docker-compose.yaml")
+
     tests_dir = task_dir / "tests"
     tests_dir.mkdir()
     from razorback_plugin_dab.verify import verify as verify_module
     shutil.copy2(Path(verify_module.__file__), tests_dir / "verify.py")
     upstream_validate = query_dir / "validate.py"
     if upstream_validate.exists():
-        shutil.copy2(upstream_validate, tests_dir / "validate.py")
+        _install_validator(
+            tests_dir=tests_dir,
+            upstream=upstream_validate,
+            dataset=dataset_meta.name,
+            query_id=query_id,
+        )
 
     write_stratum_file(
         tests_dir=tests_dir,
@@ -204,14 +222,24 @@ def _materialize_task_dir(
             else:
                 stray.unlink()
 
+    # PKG-13 T7 / AC-4: now that workdir is populated, every compose bind-mount
+    # src must resolve to a real path on disk. Caught here so the failure lands
+    # at generation time rather than during compose-up.
+    compose_path = env_dir / "docker-compose.yaml"
+    if compose_path.exists():
+        _check_compose_volumes(compose_path)
+
 
 def _task_toml(
     *,
     task_name: str,
     docker_image: str,
     container_workdir: str,
-    has_compose: bool,
+    postgres_db: str | None = None,
 ) -> str:
+    # PKG-13 T1: harbor's EnvironmentConfig has no docker_compose field;
+    # any [environment].docker_compose value is silently dropped by pydantic.
+    # Compose discovery is purely positional: environment_dir / docker-compose.yaml.
     body = (
         'schema_version = "1.2"\n\n'
         f'[task]\nname = "razorback-plugin-dab/{task_name}"\n'
@@ -219,15 +247,152 @@ def _task_toml(
         "[environment]\n"
         f'docker_image = "{_toml_escape(docker_image)}"\n'
         f'workdir = "{_toml_escape(container_workdir)}"\n'
+        f'\n[[steps]]\nname = "{_STEP_NAME}"\n'
     )
-    if has_compose:
-        body += 'docker_compose = "docker-compose.yaml"\n'
-    body += f'\n[[steps]]\nname = "{_STEP_NAME}"\n'
+    if postgres_db:
+        # PKG-13 T5 / AC-3: bookreview reachability gate. Harbor runs the
+        # per-step healthcheck after setup and before the agent; on failure
+        # it aborts the step with a typed error, which is the fail-fast
+        # shape AC-3 requires. The command exits non-zero if dab-postgres
+        # is unreachable.
+        #
+        # Implementation note: dab-agent:latest does not ship a postgres
+        # client (no psql / pg_isready), so the probe is a python3 TCP
+        # connect against the dab-postgres service. Postgres-protocol
+        # readiness is already guaranteed by compose's depends_on:
+        # condition: service_healthy + dab-postgres's container-level
+        # pg_isready healthcheck, so this TCP probe is the right shape for
+        # fail-fast detection of compose-not-loaded / network-broken paths.
+        probe = (
+            "python3 -c \\\"import socket; s=socket.create_connection(('dab-postgres', 5432), timeout=5); s.close()\\\""
+        )
+        body += (
+            "\n[steps.healthcheck]\n"
+            f'command = "{probe}"\n'
+            "interval_sec = 5\n"
+            "timeout_sec = 10\n"
+            "start_period_sec = 30\n"
+            "retries = 6\n"
+        )
     return body
+
+
+def _postgres_db_name(db_config: dict | None, *, dataset_name: str) -> str | None:
+    """Return the first postgres db_name in the db_config, or None.
+
+    The reachability gate (T5) is emitted only when at least one postgres
+    client is declared; sqlite/duckdb/mongo datasets get no gate.
+    """
+    clients = (db_config or {}).get("db_clients") or {}
+    for cfg in clients.values():
+        if isinstance(cfg, dict) and cfg.get("db_type") == "postgres":
+            return cfg.get("db_name") or f"{dataset_name}_db"
+    return None
 
 
 def _toml_escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _check_task_toml_environment_keys(text: str, *, task_name: str) -> None:
+    """Reject any [environment].* key harbor's EnvironmentConfig doesn't honour.
+
+    Harbor parses task.toml via pydantic with the default `extra='ignore'`
+    policy, which silently drops unknown keys. That bit us once already
+    (`[environment].docker_compose`, dropped, compose never loaded). This
+    helper fails fast at generation time so future schema drift surfaces
+    where it can be fixed instead of as a silent runtime no-op.
+    """
+    from harbor.models.task.config import EnvironmentConfig
+
+    parsed = tomllib.loads(text)
+    env = parsed.get("environment", {}) or {}
+    extras = sorted(set(env) - set(EnvironmentConfig.model_fields))
+    if extras:
+        raise TaskTomlError(
+            f"task.toml for {task_name!r} has [environment] keys harbor does "
+            f"not honour and will silently drop: {extras}. "
+            "Either remove the key or upgrade harbor."
+        )
+
+
+def _install_validator(
+    *,
+    tests_dir: Path,
+    upstream: Path,
+    dataset: str,
+    query_id: int,
+) -> None:
+    """Copy the upstream validate.py, optionally wrapping it with a hardened
+    template for known bookreview substring-leak queries (T14 finding).
+
+    For bookreview-q1/q2/q3 the upstream substring check is necessary but
+    not sufficient; we install a template that loads upstream as
+    `_upstream_validate.py` and adds a bounded-answer check on top.
+    """
+    from razorback_plugin_dab.verify import validators as hardened
+
+    template_name = _hardened_template(dataset=dataset, query_id=query_id)
+    if template_name is None:
+        shutil.copy2(upstream, tests_dir / "validate.py")
+        return
+
+    shutil.copy2(upstream, tests_dir / "_upstream_validate.py")
+    template_path = Path(hardened.__file__).parent / template_name
+    shutil.copy2(template_path, tests_dir / "validate.py")
+
+
+def _hardened_template(*, dataset: str, query_id: int) -> str | None:
+    if dataset != "bookreview":
+        return None
+    return {
+        1: "bookreview_q1.py",
+        2: "bookreview_q2_q3.py",
+        3: "bookreview_q2_q3.py",
+    }.get(query_id)
+
+
+def _write_compose_services_sidecar(compose_path: Path) -> None:
+    """Record the compose services emitted for this task.
+
+    The bookreview reachability gate (T5/T6) and the AC-6 re-run validator
+    read this sidecar to confirm what was supposed to be running. It is a
+    cheap structural check that does not depend on a docker daemon.
+    """
+    compose = yaml.safe_load(compose_path.read_text()) or {}
+    services = sorted((compose.get("services") or {}).keys())
+    sidecar = {"compose_file": compose_path.name, "services": services}
+    (compose_path.parent / ".compose-services.json").write_text(
+        json.dumps(sidecar, indent=2) + "\n"
+    )
+
+
+def _check_compose_volumes(compose_path: Path) -> None:
+    """Resolve every bind-mount src against the compose file's parent.
+
+    Raises ComposeError if any source resolves to a missing host path.
+    Closes AC-4: catches future regressions where the compose bind-mount
+    source path resolves to a missing host file at compose-up time.
+    """
+    compose = yaml.safe_load(compose_path.read_text()) or {}
+    base = compose_path.parent
+    missing: list[str] = []
+    for svc_name, svc in (compose.get("services") or {}).items():
+        for entry in svc.get("volumes") or []:
+            if not isinstance(entry, str):
+                continue
+            src = entry.split(":", 1)[0]
+            if src.startswith("/"):
+                resolved = Path(src)
+            else:
+                resolved = (base / src).resolve()
+            if not resolved.exists():
+                missing.append(f"{svc_name}:{src} -> {resolved}")
+    if missing:
+        raise ComposeError(
+            "compose bind-mount source(s) do not exist on host: "
+            + "; ".join(missing)
+        )
 
 
 def _instruction(

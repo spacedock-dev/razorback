@@ -35,7 +35,7 @@ def test_postgres_service_emitted(tmp_path: Path):
     pg = services["dab-postgres"]
     assert pg["image"] == "postgres:17"
     assert pg["environment"]["POSTGRES_DB"] == "bookreview_db"
-    assert pg["environment"]["POSTGRES_USER"] == "dabench"
+    assert pg["environment"]["POSTGRES_USER"] == "postgres"
     assert "pg_isready" in pg["healthcheck"]["test"][1]
     assert "dab-net" in pg["networks"]
 

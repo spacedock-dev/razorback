@@ -14,8 +14,13 @@ MONGO_IMAGE = "mongo:8"
 DEFAULT_AGENT_IMAGE = "dab-agent:latest"
 DEFAULT_CONTAINER_WORKDIR = "/workspace"
 
-POSTGRES_USER = "dabench"
-POSTGRES_PASSWORD = "dabench"
+# PKG-13 T10 finding: upstream DAB SQL dumps assume the default `postgres`
+# superuser (ALTER TABLE ... OWNER TO postgres in books_info.sql). Configuring
+# a different POSTGRES_USER makes the init SQL fail with role-not-found and
+# the container exits with code 3 before becoming healthy. Use the default
+# superuser name to match the dump's role references.
+POSTGRES_USER = "postgres"
+POSTGRES_PASSWORD = "postgres"
 
 
 class ComposeError(RuntimeError):
@@ -51,8 +56,12 @@ def generate_compose(
             pg_dbs.append(db_name)
             sql_file = cfg.get("sql_file")
             if sql_file:
+                # PKG-13 T1: compose lives at <task-dir>/environment/docker-compose.yaml;
+                # bind-mount sources resolve relative to that file, i.e. one level
+                # below the task-dir root. The dataset payload sits at
+                # <task-dir>/steps/main/workdir/{sql_file}.
                 init_volumes_pg.append(
-                    {"src": f"./workdir/{sql_file}", "dst": f"/docker-entrypoint-initdb.d/{Path(sql_file).name}"}
+                    {"src": f"../steps/main/workdir/{sql_file}", "dst": f"/docker-entrypoint-initdb.d/{Path(sql_file).name}"}
                 )
         elif kind == "mongo":
             db_name = cfg.get("db_name") or f"{dataset_name}_db"
@@ -60,7 +69,7 @@ def generate_compose(
             dump_folder = cfg.get("dump_folder")
             if dump_folder:
                 init_volumes_mongo.append(
-                    {"src": f"./workdir/{dump_folder}", "dst": f"/docker-entrypoint-initdb.d/{Path(dump_folder).name}"}
+                    {"src": f"../steps/main/workdir/{dump_folder}", "dst": f"/docker-entrypoint-initdb.d/{Path(dump_folder).name}"}
                 )
         elif kind in (None, "sqlite", "duckdb"):
             # File-backed engines need no service; bind mount handled by workdir copy.

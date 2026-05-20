@@ -83,3 +83,47 @@ After AC-1 through AC-5 land, re-run T14 (bookreview-claude live-DB, N=3) and re
 ### Summary
 
 Wrote a separate plan doc at docs/razorback-implementation/plans/pkg13-harbor-dab-live-db-verification-stack.md (6 ACs > 3 threshold). Plan opens with a harbor contract verification block (no `docker_compose` field; compose at `environment/docker-compose.yaml`) and codifies it as the first failing-test task (T0) so the rest of the plan's ordering is defensible. Eleven tasks total, ordered riskiest-mechanism-first; AC-1+AC-2+AC-3 land before AC-6's re-run. No em-dashes; "load-bearing" replaced with "critical" per the recent style cleanup.
+
+## Stage Report: implementation
+
+- DONE: T0 harbor contract assertion (mechanism check)
+  Commit 8317337; tests/unit/test_harbor_contract.py asserts EnvironmentConfig has no docker_compose field and _environment_docker_compose_path returns environment_dir / docker-compose.yaml. 2/2 pass.
+- DONE: T1 move compose write to environment/docker-compose.yaml (AC-1, AC-4)
+  Commit 7c441ba; compose now lives under environment/, bind-mount sources rebased to ../steps/main/workdir/{sql_file|dump_folder}, dead [environment].docker_compose toml line removed. Three new/updated tests cover layout, bind-mount resolution, and the dropped key.
+- DONE: T2 generator-side schema lint for task.toml (AC-1 guard)
+  Commit e05e8df; _check_task_toml_environment_keys raises TaskTomlError on any [environment].* key harbor's EnvironmentConfig does not honour. test_task_toml_lint.py covers accept-real, reject-unknown, accept-missing-section.
+- DONE: T3 compose-loading observability sidecar (AC-2)
+  Commit 1affcf0 (combined with T7); environment/.compose-services.json sidecar enumerates emitted services per task. Sidecar lists dab-postgres + main for a bookreview-shaped fixture.
+- DONE: T4 live docker compose config verification test (AC-2 runtime)
+  Commit 0a0b3c9; integration test runs `docker compose -f <env>/docker-compose.yaml config -q` against generated tree; skips when docker CLI absent.
+- DONE: T5 bookreview reachability gate plugin-side (AC-3)
+  Commit 992f3eb; task.toml carries [steps.healthcheck] with a psql probe against dab-postgres when db_clients includes postgres; sqlite-only datasets get no gate. Verified harbor TaskConfig.model_validate_toml accepts the emitted text.
+- DONE: T6 reachability-gate negative test (AC-3 verified-by)
+  Commit 1d17acc; integration test runs the generated healthcheck command directly, asserts non-zero exit with recognisable connection-failure stderr text. Skips when psql client unavailable.
+- DONE: T7 bind-mount source-file existence post-generate check (AC-4)
+  Commit 1affcf0 (combined with T3); _check_compose_volumes walks the parsed compose, resolves each volumes[].src against the compose file's parent, raises ComposeError on missing source. Wired at end of _materialize_task_dir after workdir is populated.
+- DONE: T8 validator hardening q1 bounded-decade match (AC-5)
+  Combined T8+T9 commit; verify/validators/bookreview_q1.py wraps the upstream substring check with a `^\s*(\d{4})s?\s*$` parse + ground-truth-decade equality. Six cases pass: 2020s and 2020 accepted; essay-style "published in 2020", "2020-01-01", "02020", and "the 2020s decade" rejected.
+- DONE: T9 validator hardening q2/q3 length cap (AC-5)
+  Same commit as T8; verify/validators/bookreview_q2_q3.py wraps upstream with `_ANSWER_MAX_LEN = 2000` cap. Short canonical answer passes; SQL-dump-style answer (titles + 4kb padding) fails with `too long`; missing-title regression-guarded.
+- DONE: T10 stack-level smoke before AC-6 re-run
+  Commits 1e12a9a (postgres role fix) + 5a4db23 (gate uses python3 TCP probe). Smoke surfaced two follow-ups: upstream SQL dump assumes the `postgres` superuser (init failed with `role does not exist`); dab-agent:latest ships no psql client (gate command must be portable to the image). After both fixes, T10 N=1 produced 3/3 reward=1.0 in 5m 49s with the new compose-under-environment + reachability gate + observability sidecar all confirmed loaded.
+- DONE: T11 AC-6 T14 re-run + reconciliation update
+  Commit 9a231bc; T11 N=3 produced 9/9 reward=1.0; `rk score` reports stratified pass@1 = 1.0 with Wilson 95% CI [0.7008, 1.0000]. Wall-clock 16m 17s. Reconciliation doc at docs/superpowers/plans/2026-05-19-reconciliation-baseline.md now marks the original T14 result as INVALID and appends a "T14 re-run (PKG-13, honest live-DB)" section with AC-2/AC-3/AC-5 evidence and four side findings. Also fixes `rk score` stratum loader to discover sidecars under harbor v2's `steps/<step>/verifier/` path.
+
+### Summary
+
+PKG-13 closes the T14 false-positive class end to end. T0 through T9 land all of AC-1 through AC-5 with TDD-first coverage and 72/72 plugin tests green (2 env-dependent skips). T10 smoke + T11 N=3 produce the honest live-DB headline (pass@1 = 1.0, Wilson CI [0.7008, 1.0000]) on a verifiably loaded compose stack with the reachability gate firing; the original T14 9/9 result is now marked INVALID in the reconciliation doc. Two additional shipped bugs surfaced during T10 — postgres role mismatch in the upstream SQL dump and the absence of psql in `dab-agent:latest` — both fixed in the same stage. Three follow-ups identified for separate entities: cause-6 agent-transcript debuggability (not addressed; affects AC-6 evidence depth), dab-agent image `postgresql-client` add (deferred to PKG-10), and `rk score` stratum-path discovery for harbor v2 (fixed inline in PKG-13 T11). 7 new commits since the previous report cycle.
+
+## Stage Report: validation
+
+- DONE: AC coverage scan AC-1 through AC-6
+  AC-1: prepare.py:164 writes compose at <task-dir>/environment/docker-compose.yaml; test_prepare_per_query.py + test_harbor_contract.py guard. AC-2: structural sidecar at env_dir/.compose-services.json verified in _runs/t11-n3/.../bookreview-q{1,2,3}/environment/.compose-services.json (each lists ["dab-postgres","main"]); runtime half verified in bookreview-q1__6Sm2ta5/trial.log ("Running healthcheck: python3 -c ... dab-postgres ... 5432" + "Healthcheck passed"). AC-3: T5 emits [steps.healthcheck] in task.toml; T6 negative test runs the gate from host and asserts non-zero + connection-failure stderr. AC-4: prepare.py:370 _check_compose_volumes; T7 unit test asserts missing-src raises ComposeError. AC-5: bookreview_q1.py wraps upstream with bounded-decade regex; bookreview_q2_q3.py adds _ANSWER_MAX_LEN=2000 cap; both have 6+ test cases. AC-6: docs/superpowers/plans/2026-05-19-reconciliation-baseline.md:325 "T14 re-run (PKG-13, honest live-DB)" section landed; supersedes original T14; 9/9 pass@1=1.0 Wilson CI [0.7008, 1.0000]; AC-2/AC-3/AC-5 evidence inline; side findings E/F/G/H recorded.
+- DONE: Full pytest from clean worktree
+  73 passed, 1 skipped on packages/razorback-plugin-dab (acceptance command, 1.28s). Full uv run pytest: 442 passed, 5 failed, 5 skipped in 23m30s. The 5 failures (test_rk_run_nop, test_rk_run_bookreview_nop x2, test_rk_run_bookreview_claude, test_rk_run_bookreview_spacedock_halt_resume) are pre-existing observer-wiring failures under harbor v2 (side-finding C in reconciliation doc: top-level events.jsonl/manifest.json not emitted). None of the failing test files were touched in 8bf21b1..HEAD; not PKG-13 regressions.
+- DONE: Code review on 8bf21b1..HEAD worktree diff
+  22 files changed, 1188 insertions, 33 deletions across plugin generator (compose.py, prepare.py, workspace_readme.py), two new hardened validators, one rk score loader extension, and matching TDD tests. Side-finding fixes verified: compose.py:22 POSTGRES_USER="postgres" with role-mismatch rationale; prepare.py:267 python3 TCP probe with dab-agent-no-psql rationale; src/razorback/score/load.py:117-122 stratum discovery walks steps/<step>/verifier/. Comment policy compliant (ABOUTME present; rationale-only non-obvious comments; no temporal/historical drift). Three Minor findings (none blocking): _check_compose_volumes uses .exists() which dereferences symlinks; bookreview_q1 hard-codes ground-truth decade "2020" (acceptable since upstream substring check runs first); TCP-probe TOML escaping is brittle but covered by T6. Recommendation: PASSED.
+
+### Summary
+
+PKG-13 passes validation cleanly. All six ACs have independent on-branch evidence including dual-form AC-2 observability (sidecar + trial.log healthcheck text), the AC-6 reconciliation block supersedes the original T14 false positive with honest 9/9 pass@1=1.0 Wilson CI [0.7008, 1.0000]. Plugin tests 73/74 green (1 env skip); the five repo-wide test failures are pre-existing under harbor v2 and untouched by this worktree. Three minor code-review findings recorded; none block merge. Verdict: PASSED, feedback-to: none required.
