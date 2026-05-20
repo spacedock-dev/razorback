@@ -1,0 +1,1 @@
+{"stratum": {"backends": ["postgres", "mysql"]}}

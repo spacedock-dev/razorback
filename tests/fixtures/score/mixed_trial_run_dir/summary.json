@@ -1,0 +1,7 @@
+{
+  "summary_version": 1,
+  "stratified_pass_at_1": 0.5,
+  "datasets": {
+    "bookreview": {"dataset_pass_at_1": 0.5, "n_queries": 2}
+  }
+}

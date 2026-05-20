@@ -1,0 +1,16 @@
+{
+  "id": "00000000-0000-0000-0000-000000000002",
+  "task_name": "razorback/bookreview-q2",
+  "trial_name": "trial-completed-fail",
+  "trial_uri": "file:///fixture/trial-completed-fail",
+  "task_id": {"path": "/fixture/tasks/bookreview/bookreview-q2"},
+  "source": null,
+  "task_checksum": "deadbeef",
+  "config": {},
+  "agent_info": {"name": "fixture", "version": "0", "model_info": {"name": "fixture", "provider": null}},
+  "agent_result": null,
+  "verifier_result": {"rewards": {"reward": 0.0}},
+  "exception_info": null,
+  "started_at": "2026-05-20T00:00:00Z",
+  "finished_at": "2026-05-20T00:01:00Z"
+}

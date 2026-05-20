@@ -1,0 +1,21 @@
+{
+  "id": "00000000-0000-0000-0000-000000000003",
+  "task_name": "razorback/bookreview-q3",
+  "trial_name": "trial-errored",
+  "trial_uri": "file:///fixture/trial-errored",
+  "task_id": {"path": "/fixture/tasks/bookreview/bookreview-q3"},
+  "source": null,
+  "task_checksum": "deadbeef",
+  "config": {},
+  "agent_info": {"name": "fixture", "version": "0", "model_info": {"name": "fixture", "provider": null}},
+  "agent_result": null,
+  "verifier_result": null,
+  "exception_info": {
+    "exception_type": "SubprocessError",
+    "exception_message": "agent exited non-zero",
+    "exception_traceback": "",
+    "occurred_at": "2026-05-20T00:00:30Z"
+  },
+  "started_at": "2026-05-20T00:00:00Z",
+  "finished_at": "2026-05-20T00:00:30Z"
+}

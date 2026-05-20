@@ -1,0 +1,26 @@
+{
+  "outcomes_version": 1,
+  "trials": [
+    {
+      "dataset": "bookreview",
+      "query_id": 1,
+      "trial_index": 0,
+      "trial_name": "bookreview-q1__xgRg3Eo",
+      "reward": 1.0
+    },
+    {
+      "dataset": "bookreview",
+      "query_id": 2,
+      "trial_index": 0,
+      "trial_name": "bookreview-q2__qg7aPaZ",
+      "reward": 1.0
+    },
+    {
+      "dataset": "bookreview",
+      "query_id": 3,
+      "trial_index": 0,
+      "trial_name": "bookreview-q3__dBAPNbE",
+      "reward": 1.0
+    }
+  ]
+}
