@@ -70,3 +70,16 @@ After AC-1 through AC-5 land, re-run T14 (bookreview-claude live-DB, N=3) and re
 - Goal 1 — DAB paper reproduction (entity `ay`)
 - Goal 2 — ade-bench Haiku baseline (entity `jj`; may need separate ade-bench fix)
 - T15 — Phase 2 12-dataset matrix reconciliation (deferred earlier)
+
+## Stage Report: plan
+
+- DONE: Plan reads the investigation doc end-to-end. Each of the four root causes maps to a concrete fix task; the AC-task map covers all 6 ACs.
+  Plan at docs/razorback-implementation/plans/pkg13-harbor-dab-live-db-verification-stack.md; AC-to-task table covers AC-1..AC-6; investigation causes 1/2/3/4/5 map to T1/T2/T7/T5+T6/T8+T9 respectively (cause-6 explicitly out of scope).
+- DONE: Plan distinguishes plugin-side fixes from harbor-side requirements. Harbor's EnvironmentConfig contract verified end-to-end against the pinned harbor in .venv.
+  EnvironmentConfig at harbor/models/task/config.py:127-170 has no `docker_compose` field; harbor's compose discovery at docker.py:249-251 hard-codes `environment_dir / "docker-compose.yaml"`. Plan T1 moves the plugin's compose write to `<task-dir>/environment/docker-compose.yaml` and drops the dead `[environment].docker_compose` line. T0 codifies the contract as a failing-test assertion that guards future harbor upgrades.
+- DONE: AC-5 hardening strategy chosen and motivated. Riskiest-mechanism-first ordering: AC-1+AC-2+AC-3 land before AC-6 re-run.
+  AC-5 split into T8 (q1 bounded-decade match wrapping the upstream substring check) and T9 (q2/q3 length cap on the canonical answer string). Rejected the "validators consume agent-emitted SQL" alternative as too large a contract change; chose bounded-answer as the smallest fix closing the specific T14 exploit. Task ordering: T0 (harbor contract) -> T1-T4 (compose location + observability + AC-4 bind-mount) -> T5-T6 (reachability gate) -> T7 (post-generate bind-mount existence check) -> T8-T9 (validators) -> T10 (single-trial stack smoke) -> T11 (AC-6 N=3 re-run + reconciliation update).
+
+### Summary
+
+Wrote a separate plan doc at docs/razorback-implementation/plans/pkg13-harbor-dab-live-db-verification-stack.md (6 ACs > 3 threshold). Plan opens with a harbor contract verification block (no `docker_compose` field; compose at `environment/docker-compose.yaml`) and codifies it as the first failing-test task (T0) so the rest of the plan's ordering is defensible. Eleven tasks total, ordered riskiest-mechanism-first; AC-1+AC-2+AC-3 land before AC-6's re-run. No em-dashes; "load-bearing" replaced with "critical" per the recent style cleanup.
