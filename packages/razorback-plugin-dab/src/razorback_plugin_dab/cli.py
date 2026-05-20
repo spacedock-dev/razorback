@@ -33,12 +33,24 @@ def generate(
         "direct-minimal", "--workspace-variant", help="One of: direct-minimal, direct-structured, spacedock."
     ),
     hints: bool = typer.Option(False, "--hints/--no-hints", help="Include db_description_withhint in workspace."),
+    materialize: str = typer.Option(
+        "bind",
+        "--materialize",
+        help="Dataset materialization mode: bind (default — bind-mount dumps from data_root) or copy (per-task workdir copy).",
+    ),
 ) -> None:
     """Emit harbor task directories under <out>/<dataset>-q<n>/ for each requested dataset."""
     if workspace_variant not in WORKSPACE_VARIANTS:
         typer.echo(
             f"razorback-plugin-dab: unknown workspace_variant {workspace_variant!r}; "
             f"expected one of {WORKSPACE_VARIANTS}",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
+    if materialize not in ("bind", "copy"):
+        typer.echo(
+            f"razorback-plugin-dab: --materialize must be one of bind|copy; got {materialize!r}",
             err=True,
         )
         raise typer.Exit(code=2)
@@ -77,6 +89,7 @@ def generate(
             tasks_root=out,
             workspace_variant=workspace_variant,
             hints=hints,
+            materialize_mode=materialize,
         )
 
 

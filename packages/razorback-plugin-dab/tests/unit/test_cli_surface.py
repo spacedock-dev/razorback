@@ -54,3 +54,82 @@ def test_validate_passes_on_hello_fixture(tmp_path: Path):
     result = _uv_run(["validate", str(out)])
     assert result.returncode == 0
     assert "1 tasks validated" in result.stdout
+
+
+def _build_bookreview_data_root(root: Path) -> Path:
+    import yaml as _yaml
+
+    data_root = root / "data"
+    qdir = data_root / "query_bookreview"
+    (qdir / "query_dataset").mkdir(parents=True)
+    (qdir / "db_config.yaml").write_text(_yaml.safe_dump({
+        "db_clients": {
+            "books_database": {
+                "db_type": "postgres",
+                "db_name": "bookreview_db",
+                "sql_file": "query_dataset/books_info.sql",
+            }
+        }
+    }))
+    (qdir / "db_description.txt").write_text("Bookreview schema.")
+    (qdir / "query_dataset" / "books_info.sql").write_text("CREATE TABLE books (id INT);\n")
+    q1 = qdir / "query1"
+    q1.mkdir()
+    (q1 / "query.json").write_text('{"question": "How many books?"}')
+    return data_root
+
+
+def test_cli_materialize_bind_skips_workdir_dump(tmp_path: Path):
+    data_root = _build_bookreview_data_root(tmp_path)
+    out = tmp_path / "tasks"
+    result = _uv_run([
+        "generate", "--datasets", "bookreview",
+        "--data-root", str(data_root), "--out", str(out),
+        "--materialize", "bind",
+    ])
+    assert result.returncode == 0, result.stderr
+    task_dirs = [p for p in out.iterdir() if p.is_dir()]
+    assert task_dirs
+    workdir = task_dirs[0] / "steps" / "main" / "workdir"
+    assert not (workdir / "query_dataset" / "books_info.sql").exists()
+
+
+def test_cli_materialize_copy_keeps_workdir_dump(tmp_path: Path):
+    data_root = _build_bookreview_data_root(tmp_path)
+    out = tmp_path / "tasks"
+    result = _uv_run([
+        "generate", "--datasets", "bookreview",
+        "--data-root", str(data_root), "--out", str(out),
+        "--materialize", "copy",
+    ])
+    assert result.returncode == 0, result.stderr
+    task_dirs = [p for p in out.iterdir() if p.is_dir()]
+    assert task_dirs
+    workdir = task_dirs[0] / "steps" / "main" / "workdir"
+    assert (workdir / "query_dataset" / "books_info.sql").exists()
+
+
+def test_cli_materialize_default_is_bind(tmp_path: Path):
+    data_root = _build_bookreview_data_root(tmp_path)
+    out = tmp_path / "tasks"
+    result = _uv_run([
+        "generate", "--datasets", "bookreview",
+        "--data-root", str(data_root), "--out", str(out),
+    ])
+    assert result.returncode == 0, result.stderr
+    task_dirs = [p for p in out.iterdir() if p.is_dir()]
+    workdir = task_dirs[0] / "steps" / "main" / "workdir"
+    assert not (workdir / "query_dataset" / "books_info.sql").exists(), (
+        "default materialize mode must be 'bind' (no workdir dump copy)"
+    )
+
+
+def test_cli_materialize_invalid_exits_2(tmp_path: Path):
+    out = tmp_path / "tasks"
+    result = _uv_run([
+        "generate", "--datasets", "bookreview",
+        "--data-root", str(tmp_path), "--out", str(out),
+        "--materialize", "symlink",
+    ])
+    assert result.returncode == 2
+    assert "materialize" in result.stderr
