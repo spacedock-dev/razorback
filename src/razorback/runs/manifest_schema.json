@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "razorback run-dir manifest (PKG-17)",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "run_dir_version",
+    "experiment",
+    "job_name",
+    "created_at",
+    "spec_path",
+    "frozen_spec_hash",
+    "provenance_hash",
+    "harbor_job_name",
+    "n_trials_total",
+    "n_trials_completed",
+    "n_trials_errored",
+    "per_trial_paths"
+  ],
+  "properties": {
+    "run_dir_version": {"const": 1},
+    "experiment": {"type": "string"},
+    "job_name": {"type": "string"},
+    "created_at": {"type": "string"},
+    "spec_path": {"type": "string"},
+    "frozen_spec_hash": {"type": "string", "minLength": 64, "maxLength": 64},
+    "provenance_hash": {"type": "string", "minLength": 64, "maxLength": 64},
+    "harbor_job_name": {"type": "string"},
+    "n_trials_total": {"type": "integer", "minimum": 0},
+    "n_trials_completed": {"type": "integer", "minimum": 0},
+    "n_trials_errored": {"type": "integer", "minimum": 0},
+    "per_trial_paths": {"type": "array", "items": {"type": "string"}},
+    "benchmark_kind": {"type": ["string", "null"]}
+  }
+}
