@@ -1,0 +1,6 @@
+{
+  "trial_name": "bookreview-q3__c",
+  "task_name": "razorback/bookreview-q3",
+  "verifier_result": null,
+  "exception_info": {"exception_type": "AgentTimeoutError"}
+}

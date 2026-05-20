@@ -85,3 +85,41 @@ def test_write_manifest_validates_against_schema(tmp_path: Path):
     )
     payload = json.loads((run_dir / "manifest.json").read_text())
     jsonschema.validate(payload, schema)
+
+
+def _copy_fixture(src: Path, dst: Path) -> None:
+    dst.mkdir(parents=True, exist_ok=True)
+    for child in src.iterdir():
+        target = dst / child.name
+        if child.is_dir():
+            shutil.copytree(child, target)
+        else:
+            shutil.copy(child, target)
+
+
+def test_aggregate_summary_per_trial_rewards_and_stratified(tmp_path: Path):
+    from razorback.runs.aggregate import aggregate_summary
+
+    work = tmp_path / "exp" / "job"
+    _copy_fixture(FIXTURE_RUN, work)
+
+    aggregate_summary(work)
+    summary = json.loads((work / "summary.json").read_text())
+
+    trial_ids = {t["trial_id"] for t in summary["trials"]}
+    assert trial_ids == {"bookreview-q1__a", "bookreview-q2__b", "bookreview-q3__c"}
+    by_id = {t["trial_id"]: t for t in summary["trials"]}
+    assert by_id["bookreview-q1__a"]["reward"] == 1.0
+    assert by_id["bookreview-q2__b"]["reward"] == 0.0
+    assert by_id["bookreview-q3__c"]["reward"] is None
+    assert by_id["bookreview-q3__c"]["error_reason"] == "AgentTimeoutError"
+
+    assert summary["n_trials_total"] == 3
+    assert summary["n_trials_completed"] == 2
+    assert summary["n_trials_errored"] == 1
+
+    assert summary["datasets"]["bookreview"]["dataset_pass_at_1"] == 0.5
+    assert summary["stratified_pass_at_1"] == 0.5
+
+    assert summary["cost_usd"] is None
+    assert summary["summary_version"] == 1
