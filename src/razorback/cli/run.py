@@ -15,8 +15,12 @@ from razorback.errors import (
     RazorbackError,
     SpecError,
 )
-from razorback.provenance.drift import check_alias_drift, check_harbor_drift
-from razorback.provenance.errors import AliasDriftError
+from razorback.provenance.drift import (
+    check_alias_drift,
+    check_harbor_drift,
+    check_plugin_drift,
+)
+from razorback.provenance.errors import AliasDriftError, ProvenanceError
 from razorback.runs_dir_canary import (
     check_runs_dir_visible,
     default_container_probe_factory,
@@ -106,11 +110,18 @@ def _resolve_docker_host() -> str | None:
     return None
 
 
-def _write_provenance_artifacts(spec_bytes: bytes, spec, run_dir: Path) -> None:
+def _write_provenance_artifacts(
+    spec_bytes: bytes,
+    spec,
+    run_dir: Path,
+    *,
+    plugin_drift_record: dict | None = None,
+) -> None:
     """AC-3: byte-for-byte echo of the input frozen spec + provenance.yaml writer.
 
     `spec_bytes` is the raw bytes of the input frozen spec; `spec` is its
     parsed form (used to extract the provenance block for provenance.yaml).
+    `plugin_drift_record` records a PKG-8 §3.2 plugin-drift override.
     """
     from razorback.provenance.provenance_yaml import write_provenance_yaml
 
@@ -118,7 +129,10 @@ def _write_provenance_artifacts(spec_bytes: bytes, spec, run_dir: Path) -> None:
     frozen_provenance = spec.model_dump(mode="json").get("provenance") or {}
     if frozen_provenance:
         write_provenance_yaml(
-            run_dir / "provenance.yaml", frozen_provenance, drift_record=None
+            run_dir / "provenance.yaml",
+            frozen_provenance,
+            drift_record=None,
+            plugin_drift_record=plugin_drift_record,
         )
 
 
@@ -129,6 +143,11 @@ def run_command(
         False,
         "--allow-alias-drift",
         help="Run even when provider model version differs from frozen.",
+    ),
+    allow_plugin_drift: bool = typer.Option(
+        False,
+        "--allow-plugin-drift",
+        help="Run even when installed plugin versions differ from frozen.",
     ),
     max_budget_usd_running: Optional[Path] = typer.Option(
         None,
@@ -171,6 +190,17 @@ def run_command(
         except AliasDriftError as exc:
             typer.echo(f"AliasDriftError: {exc}", err=True)
             raise typer.Exit(ExitCode.ALIAS_DRIFT)
+
+    # PKG-8 v2 AC-3 / AC-4: plugin-drift fires AFTER alias-drift so that when
+    # both inputs drift, alias-drift (exit 21) surfaces in the exit code.
+    frozen_plugins = frozen_provenance.get("plugins")
+    try:
+        plugin_drift_record = check_plugin_drift(
+            frozen=frozen_plugins, allow=allow_plugin_drift
+        )
+    except ProvenanceError as exc:
+        typer.echo(f"ProvenanceError: {exc}", err=True)
+        raise typer.Exit(exc.exit_code)
 
     # AC-6 + §3.1 canonicalization: jobs_dir is the absolute, symlink-resolved path.
     spec_bytes = spec_path.read_bytes()
@@ -277,4 +307,6 @@ def run_command(
         )
 
     # AC-3 (Task 8 finishes the writer): write spec.frozen.yaml + provenance.yaml.
-    _write_provenance_artifacts(spec_bytes, spec, run_dir)
+    _write_provenance_artifacts(
+        spec_bytes, spec, run_dir, plugin_drift_record=plugin_drift_record
+    )
