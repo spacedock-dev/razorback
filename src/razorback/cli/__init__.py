@@ -33,3 +33,7 @@ app.add_typer(baseline_app, name="baseline")
 from razorback.cli.registry import registry_app
 
 app.add_typer(registry_app, name="registry")
+
+from razorback.cli.score import score_command
+
+app.command("score")(score_command)
