@@ -2,17 +2,22 @@
 # ABOUTME: (legacy slugs or FU-1 git-task entries) into TaskConfig-ready records.
 
 import asyncio
+import fnmatch
+import os
 import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Awaitable
+from typing import Any, Awaitable, Literal
 
 import shortuuid
 from harbor.models.task.id import GitTaskId
 
 from razorback.benchmarks.dab.prepare import _DEFAULT_DOCKER_IMAGE
-from razorback.spec.schema import AdeBenchTaskEntry
+from razorback.spec.schema import AdeBenchLocalTaskEntry, AdeBenchTaskEntry
+
+
+_SOLUTION_FILE_GLOB = "seeds/solution__*.csv"
 
 
 def _run_async(coro: Awaitable[Any]) -> Any:
@@ -52,25 +57,29 @@ class ResolvedTask:
     """A task entry resolved for harbor.TaskConfig construction.
 
     Legacy slug entries set only `path` (the absolute task directory under
-    tasks_root). FU-1 git-task entries set all three fields; `path` is the
-    in-repo relative path that harbor's GitTaskId materializes on demand.
+    tasks_root). FU-1 git-task entries set `path`, `git_url`, `git_commit_id`
+    so harbor's GitTaskId materializes on demand. PKG-19 local entries set
+    `local_slug` to opt into the `materialize_local_task` path.
     """
     path: Path
     git_url: str | None = None
     git_commit_id: str | None = None
+    local_slug: str | None = None
 
 
 def resolve_task_dirs(
     *,
     tasks_root: Path,
-    tasks: list[str | AdeBenchTaskEntry],
+    tasks: list[str | AdeBenchTaskEntry | AdeBenchLocalTaskEntry],
 ) -> list[ResolvedTask]:
     """Resolve each task entry to a TaskConfig-ready record.
 
     Legacy slug entries are checked for `<tasks_root>/<slug>/task.toml`
     existence (raises FileNotFoundError on miss). Git-task entries are
     forwarded as-is — harbor's GitTaskId.get_local_path() handles fetch +
-    materialization at run-time.
+    materialization at run-time. PKG-19 `AdeBenchLocalTaskEntry` entries
+    defer to the translator, which calls `materialize_local_task` against
+    `spec.benchmark.ade_bench_root`.
     """
     resolved: list[ResolvedTask] = []
     root = Path(tasks_root).resolve()
@@ -84,6 +93,10 @@ def resolve_task_dirs(
                     f"(missing task.toml); tasks_root={root}"
                 )
             resolved.append(ResolvedTask(path=task_dir))
+        elif isinstance(entry, AdeBenchLocalTaskEntry):
+            resolved.append(
+                ResolvedTask(path=root, local_slug=entry.slug)
+            )
         else:
             resolved.append(
                 ResolvedTask(
@@ -189,4 +202,121 @@ def materialize_git_task(
             )
 
     rewrite_docker_image(target_dir / "task.toml", docker_image)
+    return target_dir
+
+
+def _build_task_toml_from_yaml(*, task_yaml: dict, docker_image: str) -> str:
+    """Synthesize a harbor-shaped task.toml from an upstream ade-bench task.yaml.
+
+    The shim consumes prompts[0].prompt (or the `key=base` entry if present) as
+    the harbor `instruction` field (written to `instruction.md` alongside the
+    task.toml). The rest of the upstream task.yaml (tags, solution_seeds,
+    test_setup, etc.) is dropped — harbor's TaskConfig does not consume those.
+    """
+    prompts = task_yaml.get("prompts") or []
+    base_prompt = next(
+        (p for p in prompts if p.get("key") == "base"), prompts[0] if prompts else None
+    )
+    if base_prompt is None:
+        raise ValueError(
+            "ade-bench task.yaml has no 'prompts' entries; cannot synthesize task.toml"
+        )
+    return (
+        'instruction = "instruction.md"\n'
+        '\n'
+        '[environment]\n'
+        f'docker_image = "{docker_image}"\n'
+    )
+
+
+def materialize_local_task(
+    *,
+    ade_bench_root: Path,
+    task_slug: str,
+    docker_image: str = _DEFAULT_DOCKER_IMAGE,
+    cache_root: Path,
+    exclude_globs: tuple[str, ...] = (_SOLUTION_FILE_GLOB,),
+    materialize_mode: Literal["bind", "copy"] = "bind",
+) -> Path:
+    """Build a view-dir for an ade-bench task that re-uses ade_bench_root data.
+
+    Output directory layout under cache_root/<task_slug>/:
+        task.toml          (synthesized — harbor-shaped)
+        instruction.md     (synthesized from prompts[0].prompt)
+        setup.sh           (symlink → ade_bench_root/tasks/<task_slug>/setup.sh)
+        solution.sh        (symlink, if present)
+        tests/             (symlink — bulk dir; copy if `materialize_mode="copy"`)
+        seeds/             (real directory with selective symlinks — every file
+                            EXCEPT entries matching `exclude_globs`)
+
+    `materialize_mode="bind"` (default) reflects upstream files as symlinks
+    (per-task footprint stays in MB). `materialize_mode="copy"` performs a
+    full content copy for provenance-strict / self-contained-tarball runs.
+    The exclusion is enforced in BOTH modes — solution__*.csv never appears
+    in the view-dir.
+    """
+    import yaml
+
+    ade_bench_root = Path(ade_bench_root).resolve()
+    source_task_dir = ade_bench_root / "tasks" / task_slug
+    if not source_task_dir.is_dir():
+        raise FileNotFoundError(
+            f"materialize_local_task: ade_bench_root has no tasks/{task_slug}/ "
+            f"directory (ade_bench_root={ade_bench_root}); "
+            f"hydrate ~/git/ade-bench checkout or pass a different slug"
+        )
+    source_task_yaml = source_task_dir / "task.yaml"
+    if not source_task_yaml.exists():
+        raise FileNotFoundError(
+            f"materialize_local_task: missing task.yaml at {source_task_yaml}"
+        )
+
+    target_dir = cache_root / task_slug
+    if target_dir.exists():
+        shutil.rmtree(target_dir)
+    target_dir.mkdir(parents=True)
+
+    task_yaml = yaml.safe_load(source_task_yaml.read_text())
+    (target_dir / "task.toml").write_text(
+        _build_task_toml_from_yaml(task_yaml=task_yaml, docker_image=docker_image)
+    )
+    prompts = task_yaml.get("prompts") or []
+    base_prompt = next(
+        (p for p in prompts if p.get("key") == "base"), prompts[0] if prompts else None
+    )
+    (target_dir / "instruction.md").write_text(base_prompt["prompt"])
+
+    def _reflect(src: Path, dst: Path) -> None:
+        if materialize_mode == "bind":
+            os.symlink(src, dst)
+        else:
+            if src.is_dir():
+                shutil.copytree(src, dst)
+            else:
+                shutil.copy2(src, dst)
+
+    for entry in source_task_dir.iterdir():
+        if entry.name == "task.yaml":
+            continue  # consumed into task.toml + instruction.md
+        rel = entry.relative_to(source_task_dir)
+        if entry.is_dir():
+            has_excluded = any(
+                fnmatch.fnmatch(str(p.relative_to(source_task_dir)), g)
+                for p in entry.rglob("*")
+                for g in exclude_globs
+            )
+            if not has_excluded:
+                _reflect(entry, target_dir / rel)
+            else:
+                (target_dir / rel).mkdir(parents=True)
+                for sub in entry.iterdir():
+                    sub_rel = sub.relative_to(source_task_dir)
+                    if any(
+                        fnmatch.fnmatch(str(sub_rel), g) for g in exclude_globs
+                    ):
+                        continue
+                    _reflect(sub, target_dir / sub_rel)
+        else:
+            _reflect(entry, target_dir / rel)
+
     return target_dir

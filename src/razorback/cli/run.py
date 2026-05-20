@@ -155,6 +155,13 @@ def run_command(
         help="Path to running-total JSON file; the gate refuses on overage and "
              "appends actual cost on completion (per spec §3.2 + §3.4 exit 22).",
     ),
+    materialize: str = typer.Option(
+        "bind",
+        "--materialize",
+        help="ade-bench task materialization mode: 'bind' (default; reflect "
+             "upstream files as symlinks for the agent view-dir) or 'copy' "
+             "(full content copy for provenance-strict tarball runs). PKG-19.",
+    ),
 ) -> None:
     """Execute a frozen spec against harbor and write the v2 run-dir artifacts."""
     try:
@@ -251,6 +258,14 @@ def run_command(
             run_dir=str(run_dir),
         )
 
+    if materialize not in ("bind", "copy"):
+        typer.echo(
+            f"ConfigInvalidError: --materialize must be 'bind' or 'copy', "
+            f"got {materialize!r}",
+            err=True,
+        )
+        raise typer.Exit(ExitCode.CONFIG_INVALID)
+
     try:
         job_config, _ = spec_to_job_config(
             spec,
@@ -258,6 +273,7 @@ def run_command(
             jobs_dir=run_dir.parent,
             tasks_root=run_dir / "tasks",
             project_root=Path.cwd(),
+            materialize_mode=materialize,  # type: ignore[arg-type]
         )
     except RazorbackError as exc:
         typer.echo(f"{type(exc).__name__}: {exc}", err=True)

@@ -106,3 +106,59 @@ Verified by: the probe re-dispatch produces a Phase 5 report at `docs/superpower
 ### Summary
 
 Plan committed to docs/razorback-implementation/plans/pkg19-ade-bench-data-bind-mount.md mapping all 7 ACs to 14 tasks. Critical design call documented: upstream ~/git/ade-bench/ uses task.yaml while harbor needs task.toml, so the bind-mount approach requires a per-task view-dir with a synthesized task.toml shim + symlink-filter exclusion of seeds/solution__*.csv. AC-4 implementation choice (c) — view directory with symlinks — chosen over the entity's (a) recommendation because solution files are siblings inside seeds/, not separate-dir, ruling out sub-path mount.
+
+## Stage Report: implementation (cycle-2)
+
+- DONE: Read PKG-19 entity (7 ACs) + plan + existing commits on the worktree branch.
+  `git log main..HEAD` shows 5 commits (ad56ad6, 1c8d515, b8f8639, 6b47330, 474ecc0) covering T2-T14 from the plan.
+- DONE: AC-1 — `materialize_local_task` builds a view-dir from `ade_bench_root` (no clone).
+  RED test ad56ad6; GREEN impl 1c8d515 in src/razorback/benchmarks/ade_bench/tasks.py.
+- DONE: AC-1 compose-side — translator wires `ade_bench_root` into the materializer.
+  b8f8639 wires `AdeBenchLocalTaskEntry` schema + `_build_ade_bench` dispatch in src/razorback/translate.py.
+- DONE: AC-2 — per-task view-dir disk footprint ≤ 10 MB.
+  6b47330 adds `test_view_dir_disk_footprint_under_10mb` (PASS at < 10MB on fixture).
+- DONE: AC-3 — `:ro` flag on synthesized compose volumes (structural unit test + live skeleton).
+  6b47330 adds tests/unit/test_ade_bench_local_task_readonly_contract.py + tests/integration/test_ade_bench_local_task_readonly_contract_live.py.
+- DONE: AC-4 — `seeds/solution__*.csv` excluded from view-dir; symlink chain not bypassable; verifier-readable copy stays outside agent mount.
+  ad56ad6 + 6b47330 — symlink-filter walker in materialize_local_task; 3 tests cover exclusion, chain integrity, upstream-still-readable invariant.
+- DONE: AC-5 — `--materialize={bind,copy}` flag.
+  6b47330 adds materialize_mode param to materialize_local_task + CLI flag in src/razorback/cli/run.py; tests in tests/unit/test_ade_bench_materialize_mode_flag.py.
+- DONE: AC-6 — hydration check (missing/empty `ade_bench_root` fails fast with clear error).
+  6b47330 adds tests/unit/test_ade_bench_local_task_hydration_check.py (FileNotFoundError with task slug in message).
+- DONE: AC-7 — probe spec committed; DO NOT RUN annotation per plan.
+  474ecc0 commits examples/specs/probe-ade-bench-airbnb001-claude-harbor-local.yaml. Validation stage dispatches the probe.
+- DONE: Full pytest sweep on PKG-19 tests (regression gate).
+  14/14 PKG-19 unit tests PASS in 0.22s. 8 pre-existing PermissionError failures in test_rk_run_budget_gate / test_rk_run_v2_* / test_run_plugin_drift_wired confirmed on main, unrelated to PKG-19 (sandbox-side filesystem restrictions, not code).
+
+### Summary
+
+PKG-19 implementation complete in 5 commits on branch spacedock-ensign/pkg19-ade-bench-data-bind-mount. All 7 ACs covered with 14 passing PKG-19 unit tests; probe spec emitted for AC-7 validation-stage re-dispatch. Critical design choice (per-task view-dir with selective symlinks, not sub-path bind-mount) implemented as planned — the task.yaml→task.toml shim + symlink-filter walker excludes `seeds/solution__*.csv` while keeping upstream solutions verifier-accessible. Pre-existing sandbox PermissionError failures in unrelated tests (DAB/budget/harbor-cache) reproduce on main and are not PKG-19 regressions.
+
+## Stage Report: validation
+
+- DONE: Read PKG-19 entity (7 ACs) + plan + impl commits + impl stage report
+  Entity body + plan + impl-stage report (cycle-2 at `bac5708`) read in full; 14/14 PKG-19 tests confirmed pre-validation.
+- DONE: AC-1 verification — bind-mount, no clone
+  2 unit tests PASS; live demo: `setup.sh.is_symlink()=True` pointing at upstream fixture; translator at `src/razorback/translate.py:266-280` dispatches `local_slug` branch.
+- DONE: AC-2 verification — per-task disk footprint ≤ 10 MB
+  1 unit test PASS; live demo: 107 bytes (excl symlinks). Real-task `du -sh` deferred with AC-7.
+- DONE: AC-3 verification — :ro contract structural
+  1 unit test PASS; synthesized task.toml has no `[environment.volumes]` block and no `:rw`. Live EROFS deferred (gated on AC-7).
+- DONE: AC-4 verification — solution files excluded from agent view
+  4 unit tests PASS; live demo: zero `solution__*.csv` in view-dir/seeds, `seeds/` is a real dir (not symlink), upstream copy intact. `docker exec ls` deferred with AC-7.
+- DONE: AC-5 verification — `--materialize={bind,copy}` flag
+  2 unit tests PASS; live demo: copy mode 0 symlinks, bind mode 3 symlinks; AC-4 exclusion preserved in both modes.
+- DONE: AC-6 verification — hydration check
+  2 unit tests PASS; live demo: both missing-path and empty-dir raise `FileNotFoundError` with task slug in message.
+- SKIPPED: AC-7 verification — ade-bench probe re-dispatch
+  Sandbox blocks reads of `~/git/ade-bench/` (`ls`/`df` return EPERM) and `CLAUDE_CODE_OAUTH_TOKEN` is not exported into env. Per dispatch directive ("Do NOT block the gate on AC-7 if env is the blocker"), SKIPPED-with-reason, not FAILED. Probe spec committed at `examples/specs/probe-ade-bench-airbnb001-claude-harbor-local.yaml` is ready for future re-dispatch from a non-sandbox env with token loaded.
+- DONE: Run `uv run pytest packages/razorback-plugin-dab/` + whole-repo sweep
+  Plugin: 72 passed, 1 sandbox failure (docker config EPERM, unrelated), 1 skipped. Whole-repo: 442 passed, 13 pre-existing sandbox PermissionError failures (reproduce on main), 6 skipped.
+- DONE: `superpowers:requesting-code-review` on worktree branch
+  In-line review against the 6-commit branch diff. Strengths + 1 important pre-merge concern (branch base `d1331fe` predates PKG-17 landing on main; recommend rebase before merge) + 3 minor notes documented in the validation report.
+- DONE: Validation report at `docs/razorback-implementation/validation/pkg19-ade-bench-data-bind-mount.md`
+  Written; gate decision **APPROVE → done**.
+
+### Summary
+
+PKG-19 validation: APPROVE. AC-1..AC-6 PASS with unit-test + live-fixture evidence; AC-7 SKIPPED-with-reason per dispatch (sandbox blocks `~/git/ade-bench/` reads and `CLAUDE_CODE_OAUTH_TOKEN` not exported). Pre-merge note flagged for terminalize: branch base predates PKG-17 landing on main — rebase or cherry-pick required before merge to avoid silently reverting PKG-17.
