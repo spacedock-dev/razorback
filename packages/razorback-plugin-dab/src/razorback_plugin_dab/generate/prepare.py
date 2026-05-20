@@ -170,7 +170,12 @@ def _materialize_task_dir(
     shutil.copy2(Path(verify_module.__file__), tests_dir / "verify.py")
     upstream_validate = query_dir / "validate.py"
     if upstream_validate.exists():
-        shutil.copy2(upstream_validate, tests_dir / "validate.py")
+        _install_validator(
+            tests_dir=tests_dir,
+            upstream=upstream_validate,
+            dataset=dataset_meta.name,
+            query_id=query_id,
+        )
 
     write_stratum_file(
         tests_dir=tests_dir,
@@ -301,6 +306,42 @@ def _check_task_toml_environment_keys(text: str, *, task_name: str) -> None:
             f"not honour and will silently drop: {extras}. "
             "Either remove the key or upgrade harbor."
         )
+
+
+def _install_validator(
+    *,
+    tests_dir: Path,
+    upstream: Path,
+    dataset: str,
+    query_id: int,
+) -> None:
+    """Copy the upstream validate.py, optionally wrapping it with a hardened
+    template for known bookreview substring-leak queries (T14 finding).
+
+    For bookreview-q1/q2/q3 the upstream substring check is necessary but
+    not sufficient; we install a template that loads upstream as
+    `_upstream_validate.py` and adds a bounded-answer check on top.
+    """
+    from razorback_plugin_dab.verify import validators as hardened
+
+    template_name = _hardened_template(dataset=dataset, query_id=query_id)
+    if template_name is None:
+        shutil.copy2(upstream, tests_dir / "validate.py")
+        return
+
+    shutil.copy2(upstream, tests_dir / "_upstream_validate.py")
+    template_path = Path(hardened.__file__).parent / template_name
+    shutil.copy2(template_path, tests_dir / "validate.py")
+
+
+def _hardened_template(*, dataset: str, query_id: int) -> str | None:
+    if dataset != "bookreview":
+        return None
+    return {
+        1: "bookreview_q1.py",
+        2: "bookreview_q2_q3.py",
+        3: "bookreview_q2_q3.py",
+    }.get(query_id)
 
 
 def _write_compose_services_sidecar(compose_path: Path) -> None:
