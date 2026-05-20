@@ -44,7 +44,7 @@ $ find .runs/.../tasks/bookreview/bookreview-q1 -name books_info.sql
 .runs/.../tasks/bookreview/bookreview-q1/steps/main/workdir/query_dataset/books_info.sql
 ```
 
-This bug would matter — except it never gets exercised (see B).
+This bug would matter - except it never gets exercised (see B).
 
 ### B. The plugin's docker-compose.yaml is never loaded by harbor
 
@@ -160,7 +160,7 @@ plus the per-query validators inside the task dir:
   1
   ```
   So an agent that dumps even a moderately wide selection of rows from the SQL
-  file into its answer will pass — regardless of whether the answer is actually
+  file into its answer will pass - regardless of whether the answer is actually
   the correct query result.
 
 `test-stdout.txt` is empty because `verify.py` writes to stderr on failure and
@@ -194,7 +194,7 @@ compose file is never loaded.
    harbor does not honour.**
    - Symptom: silent drop on TaskConfig parse; no warning, no error.
    - Cause: `EnvironmentConfig` (harbor/models/task/config.py:127) defines
-     `docker_image`, `os`, `workdir`, etc. — no `docker_compose`.
+     `docker_image`, `os`, `workdir`, etc. - no `docker_compose`.
    - Effect: pydantic ignores the unknown key; the task author has no
      feedback that their wiring is dead.
 
@@ -235,7 +235,7 @@ compose file is never loaded.
      `[{"source": "/logs/artifacts", "destination": "artifacts",
         "type": "directory", "status": "empty"}]`
      for all 9 trials. No artifacts surface the agent's `analyze_books.py` or
-     its `answers.json` to the host — only the docker-compose's `main`
+     its `answers.json` to the host - only the docker-compose's `main`
      service's mounts do, and harbor doesn't bind `/workspace` out.
    - Cause: no `[task].artifacts` entry collects `/workspace/answers.json`
      or the agent's working files; no `[[steps]].artifacts`.
@@ -245,16 +245,16 @@ compose file is never loaded.
 
 ## Fix scope per cause (do NOT implement here; captain decides)
 
-The following are sketches of what each fix would need to land — not
+The following are sketches of what each fix would need to land - not
 implementations.
 
 | # | Cause | Fix scope sketch |
 |---|---|---|
 | 1 | Compose in wrong dir | Move `(task_dir / "docker-compose.yaml")` write to `(task_dir / "environment" / "docker-compose.yaml")` AND ensure the bind-mount source is relative to that new compose dir, OR introduce a harbor-mapper plugin that hands harbor the compose explicitly. Update the small handful of plugin tests that assert path layout. Add an integration test that, after `prepare_dataset_tasks`, runs `docker compose -f $task/environment/docker-compose.yaml config` and asserts `dab-postgres` is in the parsed services. |
 | 2 | Silent task.toml field drop | Remove the `docker_compose = "docker-compose.yaml"` line from `_task_toml()` (it's a no-op). Optionally add a generator-side schema lint that refuses to emit fields not in harbor's `EnvironmentConfig`. Test: assert the generated task.toml round-trips through `TaskConfig.model_validate_toml` with no extra-keys warning. |
-| 3 | Bind-mount path | After fix (1), the relative path becomes `../steps/main/workdir/{sql_file}` (relative to `environment/docker-compose.yaml`). Alternatively, restructure so workdir lives at the same level as compose — either move compose to `steps/main/` or move workdir up. Test: a post-generate check that `docker compose config` resolves all `volumes` to existing host paths, gating in CI. |
+| 3 | Bind-mount path | After fix (1), the relative path becomes `../steps/main/workdir/{sql_file}` (relative to `environment/docker-compose.yaml`). Alternatively, restructure so workdir lives at the same level as compose - either move compose to `steps/main/` or move workdir up. Test: a post-generate check that `docker compose config` resolves all `volumes` to existing host paths, gating in CI. |
 | 4 | Missing reachability gate | Add a startup gate that, after `docker compose up --wait` and before the agent runs, execs in the `main` container: `psql -h dab-postgres -U dabench -d bookreview_db -tAc 'select count(*) from books_info'` and asserts >0 rows. Either a per-step healthcheck (StepConfig.healthcheck) or a pre-agent shell hook. Failure → aborted trial with a typed error in `exclude_exceptions` so the run errors visibly instead of green-stamping. |
-| 5 | Validator weakness | Outside the scope of this bug — but the agreed-on remediation is: feed validators only the canonical answer string (the JSON-parsed value of `answer`, with the SQL dump explicitly NOT in scope), and add a second-line check that the answer length is bounded so dumping the dataset can't pass. This belongs in spec work, not a quick patch. |
+| 5 | Validator weakness | Outside the scope of this bug - but the agreed-on remediation is: feed validators only the canonical answer string (the JSON-parsed value of `answer`, with the SQL dump explicitly NOT in scope), and add a second-line check that the answer length is bounded so dumping the dataset can't pass. This belongs in spec work, not a quick patch. |
 | 6 | No host-visible artifacts | Add `[task].artifacts = ["/workspace/answers.json"]` (or equivalent step-level) to the emitted task.toml so the answer file is downloaded to `steps/main/artifacts/`. Test: integration test that after a trial finishes, `answers.json` is present in the host-side artifacts dir. |
 
 ## Sanity / cross-checks performed
@@ -271,7 +271,7 @@ implementations.
 - Verified that all three currently-live `bookreview-q1__*-main-1` containers
   hold the identical `{"answer": "2020s"}` in `/workspace/answers.json` and
   have an agent-authored `/workspace/analyze_books.py` that parses the raw
-  `.sql` file — i.e., the agent independently routed around the missing DB
+  `.sql` file - i.e., the agent independently routed around the missing DB
   using the same fallback every time.
 
 ## What this means for the rollup metrics
@@ -285,7 +285,7 @@ implementations.
     accept substring presence.
 - The benchmark, as currently wired, **cannot distinguish a working
   agent-DB pipeline from a broken one**. It will return ~1.0 even when no DB
-  exists, as demonstrated. This is the worst kind of false positive — silently
+  exists, as demonstrated. This is the worst kind of false positive - silently
   green when everything is wrong.
 
 ## Recommendation
