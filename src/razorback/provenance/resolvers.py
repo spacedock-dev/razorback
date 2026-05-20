@@ -8,10 +8,26 @@ import hashlib
 import shutil
 import subprocess
 import time
+from importlib.metadata import (
+    PackageNotFoundError,
+    distribution as _distribution,
+    entry_points,
+)
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 from razorback.provenance.retry import retry_with_backoff
+
+
+_SOLVER_WORKFLOW_SKIP_DIRS = frozenset({".git", "__pycache__", ".pytest_cache"})
+_SOLVER_WORKFLOW_SKIP_FILES = frozenset({".DS_Store"})
+
+
+_PLUGIN_ENTRY_POINT_GROUPS: tuple[str, ...] = (
+    "harbor.agents",
+    "harbor.benchmarks",
+    "razorback.plugins",
+)
 
 
 def resolve_model_version(
@@ -137,3 +153,92 @@ def resolve_prompt_hashes(prompt_paths: list[Path]) -> dict[str, str] | None:
         h = hashlib.sha256(Path(p).read_bytes()).hexdigest()
         out[str(p)] = f"sha256:{h}"
     return out
+
+
+# spec §8.2: recursive content hash, pinned under provenance.yaml.solver_workflow_hash
+def resolve_solver_workflow_hash(dir_path: Path) -> str | None:
+    """Content-hash a `solver_workflow/` directory recursively.
+
+    Walks regular files in POSIX-relative-path sorted order. Each file frames as
+    `len(path):4 + path:utf-8 + len(content):8 + content` so two files with the
+    same concatenation but different path boundaries hash differently.
+    Skips `.git/`, `__pycache__/`, `.pytest_cache/`, `.DS_Store` (not semantic
+    content). Returns `None` when `dir_path` does not exist or is not a directory.
+    """
+    root = Path(dir_path)
+    if not root.is_dir():
+        return None
+    h = hashlib.sha256()
+    for rel_posix, content in _walk_solver_workflow(root):
+        path_bytes = rel_posix.encode("utf-8")
+        h.update(len(path_bytes).to_bytes(4, "big"))
+        h.update(path_bytes)
+        h.update(len(content).to_bytes(8, "big"))
+        h.update(content)
+    return f"sha256:{h.hexdigest()}"
+
+
+def _walk_solver_workflow(root: Path) -> Iterator[tuple[str, bytes]]:
+    entries: list[tuple[str, Path]] = []
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(root)
+        parts = rel.parts
+        if any(part in _SOLVER_WORKFLOW_SKIP_DIRS for part in parts[:-1]):
+            continue
+        if parts[-1] in _SOLVER_WORKFLOW_SKIP_FILES:
+            continue
+        entries.append(("/".join(parts), path))
+    entries.sort(key=lambda item: item[0])
+    for rel_posix, path in entries:
+        yield rel_posix, path.read_bytes()
+
+
+# AC-1: harbor.agents + harbor.benchmarks + razorback.plugins entry-point inventory.
+def resolve_plugin_inventory(
+    *,
+    entry_points_fn: Callable[..., Any] | None = None,
+    distribution_fn: Callable[[str], Any] | None = None,
+) -> dict[str, list[dict[str, str]]]:
+    """List installed harbor adapter + harbor agent plugins for `provenance.yaml`.
+
+    Scans the three plugin entry-point groups (`harbor.agents`,
+    `harbor.benchmarks`, `razorback.plugins`) and emits one row per entry point
+    with its package distribution name, version, group, and entry-point name.
+    Rows sort by `(group, name)` for determinism. Returns
+    `{"plugins": []}` when no plugins are installed (a valid environment).
+    """
+    ep_fn = entry_points_fn or entry_points
+    dist_fn = distribution_fn or _distribution
+    rows: list[dict[str, str]] = []
+    for group in _PLUGIN_ENTRY_POINT_GROUPS:
+        try:
+            eps = ep_fn(group=group)
+        except TypeError:
+            eps = ep_fn().select(group=group)  # py3.10 compat fallback
+        for ep in eps:
+            dist_name = _entry_point_distribution_name(ep)
+            if dist_name is None:
+                continue
+            try:
+                dist = dist_fn(dist_name)
+            except PackageNotFoundError:
+                continue
+            rows.append(
+                {
+                    "group": group,
+                    "name": ep.name,
+                    "distribution": dist.metadata["Name"],
+                    "version": dist.version,
+                }
+            )
+    rows.sort(key=lambda r: (r["group"], r["name"]))
+    return {"plugins": rows}
+
+
+def _entry_point_distribution_name(ep: Any) -> str | None:
+    dist = getattr(ep, "dist", None)
+    if dist is not None:
+        return getattr(dist, "name", None) or dist.metadata["Name"]
+    return None
