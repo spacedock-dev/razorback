@@ -93,3 +93,26 @@ Verified by: the test runs green in CI / `uv run pytest` and would fail if the A
 ## Blocks
 
 - Goal 1's full 12-dataset matrix (agnews + yelp are in the 12; PKG-15 unblocks them). For Goal 1's first-number-shipping cycle, captain accepted 10-of-12 (skip mongo). PKG-15 closes that gap for a later full reproduction claim.
+
+## Stage Report: plan
+
+- DONE: Read PKG-15 entity (6 ACs covering mongo init mechanism + reachability gate + agnews/yelp honest re-run + full-12-dataset Goal 1 unblock + plugin test coverage).
+  Entity body parsed at /Users/clkao/git/razorback/docs/razorback-implementation/pkg15-harbor-dab-mongo-init-restore.md; all 6 ACs map 1:1 to plan tasks per the AC↔Task table.
+- DONE: Critical: PKG-15 is REQUIRED for full Goal 1 DAB paper reproduction (12 datasets including agnews + yelp). Captain corrected the FO 2026-05-20: '1× is fine' meant N=1 per cell, NOT 10-of-12 datasets.
+  Plan's Architecture sentence + AC-5/T12 explicitly flag PKG-15 as unblocker for agnews+yelp in the 12-dataset matrix.
+- DONE: Review the dab-mongo-probe report at docs/superpowers/plans/2026-05-20-dab-mongo-path-probe.md and the probe commit 3987ca1 for the two bugs surfaced.
+  Probe report + commit reviewed; Bug 1 (mongo:8 ignores BSON in init.d) is closed by T2/T3/T6/T8; Bug 2 (no reachability gate) is closed by T4/T5/T7.
+- DONE: Choose the AC-1 fix shape: (a) .sh shim alongside the BSON dump that runs mongorestore; (b) one-shot init service; (c) per-step agent setup hook.
+  Selected (a). Rationale documented above the Stage Report and in the plan's Architecture section: (a) keeps PKG-13's compose structure unchanged, matches postgres's init.d/.sql auto-run symmetry, lowest surface area. (b) would rewrite `main`'s depends_on wiring; (c) leaks restore concerns into the agent's task surface.
+- DONE: Write a TDD-first plan: AC-1 RED test BEFORE shim is added; AC-2 extends PKG-13 T5's gate to mongo; AC-3+AC-4 are validation-stage integration gates; AC-6 is the regression safety net.
+  Plan tasks T2 (AC-1 RED), T4 (AC-2 RED), T8 (AC-1 end-to-end mechanism check before live runs), T10/T11 (validation-stage live re-runs), T9 (full pytest sweep). Riskiest contract — the shim actually loading documents in mongo:8 — gets its own integration test (T8) before validation-stage live runs.
+- DONE: Cross-reference PKG-13's reachability-gate code path (postgres-only by design); PKG-15 extends it for mongo without regressing postgres behavior.
+  Plan T5 adds `_mongo_probe_targets` alongside `_postgres_db_name` and a parallel elif branch in `_task_toml`; postgres branch is preserved verbatim. T5 step 4 explicitly re-runs `test_reachability_gate.py` to confirm no postgres regression.
+- DONE: Cross-reference PKG-16 (in validation) + PKG-14 (in implementation): both modify prepare.py / compose.py. Plan should call this out.
+  Plan has a dedicated "Dependency / rebase awareness" section: PKG-15's compose changes are additive (one extra mount); prepare changes are additive (one helper + one elif). Rebase strategy documented for either landing order.
+- DONE: Write plan to docs/razorback-implementation/plans/pkg15-harbor-dab-mongo-init-restore.md.
+  File created: /Users/clkao/git/razorback/docs/razorback-implementation/plans/pkg15-harbor-dab-mongo-init-restore.md (12 tasks, AC↔Task map, file-structure section, self-review).
+
+### Summary
+
+Selected AC-1 fix shape (a): emit a `restore.sh` shim alongside the BSON dump folder. The mongo:8 image auto-runs `.sh` files in `/docker-entrypoint-initdb.d/` even though it ignores `.bson` — this is the lowest-complexity fix that matches postgres's existing init.d auto-run symmetry without restructuring compose. AC-2 extends PKG-13 T5's reachability-gate scaffolding additively (new `_mongo_probe_targets` helper, new elif branch in `_task_toml`) so the postgres path is preserved unchanged. The plan front-loads the riskiest contract (T8: docker-integration check that the shim+bind-mount actually loads BSON in mongo:8) before the validation-stage live re-runs (T10/T11), per the "smallest end-to-end exercise of the riskiest path first" rule. Plan is additive against PKG-14 and PKG-16 so rebase is a cherry-pick onto either landing order.
