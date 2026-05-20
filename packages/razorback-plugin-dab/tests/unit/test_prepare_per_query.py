@@ -152,6 +152,26 @@ def test_stratum_payload_in_tests(tmp_path: Path):
     assert stratum["stratum"]["backends"] == ["postgres", "sqlite"]
 
 
+def test_task_toml_environment_keys_are_all_honoured_by_harbor(tmp_path: Path):
+    """PKG-13 T2: any [environment].* key emitted by the plugin must map to
+    a real harbor EnvironmentConfig field. Future un-honoured keys (like
+    the dropped `docker_compose`) should land at generation time, not as a
+    silent runtime no-op.
+    """
+    from harbor.models.task.config import EnvironmentConfig
+
+    data_root = _build_synthetic_data_root(tmp_path)
+    out = tmp_path / "tasks"
+    manifest = prepare_dataset_tasks(
+        data_root=data_root, dataset="bookreview", tasks_root=out
+    )
+    import tomllib
+
+    parsed = tomllib.loads((manifest[0]["task_dir"] / "task.toml").read_text())
+    extras = set(parsed.get("environment", {})) - set(EnvironmentConfig.model_fields)
+    assert not extras, f"task.toml has unknown [environment] keys: {extras}"
+
+
 def test_unknown_dataset_rejected(tmp_path: Path):
     data_root = tmp_path / "data"
     data_root.mkdir()

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import shutil
 import stat
+import tomllib
 from pathlib import Path
 from typing import TypedDict
 
@@ -19,6 +20,10 @@ from razorback_plugin_dab.generate.compose import (
 from razorback_plugin_dab.generate.stratum import write_stratum_file
 from razorback_plugin_dab.generate.tools_denied import write_settings_json
 from razorback_plugin_dab.generate.workspace_readme import render_workspace_readme
+
+
+class TaskTomlError(RuntimeError):
+    """Generated task.toml has keys harbor will silently drop (schema drift)."""
 
 
 class TaskManifestEntry(TypedDict):
@@ -117,13 +122,13 @@ def _materialize_task_dir(
 ) -> None:
     task_dir.mkdir(parents=True)
 
-    (task_dir / "task.toml").write_text(
-        _task_toml(
-            task_name=task_name,
-            docker_image=docker_image,
-            container_workdir=container_workdir,
-        )
+    task_toml_text = _task_toml(
+        task_name=task_name,
+        docker_image=docker_image,
+        container_workdir=container_workdir,
     )
+    _check_task_toml_environment_keys(task_toml_text, task_name=task_name)
+    (task_dir / "task.toml").write_text(task_toml_text)
 
     instruction = _instruction(
         query_dir=query_dir,
@@ -229,6 +234,28 @@ def _task_toml(
 
 def _toml_escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _check_task_toml_environment_keys(text: str, *, task_name: str) -> None:
+    """Reject any [environment].* key harbor's EnvironmentConfig doesn't honour.
+
+    Harbor parses task.toml via pydantic with the default `extra='ignore'`
+    policy, which silently drops unknown keys. That bit us once already
+    (`[environment].docker_compose`, dropped, compose never loaded). This
+    helper fails fast at generation time so future schema drift surfaces
+    where it can be fixed instead of as a silent runtime no-op.
+    """
+    from harbor.models.task.config import EnvironmentConfig
+
+    parsed = tomllib.loads(text)
+    env = parsed.get("environment", {}) or {}
+    extras = sorted(set(env) - set(EnvironmentConfig.model_fields))
+    if extras:
+        raise TaskTomlError(
+            f"task.toml for {task_name!r} has [environment] keys harbor does "
+            f"not honour and will silently drop: {extras}. "
+            "Either remove the key or upgrade harbor."
+        )
 
 
 def _instruction(
