@@ -153,11 +153,15 @@ def _materialize_task_dir(
     task_dir.mkdir(parents=True)
 
     postgres_db = _postgres_db_name(db_config, dataset_name=dataset_meta.name)
+    mongo_probes = _mongo_probe_targets(
+        db_config, dataset_dir=dataset_dir, dataset_name=dataset_meta.name,
+    )
     task_toml_text = _task_toml(
         task_name=task_name,
         docker_image=docker_image,
         container_workdir=container_workdir,
         postgres_db=postgres_db,
+        mongo_probes=mongo_probes,
     )
     _check_task_toml_environment_keys(task_toml_text, task_name=task_name)
     (task_dir / "task.toml").write_text(task_toml_text)
@@ -193,6 +197,7 @@ def _materialize_task_dir(
         )
         (env_dir / "docker-compose.yaml").write_text(compose_text)
         _write_compose_services_sidecar(env_dir / "docker-compose.yaml")
+        _write_mongo_restore_shims(env_dir=env_dir, db_config=db_config, dataset_name=dataset_meta.name)
 
     tests_dir = task_dir / "tests"
     tests_dir.mkdir()
@@ -283,6 +288,7 @@ def _task_toml(
     docker_image: str,
     container_workdir: str,
     postgres_db: str | None = None,
+    mongo_probes: list[tuple[str, str]] | None = None,
 ) -> str:
     # PKG-13 T1: harbor's EnvironmentConfig has no docker_compose field;
     # any [environment].docker_compose value is silently dropped by pydantic.
@@ -320,6 +326,29 @@ def _task_toml(
             "timeout_sec = 10\n"
             "start_period_sec = 30\n"
             "retries = 6\n"
+        )
+    elif mongo_probes:
+        # PKG-15 AC-2: content-presence probe, NOT TCP-only. TCP would have
+        # missed Bug 1 from the dab-mongo-probe (mongo ignored .bson and
+        # started healthy with an empty DB). countDocuments() > 0 fails fast
+        # if mongorestore did not run or produced no documents.
+        # start_period_sec=60 + retries=12 gives 2m post-init budget on top
+        # of mongo's container start; mongorestore of agnews/yelp (~120-150k
+        # docs) empirically completes in ~30s but the headroom is cheap.
+        db_name, collection = mongo_probes[0]
+        eval_js = (
+            f"db.getSiblingDB('{db_name}').getCollection('{collection}').countDocuments() > 0"
+        )
+        probe = (
+            f"mongosh --quiet --host dab-mongo --eval \\\"{eval_js}\\\" | grep -q true"
+        )
+        body += (
+            "\n[steps.healthcheck]\n"
+            f'command = "{probe}"\n'
+            "interval_sec = 5\n"
+            "timeout_sec = 10\n"
+            "start_period_sec = 60\n"
+            "retries = 12\n"
         )
     return body
 
@@ -361,6 +390,56 @@ def _postgres_db_name(db_config: dict | None, *, dataset_name: str) -> str | Non
         if isinstance(cfg, dict) and cfg.get("db_type") == "postgres":
             return cfg.get("db_name") or f"{dataset_name}_db"
     return None
+
+
+def _mongo_probe_targets(
+    db_config: dict | None,
+    *,
+    dataset_dir: Path,
+    dataset_name: str,
+) -> list[tuple[str, str]]:
+    """Return (db_name, collection_name) pairs for every mongo client.
+
+    Collection name is derived from the .bson file basename under
+    <dataset_dir>/<dump_folder>/<db_name>/ (mongo's standard dump layout).
+    Returns [] when no mongo client is declared.
+    """
+    pairs: list[tuple[str, str]] = []
+    clients = (db_config or {}).get("db_clients") or {}
+    for cfg in clients.values():
+        if not isinstance(cfg, dict) or cfg.get("db_type") != "mongo":
+            continue
+        db_name = cfg.get("db_name") or f"{dataset_name}_db"
+        dump_folder = cfg.get("dump_folder")
+        collection = _derive_mongo_collection(
+            dataset_dir=dataset_dir, dump_folder=dump_folder, db_name=db_name,
+        )
+        if collection is None:
+            raise ComposeError(
+                f"could not derive mongo probe collection for dataset {dataset_name!r} "
+                f"(db_name={db_name!r}, dump_folder={dump_folder!r}). "
+                "Expected <dump_folder>/<db_name>/<collection>.bson under data_root."
+            )
+        pairs.append((db_name, collection))
+    return pairs
+
+
+def _derive_mongo_collection(
+    *, dataset_dir: Path, dump_folder: str | None, db_name: str,
+) -> str | None:
+    if not dump_folder:
+        return None
+    base = dataset_dir / dump_folder / db_name
+    if not base.is_dir():
+        return None
+    bsons = [p for p in base.iterdir() if p.suffix == ".bson"]
+    if not bsons:
+        return None
+    # The largest .bson is the primary collection; ties broken by lexicographic
+    # name for determinism. Probing any one collection > 0 documents is enough
+    # to certify the restore actually loaded data.
+    bsons.sort(key=lambda p: (-p.stat().st_size, p.name))
+    return bsons[0].stem
 
 
 def _toml_escape(value: str) -> str:
@@ -423,6 +502,34 @@ def _hardened_template(*, dataset: str, query_id: int) -> str | None:
         2: "bookreview_q2_q3.py",
         3: "bookreview_q2_q3.py",
     }.get(query_id)
+
+
+def _write_mongo_restore_shims(
+    *, env_dir: Path, db_config: dict, dataset_name: str,
+) -> None:
+    """Emit one restore.sh per mongo client alongside the compose file.
+
+    PKG-15 AC-1: compose.py mounts these into the mongo container's
+    /docker-entrypoint-initdb.d/. Shim text comes from mongo_init; we
+    chmod +x so mongo's init.d phase actually executes it.
+    """
+    from razorback_plugin_dab.generate.mongo_init import render_mongo_restore_sh
+
+    for cfg in (db_config.get("db_clients") or {}).values():
+        if not isinstance(cfg, dict) or cfg.get("db_type") != "mongo":
+            continue
+        db_name = cfg.get("db_name") or f"{dataset_name}_db"
+        dump_folder = cfg.get("dump_folder")
+        if not dump_folder:
+            continue
+        shim_path = env_dir / f"restore-{db_name}.sh"
+        shim_path.write_text(
+            render_mongo_restore_sh(
+                db_name=db_name,
+                dump_folder_basename=Path(dump_folder).name,
+            )
+        )
+        shim_path.chmod(shim_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
 def _write_compose_services_sidecar(compose_path: Path) -> None:

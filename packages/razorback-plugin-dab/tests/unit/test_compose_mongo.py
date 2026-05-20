@@ -42,3 +42,18 @@ def test_no_postgres_for_mongo_only(tmp_path: Path):
     text = generate_compose(db_config=_AGNEWS_LIKE, dataset_name="agnews", data_root=tmp_path)
     compose = yaml.safe_load(text)
     assert "dab-postgres" not in compose["services"]
+
+
+def test_mongo_compose_mounts_restore_shim(tmp_path: Path):
+    text = generate_compose(db_config=_AGNEWS_LIKE, dataset_name="agnews", data_root=tmp_path)
+    compose = yaml.safe_load(text)
+    volumes = compose["services"]["dab-mongo"]["volumes"]
+    assert any(
+        "agnews_articles" in v and ":/docker-entrypoint-initdb.d/agnews_articles" in v
+        for v in volumes
+    )
+    # PKG-15 AC-1: shim mount with 00- prefix so it sorts before any other .sh.
+    assert any(
+        v.endswith(":/docker-entrypoint-initdb.d/00-restore-articles_db.sh:ro")
+        for v in volumes
+    ), volumes

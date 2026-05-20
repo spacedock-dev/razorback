@@ -29,3 +29,6 @@ build-backend = "uv_build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "long: integration tests that require docker / heavy data; opt-in via -m long",
+]

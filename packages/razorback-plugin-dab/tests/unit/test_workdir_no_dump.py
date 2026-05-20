@@ -157,8 +157,12 @@ def _build_synthetic_dataset(root: Path, dataset: catalog.DabDataset) -> Path:
                 continue
             target = qdir / rel
             if key == "dump_folder":
+                # PKG-15 mongo gate: <dump_folder>/<db_name>/<collection>.bson
+                # so collection derivation can find the bson file.
                 target.mkdir(parents=True, exist_ok=True)
-                (target / "metadata.bson").write_bytes(b"\x00" * 64)
+                db_subdir = target / cfg["db_name"]
+                db_subdir.mkdir(exist_ok=True)
+                (db_subdir / "items.bson").write_bytes(b"\x00" * 64)
             else:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 if key == "db_path":
