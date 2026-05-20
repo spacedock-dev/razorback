@@ -1,9 +1,9 @@
 ---
 id: r447te87yycw1wxmb5q3dp6s
 title: Phase 4a — rk run budget gate (--max-budget-usd-running)
-status: backlog
+status: plan
 source: plan Phase 4a + spec §3.1 (v2 spec at docs/superpowers/specs/2026-05-19-razorback-on-harbor.md)
-started:
+started: 2026-05-20T07:03:12Z
 completed:
 verdict:
 score: 0.8
