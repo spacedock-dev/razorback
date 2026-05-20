@@ -106,3 +106,16 @@ pkg1-v2-rk-runs-cli AC-4.
 - `r0` pkg1-v2-rk-runs-cli (rk runs list/show CLI surface — `rk
   runs cost` extends the same JSON-stable shape and shares its
   filtering flags)
+
+## Stage Report: plan
+
+- DONE: Plan covers rk runs cost: enumerates run-dirs and sums cost_usd across trials. Cite spec §3.3 (rk runs subcommands) where rk runs cost lives.
+  Plan at `docs/razorback-implementation/plans/phase4a-rk-runs-cost.md`; spec §3.2 cites `rk runs cost <root>` in the first-ship surface and §3.3 the JSON-key stability promise; Task 2 implements per-trial cost summation via the `result_step_agent` precedence level reading `step_results[].agent_result.cost_usd`; Task 3 aggregates into `total_usd`.
+- DONE: Plan acknowledges the cost-telemetry gap: subscription-billed Claude leaves agent_result.cost_usd:null (per phase0 baseline-rerun). rk runs cost MUST distinguish 'cost data present' from 'cost data missing' in its output; null aggregation is a real first-class output, not a silent-zero.
+  Plan's "Cost-telemetry gap discipline" section + AC-4 + Tasks 2/3/5 surface this: per-run `cost_unknown: true`, top-level `n_unknown` counter, non-empty `warnings` list; `total_usd: 0.0 + n_unknown: N + warnings: [...]` is a §3.3-distinct document from `total_usd: 0.0 + n_unknown: 0 + warnings: []`; Task 5 pins the subscription-auth all-null fixture end-to-end; cites Phase 0 baseline-rerun §"Phase 0 side findings" item C.
+- DONE: Plan integrates with pkg1-v2 (rk runs list/show, already implemented), rk runs cost is a sibling subcommand under rk runs. Cite pkg1-v2's runs/inspect.py shape.
+  Task 4 attaches `cost_command` to the existing `runs_app` at `src/razorback/cli/runs.py` next to pkg1-v2's `list_command`/`show_command`; Task 3 reuses `list_run_dirs(root, experiment=...)` from `razorback.runs.inspect` (pkg1-v2 t2) for enumeration and propagates `created_at` from its output verbatim; the new `read_run_cost` primitive lives in a sibling `src/razorback/runs/cost.py` so `inspect.py` is unchanged; Task 1 extends pkg1-v2 t1's `make_run_dir` factory rather than reimplementing it. Cross-plan note pins coordination with `phase4a-rk-run-budget-gate.read_actual_cost_from_run_dir` on the shared cost-source precedence.
+
+### Summary
+
+Wrote a separate-doc plan (8 tasks, ~25 unit tests) because the entity has 7 ACs, over the ≤3-AC inline threshold. Riskiest contract is cost-source precedence (must match `phase4a-rk-run-budget-gate`'s reader on `summary.json` → `result.json.stats.cost_usd`, then extends with a third per-trial fallback observed in the real run-dir). The cost-telemetry gap is first-class: every unknown surfaces as `cost_unknown: true` + a `warnings` entry; `total_usd` sums known-only; `n_runs == n_known + n_unknown` is invariant. Acceptance pass exercises the real subscription-auth fixture at `.runs/baseline-rerun-20260520-bookreview/m3-bookreview-claude/b62c780119d24d68/` where `summary.json` has no cost field and per-trial `agent_result.cost_usd` is null.
