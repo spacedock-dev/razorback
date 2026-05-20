@@ -122,3 +122,36 @@ def test_empty_records_returns_empty_strata() -> None:
     report = reduce_trials([], alpha=0.05)
     assert report["strata"] == {}
     assert report["stratified_pass_at_1"] is None
+
+
+# AC-3 / Task 3: all-errored stratum branch.
+
+
+def test_all_errored_stratum_yields_null_score_and_error_reason() -> None:
+    records = [_errored(f"e{i}", "A", "SubprocessError") for i in range(3)]
+    report = reduce_trials(records, alpha=0.05)
+    stratum = report["strata"]["A"]
+    assert stratum["pass_at_1"] is None
+    assert stratum["wilson_ci"] is None
+    assert stratum["error_reason"] == "SubprocessError"
+
+
+def test_dominant_error_class_wins_with_alphabetical_tiebreak() -> None:
+    records = [
+        _errored("e1", "A", "SubprocessError"),
+        _errored("e2", "A", "SubprocessError"),
+        _errored("e3", "A", "TimeoutError"),
+    ]
+    report = reduce_trials(records, alpha=0.05)
+    assert report["strata"]["A"]["error_reason"] == "SubprocessError"
+
+
+def test_all_errored_run_level_rollup() -> None:
+    records = [
+        _errored("a1", "A", "SubprocessError"),
+        _errored("a2", "A", "SubprocessError"),
+        _errored("b1", "B", "TimeoutError"),
+    ]
+    report = reduce_trials(records, alpha=0.05)
+    assert report["stratified_pass_at_1"] is None
+    assert report["error_reason"] == "SubprocessError"
