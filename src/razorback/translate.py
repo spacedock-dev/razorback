@@ -2,7 +2,7 @@
 # ABOUTME: Replaces the v1 compat translator. Auth flows via AgentConfig.env per FU-1 AC-1.
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from harbor.models.agent.name import AgentName
 from harbor.models.job.config import JobConfig, RetryConfig
@@ -47,6 +47,7 @@ def spec_to_job_config(
     project_root: Path | None = None,
     home: Path | None = None,
     prior_frozen_spec_path: Path | None = None,
+    materialize_mode: Literal["bind", "copy"] = "bind",
 ) -> tuple[JobConfig, dict[str, tuple[str, int]]]:
     """Translate a parsed (frozen) spec into a harbor JobConfig.
 
@@ -94,6 +95,7 @@ def spec_to_job_config(
             jobs_dir=jobs_dir,
             agent_cfg=agent_cfg,
             home=home,
+            materialize_mode=materialize_mode,
         ), {}
     raise SpecError(f"unsupported benchmark block: {type(spec.benchmark).__name__}")
 
@@ -241,6 +243,7 @@ def _build_ade_bench(
     jobs_dir: Path,
     agent_cfg: AgentConfig,
     home: Path | None = None,
+    materialize_mode: Literal["bind", "copy"] = "bind",
 ) -> JobConfig:
     # Phase 1 keeps the in-tree ade-bench path until Phase 8's port-out.
     from razorback.benchmarks.ade_bench.tasks import (
@@ -274,6 +277,7 @@ def _build_ade_bench(
                 task_slug=r.local_slug,
                 docker_image=docker_image,
                 cache_root=cache_root,
+                materialize_mode=materialize_mode,
             )
             tasks.append(TaskConfig(path=materialized))
         elif r.git_url is not None and r.git_commit_id is not None:

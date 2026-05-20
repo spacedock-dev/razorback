@@ -48,3 +48,108 @@ def test_materialize_local_task_does_not_clone(tmp_path: Path, monkeypatch) -> N
         cache_root=cache_root,
     )
     assert (materialized / "task.toml").exists()
+
+
+def test_view_dir_disk_footprint_under_10mb(tmp_path: Path) -> None:
+    """AC-2: per-task view-dir is ≤ 10 MB excluding symlink targets."""
+    from razorback.benchmarks.ade_bench.tasks import materialize_local_task
+
+    ade_bench_root = (FIXTURES / "fixture_local_task_minimal").resolve()
+    cache_root = tmp_path / "pkg19-cache"
+    materialized = materialize_local_task(
+        ade_bench_root=ade_bench_root,
+        task_slug="example001",
+        docker_image="ade-bench-agent:latest",
+        cache_root=cache_root,
+    )
+
+    total_bytes = 0
+    for p in materialized.rglob("*"):
+        if p.is_symlink():
+            continue
+        if p.is_file():
+            total_bytes += p.stat().st_size
+    assert total_bytes < 10 * 1024 * 1024, (
+        f"AC-2: per-task view-dir must be ≤ 10 MB (excluding symlinks); "
+        f"got {total_bytes} bytes"
+    )
+
+
+def test_view_dir_excludes_solution_csv_files(tmp_path: Path) -> None:
+    """AC-4: solution__*.csv files must NOT be reachable from the view-dir."""
+    from razorback.benchmarks.ade_bench.tasks import materialize_local_task
+
+    ade_bench_root = (FIXTURES / "fixture_local_task_minimal").resolve()
+    cache_root = tmp_path / "pkg19-cache"
+    materialized = materialize_local_task(
+        ade_bench_root=ade_bench_root,
+        task_slug="example001",
+        docker_image="ade-bench-agent:latest",
+        cache_root=cache_root,
+    )
+    seeds_dir = materialized / "seeds"
+    assert seeds_dir.exists(), "seeds/ must be reflected (for non-solution files)"
+    solution_files = list(seeds_dir.glob("solution__*.csv"))
+    assert solution_files == [], (
+        f"AC-4: view-dir must not expose solution files; got {solution_files}"
+    )
+    # Other seed files (e.g., _no-op.txt) remain accessible.
+    assert (seeds_dir / "_no-op.txt").exists()
+
+
+def test_view_dir_solution_files_not_reachable_via_symlink_chain(tmp_path: Path) -> None:
+    """AC-4 invariant: even if seeds/ is a symlink, following it must not
+    yield solution files (i.e., seeds/ is NOT a whole-dir symlink to
+    ade_bench_root when the dir contains excluded files)."""
+    from razorback.benchmarks.ade_bench.tasks import materialize_local_task
+
+    ade_bench_root = (FIXTURES / "fixture_local_task_minimal").resolve()
+    cache_root = tmp_path / "pkg19-cache"
+    materialized = materialize_local_task(
+        ade_bench_root=ade_bench_root,
+        task_slug="example001",
+        docker_image="ade-bench-agent:latest",
+        cache_root=cache_root,
+    )
+    seeds_dir = materialized / "seeds"
+    assert not seeds_dir.is_symlink(), (
+        "AC-4: seeds/ must be a real directory (with selective symlinks), "
+        "NOT a symlink to ade_bench_root's seeds/"
+    )
+
+
+def test_view_dir_whole_dir_symlink_when_no_excluded_files(tmp_path: Path) -> None:
+    """When a subdirectory has no excluded files, the materializer may
+    whole-dir symlink for performance (or copy; behavior is implementation-
+    defined). This test confirms `tests/` is reflected either way."""
+    from razorback.benchmarks.ade_bench.tasks import materialize_local_task
+
+    ade_bench_root = (FIXTURES / "fixture_local_task_minimal").resolve()
+    cache_root = tmp_path / "pkg19-cache"
+    materialized = materialize_local_task(
+        ade_bench_root=ade_bench_root,
+        task_slug="example001",
+        docker_image="ade-bench-agent:latest",
+        cache_root=cache_root,
+    )
+    tests_dir = materialized / "tests"
+    assert tests_dir.exists()
+    assert tests_dir.is_dir() or tests_dir.is_symlink()
+
+
+def test_ade_bench_root_seeds_remain_unfiltered(tmp_path: Path) -> None:
+    """AC-4 invariant: solution__*.csv files are EXCLUDED from the agent
+    view-dir, but REMAIN on the host filesystem under ade_bench_root for
+    the verifier's separate mount."""
+    from razorback.benchmarks.ade_bench.tasks import materialize_local_task
+
+    ade_bench_root = (FIXTURES / "fixture_local_task_minimal").resolve()
+    cache_root = tmp_path / "pkg19-cache"
+    materialize_local_task(
+        ade_bench_root=ade_bench_root,
+        task_slug="example001",
+        docker_image="ade-bench-agent:latest",
+        cache_root=cache_root,
+    )
+    upstream_seeds = ade_bench_root / "tasks" / "example001" / "seeds"
+    assert (upstream_seeds / "solution__x.csv").exists()
