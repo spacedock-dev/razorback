@@ -1,9 +1,9 @@
 ---
 id: ayf9mczntgnp808z8ggpjzf4
 title: Goal 1 — DAB paper reproduction (opus-4.7 + hints × 3 variants × 12 datasets × N=5)
-status: backlog
+status: plan
 source: handoff "Two named research goals" + reconciliation plan Phase 4a end note
-started:
+started: 2026-05-20T16:33:40Z
 completed:
 verdict:
 score: 0.65
