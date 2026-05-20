@@ -395,6 +395,50 @@ based on its inner runtime's reset capability; harbor's docker
 environment guarantees per-trial container resets which covers most of
 the picture.
 
+**Harbor-resume interaction.** `harbor jobs resume`
+(`harbor/cli/jobs.py:1361-1430` → `harbor/job.py:_maybe_init_existing_job:192-228`)
+rmtree's any trial directory that lacks `result.json` and re-runs the
+trial under a freshly randomised `trial_name`
+(`harbor/models/trial/config.py:213-222`). Razorback's freeze tree
+therefore cannot live inside harbor's per-trial scratch zone: if a
+`SpacedockSolverAgent` halts mid-trial (process killed, container
+evicted, `harbor run` Ctrl-C'd) before `result.json` is written,
+harbor's resume destroys the trial directory and every razorback file
+under it, and the re-executed trial gets a new `trial_name` that
+would not match any `trial_name`-keyed sibling store.
+
+The mitigation: razorback writes the freeze tree to a sibling
+directory **outside harbor's per-trial scratch zone**, keyed by
+`sealed_hash` rather than `trial_name`. The freeze location is
+`<harbor-run-dir>/_razorback/freeze/<sealed_hash>/` (see §7.1).
+`sealed_hash` is the §4.3 + §8.4 sealed-input hash, identical across
+the initial run and any subsequent `harbor jobs resume` because the
+sealed inputs (model, sampling, solver_workflow content, prompts,
+spacedock skill version, harbor agent kwargs) are read from
+`spec.frozen.yaml`, which itself survives resume.
+
+Consequences:
+
+- **In-place resume of a halted trial is supported.** The re-executed
+  trial recomputes `sealed_hash` from the unchanged `spec.frozen.yaml`,
+  locates the existing freeze tree at the same path, and restores the
+  workspace from its embedded `.git/` before invoking the inner
+  runtime.
+- **Cross-job `resume_from_freeze` is supported the same way.** The
+  cross-job resume reads `<path>/sealed_hash.txt`, refuses on
+  mismatch (`SeedMismatchError`, exit 20), and restores from
+  `<path>/.git/` otherwise. The two resume mechanisms share the same
+  freeze layout.
+- **No partial-credit recovery on rmtree'd stages remains acceptable.**
+  Stage commits are written to `_razorback/freeze/<sealed_hash>/`
+  immediately as the freeze mod produces them, so per-stage cost
+  attribution survives the rmtree even though the trial's `agent/`
+  subtree does not.
+
+Empirically verified by AC-0.5's probe at
+`docs/superpowers/plans/2026-05-19-harbor-resume-probe.md`
+(commit `1569853`).
+
 ### 4.5 Registration with harbor
 
 `SpacedockSolverAgent` registers with harbor via harbor's agent-plugin
