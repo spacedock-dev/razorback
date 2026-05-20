@@ -202,3 +202,17 @@ AC-1 walking-skeleton was blocked by two sandbox-safety issues in harbor's defau
 ### Summary
 
 AC-1 fails on a real authentication bug, not on test fixture leniency: harbor's pydantic serializer redacts the OAuth token when JobConfig is dumped to `_job_config.yaml`, because the token comes from `~/.claude/benchmark-token` and `templatize_sensitive_env` only round-trips values that match `os.environ`. The harbor subprocess receives `CLAUDE_CODE_OAUTH_TOKEN=sk-a****gAA` and claude-cli's auth fails immediately, producing 0.6-second "successful" agent_execution windows that the AC-1 test's `n_errored_trials == 0` predicate accepts. AC-1 verifier needs to assert reward=1.0 (the baseline anchor) in addition to completion. AC-2/3/4/5/6/7/8 verdicts are PASS independently. Gate decision: REJECT to implementation; recommended fix is to mirror the OAuth token into `os.environ` before `job_config.model_dump_json`, so templatize emits `${CLAUDE_CODE_OAUTH_TOKEN}` and the harbor subprocess inherits the real token via the existing `harbor_env` dict.
+
+### Feedback Cycles
+
+**Cycle 1 (2026-05-20):** validation REJECT.
+
+Root cause (per validation report at `docs/razorback-implementation/validation/phase1-rk-run-v2-wrapper.md`): harbor's `AgentConfig.env` field_serializer templatizes `CLAUDE_CODE_OAUTH_TOKEN` to `sk-a****gAA` during `job_config.model_dump_json` at `cli/run.py:185-186`, because razorback reads the token from `~/.claude/benchmark-token` rather than `os.environ`. Harbor's `templatize_sensitive_env` only round-trips values that match `os.environ`; otherwise it redacts irrecoverably. Subprocess gets the redacted string, claude-cli auth fails in 0.6s, agent writes no answer, reward=0.0.
+
+AC-1's test asserted `n_errored_trials == 0` only, missing the reward correctness check.
+
+Fix: mirror the resolved OAuth token (and ANTHROPIC_API_KEY) into `os.environ` BEFORE `job_config.model_dump_json` so templatize emits `${CLAUDE_CODE_OAUTH_TOKEN}` and harbor's `harbor_env={**os.environ, ...}` at `cli/run.py:189` inherits the real value. Strengthen AC-1 integration test to assert `reward == 1.0` (matches baseline-rerun at commit e014dbf), not just `n_errored_trials == 0`.
+
+AC-2/3/4/5/6/7/8 PASS independently — only AC-1 needs the fix + test strengthening.
+
+Routed back to implementation worker `spacedock-ensign-phase1-rk-run-v2-wrapper-implementation`.
