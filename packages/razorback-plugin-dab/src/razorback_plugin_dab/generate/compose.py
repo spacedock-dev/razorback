@@ -56,20 +56,21 @@ def generate_compose(
             pg_dbs.append(db_name)
             sql_file = cfg.get("sql_file")
             if sql_file:
-                # PKG-13 T1: compose lives at <task-dir>/environment/docker-compose.yaml;
-                # bind-mount sources resolve relative to that file, i.e. one level
-                # below the task-dir root. The dataset payload sits at
-                # <task-dir>/steps/main/workdir/{sql_file}.
+                # PKG-14 AC-1: bind-mount the dump from data_root directly,
+                # read-only. No per-task copy. Compose accepts absolute host
+                # paths in volume sources.
+                src = (data_root / f"query_{dataset_name}" / sql_file).resolve()
                 init_volumes_pg.append(
-                    {"src": f"../steps/main/workdir/{sql_file}", "dst": f"/docker-entrypoint-initdb.d/{Path(sql_file).name}"}
+                    {"src": str(src), "dst": f"/docker-entrypoint-initdb.d/{Path(sql_file).name}"}
                 )
         elif kind == "mongo":
             db_name = cfg.get("db_name") or f"{dataset_name}_db"
             mongo_dbs.append(db_name)
             dump_folder = cfg.get("dump_folder")
             if dump_folder:
+                src = (data_root / f"query_{dataset_name}" / dump_folder).resolve()
                 init_volumes_mongo.append(
-                    {"src": f"../steps/main/workdir/{dump_folder}", "dst": f"/docker-entrypoint-initdb.d/{Path(dump_folder).name}"}
+                    {"src": str(src), "dst": f"/docker-entrypoint-initdb.d/{Path(dump_folder).name}"}
                 )
         elif kind in (None, "sqlite", "duckdb"):
             # File-backed engines need no service; bind mount handled by workdir copy.
