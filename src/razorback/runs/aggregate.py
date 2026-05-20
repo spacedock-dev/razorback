@@ -272,3 +272,38 @@ def concatenate_events(run_dir: Path) -> None:
     (run_dir / "events.jsonl").write_text(
         ("\n".join(out_lines) + "\n") if out_lines else ""
     )
+
+
+OUTCOMES_VERSION = 1
+
+
+def write_per_trial_outcomes(run_dir: Path) -> None:
+    """AC-4: write <run_dir>/per_trial_outcomes.json for rk runs diff.
+
+    Errored trials enter the outcomes table with reward=0.0 (parity with
+    benchmarks/dab/aggregate.py:104 — `if verifier_result is None: reward = 0.0`).
+    rk runs diff is a pairwise comparison and needs every key on both arms.
+    """
+    counter: dict[tuple[str, int | None], int] = {}
+    rows: list[dict] = []
+    for trial_dir in _iter_trial_dirs(run_dir):
+        info = _read_trial(trial_dir)
+        stratum = info.get("stratum") or {}
+        dataset = str(stratum.get("dataset", "default"))
+        query_id = stratum.get("query_id")
+        key = (dataset, query_id)
+        idx = counter.get(key, 0)
+        counter[key] = idx + 1
+        reward = info["reward"] if info["reward"] is not None else 0.0
+        rows.append(
+            {
+                "dataset": dataset,
+                "query_id": query_id,
+                "trial_index": idx,
+                "trial_name": trial_dir.name,
+                "reward": float(reward),
+            }
+        )
+    (run_dir / "per_trial_outcomes.json").write_text(
+        json.dumps({"outcomes_version": OUTCOMES_VERSION, "trials": rows}, indent=2) + "\n"
+    )

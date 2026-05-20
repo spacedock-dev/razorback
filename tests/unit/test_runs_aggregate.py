@@ -123,3 +123,21 @@ def test_aggregate_summary_per_trial_rewards_and_stratified(tmp_path: Path):
 
     assert summary["cost_usd"] is None
     assert summary["summary_version"] == 1
+
+
+def test_write_per_trial_outcomes_matches_pairing_loader_contract(tmp_path: Path):
+    from razorback.runs.aggregate import write_per_trial_outcomes
+    from razorback.diff.pairing import load_run_outcomes
+
+    work = tmp_path / "exp" / "job"
+    _copy_fixture(FIXTURE_RUN, work)
+
+    write_per_trial_outcomes(work)
+
+    trials = load_run_outcomes(work)
+    by_q = {(t["dataset"], t["query_id"]): t for t in trials}
+    assert by_q[("bookreview", 1)]["reward"] == 1.0
+    assert by_q[("bookreview", 2)]["reward"] == 0.0
+    # Errored trials get reward=0.0 per legacy aggregate_job_result (legacy line 102-106).
+    assert by_q[("bookreview", 3)]["reward"] == 0.0
+    assert all(t["trial_index"] == 0 for t in trials)
