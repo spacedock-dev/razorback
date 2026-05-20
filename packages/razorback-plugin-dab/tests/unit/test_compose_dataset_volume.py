@@ -95,6 +95,33 @@ def test_schema_version_v2_yields_distinct_volume_name(tmp_path: Path):
     assert "dab-postgres-data-bookreview-v1" not in yaml_v2
 
 
+def test_fresh_mode_yields_per_task_volume_name(tmp_path: Path):
+    """AC-11: fresh mode appends a per-task suffix; the volume is NOT shared."""
+    data_root = tmp_path / "data"
+    cfg = _bookreview_cfg(data_root)
+    yaml_text = generate_compose(
+        db_config=cfg, dataset_name="bookreview", data_root=data_root,
+        postgres_volume_mode="fresh", task_id="bookreview-q1",
+    )
+    compose = yaml.safe_load(yaml_text)
+    vol_names = list(compose["volumes"].keys())
+    assert vol_names == ["dab-postgres-data-bookreview-v1-bookreview-q1"], (
+        f"AC-11: fresh mode must carry per-task suffix; got {vol_names}"
+    )
+
+
+def test_reuse_mode_default_no_per_task_suffix(tmp_path: Path):
+    data_root = tmp_path / "data"
+    cfg = _bookreview_cfg(data_root)
+    yaml_text = generate_compose(
+        db_config=cfg, dataset_name="bookreview", data_root=data_root,
+        task_id="bookreview-q1",
+    )
+    compose = yaml.safe_load(yaml_text)
+    vol_names = list(compose["volumes"].keys())
+    assert vol_names == ["dab-postgres-data-bookreview-v1"]
+
+
 def test_postgres_volume_name_lowercased_for_caps_datasets(tmp_path: Path):
     """Docker volume names should be case-stable; the catalog names like
     PANCANCER_ATLAS must lowercase to a valid volume name."""

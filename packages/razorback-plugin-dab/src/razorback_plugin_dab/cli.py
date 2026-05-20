@@ -38,6 +38,11 @@ def generate(
         "--materialize",
         help="Dataset materialization mode: bind (default — bind-mount dumps from data_root) or copy (per-task workdir copy).",
     ),
+    postgres_volume_mode: str = typer.Option(
+        "reuse",
+        "--postgres-volume-mode",
+        help="postgres data volume strategy: reuse (default — dataset-keyed shared volume) or fresh (per-task unique volume).",
+    ),
 ) -> None:
     """Emit harbor task directories under <out>/<dataset>-q<n>/ for each requested dataset."""
     if workspace_variant not in WORKSPACE_VARIANTS:
@@ -51,6 +56,14 @@ def generate(
     if materialize not in ("bind", "copy"):
         typer.echo(
             f"razorback-plugin-dab: --materialize must be one of bind|copy; got {materialize!r}",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
+    if postgres_volume_mode not in ("reuse", "fresh"):
+        typer.echo(
+            f"razorback-plugin-dab: --postgres-volume-mode must be one of reuse|fresh; "
+            f"got {postgres_volume_mode!r}",
             err=True,
         )
         raise typer.Exit(code=2)
@@ -90,6 +103,7 @@ def generate(
             workspace_variant=workspace_variant,
             hints=hints,
             materialize_mode=materialize,
+            postgres_volume_mode=postgres_volume_mode,
         )
 
 

@@ -133,3 +133,34 @@ def test_cli_materialize_invalid_exits_2(tmp_path: Path):
     ])
     assert result.returncode == 2
     assert "materialize" in result.stderr
+
+
+def test_cli_postgres_volume_mode_invalid_exits_2(tmp_path: Path):
+    out = tmp_path / "tasks"
+    result = _uv_run([
+        "generate", "--datasets", "bookreview",
+        "--data-root", str(tmp_path), "--out", str(out),
+        "--postgres-volume-mode", "bogus",
+    ])
+    assert result.returncode == 2
+    assert "postgres-volume-mode" in result.stderr
+
+
+def test_cli_postgres_volume_mode_fresh_yields_per_task_volume(tmp_path: Path):
+    import yaml as _yaml
+
+    data_root = _build_bookreview_data_root(tmp_path)
+    out = tmp_path / "tasks"
+    result = _uv_run([
+        "generate", "--datasets", "bookreview",
+        "--data-root", str(data_root), "--out", str(out),
+        "--postgres-volume-mode", "fresh",
+    ])
+    assert result.returncode == 0, result.stderr
+    task_dirs = [p for p in out.iterdir() if p.is_dir()]
+    compose = _yaml.safe_load(
+        (task_dirs[0] / "environment" / "docker-compose.yaml").read_text()
+    )
+    vol_names = list(compose["volumes"].keys())
+    assert len(vol_names) == 1
+    assert vol_names[0].startswith("dab-postgres-data-bookreview-v1-bookreview-")
