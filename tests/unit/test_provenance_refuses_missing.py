@@ -15,6 +15,7 @@ FIELDS = [
     "harness_git_sha",
     "harbor_version",
     "prompt_file_hashes",
+    "plugins",
 ]
 
 
@@ -27,6 +28,7 @@ def _all_resolved() -> dict:
         "harness_git_sha": "0123456789abcdef",
         "harbor_version": "0.6.6",
         "prompt_file_hashes": {"agent-prompts/p.md": "sha256:fedcba"},
+        "plugins": [],
     }
 
 

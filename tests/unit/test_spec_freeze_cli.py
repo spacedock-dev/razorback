@@ -51,6 +51,8 @@ def _stub_all_resolved(monkeypatch):
     )
     monkeypatch.setattr(fc, "resolve_harbor_version", lambda: "0.6.6")
     monkeypatch.setattr(fc, "resolve_prompt_hashes", lambda _paths: {})
+    monkeypatch.setattr(fc, "resolve_plugin_inventory", lambda: {"plugins": []})
+    monkeypatch.setattr(fc, "resolve_solver_workflow_hash", lambda _p: None)
 
 
 def test_freeze_all_resolved_writes_frozen_and_provenance(spec_file, monkeypatch):
@@ -83,6 +85,8 @@ def test_freeze_refuses_when_field_missing(spec_file, monkeypatch):
     )
     monkeypatch.setattr(fc, "resolve_harbor_version", lambda: "0.6.6")
     monkeypatch.setattr(fc, "resolve_prompt_hashes", lambda _paths: {})
+    monkeypatch.setattr(fc, "resolve_plugin_inventory", lambda: {"plugins": []})
+    monkeypatch.setattr(fc, "resolve_solver_workflow_hash", lambda _p: None)
 
     result = runner.invoke(app, ["spec", "freeze", str(spec_file)])
     assert result.exit_code == 11
@@ -103,6 +107,8 @@ def test_freeze_allow_missing_writes_with_unresolved_marker(spec_file, monkeypat
     )
     monkeypatch.setattr(fc, "resolve_harbor_version", lambda: "0.6.6")
     monkeypatch.setattr(fc, "resolve_prompt_hashes", lambda _paths: {})
+    monkeypatch.setattr(fc, "resolve_plugin_inventory", lambda: {"plugins": []})
+    monkeypatch.setattr(fc, "resolve_solver_workflow_hash", lambda _p: None)
 
     result = runner.invoke(app, ["spec", "freeze", str(spec_file), "--allow-missing"])
     assert result.exit_code == 0, result.output

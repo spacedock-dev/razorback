@@ -18,7 +18,14 @@ REQUIRED_FIELDS = (
     "harness_git_sha",
     "harbor_version",
     "prompt_file_hashes",
+    "plugins",
 )
+
+# Optional fields: written when non-None, never appear in REQUIRED_FIELDS or in
+# the `unresolved:` list. solver_workflow_hash is conditional on the spec
+# carrying an agent.solver_workflow path (spec §8.2; only spacedock-solver
+# specs do today).
+OPTIONAL_FIELDS = ("solver_workflow_hash",)
 
 
 def refuse_if_any_unresolved(resolved: dict[str, Any], *, allow_missing: bool) -> None:
@@ -38,11 +45,15 @@ def write_provenance_yaml(
     resolved: dict[str, Any],
     *,
     drift_record: dict[str, Any] | None = None,
+    plugin_drift_record: dict[str, Any] | None = None,
 ) -> None:
     """Serialize the resolved-field dict to provenance.yaml.
 
-    Unresolved fields (value=None) are written as a list under `unresolved:`.
-    `drift_record` records alias-drift overrides (§6.4) recorded by `rk run`.
+    Unresolved REQUIRED_FIELDS (value=None) are written as a list under
+    `unresolved:`. OPTIONAL_FIELDS (solver_workflow_hash) are written only when
+    non-None and never appear under `unresolved:`. `drift_record` records
+    alias-drift overrides (§6.4); `plugin_drift_record` records plugin-drift
+    overrides (PKG-8 §3.2).
     """
     document: dict[str, Any] = {}
     unresolved: list[str] = []
@@ -52,10 +63,16 @@ def write_provenance_yaml(
             unresolved.append(name)
         else:
             document[name] = val
+    for name in OPTIONAL_FIELDS:
+        val = resolved.get(name)
+        if val is not None:
+            document[name] = val
     if "model_resolved_at" in resolved and resolved["model_resolved_at"] is not None:
         document["model_resolved_at"] = resolved["model_resolved_at"]
     if unresolved:
         document["unresolved"] = sorted(unresolved)
     if drift_record is not None:
         document["alias_drift"] = drift_record
+    if plugin_drift_record is not None:
+        document["plugin_drift"] = plugin_drift_record
     out_path.write_text(yaml.safe_dump(document, sort_keys=False, default_flow_style=False))

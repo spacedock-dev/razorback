@@ -1,9 +1,13 @@
-# ABOUTME: `rk spec freeze` Typer command — orchestrates the six resolvers (§6.4).
+# ABOUTME: `rk spec freeze` Typer command — orchestrates the per-field resolvers (§6.4, §8.2).
 # ABOUTME: Writes spec.frozen.yaml (pinned spec body) + provenance.yaml (sidecar).
+# Pass-through-only: experiment_meta block (incl. estimated_cost_usd) is a static
+# operator field, not a rk freeze-computed dynamic input; r4 phase4a-rk-run-budget-gate
+# owns the schema. PKG-8 carries it through verbatim via spec.model_dump.
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import typer
 import yaml
@@ -19,7 +23,9 @@ from razorback.provenance.resolvers import (
     resolve_harness_git_sha,
     resolve_image_digest,
     resolve_model_version,
+    resolve_plugin_inventory,
     resolve_prompt_hashes,
+    resolve_solver_workflow_hash,
 )
 from razorback.spec.parse import parse_spec_file
 
@@ -60,6 +66,13 @@ def freeze_command(
     harbor_version = resolve_harbor_version()
     prompt_paths = _collect_prompt_paths(spec)
     prompt_hashes = resolve_prompt_hashes(prompt_paths)
+    # PKG-8 v2 (§3.2 + §8.2): plugin inventory + solver_workflow content hash.
+    plugin_inventory = resolve_plugin_inventory()
+    plugins = plugin_inventory["plugins"] if plugin_inventory is not None else None
+    sw_path = _solver_workflow_path(spec)
+    solver_workflow_hash = (
+        resolve_solver_workflow_hash(sw_path) if sw_path is not None else None
+    )
 
     resolved = {
         "model_resolved_version": model_id,
@@ -69,6 +82,8 @@ def freeze_command(
         "harness_git_sha": git_sha,
         "harbor_version": harbor_version,
         "prompt_file_hashes": prompt_hashes,
+        "plugins": plugins,
+        "solver_workflow_hash": solver_workflow_hash,
     }
 
     try:
@@ -79,7 +94,7 @@ def freeze_command(
 
     frozen_path = out or spec_path.with_suffix(".frozen.yaml")
     frozen_body = spec.model_dump(mode="json")
-    frozen_body["provenance"] = {
+    frozen_provenance_block: dict[str, Any] = {
         **frozen_body.get("provenance", {}),
         "model_resolved_version": model_id,
         "model_resolved_at": model_at,
@@ -88,7 +103,11 @@ def freeze_command(
         "harness_git_sha": git_sha,
         "harbor_version": harbor_version,
         "prompt_file_hashes": prompt_hashes,
+        "plugins": plugins,
     }
+    if solver_workflow_hash is not None:
+        frozen_provenance_block["solver_workflow_hash"] = solver_workflow_hash
+    frozen_body["provenance"] = frozen_provenance_block
     frozen_path.write_text(yaml.safe_dump(frozen_body, sort_keys=False))
 
     write_provenance_yaml(spec_path.parent / "provenance.yaml", resolved)
@@ -103,3 +122,14 @@ def _collect_prompt_paths(spec) -> list[Path]:
     if pf:
         paths.append(Path(pf))
     return paths
+
+
+def _solver_workflow_path(spec) -> Path | None:
+    """Return the spec's solver_workflow directory path, or None when not set.
+
+    Only spec.agent kinds that opt into a solver_workflow surface set this
+    attribute (spec §8.2). Non-spacedock agents return None and the
+    solver_workflow_hash field stays absent from provenance.yaml.
+    """
+    raw = getattr(spec.agent, "solver_workflow", None)
+    return Path(raw) if raw else None
