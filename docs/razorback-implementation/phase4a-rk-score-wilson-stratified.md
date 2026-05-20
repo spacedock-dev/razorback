@@ -136,3 +136,16 @@ on key rename or removal within the major version. Per spec §3.3.
 - `dk` pkg2-v2-rk-score-counting (counting-honesty integration —
   the spec §9.2 counting-honesty discipline lands here in `rk
   score`'s implementation)
+
+## Stage Report: plan
+
+- DONE: Plan covers rk score's three readouts: Wilson CI per stratum, stratified pass@1 mean, --against-constant for paper-published baseline comparison. Cite spec §3.2 + §8.3a.
+  Plan doc at `docs/razorback-implementation/plans/phase4a-rk-score-wilson-stratified.md` Task 2 (Wilson + stratified mean reducer) + Task 4 (against-constant verdict); architecture section cites §3.2 + §8.3a verbatim.
+- DONE: Plan acknowledges that rk score reads run-dirs produced by phase1 (rk run) and stratum-tagged trials produced by phase2 DAB harbor adapter (per AC-8). Cite both as input contracts.
+  Plan doc "Input contracts (dependencies)" section names phase3-spacedock-solver-v2 sealed-state contract and phase2-dab-harbor-adapter AC-8 (Task 11 stratum.json side-channel) as the two upstream producers; Phase dependencies block lists phase1 (run-dir layout) and phase2 (stratum tagging) explicitly.
+- DONE: Test plan: fixture-based unit tests for the math (Wilson, stratified mean, against-constant); integration test against .runs/baseline-rerun-20260520-bookreview/ fixture run-dir.
+  Tasks 2 (Wilson at n=20 k=10 = [0.299, 0.701] + α=0.10 half-width), 2 (stratified mean macro-average), 4 (against-constant inside/outside-CI), 7 (integration test against `.runs/baseline-rerun-20260520-bookreview/m3-bookreview-claude/b62c780119d24d68/` end-to-end). Task 8 adds ade-bench-shaped fixture for AC-6 adapter-agnosticism.
+
+### Summary
+
+Wrote a 10-task plan covering the three rk score readouts (per-stratum Wilson CI, stratified pass@1 macro-average, --against-constant verdict), citing spec §3.2 + §8.3a verbatim and pinning the consumer side of phase2 AC-8's stratum.json contract. Tasks order the loader's input contract (Task 1) ahead of the reducer (Task 2) per CL's "Validating new mechanisms" rule; AC-3 counting-honesty (errored-vs-completed denominator + all-errored null + error_reason) folds in pkg2-v2-rk-score-counting per the entity. wilson_ci is reused verbatim from `diff/stats.py:14-33` per the module inventory's KEEP-EXTRACT classification (no rewrite).
