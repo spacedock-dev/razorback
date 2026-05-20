@@ -16,6 +16,7 @@ from razorback_plugin_dab import datasets as catalog
 from razorback_plugin_dab.generate.compose import (
     DEFAULT_AGENT_IMAGE,
     DEFAULT_CONTAINER_WORKDIR,
+    POSTGRES_USER,
     ComposeError,
     generate_compose,
 )
@@ -124,10 +125,12 @@ def _materialize_task_dir(
 ) -> None:
     task_dir.mkdir(parents=True)
 
+    postgres_db = _postgres_db_name(db_config, dataset_name=dataset_meta.name)
     task_toml_text = _task_toml(
         task_name=task_name,
         docker_image=docker_image,
         container_workdir=container_workdir,
+        postgres_db=postgres_db,
     )
     _check_task_toml_environment_keys(task_toml_text, task_name=task_name)
     (task_dir / "task.toml").write_text(task_toml_text)
@@ -227,11 +230,12 @@ def _task_toml(
     task_name: str,
     docker_image: str,
     container_workdir: str,
+    postgres_db: str | None = None,
 ) -> str:
     # PKG-13 T1: harbor's EnvironmentConfig has no docker_compose field;
     # any [environment].docker_compose value is silently dropped by pydantic.
     # Compose discovery is purely positional: environment_dir / docker-compose.yaml.
-    return (
+    body = (
         'schema_version = "1.2"\n\n'
         f'[task]\nname = "razorback-plugin-dab/{task_name}"\n'
         f'description = "DAB {task_name} as a harbor task."\n\n'
@@ -240,6 +244,37 @@ def _task_toml(
         f'workdir = "{_toml_escape(container_workdir)}"\n'
         f'\n[[steps]]\nname = "{_STEP_NAME}"\n'
     )
+    if postgres_db:
+        # PKG-13 T5 / AC-3: bookreview reachability gate. Harbor runs the
+        # per-step healthcheck after setup and before the agent; on failure
+        # it aborts the step with a typed error, which is the fail-fast
+        # shape AC-3 requires. The command exits non-zero if dab-postgres
+        # is unreachable or the schema is not initialized.
+        psql_cmd = (
+            f"psql -h dab-postgres -U {POSTGRES_USER} -d {_toml_escape(postgres_db)} -tAc 'select 1'"
+        )
+        body += (
+            "\n[steps.healthcheck]\n"
+            f'command = "{psql_cmd}"\n'
+            "interval_sec = 5\n"
+            "timeout_sec = 10\n"
+            "start_period_sec = 30\n"
+            "retries = 6\n"
+        )
+    return body
+
+
+def _postgres_db_name(db_config: dict | None, *, dataset_name: str) -> str | None:
+    """Return the first postgres db_name in the db_config, or None.
+
+    The reachability gate (T5) is emitted only when at least one postgres
+    client is declared; sqlite/duckdb/mongo datasets get no gate.
+    """
+    clients = (db_config or {}).get("db_clients") or {}
+    for cfg in clients.values():
+        if isinstance(cfg, dict) and cfg.get("db_type") == "postgres":
+            return cfg.get("db_name") or f"{dataset_name}_db"
+    return None
 
 
 def _toml_escape(value: str) -> str:
