@@ -49,12 +49,17 @@ def cost_command(
 def show_command(
     run_dir: Path = typer.Argument(...),
 ) -> None:
-    """Show one run-dir's manifest envelope + summary. §3.2."""
+    """Show one run-dir's manifest envelope + summary + lock drift. §3.2."""
     try:
         payload = read_run_dir(run_dir)
     except FileNotFoundError as exc:
         typer.echo(f"run-dir missing required input: {exc}", err=True)
         raise typer.Exit(ExitCode.USAGE)
+    from razorback.runs.lock_drift import compute_drift
+
+    drift = compute_drift(run_dir)
+    if drift is not None:
+        payload["lock_drift"] = drift
     typer.echo(json.dumps(payload, indent=2))
 
 
