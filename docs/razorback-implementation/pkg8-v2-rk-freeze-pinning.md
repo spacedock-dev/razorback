@@ -1,9 +1,9 @@
 ---
 id: 72ej035903fc6wrsx0h9fb4g
 title: PKG-8 v2 — plugin pinning in rk freeze
-status: backlog
+status: plan
 source: spec §3.2 + §8.2 (v2 spec at docs/superpowers/specs/2026-05-19-razorback-on-harbor.md)
-started:
+started: 2026-05-20T07:26:09Z
 completed:
 verdict:
 score:
