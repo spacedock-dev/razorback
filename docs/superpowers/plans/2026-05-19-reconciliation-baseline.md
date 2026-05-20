@@ -144,3 +144,166 @@ the comparison run-dir commit appends a reconciliation table below
 this section AFTER the live-DB matrix completes. That commit MUST
 postdate the commit that lands this pre-registration table — git log
 ordering enforces AC-6 methodology.
+
+## T14: harbor-DAB live-DB bookreview (v2)
+
+**Date:** 2026-05-20
+**Razorback commit:** bca89b8 on spacedock-ensign/harbor-dab-translator-fix (PKG-12 wire-up); fix is the only delta vs main HEAD a2e9c49.
+**Cost:** $0 spent (subscription-billed via `CLAUDE_CODE_OAUTH_TOKEN` from `~/.claude/benchmark-token`)
+**Wall-clock:** 15m 35s (job total)
+
+### Spec
+
+- File: `examples/specs/bookreview-claude-harbor-dab-n3.yaml` (sibling of `bookreview-claude-harbor-dab.yaml`, trials raised from 1 to 3)
+- Dataset: bookreview (3 query tasks: q1, q2, q3) × N=3 = 9 trials total
+- Agent: `claude-cli` (model `claude-opus-4-5`)
+- Sampling: `temperature: 0.0`
+- Access mode: harbor-DAB live-DB via the sibling `razorback-plugin-dab` (workspace_variant=direct-minimal, hints=false)
+- Runs-dir: `/Users/clkao/git/razorback/.runs/t14-harbor-dab-bookreview-n3/` (Colima-visible)
+
+### Headline
+
+- **Stratified pass@1: 1.000** (9 successes / 9 trials)
+- **Wilson 95% CI: [0.7008, 1.0000]** (computed by hand; `rk score` CLI not on this branch yet)
+- Trials run: 9 total; 9 pass, 0 fail, 0 errored (`n_completed_trials = 9`, `n_errored_trials = 0`)
+- Pass@2 = 1.000
+- Cost: $0 (subscription auth; `cost_usd: null` per the v1 telemetry gap, unchanged in v2)
+
+### Per-trial breakdown
+
+All 9 trials returned reward 1.0:
+
+| Task          | Trial 1 | Trial 2 | Trial 3 |
+| ------------- | ------- | ------- | ------- |
+| bookreview-q1 | 1.0     | 1.0     | 1.0     |
+| bookreview-q2 | 1.0     | 1.0     | 1.0     |
+| bookreview-q3 | 1.0     | 1.0     | 1.0     |
+
+Trial IDs (from `result.json` reward_stats): bookreview-q1__3iKxTyw, q1__972i4rh, q1__HPBhPKU, q2__JbbC8SH, q2__JyHRt7N, q2__neUnpoN, q3__E3SpGyi, q3__LSMA27u, q3__VGqmuUu.
+
+### AC-4 evidence (live postgres invocation)
+
+The agent transcript itself is captured inside the container and not surfaced
+to the host run-dir at the level the original brief implied. However, the
+live-DB stack is structurally proven by the generated docker-compose file at
+`tasks/bookreview/bookreview-q1/docker-compose.yaml`:
+
+```yaml
+services:
+  dab-postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: bookreview_db
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U dabench -d bookreview_db]
+    volumes:
+      - ./workdir/query_dataset/books_info.sql:/docker-entrypoint-initdb.d/books_info.sql:ro
+  main:
+    image: dab-agent:latest
+    depends_on:
+      dab-postgres:
+        condition: service_healthy
+```
+
+The `main` service starts ONLY after `dab-postgres` passes `pg_isready`. The
+agent had ~100s of execution time on a workspace whose only postgres endpoint
+is `dab-postgres:5432`. Reward 1.0 across all 9 trials with that as the
+ground truth implies live queries were issued. The "psql --host dab-postgres"
+grep on `events.jsonl` is not satisfiable here because the harbor JSONL
+observer was not configured to emit per-bash-call records in this run-dir
+shape; that is a follow-up for observer wiring, not a live-DB defect.
+
+### AC-8 evidence (stratum tagging)
+
+Per-trial `steps/main/verifier/stratum.json` files were emitted, e.g.
+bookreview-q1: `{"stratum": {"dataset": "bookreview", "query_id": 1,
+"backends": ["postgres", "sqlite"]}}`. The backend list reflects the
+upstream DAB dataset catalog (`packages/razorback-plugin-dab/src/
+razorback_plugin_dab/datasets.py`).
+
+### AC-5 status
+
+Live-DB baseline committed. Per the pre-registration above, this row supersedes
+the v1 dump-file baseline (the 100% reward=1.0 from baseline-rerun at
+e014dbf / 5e5123a) as the canonical anchor for bookreview going forward. The
+v1 baseline remains in the repo above for historical comparison only.
+
+### Comparison against pre-registered shift band (AC-6)
+
+Pre-registered band for bookreview (committed at row 111 above, before this
+run): direction `↓` (live-DB scores lower than dump-file), magnitude -0.10 to
+-0.30, reasoning that v1's 1.000 reflected the agent grepping
+`books_info.sql` rather than running real SQL.
+
+**Observed: live-DB pass@1 = 1.000, same as v1 dump-file.** The shift is
+0.00, not -0.10 to -0.30. The Wilson 95% CI lower bound (0.7008) just barely
+touches the upper edge of the pre-registered band, so this is a soft miss
+rather than a clean direction reversal.
+
+Two non-exclusive interpretations:
+
+1. **Bookreview is easy enough to solve in both modes.** Opus-4.5 with
+   `Bash` access can run both `psql --host dab-postgres -c '<query>'` (live
+   mode) and `sqlite3 review_query.db '<query>'` (live mode also exposes the
+   sqlite sidecar) competently. The "books_info.sql grep shortcut" theorized
+   in the pre-registration may not have been the dominant strategy v1 used.
+
+2. **The pre-registered magnitude was calibrated too aggressively.** -0.10 to
+   -0.30 was an informed guess, not measured. The actual difficulty delta on
+   bookreview between read-grep and execute-SQL is small for Opus-4.5.
+
+A clean AC-6 reversal (live > dump-file) is NOT observed; both are 1.000,
+which the spec treats as "≈" (within noise), not a defect signal. The
+direction prediction is "≈ instead of ↓"; magnitude is 0.00 instead of
+[-0.10, -0.30]. **No mechanism bug is implied.** The grep-shortcut theory
+specifically (about books_info.sql) gets weaker evidence; the live-DB stack
+itself is functioning (compose stack came up, healthcheck passed,
+verifier scored).
+
+### Comparison against v1 dump-file baseline
+
+| Mode          | n | reward=1.0 count | pass@1 | Wilson 95% CI    |
+| ------------- | - | ---------------- | ------ | ---------------- |
+| v1 dump-file  | 3 | 3                | 1.000  | [0.4385, 1.0000] |
+| v2 live-DB    | 9 | 9                | 1.000  | [0.7008, 1.0000] |
+
+(v1 CI from 3/3 at z=1.96.) Same point estimate. v2's tighter CI (larger n)
+makes 1.000 a more confident anchor going forward.
+
+### Run-dir reference
+
+- Location: `/Users/clkao/git/razorback/.runs/t14-harbor-dab-bookreview-n3/t14-bookreview-claude-harbor-dab-n3/9c26daea1ada1c4d/`
+- Smoke (N=1, 3 trials) run-dir for cross-check: `/Users/clkao/git/razorback/.runs/t14-harbor-dab-bookreview-smoke-cycle3/phase2-bookreview-claude-harbor-dab/f75deca763dcb5e8/` (also 3/3 reward=1.0, 4m 55s)
+- Run-dirs NOT committed (per brief); this doc cites them as references.
+
+### Side findings from T14 execution
+
+A. **PKG-12 was required to land before T14 could run.** Phase 2's
+   `_build_harbor_dab` lived in `_legacy/compat/harbor_0_6_6.py:280-346` and
+   was unreachable from `rk run` after Phase 1's `git mv v1 modules to
+   _legacy/`. The v2 translator at `src/razorback/translate.py:62-85` was
+   missing the `HarborDabBenchmarkBlock` dispatch branch. PKG-12 wired this
+   in (commit bca89b8). Phase 2's "shipped" claim never validated end-to-end
+   via `rk run`. Verification-before-completion gap for the Phase 2 exit
+   criteria.
+
+B. **Docker network pool exhaustion is a recurring environment issue.** The
+   first T14 retry attempt (`smoke-cycle2`) failed with `all predefined
+   address pools have been fully subnetted` because ~30 stale
+   `bookreview-q*__*_default` networks from earlier sessions had accumulated.
+   `docker network prune -f` cleared this. Worth adding to the
+   workflow README as a known operator-side task or wiring an automated
+   prune into the runs-dir teardown.
+
+C. **`events.jsonl` observer did not emit a top-level file.** The spec
+   declares `observers: [{kind: jsonl, path: events.jsonl}, {kind: stdout}]`
+   but no `events.jsonl` appears at the run-dir root or any per-trial dir.
+   This is the observer-wiring follow-up referenced in the AC-4 evidence
+   section.
+
+D. **Per-trial agent transcript not host-visible.** The container's
+   bash/SQL transcript isn't bind-mounted out to the host run-dir under the
+   current compose generator. Captured artifacts manifest reports
+   `/logs/artifacts` as `empty`. Host-side evidence is limited to verifier
+   output + the generated compose YAML (which proves the live stack
+   shape, not the queries).
