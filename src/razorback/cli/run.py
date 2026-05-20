@@ -65,12 +65,43 @@ def _stage_harbor_home(runs_dir_resolved: Path) -> Path:
 
     Harbor hardcodes `~/.cache/harbor` and `~/.harbor` via Path.expanduser.
     Pointing HOME under the runs-dir keeps both inside the user-chosen,
-    canary-checked runs-dir tree.
+    canary-checked runs-dir tree. The user's real `~/.docker/` (cli-plugins,
+    config, contexts) is symlinked in so harbor's subprocess docker calls
+    still find `docker compose` and the active context.
     """
     harbor_home = runs_dir_resolved / ".harbor-home"
     (harbor_home / ".cache" / "harbor").mkdir(parents=True, exist_ok=True)
     (harbor_home / ".harbor").mkdir(parents=True, exist_ok=True)
+    real_docker = Path(os.environ.get("HOME", str(Path.home()))) / ".docker"
+    synthetic_docker = harbor_home / ".docker"
+    if real_docker.exists() and not synthetic_docker.exists():
+        synthetic_docker.symlink_to(real_docker)
     return harbor_home
+
+
+def _resolve_docker_host() -> str | None:
+    """Return the user's active docker host so the harbor subprocess can reach docker.
+
+    Redirecting HOME (so harbor's hardcoded ~/.cache/harbor works) hides the
+    user's `~/.docker/config.json` from docker's context resolver, which then
+    falls back to the default socket and fails on Colima/Docker-Desktop hosts.
+    Pre-resolve the current context's Host so the subprocess gets DOCKER_HOST
+    set explicitly.
+    """
+    if "DOCKER_HOST" in os.environ:
+        return os.environ["DOCKER_HOST"]
+    try:
+        proc = subprocess.run(
+            ["docker", "context", "inspect", "--format", "{{.Endpoints.docker.Host}}"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            return proc.stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+    return None
 
 
 def _write_provenance_artifacts(spec_bytes: bytes, spec, run_dir: Path) -> None:
@@ -156,6 +187,9 @@ def run_command(
 
     harbor_home = _stage_harbor_home(runs_dir_resolved)
     harbor_env = {**os.environ, "HOME": str(harbor_home)}
+    docker_host = _resolve_docker_host()
+    if docker_host is not None:
+        harbor_env["DOCKER_HOST"] = docker_host
     rc = _invoke_harbor(job_config_yaml, harbor_env)
     if rc != 0:
         typer.echo(f"harbor run failed (exit {rc}); surfacing as exit 30", err=True)
