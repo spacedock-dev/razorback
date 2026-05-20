@@ -143,12 +143,25 @@ class AdeBenchTaskEntry(BaseModel):
     git_commit_id: str
 
 
+class AdeBenchLocalTaskEntry(BaseModel):
+    """PKG-19 — local upstream-checkout task entry.
+
+    Opts the entry into the `ade_bench_root` materialization path: the
+    translator dispatches to `materialize_local_task`, which builds a view-
+    dir from the captain's `~/git/ade-bench` checkout instead of cloning
+    `harbor-datasets` per task.
+    """
+    model_config = ConfigDict(extra="forbid")
+    slug: str
+
+
 class AdeBenchBenchmarkBlock(BaseModel):
     model_config = ConfigDict(extra="forbid")
     kind: Literal["ade-bench"]
     tasks_root: Path
-    tasks: list[str | AdeBenchTaskEntry] = Field(min_length=1)
+    tasks: list[str | AdeBenchTaskEntry | AdeBenchLocalTaskEntry] = Field(min_length=1)
     docker_image_override: str | None = None
+    ade_bench_root: Path | None = None
 
 
 BenchmarkBlock = Annotated[
