@@ -115,3 +115,24 @@ Verified by: a unit test exercises both modes and confirms the compose's volume 
 
 - Goal 1 — DAB paper reproduction (disk-feasibility constraint + cross-variant DB-reuse wall-clock constraint; captain explicitly called out "we need to run both dab-minimum and dab-spacedock, we don't want to re-instantiate the db" on 2026-05-20).
 - Goal 2 — ade-bench Haiku baseline (disk-feasibility for matrix; ade-bench plugin's per-task disk profile is investigated separately by the ade-bench probe).
+
+## Stage Report: plan
+
+- DONE: Read PKG-14 entity (11 ACs split into two problem clusters: AC-1..6 dataset bind-mount from data_root (no per-trial copy); AC-7..11 per-dataset NAMED postgres volume reuse so dab-minimum and dab-spacedock runs share one DB init per dataset).
+  Entity read at docs/razorback-implementation/pkg14-harbor-dab-lfs-bindmount-reuse.md; clusters confirmed and structured into AC↔task map.
+- DONE: Cross-reference PKG-16 plan (already lands at docs/razorback-implementation/plans/pkg16-harbor-dab-workdir-no-sql-dump.md): PKG-16 stages dumps under <task_dir>/environment/_initdb/ INDEPENDENT of data_root. PKG-14 builds ON PKG-16: the same dumps that PKG-16 stages under _initdb/ can be bind-mounted from data_root directly (AC-1+AC-2), saving the per-trial copy step.
+  Plan's "Dependency on PKG-16" section + Task 4 explicitly threads `materialize_mode` through PKG-16's `_initdb/` copy block; default `bind` skips that copy and points compose to data_root.
+- DONE: PKG-14's two clusters are independent: AC-1..6 is a compose.py source-path change; AC-7..11 is a compose.py volume-name + volumes-section change. Plan should sequence: cluster 1 first (smaller, lower risk), then cluster 2.
+  Tasks T2–T9 = Cluster A; T10–T16 = Cluster B; T12 is a regression gate between clusters; T17 is the final regression gate.
+- DONE: Write a TDD-first plan: AC-1 (compose source resolves to data_root absolute paths) RED test BEFORE the source-resolution change; AC-7 (dataset-keyed NAMED volume) RED test BEFORE the volume-name change; AC-8 (two-trial smoke confirms postgres skips init.d on second trial) is the integration-test gate.
+  T2 (RED, AC-1) precedes T3 (GREEN); T10 (RED, AC-7) precedes T11 (GREEN); T13 emits the AC-8 spec + assertion script for the validation stage.
+- DONE: Riskiest-contract-first: AC-3 (read-only contract via :ro) is structurally important — without it the agent could mutate source data. Test before any docker compose up.
+  T6 (unit `:ro` assertion) lands before T7 (live EROFS integration); T6 runs on every implementation-stage invocation, T7 is gated on docker availability.
+- DONE: Identify compose.py + prepare.py touchpoints. PKG-13 + PKG-16 both modified these files; the plan must explicitly cite which lines PKG-14 changes vs leaves alone.
+  File-structure table lines out the exact line ranges; risk-first rationale references the post-PKG-16 source-path location; PKG-13's reachability gate + `_check_compose_volumes` are explicitly preserved.
+- DONE: Write plan to docs/razorback-implementation/plans/pkg14-harbor-dab-lfs-bindmount-reuse.md.
+  File written; 11-AC↔18-task map at top; self-review confirms full coverage + risk-first ordering.
+
+### Summary
+
+Wrote a TDD-first, 18-task plan covering all 11 PKG-14 ACs, split into Cluster A (data_root bind-mount, T2–T9) and Cluster B (dataset-keyed NAMED postgres volume, T10–T16), with two full-suite regression gates (T12, T17) and three validation-stage specs (T7 live EROFS, T13 cross-variant skip-init.d, T18 honest events.jsonl). Plan explicitly depends on PKG-16's `_initdb/` staging landing first and threads `materialize_mode` so PKG-16's copy path is preserved as opt-in. Riskiest contracts (compose source resolution at AC-1, `:ro` enforcement at AC-3, NAMED volume keying at AC-7) get RED tests before any implementation change.
