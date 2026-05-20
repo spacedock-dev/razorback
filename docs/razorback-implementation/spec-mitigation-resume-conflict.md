@@ -1,9 +1,9 @@
 ---
 id: b5f4zn4vd74yvrmpn207qrwk
 title: Spec mitigation for harbor jobs resume conflict (§4.4)
-status: backlog
+status: plan
 source: AC-0.5 probe finding (Phase 0 reconciliation plan)
-started:
+started: 2026-05-20T05:58:15Z
 completed:
 verdict:
 score: 0.95
