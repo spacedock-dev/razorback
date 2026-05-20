@@ -331,7 +331,7 @@ commit ordering rule is unambiguous when T15 finally runs.
 - DONE: Code review against 2b802f8..0847b36.
   No blocking findings. Six non-blocking notes: subprocess uses `uv run` (workspace coupling), trial-name-map rsplit fragile to future dataset names with `-q`, `pg_dbs[0]` picks first postgres DB silently, `from __future__ import annotations` inconsistency, validate CLI is name-only (not task.toml-schema), double-level out-dir nesting is a small readability footgun. Full text in validation report.
 - DONE: Gate decision.
-  PARTIAL-PASS — approve to `done`. Deferred ACs (4, 5) gated on external events (Phase 1 ship + captain $30-60 approval). T14 and T15 already tracked as pending tasks #32 and #35.
+  PARTIAL-PASS, approve to `done`. Deferred ACs (4, 5) gated on external events (Phase 1 ship + captain $30-60 approval). T14 and T15 already tracked as pending tasks #32 and #35.
 
 ### Summary
 

@@ -1,10 +1,10 @@
-# Validation: Phase 2 — DAB harbor adapter (sibling package)
+# Validation: Phase 2: DAB harbor adapter (sibling package)
 
 - entity: `docs/razorback-implementation/phase2-dab-harbor-adapter.md`
 - branch: `spacedock-ensign/phase2-dab-harbor-adapter`
 - diff range: `2b802f8..0847b36`
 - worktree: `.worktrees/spacedock-ensign-phase2-dab-harbor-adapter`
-- gate decision: **PARTIAL-PASS — approve to `done` with T14/T15 carried as a
+- gate decision: **PARTIAL-PASS, approve to `done` with T14/T15 carried as a
   follow-up entity gated on Phase 1 (e3) ship + captain approval for the
   $30-60 matrix run.**
 
@@ -26,7 +26,7 @@ also stays green.
 
 ## AC coverage
 
-### AC-1 — Walking skeleton holds on both paths — PARTIAL-PASS (live `rk run` deferred)
+### AC-1: Walking skeleton holds on both paths, PARTIAL-PASS (live `rk run` deferred)
 
 - In-tree path: `examples/specs/bookreview-claude-in-tree-dab.yaml`
   carries `kind: in_tree_dab` and parses via the alias at
@@ -42,7 +42,7 @@ also stays green.
   exercised under a mocked subprocess in
   `test_harbor_dab_translator_invokes_plugin_and_builds_tasks`.
 
-### AC-2 — DAB harbor adapter package builds and publishes locally — PARTIAL-PASS
+### AC-2: DAB harbor adapter package builds and publishes locally, PARTIAL-PASS
 
 - Package layout under `packages/razorback-plugin-dab/` is in place
   (pyproject.toml, src layout, tests). Root `pyproject.toml` registers
@@ -62,7 +62,7 @@ also stays green.
   separate wheel-install gate matters only for out-of-workspace
   consumers, which is out of scope.
 
-### AC-3 — All 12 DAB datasets ported as harbor task definitions — PASS
+### AC-3: All 12 DAB datasets ported as harbor task definitions, PASS
 
 - `packages/razorback-plugin-dab/src/razorback_plugin_dab/datasets.py:16-29`
   enumerates 12 datasets with backends and query counts. Catalog test
@@ -79,7 +79,7 @@ also stays green.
   This matches the AC-0.2 filesystem task-tree dispatch model
   the entity's plan-stage report cites.
 
-### AC-4 — Live-DB mode confirmed by trajectory evidence — DEFERRED (T14)
+### AC-4: Live-DB mode confirmed by trajectory evidence, DEFERRED (T14)
 
 - The compose-stack generator at
   `packages/razorback-plugin-dab/src/razorback_plugin_dab/generate/compose.py`
@@ -96,7 +96,7 @@ also stays green.
   lands in Phase 1, and (b) the API cost requires captain approval
   per the dispatch's $10 ceiling. T14 is open as pending task #32.
 
-### AC-5 — Live-DB baseline committed and promoted to canonical anchor — DEFERRED (T15)
+### AC-5: Live-DB baseline committed and promoted to canonical anchor, DEFERRED (T15)
 
 - The matrix spec exists at
   `examples/specs/dab-claude-harbor-adapter.yaml`. The baseline doc
@@ -108,7 +108,7 @@ also stays green.
   above the $10 unattended ceiling and requires captain approval.
   T15 is open as pending task #35.
 
-### AC-6 — Per-dataset expected-shift bands pre-registered — PASS
+### AC-6: Per-dataset expected-shift bands pre-registered, PASS
 
 - Commit `8c928bd` appends the 12-row pre-registration table to
   `docs/superpowers/plans/2026-05-19-reconciliation-baseline.md` with
@@ -121,7 +121,7 @@ also stays green.
   ships, the rule says it MUST postdate `8c928bd`; that's a git-log
   check at T15 validation, not Phase 2's responsibility.
 
-### AC-7 — In-tree adapter still functional — PASS
+### AC-7: In-tree adapter still functional, PASS
 
 - `src/razorback/benchmarks/dab/` is untouched by the diff range. The
   v1 alias path (`kind: in_tree_dab` → internal `kind: dab`) routes
@@ -130,7 +130,7 @@ also stays green.
   (passing).
 - The 29 pre-existing `test_dab_*` tests pass unchanged.
 
-### AC-8 — Cross-dataset aggregation contract honored — PASS
+### AC-8: Cross-dataset aggregation contract honored, PASS
 
 - Per-trial stratum payload at
   `packages/razorback-plugin-dab/src/razorback_plugin_dab/generate/stratum.py:10-31`
@@ -143,7 +143,7 @@ also stays green.
   consumption of those tags is razorback core's job and not the
   adapter's; consumer-side verification belongs to Phase 4b's `rk diff`.
 
-### AC-9 — Dataset hydration semantics named and honored — PASS
+### AC-9: Dataset hydration semantics named and honored, PASS
 
 - Decision (option b, enforced prereq) is named in the plan and
   implemented at
@@ -155,7 +155,7 @@ also stays green.
 - The CLI catches the error and exits code 2 (`cli.py:66-71`). The
   fresh-checkout + hydrate-and-rerun integration test at
   `packages/razorback-plugin-dab/tests/integration/test_ac9_missing_dataset.py`
-  passes (2/2) — it seeds a real LFS-pointer-shaped data root, asserts
+  passes (2/2), it seeds a real LFS-pointer-shaped data root, asserts
   exit 2 + regex on stderr, then replaces the pointer and confirms the
   re-run succeeds.
 
@@ -168,7 +168,7 @@ against razorback's conventions and the plan's contract.
 
 - Per-file ABOUTME comments are present on every new module and match
   the project's CLAUDE.md rule.
-- Razorback core's contract with the plugin is subprocess-only — there's
+- Razorback core's contract with the plugin is subprocess-only, there's
   no `from razorback_plugin_dab import ...` in core. The plugin is a
   true sibling per D5.
 - AC-9's stderr text is hard-coded as a single source of truth in
@@ -185,7 +185,7 @@ against razorback's conventions and the plan's contract.
 
 ### Non-blocking findings
 
-1. **subprocess call uses `uv run` literally** —
+1. **subprocess call uses `uv run` literally** ,
    `src/razorback/compat/harbor_0_6_6.py:304` invokes
    `["uv", "run", "razorback-plugin-dab", "generate", …]`. This works
    from the workspace root but couples the translator to the uv
@@ -193,45 +193,45 @@ against razorback's conventions and the plan's contract.
    workspace install is the only deployment shape, so this is
    acceptable; downstream wheel-install deployments would need a
    direct entry-point shell-out. Note for a follow-up.
-2. **subprocess call ignores `--out` parent layout** —
+2. **subprocess call ignores `--out` parent layout** ,
    The translator passes `--out <tasks_root>/<dataset>` to the plugin
    and then iterates `out_dir.iterdir()` for emitted task dirs. The
    plugin (per `prepare.py:42-101`) writes per-query dirs directly
    under `tasks_root`, which means `<tasks_root>/<dataset>/<dataset>-q<n>/`.
    The test `test_harbor_dab_translator_invokes_plugin_and_builds_tasks`
    stubs the directory tree with `_seed_emitted_tasks(out.parent, ds, …)`
-   — note `out.parent`, not `out`. That detail in the stub matches the
+  , note `out.parent`, not `out`. That detail in the stub matches the
    real layout (the seed writes under `out_root/dataset/dataset-qN`,
    and the translator iterates `out_dir.iterdir()` where
    `out_dir = tasks_root / dataset`). The shape is internally
    consistent, but the double-level nesting (`tasks_root/dataset/dataset-qN`)
-   is a small footgun — a reader expects `tasks_root/dataset-qN`. A
+   is a small footgun, a reader expects `tasks_root/dataset-qN`. A
    follow-up could flatten this or add a comment naming the shape.
-   Not blocking — the translator and the plugin agree on the layout.
-3. **Trial-name-map rsplit on `-q`** — `harbor_0_6_6.py:327-332` parses
+   Not blocking, the translator and the plugin agree on the layout.
+3. **Trial-name-map rsplit on `-q`**: `harbor_0_6_6.py:327-332` parses
    task names with `task_name.rsplit("-q", 1)`. This fails silently
-   (no map entry) for any dataset whose name contains `-q` — none of
+   (no map entry) for any dataset whose name contains `-q`, none of
    the current 12 do, but a future dataset like `kafka-queue-stats`
    would break it. Switch to deriving the map directly from the
    plugin's emitted manifest (`prepare_dataset_tasks` already returns
    one), or assert the rsplit shape. Not blocking for the current
    catalog.
-4. **`from __future__ import annotations` is inconsistent** — most
+4. **`from __future__ import annotations` is inconsistent**: most
    plugin modules have it; `hydration.py` and the verify modules use
    it; `prepare.py` uses it; `verify/verify.py` does not but does not
    use annotation features beyond stdlib types in args. Cosmetic.
-5. **`pg_dbs[0]` chosen as the postgres init DB** —
+5. **`pg_dbs[0]` chosen as the postgres init DB** ,
    `compose.py:77, :80` picks the first declared postgres DB for
    `POSTGRES_DB` + `pg_isready -d`. None of the 12 datasets have
    multi-postgres-DB shapes per the catalog, but the codepath silently
    drops the other names rather than declaring them. A `# upstream
    confirms 1 postgres DB per dataset` comment or a `len(pg_dbs) == 1`
    assert would make the assumption explicit.
-6. **CLI `validate` subcommand is name-only** — `cli.py:93-111` checks
+6. **CLI `validate` subcommand is name-only**: `cli.py:93-111` checks
    for the presence of `task.toml`, `instruction.md`, `tests/`. It does
    not parse `task.toml` or validate against harbor's TaskConfig
-   schema. Acceptable for a smoke surface — harbor's own ingestion
-   provides the real schema check at run time — but the AC-3 phrasing
+   schema. Acceptable for a smoke surface, harbor's own ingestion
+   provides the real schema check at run time, but the AC-3 phrasing
    "each task's manifest passes harbor's adapter schema validation"
    could be read as stricter. Phase 2's design (filesystem task-tree
    dispatch, not registered-adapter dispatch) makes the strict reading
@@ -270,8 +270,8 @@ tasks (#32 T14, #35 T15) that block on concrete external events
 
 **Approve to `done` (PARTIAL-PASS).**
 
-Phase 2's contract — ship the sibling-package DAB harbor adapter so
-that Phase 1's `rk run` has a target to dispatch into — is delivered.
+Phase 2's contract, ship the sibling-package DAB harbor adapter so
+that Phase 1's `rk run` has a target to dispatch into, is delivered.
 The non-deferred ACs (1 partial / 2 partial / 3 / 6 / 7 / 8 / 9) hold.
 The deferred ACs (4 / 5) are gated on external events the captain
 already controls.
@@ -284,6 +284,6 @@ Recommend the first officer:
 2. Either: file a follow-up entity `phase2-live-db-end-to-end` that
    blocks on e3 ship + captain approval and carries T14+T15; or keep
    the existing pending tasks #32 and #35 visible and let the next
-   sprint planning surface them. (No preference — both keep the
+   sprint planning surface them. (No preference, both keep the
    work tracked.)
 3. Do NOT dispatch the matrix run during the current validation pass.
