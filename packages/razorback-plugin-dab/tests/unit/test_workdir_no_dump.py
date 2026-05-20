@@ -94,3 +94,91 @@ def test_compose_bind_mount_resolves_to_staged_dump(tmp_path: Path):
         assert "steps/main/workdir" not in str(resolved), (
             f"AC-1: postgres bind-mount source still resolves into agent workdir: {resolved}"
         )
+
+
+# AC-4: walk the 12-dataset catalog and confirm the workdir-absence contract
+# holds for every dataset using a synthetic per-dataset fixture (no LFS deps).
+
+_PG_DUMP_NAMES = {
+    "bookreview": "books_info.sql",
+    "crmarenapro": "support.sql",
+    "googlelocal": "googlelocal.sql",
+    "PANCANCER_ATLAS": "pancancer_atlas.sql",
+    "PATENTS": "patents.sql",
+}
+_MONGO_DUMP_NAMES = {
+    "agnews": "agnews_articles",
+    "yelp": "yelp_business",
+}
+
+
+def _backend_to_client_cfg(dataset_name: str, backend: str) -> dict:
+    """Return a synthetic db_clients entry for one backend on one dataset."""
+    if backend == "postgres":
+        return {
+            "db_type": "postgres",
+            "db_name": f"{dataset_name.lower()}_db",
+            "sql_file": f"query_dataset/{_PG_DUMP_NAMES.get(dataset_name, dataset_name.lower() + '.sql')}",
+        }
+    if backend == "mongo":
+        return {
+            "db_type": "mongo",
+            "db_name": f"{dataset_name.lower()}_db",
+            "dump_folder": f"query_dataset/{_MONGO_DUMP_NAMES.get(dataset_name, dataset_name.lower())}",
+        }
+    if backend == "sqlite":
+        return {"db_type": "sqlite", "db_path": f"query_dataset/{dataset_name.lower()}.db"}
+    if backend == "duckdb":
+        return {"db_type": "duckdb", "db_path": f"query_dataset/{dataset_name.lower()}.duckdb"}
+    raise AssertionError(f"unknown backend: {backend}")
+
+
+def _build_synthetic_dataset(root: Path, dataset: catalog.DabDataset) -> Path:
+    data_root = root / "data"
+    qdir = data_root / f"query_{dataset.name}"
+    qdir.mkdir(parents=True, exist_ok=True)
+    clients = {
+        f"{backend}_client": _backend_to_client_cfg(dataset.name, backend)
+        for backend in dataset.backends
+    }
+    (qdir / "db_config.yaml").write_text(yaml.safe_dump({"db_clients": clients}))
+    (qdir / "db_description.txt").write_text(f"{dataset.name} schema.")
+    qd = qdir / "query_dataset"
+    qd.mkdir(exist_ok=True)
+    for cfg in clients.values():
+        for key in ("sql_file", "dump_folder", "db_path"):
+            rel = cfg.get(key)
+            if not rel:
+                continue
+            target = qdir / rel
+            if key == "dump_folder":
+                target.mkdir(parents=True, exist_ok=True)
+                (target / "metadata.bson").write_bytes(b"\x00" * 64)
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                if key == "db_path":
+                    target.write_bytes(b"SQLite format 3\x00" + b"\x00" * 100)
+                else:
+                    target.write_text("INSERT INTO t VALUES (1);\n" * 10)
+    q1 = qdir / "query1"
+    q1.mkdir(exist_ok=True)
+    (q1 / "query.json").write_text('{"question": "synthetic"}')
+    return data_root
+
+
+@pytest.mark.parametrize("dataset", catalog.DAB_DATASETS, ids=lambda d: d.name)
+def test_workdir_excludes_all_dump_artifacts_for_each_dataset(
+    tmp_path: Path, dataset: catalog.DabDataset
+):
+    data_root = _build_synthetic_dataset(tmp_path, dataset)
+    manifest = prepare_dataset_tasks(
+        data_root=data_root, dataset=dataset.name, tasks_root=tmp_path / "tasks"
+    )
+    assert manifest, f"{dataset.name}: expected at least one task"
+    workdir = manifest[0]["task_dir"] / "steps" / "main" / "workdir"
+    # AC-1 + AC-4: no .sql under the workdir for any dataset.
+    leaked_sql = list(workdir.rglob("*.sql"))
+    assert leaked_sql == [], f"{dataset.name}: .sql leaked into workdir: {leaked_sql}"
+    # AC-1 + AC-4: no mongo BSON dump under the workdir for any mongo dataset.
+    leaked_bson = list(workdir.rglob("*.bson"))
+    assert leaked_bson == [], f"{dataset.name}: BSON dump leaked into workdir: {leaked_bson}"
