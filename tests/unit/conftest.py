@@ -37,11 +37,20 @@ def make_run_dir(
     manifest_overrides: dict | None = None,
     summary_overrides: dict | None = None,
     omit: tuple[str, ...] = (),
+    cost_in_summary: float | None = None,
+    cost_in_result_stats: float | None = None,
+    write_result_stats: bool = False,
 ) -> Path:
     """Create a synthetic run-dir at <tmp_path>/<root>/<experiment>/<job_name>/.
 
     Writes manifest.json and summary.json unless their names appear in `omit`.
     Returns the run-dir path.
+
+    Cost-bearing kwargs (Phase 4a):
+    - cost_in_summary: writes `cost_usd: <value>` into summary.json.
+    - cost_in_result_stats: writes `result.json` with `stats.cost_usd: <value>`.
+      Pass write_result_stats=True with cost_in_result_stats=None to emit
+      the present-but-null case (the subscription-auth shape).
     """
     run_dir = tmp_path / root / experiment / job_name
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -56,6 +65,25 @@ def make_run_dir(
         summary = dict(DEFAULT_SUMMARY)
         if summary_overrides:
             summary.update(summary_overrides)
+        if cost_in_summary is not None:
+            summary["cost_usd"] = cost_in_summary
         (run_dir / "summary.json").write_text(json.dumps(summary, indent=2))
 
+    if cost_in_result_stats is not None or write_result_stats:
+        result = {"stats": {"cost_usd": cost_in_result_stats}}
+        (run_dir / "result.json").write_text(json.dumps(result, indent=2))
+
     return run_dir
+
+
+def make_trial_dir(run_dir: Path, *, trial_name: str, agent_cost_usd: float | None) -> Path:
+    """Create a per-trial subdir under run_dir carrying step_results[].agent_result.cost_usd.
+
+    Mirrors the harbor per-trial result.json shape observed at
+    .runs/baseline-rerun-20260520-bookreview/m3-bookreview-claude/<job>/<trial>/result.json.
+    """
+    trial = run_dir / trial_name
+    trial.mkdir(parents=True, exist_ok=True)
+    body = {"step_results": [{"agent_result": {"cost_usd": agent_cost_usd}}]}
+    (trial / "result.json").write_text(json.dumps(body, indent=2))
+    return trial
