@@ -648,7 +648,10 @@ environment:
   # passes through to harbor's environment config
   kind: docker
 
-trials: 5
+trials: 5                       # razorback-internal field; rk run translates
+                                # to harbor's JobConfig by replicating tasks[]
+                                # entries (NOT harbor's n_attempts, which is
+                                # per-trial retry count — see §6.3)
 concurrency:
   trials: 4
 
@@ -694,6 +697,22 @@ JobConfig translation time.
 
 Other blocks (`benchmark`, `environment`, `trials`, `concurrency`)
 pass through to harbor; harbor validates them at `harbor run` time.
+
+**`trials` → harbor field-name translation.** Razorback's `trials: int`
+field means "number of independent trials per task" — N executions of
+the same task with fresh per-trial state. Harbor's `JobConfig.n_attempts:
+int` (`harbor/models/job/config.py:244-302`) is **not** the same
+concept — it is the per-trial retry count after agent failure.
+`rk run`'s translator implements razorback's `trials: N` semantics by
+duplicating `JobConfig.tasks[]` entries N times (or by invoking
+`harbor run` N times against a single-pass JobConfig, whichever harbor
+supports more cleanly at the pinned version); it does **not** set
+`JobConfig.n_attempts = spec.trials`. The frozen spec keeps razorback's
+`trials:` field name; harbor's `JobConfig` carries `n_attempts:`
+unchanged. Verified by AC-0.3/4/6's source probe at
+`docs/superpowers/plans/2026-05-19-harbor-source-probe.md`
+("Field-by-field gap" table, `trials: int` → `n_attempts: int` row,
+and the "open question" filed in the probe summary).
 
 ---
 
