@@ -85,3 +85,24 @@ Verified by: the probe re-dispatch produces a Phase 5 report at `docs/superpower
 
 - Goal 2 — Full ade-bench Haiku baseline. Goal 2's 48-task × N≥3 matrix is disk-infeasible without bind-mount and ML-honesty-infeasible without the solution-file exclusion.
 - (Indirectly) any future ade-bench probe re-dispatch.
+
+## Stage Report: plan
+
+- DONE: Read PKG-19 entity (7 ACs: bind-mount ade-bench task tree from ~/git/ade-bench/ (no fresh clone); seeds/solution__*.csv excluded from agent container; analog of PKG-14 for ade-bench).
+  Entity read in full; 7 ACs noted; analog-of-PKG-14 framing carried into plan structure.
+- DONE: Read the ade-bench probe report at .worktrees/spacedock-ensign-ade-bench-probe-2/docs/superpowers/plans/2026-05-20-ade-bench-path-probe.md and the probe branch spacedock-ensign/ade-bench-probe-2 for Phase 1 findings (materialize_git_task fresh-clones; 44 tasks upstream; seeds/solution__*.csv hazard).
+  Probe report read in full; Phase 1 findings cited in the plan's Spec §-cites section.
+- DONE: Identify the ade-bench harbor integration touchpoints: AdeBenchBenchmarkBlock, _build_ade_bench, materialize_git_task. Plan must cite which lines change vs leave alone.
+  Plan File-structure table names schema.py:133–151, translate.py:237–286, ade_bench/tasks.py append. `materialize_git_task` left untouched; new sibling `materialize_local_task` added.
+- DONE: Decide AC-4 exclusion approach: (a) sub-path bind-mount that omits seeds/ directory; (b) docker tmpfs to mask just solution files; (c) per-task view directory with symlinks. Recommendation in entity body: (a) is simpler; (b) is safer if task structure varies.
+  Plan picks (c) per-task view directory with selective symlinks. Rationale: (a) does not work — seeds/ is a sibling of task.yaml, not a sibling of the task dir, so masking requires file-level granularity. The upstream task.yaml→task.toml shape mismatch ALSO forces a per-task view-dir construction anyway, so the symlink filter is a free addition.
+- DONE: Write a TDD-first plan: AC-1 (bind-mount instead of clone) RED test BEFORE source-resolution change; AC-3 (:ro read-only) test BEFORE any docker compose up; AC-4 (solution files not visible to agent) RED test BEFORE the exclusion mechanism lands.
+  T2 RED → T3 GREEN for AC-1; T6 structural unit-level RED for AC-3 (T7 live skeleton deferred to validation per the live-EROFS pattern from PKG-14); T8 RED → T9 GREEN for AC-4.
+- DONE: AC-7 specifies the probe re-dispatch as a validation-stage integration gate. Plan should emit the probe spec but NOT execute it (validation does that, after captain frees disk + exports OAuth token).
+  T14 emits the spec at examples/specs/probe-ade-bench-airbnb001-claude-harbor-local.yaml; explicit DO NOT RUN annotation; Handoff section names the validation-stage workflow.
+- DONE: Write plan to docs/razorback-implementation/plans/pkg19-ade-bench-data-bind-mount.md.
+  Plan written to that exact path on main.
+
+### Summary
+
+Plan committed to docs/razorback-implementation/plans/pkg19-ade-bench-data-bind-mount.md mapping all 7 ACs to 14 tasks. Critical design call documented: upstream ~/git/ade-bench/ uses task.yaml while harbor needs task.toml, so the bind-mount approach requires a per-task view-dir with a synthesized task.toml shim + symlink-filter exclusion of seeds/solution__*.csv. AC-4 implementation choice (c) — view directory with symlinks — chosen over the entity's (a) recommendation because solution files are siblings inside seeds/, not separate-dir, ruling out sub-path mount.
