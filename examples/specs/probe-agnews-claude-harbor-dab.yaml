@@ -1,0 +1,23 @@
+version: 1
+experiment: probe-agnews-claude-harbor-dab
+agent:
+  kind: claude-cli
+  model: claude-opus-4-5
+  sampling:
+    temperature: 0.0
+  tools_allowed: [Bash, Read, Write, Edit, Glob, Grep]
+benchmark:
+  kind: harbor_dab
+  data_root: /Users/clkao/git/dataagentbench/data
+  datasets:
+    - agnews
+  workspace_variant: direct-minimal
+  hints: false
+trials: 1
+experiment_meta:
+  max_budget_usd: 5.0
+  estimated_cost_usd: 1.5
+observers:
+  - kind: jsonl
+    path: events.jsonl
+  - kind: stdout
