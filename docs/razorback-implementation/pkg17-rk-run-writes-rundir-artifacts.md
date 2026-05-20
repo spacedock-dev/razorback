@@ -97,3 +97,22 @@ Verified by: `uv run rk score <pkg13-honest-rundir>` produces the same 9/9 Wilso
 
 - Goal 1 — AC-7 (matrix cost ledger) is blocked without this. Captain authorized 2026-05-20 with "File as PKG-18, ship before Goal 1."
 - `rk runs list / show / cost / diff` are broadly broken against v2 run-dirs until this lands.
+
+## Stage Report: plan
+
+- DONE: Read PKG-17 entity (8 ACs)
+  Entity body covered; all 8 ACs mapped 1:1 to tasks in the AC↔Task table at the plan top.
+- DONE: Review _legacy/run.py:91-162 and benchmarks/dab/aggregate.py:49,122 — identify what's liftable into src/razorback/runs/aggregate.py without re-importing legacy
+  Liftable: stratified-pass@1 math (legacy `_build_summary`), per_trial_outcomes shape (legacy line 49,122), per-trial reward extraction (legacy line 100-118). Lifted shape is re-derived from on-disk run-dir (not `JobResult.trial_results`) because v2 invokes harbor as a subprocess (`cli/run.py:62`). No legacy module import; aggregator module is standalone.
+- DONE: Review PKG-13 T11 rk score loader-fix path — note PKG-17 is ADDITIVE
+  T12 explicitly verifies `score/load.py:44-60` walks per-trial `result.json` (not `summary.json`); PKG-17's `summary.json`/`manifest.json`/`per_trial_outcomes.json`/`events.jsonl` writes are added without disturbing that path. AC-8 no-regression test in T12.
+- DONE: Write a TDD-first plan that ships AC-1..AC-8 in task order; AC-1 (manifest schema test) + AC-2 (summary aggregator test) are the unit-test gate; AC-7 (8 integration tests un-break) is the integration gate; AC-8 (no regression on rk score) is the safety net
+  T1 (manifest schema) → T2 (summary core) → T3 (events) → T4 (per_trial_outcomes) → T5 (lock drift) → T6 (mechanism check — riskiest contract first, per "Validating new mechanisms") → T7 (provenance hash helper) → T8 (failure path — aggregator never masks harbor exit) → T9 (wire into cli/run.py) → T10 (AC-6 cost smoke) → T11 (AC-7 integration test un-break with per-test decision table) → T12 (AC-8 no-regression) → T13 (full sweep).
+- DONE: Identify which of the 8 broken integration tests need test-side updates vs which are correct and only broken because v2 dropped the artifacts; document each in the plan
+  Per-test decision table in T11: 7 of 8 are already-aligned (assert on summary/manifest/events as the spec already expects); only `test_rk_run_v2_deterministic_smoke.py` needs an additive assertion block to also check the PKG-17 artifact set (it currently asserts on harbor's job-level `result.json` directly per the post-PKG-13 loader-fix world).
+- DONE: Write plan to docs/razorback-implementation/plans/pkg17-rk-run-writes-rundir-artifacts.md
+  Plan written; 13 tasks; one new module + schema + drift helper + 4 new test files; mechanism-check (T6) before wiring (T9); failure-safety (T8) before wiring.
+
+### Summary
+
+13-task TDD plan: new `src/razorback/runs/aggregate.py` module (manifest/summary/events/per_trial_outcomes writers) invoked from `cli/run.py` after `_invoke_harbor()` exits regardless of harbor's rc. Harbor 0.6.6 writes `lock.json` itself, so AC-5 is implemented as a drift READ surface in `rk runs show` via new `src/razorback/runs/lock_drift.py`. Mechanism check (T6) validates the on-disk read path against a fixture skeleton before wiring (T9), per the "validate the smallest end-to-end exercise of the riskiest contract FIRST" rule. AC-7's 8 broken integration tests are mostly already-aligned — only `test_rk_run_v2_deterministic_smoke.py` needs an additive assertion. AC-8 no-regression is guarded by an isolation test that exercises `score/load.py` before and after PKG-17 writes.
