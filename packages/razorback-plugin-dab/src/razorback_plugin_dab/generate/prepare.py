@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import stat
 import tomllib
@@ -15,6 +16,7 @@ from razorback_plugin_dab import datasets as catalog
 from razorback_plugin_dab.generate.compose import (
     DEFAULT_AGENT_IMAGE,
     DEFAULT_CONTAINER_WORKDIR,
+    ComposeError,
     generate_compose,
 )
 from razorback_plugin_dab.generate.stratum import write_stratum_file
@@ -157,6 +159,7 @@ def _materialize_task_dir(
             container_workdir=container_workdir,
         )
         (env_dir / "docker-compose.yaml").write_text(compose_text)
+        _write_compose_services_sidecar(env_dir / "docker-compose.yaml")
 
     tests_dir = task_dir / "tests"
     tests_dir.mkdir()
@@ -211,6 +214,13 @@ def _materialize_task_dir(
             else:
                 stray.unlink()
 
+    # PKG-13 T7 / AC-4: now that workdir is populated, every compose bind-mount
+    # src must resolve to a real path on disk. Caught here so the failure lands
+    # at generation time rather than during compose-up.
+    compose_path = env_dir / "docker-compose.yaml"
+    if compose_path.exists():
+        _check_compose_volumes(compose_path)
+
 
 def _task_toml(
     *,
@@ -255,6 +265,49 @@ def _check_task_toml_environment_keys(text: str, *, task_name: str) -> None:
             f"task.toml for {task_name!r} has [environment] keys harbor does "
             f"not honour and will silently drop: {extras}. "
             "Either remove the key or upgrade harbor."
+        )
+
+
+def _write_compose_services_sidecar(compose_path: Path) -> None:
+    """Record the compose services emitted for this task.
+
+    The bookreview reachability gate (T5/T6) and the AC-6 re-run validator
+    read this sidecar to confirm what was supposed to be running. It is a
+    cheap structural check that does not depend on a docker daemon.
+    """
+    compose = yaml.safe_load(compose_path.read_text()) or {}
+    services = sorted((compose.get("services") or {}).keys())
+    sidecar = {"compose_file": compose_path.name, "services": services}
+    (compose_path.parent / ".compose-services.json").write_text(
+        json.dumps(sidecar, indent=2) + "\n"
+    )
+
+
+def _check_compose_volumes(compose_path: Path) -> None:
+    """Resolve every bind-mount src against the compose file's parent.
+
+    Raises ComposeError if any source resolves to a missing host path.
+    Closes AC-4: catches future regressions where the compose bind-mount
+    source path resolves to a missing host file at compose-up time.
+    """
+    compose = yaml.safe_load(compose_path.read_text()) or {}
+    base = compose_path.parent
+    missing: list[str] = []
+    for svc_name, svc in (compose.get("services") or {}).items():
+        for entry in svc.get("volumes") or []:
+            if not isinstance(entry, str):
+                continue
+            src = entry.split(":", 1)[0]
+            if src.startswith("/"):
+                resolved = Path(src)
+            else:
+                resolved = (base / src).resolve()
+            if not resolved.exists():
+                missing.append(f"{svc_name}:{src} -> {resolved}")
+    if missing:
+        raise ComposeError(
+            "compose bind-mount source(s) do not exist on host: "
+            + "; ".join(missing)
         )
 
 
