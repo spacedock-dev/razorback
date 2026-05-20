@@ -4,10 +4,12 @@
 import os
 import subprocess
 from pathlib import Path
+from typing import Optional
 
 import typer
 
 from razorback.errors import (
+    BudgetExceededError,
     ConfigInvalidError,
     ExitCode,
     RazorbackError,
@@ -128,6 +130,12 @@ def run_command(
         "--allow-alias-drift",
         help="Run even when provider model version differs from frozen.",
     ),
+    max_budget_usd_running: Optional[Path] = typer.Option(
+        None,
+        "--max-budget-usd-running",
+        help="Path to running-total JSON file; the gate refuses on overage and "
+             "appends actual cost on completion (per spec §3.2 + §3.4 exit 22).",
+    ),
 ) -> None:
     """Execute a frozen spec against harbor and write the v2 run-dir artifacts."""
     try:
@@ -170,6 +178,49 @@ def run_command(
     run_dir = runs_dir_resolved / spec.experiment / job_name
     run_dir.mkdir(parents=True, exist_ok=True)
 
+    # Phase 4a: pre-launch budget gate. Opt-in via --max-budget-usd-running.
+    # Refuses with exit 22 before spending harbor compute when the running
+    # total plus this invocation's estimate would exceed the cap.
+    if max_budget_usd_running is not None:
+        from razorback.budget import (
+            decide_budget,
+            read_estimate_from_spec,
+            read_running_total,
+            stamp_started,
+        )
+
+        meta = getattr(spec, "experiment_meta", None)
+        max_budget = getattr(meta, "max_budget_usd", None) if meta else None
+        if max_budget is None:
+            typer.echo(
+                "ConfigInvalidError: --max-budget-usd-running requires "
+                "spec.experiment_meta.max_budget_usd",
+                err=True,
+            )
+            raise typer.Exit(ExitCode.CONFIG_INVALID)
+        try:
+            estimate = read_estimate_from_spec(spec)
+            rt = read_running_total(
+                max_budget_usd_running,
+                experiment=spec.experiment,
+                max_budget_usd=max_budget,
+            )
+            decide_budget(rt, estimate_usd=estimate)
+        except BudgetExceededError as exc:
+            typer.echo(f"BudgetExceededError: {exc}", err=True)
+            raise typer.Exit(ExitCode.BUDGET_EXCEEDED)
+        except ConfigInvalidError as exc:
+            typer.echo(f"ConfigInvalidError: {exc}", err=True)
+            raise typer.Exit(ExitCode.CONFIG_INVALID)
+        # Gate decided "proceed": stamp the in-flight record.
+        stamp_started(
+            path=max_budget_usd_running,
+            experiment=spec.experiment,
+            max_budget_usd=max_budget,
+            estimate_usd=estimate,
+            run_dir=str(run_dir),
+        )
+
     try:
         job_config, _ = spec_to_job_config(
             spec,
@@ -205,6 +256,25 @@ def run_command(
     if rc != 0:
         typer.echo(f"harbor run failed (exit {rc}); surfacing as exit 30", err=True)
         raise typer.Exit(ExitCode.HARBOR_RUNTIME)
+
+    # Phase 4a: post-completion budget stamp. Read the harbor-produced cost
+    # field from the run-dir and append it to the running-total file. When
+    # cost telemetry is null (subscription auth per Phase 0 baseline), the
+    # record is stamped with cost_known=False so the gate's next decision
+    # falls back to the pre-launch estimate.
+    if max_budget_usd_running is not None:
+        from razorback.budget import (
+            read_actual_cost_from_run_dir,
+            stamp_completed,
+        )
+
+        actual_cost, cost_known = read_actual_cost_from_run_dir(run_dir)
+        stamp_completed(
+            path=max_budget_usd_running,
+            run_dir=str(run_dir),
+            actual_usd=actual_cost,
+            cost_known=cost_known,
+        )
 
     # AC-3 (Task 8 finishes the writer): write spec.frozen.yaml + provenance.yaml.
     _write_provenance_artifacts(spec_bytes, spec, run_dir)
