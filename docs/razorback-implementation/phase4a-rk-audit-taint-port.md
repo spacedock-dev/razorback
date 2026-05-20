@@ -1,13 +1,13 @@
 ---
 id: v6r0x3hhh4cbnvsnjz3mk6nt
 title: Phase 4a — rk audit (taint.py port)
-status: plan
+status: implementation
 source: plan Phase 4a + spec §3.2 + §9.4 (v2 spec at docs/superpowers/specs/2026-05-19-razorback-on-harbor.md)
 started: 2026-05-20T07:03:12Z
 completed:
 verdict:
 score: 0.85
-worktree:
+worktree: .worktrees/spacedock-ensign-phase4a-rk-audit-taint-port
 issue:
 pr:
 mod-block:
