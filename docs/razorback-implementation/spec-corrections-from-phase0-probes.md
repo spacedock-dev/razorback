@@ -1,13 +1,13 @@
 ---
 id: ra95gn6g7fhzjfzpv3q4m3ay
 title: Spec corrections from Phase 0 probes (import_path dispatch + harbor follow-ups)
-status: plan
+status: implementation
 source: AC-0.2 + AC-0.3/4/6 probe findings (Phase 0 reconciliation plan)
 started: 2026-05-20T06:06:58Z
 completed:
 verdict:
 score: 0.9
-worktree:
+worktree: .worktrees/spacedock-ensign-spec-corrections-from-phase0-probes
 issue:
 pr:
 mod-block:
