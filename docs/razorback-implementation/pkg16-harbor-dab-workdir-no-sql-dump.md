@@ -1,9 +1,9 @@
 ---
 id: kw3vn8d1qj7r2p9zhx6f5tm4
 title: PKG-16 — harbor-DAB plugin removes SQL dump from agent workdir (force live-DB queries)
-status: backlog
+status: implementation
 source: Staff ML review 2026-05-20 finding F2; captain decision "i care only about F2"; PKG-13 debrief note H ("whether the agent actually queried postgres versus reading the SQL dump file is not directly observable")
-started:
+started: 2026-05-20T20:54:07Z
 completed:
 verdict:
 score: 0.95
