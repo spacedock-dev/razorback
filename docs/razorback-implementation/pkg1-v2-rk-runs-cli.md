@@ -1,7 +1,7 @@
 ---
 id: r08css78b4zkmjd9yc74e4at
 title: PKG-1 v2 — rk runs list/show
-status: implementation
+status: validation
 source: spec §3.2 (v2 spec at docs/superpowers/specs/2026-05-19-razorback-on-harbor.md)
 started: 2026-05-20T06:42:02Z
 completed:
