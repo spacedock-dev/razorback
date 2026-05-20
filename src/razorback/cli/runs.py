@@ -30,6 +30,19 @@ def list_command(
     typer.echo(json.dumps(entries, indent=2))
 
 
+@runs_app.command("show")
+def show_command(
+    run_dir: Path = typer.Argument(...),
+) -> None:
+    """Show one run-dir's manifest envelope + summary. §3.2."""
+    try:
+        payload = read_run_dir(run_dir)
+    except FileNotFoundError as exc:
+        typer.echo(f"run-dir missing required input: {exc}", err=True)
+        raise typer.Exit(ExitCode.USAGE)
+    typer.echo(json.dumps(payload, indent=2))
+
+
 @runs_app.command("diff")
 def diff_command(
     run_a: Path = typer.Argument(..., exists=True, file_okay=False, dir_okay=True),
