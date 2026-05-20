@@ -1,0 +1,38 @@
+# PKG-19 AC-7 — ade-bench probe re-dispatch spec.
+#
+# DO NOT RUN from the implementation stage. Validation dispatches this AFTER
+# the captain frees disk (≥ 10 GiB free) and exports CLAUDE_CODE_OAUTH_TOKEN.
+# The implementation stage emits the spec only.
+#
+# This spec exercises the PKG-19 bind-mount path: tasks reference ~/git/ade-bench
+# via `ade_bench_root` + AdeBenchLocalTaskEntry, so no harbor-datasets clone
+# happens per task and `seeds/solution__*.csv` is filtered out of the agent's
+# view-dir.
+version: 1
+experiment: probe-ade-bench-airbnb001-claude-harbor-local
+agent:
+  kind: claude-cli
+  model: claude-opus-4-5
+  sampling:
+    temperature: 0.0
+  tools_allowed:
+    - Bash
+    - Read
+    - Write
+    - Edit
+    - Glob
+    - Grep
+benchmark:
+  kind: ade-bench
+  tasks_root: .  # ignored when every entry is a local-task; required by current schema
+  ade_bench_root: ~/git/ade-bench
+  tasks:
+    - slug: airbnb001
+trials: 1
+experiment_meta:
+  max_budget_usd: 5.0
+  estimated_cost_usd: 2.0
+observers:
+  - kind: jsonl
+    path: events.jsonl
+  - kind: stdout
