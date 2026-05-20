@@ -117,6 +117,12 @@ def _resolve_stratum(trial_dir: Path, result: dict[str, Any]) -> str:
         trial_dir / "agent" / "stratum.json",
         trial_dir / "logs" / "verifier" / "stratum.json",
     ]
+    # Harbor v2 task layout writes verifier sidecars under
+    # steps/<step-name>/verifier/. Discover stratum.json in any of those.
+    steps_root = trial_dir / "steps"
+    if steps_root.is_dir():
+        for step_dir in sorted(steps_root.iterdir()):
+            candidates.append(step_dir / "verifier" / "stratum.json")
     stratum_payload: dict[str, Any] | None = None
     for candidate in candidates:
         if candidate.exists():
