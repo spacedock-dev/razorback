@@ -79,3 +79,16 @@ the major version.
 - Deferral to `harbor job list` / `harbor job show`. Spec §3.2 flags
   this as conditional on harbor shipping those subcommands; revisit
   at that time.
+
+## Stage Report: plan
+
+- DONE: Plan covers rk runs list (enumerate run-dirs with summary headlines) and rk runs show (per-run-dir detail). Cite spec §3.3.
+  Plan at `docs/razorback-implementation/plans/pkg1-v2-rk-runs-cli.md` covers both subcommands and pins JSON-key stability against §3.3 in Task 6.
+- DONE: Plan separates the rk runs CLI surface (independent of phase1) from data sources (run-dirs produced by phase1 rk run). Read-only CLI; safe to plan and implement in parallel with phase1 if needed.
+  Plan's Architecture paragraph names the independence explicitly; `runs/inspect.py` reads phase1 artifacts but does not import phase1 code.
+- DONE: Test plan: fixture-based (use a known-good run-dir from a recent baseline-rerun under .runs/baseline-rerun-20260520-bookreview/); validation reproduces against a fresh run-dir.
+  Tasks 1-6 use synthetic `tmp_path` fixtures (`make_run_dir`); Task 7 acceptance pass exercises the real `.runs/baseline-rerun-20260520-bookreview/m3-bookreview-claude/b62c780119d24d68/` run-dir end-to-end.
+
+### Summary
+
+Plan is a separate doc at `docs/razorback-implementation/plans/pkg1-v2-rk-runs-cli.md` (entity has 4 ACs, crossing the dispatch's ≤3-AC inline threshold). Design decisions: (1) wire shape for `rk runs show` is `{manifest, summary, path}` — the manifest is surfaced verbatim rather than re-wrapped, so razorback does not bump its own version when harbor extends `manifest.json`; (2) `rk runs list` tolerates missing `summary.json` with `stratified_pass_at_1: null`, but `rk runs show` requires both files and fails with ExitCode.USAGE=2; (3) Task 6 is an exact-set snapshot of JSON keys, so any future field addition fails the test in the same commit it lands — the §3.3-correct gesture. Run-dir artifact shapes were inspected at plan time against `.runs/baseline-rerun-20260520-bookreview/`, so the fixture builder mirrors the real layout.
