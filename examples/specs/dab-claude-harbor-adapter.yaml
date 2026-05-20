@@ -1,0 +1,31 @@
+version: 1
+experiment: phase2-dab-claude-harbor-adapter-matrix
+agent:
+  kind: claude-cli
+  model: claude-opus-4-5
+  sampling:
+    temperature: 0.0
+  tools_allowed: [Bash, Read, Write, Edit, Glob, Grep]
+benchmark:
+  kind: harbor_dab
+  data_root: /Users/clkao/git/dataagentbench/data
+  datasets:
+    - agnews
+    - bookreview
+    - crmarenapro
+    - DEPS_DEV_V1
+    - GITHUB_REPOS
+    - googlelocal
+    - music_brainz_20k
+    - PANCANCER_ATLAS
+    - PATENTS
+    - stockindex
+    - stockmarket
+    - yelp
+  workspace_variant: direct-minimal
+  hints: false
+trials: 1
+observers:
+  - kind: jsonl
+    path: events.jsonl
+  - kind: stdout

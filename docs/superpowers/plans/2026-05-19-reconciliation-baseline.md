@@ -92,3 +92,55 @@ A. **Integration test consistent with corrected baseline.** `tests/integration/t
 B. **Smoke spec runs 3 tasks, not 1.** `examples/specs/_deterministic-smoke.yaml` declares `datasets: [bookreview]`, and the DAB adapter (`razorback.benchmarks.dab.prepare.prepare_dataset_tasks`) expands a dataset name to every `query*/` subdir under `query_<dataset>/`. There is no per-query selector in the current spec schema, so AC-0.1(b)'s "one task" intent is not realized today. The smoke runs 3 trials, all pass deterministically. This remains a follow-up for Phase 1 scoping (whether to add a `query_ids: [1]`-style selector to the spec schema or to ship a single-query bookreview-q1 dataset shape) — do NOT add a selector now.
 
 C. **Subscription-auth cost telemetry gap.** With `CLAUDE_CODE_OAUTH_TOKEN` (Claude Code subscription) the per-trial `agent_result.cost_usd` is `null` and the five token fields are all `null` on every step result. Phase 4a's `rk runs cost` work will need a different telemetry source on this access mode (or to mark "subscription-billed; per-call cost not retrievable"). The §7.2 `phase_stats.json` schema mandates the five token fields as required; the v1 claude-cli access path cannot populate them under OAuth subscription auth.
+
+## Phase 2 AC-6 pre-registered expected-shift bands (committed BEFORE the comparison run)
+
+This section is the AC-6 commitment: every per-dataset live-DB-vs-dump-file
+shift band is recorded HERE in a commit that precedes the Phase 2 12-dataset
+matrix run-dir commit (Task 15 of `docs/razorback-implementation/plans/phase2-dab-harbor-adapter.md`).
+A surprise reversal in any row flags a real bug (mechanism failure, not
+statistical noise).
+
+The v1 dump-file column reflects M5's per-dataset pass-rate where measured;
+"n/a" marks datasets v1 never ran end-to-end (those were only exercised
+piecewise during M3 prototyping). Direction notation: `↓` = live-DB is
+expected to score lower than dump-file; `↑` = higher; `≈` = within noise.
+
+| Dataset | v1 dump-file score (pre-correction) | Expected direction (live-DB vs dump-file) | Expected magnitude | Reasoning |
+|---|---|---|---|---|
+| bookreview | 1.000 (3/3, this doc's headline) | ↓ | -0.10 to -0.30 | bookreview's 1.000 v1 run almost certainly grepped books_info.sql per archived PKG-3; agent must learn live SQL now. |
+| agnews | n/a (M3 only) | ↓ | -0.05 to -0.20 | mongo + sqlite backend mix; dump-file mode let the agent read the mongo dump folder as text — live mongo forces real queries. |
+| crmarenapro | n/a | ↓ | -0.10 to -0.25 | duckdb + postgres + sqlite triple is the most complex mix; live-DB removes file-grep shortcuts on all three. |
+| DEPS_DEV_V1 | n/a | ≈ to ↓ | -0.05 to -0.15 | duckdb + sqlite; duckdb files are already query-mediated even in dump-file mode, so smaller shift expected. |
+| GITHUB_REPOS | n/a | ≈ to ↓ | -0.05 to -0.15 | Same reasoning as DEPS_DEV_V1; duckdb + sqlite. |
+| googlelocal | n/a | ↓ | -0.10 to -0.25 | postgres + sqlite; postgres dump-file is the canonical grep target. |
+| music_brainz_20k | n/a | ≈ to ↓ | -0.05 to -0.15 | duckdb + sqlite. |
+| PANCANCER_ATLAS | n/a | ↓ | -0.10 to -0.25 | duckdb + postgres; live postgres forces SQL on the dominant backend. |
+| PATENTS | n/a | ↓ | -0.10 to -0.25 | postgres + sqlite. |
+| stockindex | n/a | ≈ to ↓ | -0.05 to -0.15 | duckdb + sqlite. |
+| stockmarket | n/a | ≈ to ↓ | -0.05 to -0.15 | duckdb + sqlite. |
+| yelp | n/a | ↓ | -0.10 to -0.25 | duckdb + mongo; mongo live-mode is the larger shift driver. |
+
+**AC-6 acceptance criterion.** Observed shifts must fall within the
+pre-registered direction; magnitudes must fall within 2× of the predicted
+band. A reversed direction (live-DB scores higher than dump-file on any
+postgres-or-mongo-backed dataset) flags a real bug — mechanism failure
+in either the dump-file v1 path (false-positive grep matches that
+artificially inflated v1) or the live-DB v2 path (compose stack not
+actually being queried). Per-trial stratification with Wilson 95% CI
+from `rk score` is the readout shape (spec §3.2, §8.3a).
+
+**Methodology note.** Only bookreview has a v1 end-to-end number in
+this doc. For the eleven `n/a` rows the pre-registration is direction
++ magnitude only; AC-6 enforcement compares observed live-DB scores
+against the direction prediction. The magnitude bands are calibrated
+to bookreview's expected drop (postgres-heavy, the strongest
+file-grep shortcut). Datasets with smaller expected shifts
+(duckdb-heavy) get tighter bands; datasets with stronger shifts
+(postgres + mongo) get wider bands.
+
+**Where the run-dir commit lands.** Per Task 15 of the Phase 2 plan,
+the comparison run-dir commit appends a reconciliation table below
+this section AFTER the live-DB matrix completes. That commit MUST
+postdate the commit that lands this pre-registration table — git log
+ordering enforces AC-6 methodology.

@@ -1,0 +1,18 @@
+version: 1
+experiment: phase2-bookreview-claude-in-tree-dab
+agent:
+  kind: claude-cli
+  model: claude-opus-4-5
+  sampling:
+    temperature: 0.0
+  tools_allowed: [Bash, Read, Write, Edit, Glob, Grep]
+benchmark:
+  kind: in_tree_dab
+  data_root: /Users/clkao/git/dataagentbench/data
+  datasets:
+    - bookreview
+trials: 1
+observers:
+  - kind: jsonl
+    path: events.jsonl
+  - kind: stdout
