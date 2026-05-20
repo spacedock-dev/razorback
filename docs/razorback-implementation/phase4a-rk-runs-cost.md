@@ -1,9 +1,9 @@
 ---
 id: taf9venjw6wr17pdqhfy5r2z
 title: Phase 4a — rk runs cost
-status: backlog
+status: plan
 source: plan Phase 4a + spec §3.3 (v2 spec at docs/superpowers/specs/2026-05-19-razorback-on-harbor.md)
-started:
+started: 2026-05-20T07:12:27Z
 completed:
 verdict:
 score: 0.8
