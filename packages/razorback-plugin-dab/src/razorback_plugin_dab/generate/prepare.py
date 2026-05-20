@@ -38,13 +38,32 @@ class TaskManifestEntry(TypedDict):
 
 _QUERY_SAFE = ("query.json",)
 _QUERY_FORBIDDEN = ("ground_truth.csv", "validate.py", "__pycache__")
-_DATASET_SAFE = (
+_DATASET_METADATA = (
     "db_config.yaml",
     "db_description.txt",
     "db_description_withhint.txt",
-    "query_dataset",
 )
 _STEP_NAME = "main"
+
+
+def _dump_paths(db_config: dict) -> set[str]:
+    """Return the dataset-relative paths postgres/mongo ingest at compose-up.
+
+    These are the files the agent must NOT see in its workdir — the live-DB
+    contract requires that the agent query the postgres/mongo service
+    instead of reading the dump. File-backed engines (sqlite, duckdb) are
+    NOT included here — those files ARE the live DB and must remain
+    reachable from the workdir.
+    """
+    paths: set[str] = set()
+    for cfg in (db_config or {}).get("db_clients", {}).values():
+        if not isinstance(cfg, dict):
+            continue
+        for key in ("sql_file", "dump_folder"):
+            value = cfg.get(key)
+            if value:
+                paths.add(str(value).lstrip("./"))
+    return paths
 
 
 def prepare_dataset_tasks(
@@ -199,15 +218,47 @@ def _materialize_task_dir(
         render_workspace_readme(variant=workspace_variant, container_workdir=container_workdir)
     )
 
-    for name in _DATASET_SAFE:
-        src = dataset_dir / name
+    # PKG-16 AC-1: server-ingested dump files (postgres .sql, mongo BSON folder)
+    # must NOT appear in the agent workdir. Stage them at <task_dir>/environment/_initdb/
+    # so the compose can still bind-mount them into the DB container's init.d.
+    dump_rel_paths = _dump_paths(db_config)
+    initdb_dir = env_dir / "_initdb"
+    for rel in sorted(dump_rel_paths):
+        src = dataset_dir / rel
         if not src.exists():
             continue
-        dst = workdir / name
+        initdb_dir.mkdir(exist_ok=True)
+        dst = initdb_dir / Path(rel).name
         if src.is_dir():
             shutil.copytree(src, dst)
         else:
             shutil.copy2(src, dst)
+
+    # Metadata files: schema-only, safe to expose to the agent.
+    for name in _DATASET_METADATA:
+        src = dataset_dir / name
+        if src.exists():
+            shutil.copy2(src, workdir / name)
+
+    # query_dataset/: copy entries that are NOT server-ingested dumps.
+    # Sqlite (.db) and duckdb (.duckdb) live-DB files MUST remain here —
+    # the agent reads them directly. SQL dumps and BSON dump folders are
+    # excluded because they leak ground-truth rows to the agent.
+    src_qd = dataset_dir / "query_dataset"
+    if src_qd.is_dir():
+        dst_qd = workdir / "query_dataset"
+        dst_qd.mkdir(exist_ok=True)
+        excluded_names = {
+            Path(p).name for p in dump_rel_paths if p.startswith("query_dataset/")
+        }
+        for entry in sorted(src_qd.iterdir()):
+            if entry.name in excluded_names:
+                continue
+            dst_entry = dst_qd / entry.name
+            if entry.is_dir():
+                shutil.copytree(entry, dst_entry)
+            else:
+                shutil.copy2(entry, dst_entry)
 
     for name in _QUERY_SAFE:
         src = query_dir / name
