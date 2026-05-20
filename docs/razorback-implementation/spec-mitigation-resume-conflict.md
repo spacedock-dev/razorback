@@ -1,13 +1,13 @@
 ---
 id: b5f4zn4vd74yvrmpn207qrwk
 title: Spec mitigation for harbor jobs resume conflict (§4.4)
-status: validation
+status: done
 source: AC-0.5 probe finding (Phase 0 reconciliation plan)
 started: 2026-05-20T05:58:15Z
-completed:
-verdict:
+completed: 2026-05-20T06:19:16Z
+verdict: PASSED
 score: 0.95
-worktree: .worktrees/spacedock-ensign-spec-mitigation-resume-conflict
+worktree: 
 issue:
 pr:
 mod-block:
