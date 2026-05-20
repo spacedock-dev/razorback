@@ -36,6 +36,9 @@ build-backend = "uv_build"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "integration: live integration tests; require docker/colima and provider auth",
+]
 
 [tool.uv.workspace]
 members = ["packages/razorback-plugin-dab"]

@@ -9,6 +9,31 @@ from pathlib import Path
 import pytest
 
 
+# Phase 1 AC-7: tests that exercise v1 surfaces moved under src/razorback/_legacy/.
+# Per test-inventory DROP classification; Phase 6/7 owns deletion.
+collect_ignore_glob = [
+    "unit/test_ade_bench_translator*.py",
+    "unit/test_baseline_promote_verify.py",
+    "unit/test_channel_drainer.py",
+    "unit/test_claude_cli_registry.py",
+    "unit/test_claude_cli_required_env.py",
+    "unit/test_claude_cli_supported_sampling.py",
+    "unit/test_claude_cli_translator_proxy.py",
+    "unit/test_claude_cli_version.py",
+    "unit/test_cli_validate_per_trial_state_reset.py",
+    "unit/test_cli_validate_tools_allowed.py",
+    "unit/test_compat_translator.py",
+    "unit/test_constraints_check.py",
+    "unit/test_dab_translator*.py",
+    "unit/test_manifest.py",
+    "unit/test_reconcile_run_workflow.py",
+    "unit/test_registry_resolve.py",
+    "unit/test_run_drift_wired.py",
+    "unit/test_spec_freeze_cli.py",
+    "unit/test_spacedock_cli_seed_mismatch_exit_code.py",
+]
+
+
 @pytest.fixture
 def colima_safe_tmp_path():
     """A tmp dir under /Users/... that Colima mounts into the docker VM."""
