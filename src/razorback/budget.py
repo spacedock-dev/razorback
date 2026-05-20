@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from razorback.errors import ConfigInvalidError
+from razorback.errors import BudgetExceededError, ConfigInvalidError
 
 
 SCHEMA_VERSION = 1
@@ -84,3 +84,19 @@ def current_total_usd(rt: RunningTotal) -> float:
             total += inv.estimate_usd
         # cost_known is None: skip
     return total
+
+
+def decide_budget(rt: RunningTotal, *, estimate_usd: float) -> None:
+    """Raise BudgetExceededError if running_total + estimate would exceed the cap.
+
+    The condition is strictly greater; equality at the cap proceeds.
+    Per AC-4 the error message names budget, running total, and estimate.
+    """
+    used = current_total_usd(rt)
+    projected = used + estimate_usd
+    if projected > rt.max_budget_usd:
+        raise BudgetExceededError(
+            f"budget exceeded: experiment.max_budget_usd={rt.max_budget_usd}, "
+            f"running_total_usd={used:.4f}, this_invocation_estimate_usd={estimate_usd:.4f}, "
+            f"projected_total_usd={projected:.4f}"
+        )
