@@ -114,3 +114,16 @@ the running total as if the crashed invocation never happened.
 
 - `phase1-rk-run-v2-wrapper` (provides the `rk run` base command
   this entity extends with a flag)
+
+## Stage Report: plan
+
+- DONE: Plan covers --max-budget-usd-running flag on rk run; pre-flight cost estimate from spec checked against the cap; mid-run cost accumulation tracked from harbor's cost-emitting events; exit with ExitCode.BUDGET_EXCEEDED when accumulated > cap.
+  Plan at `docs/razorback-implementation/plans/phase4a-rk-run-budget-gate.md`; Tasks 1-2 (file format + decision logic), Task 3 (spec-sourced estimate from `experiment_meta.estimated_cost_usd`), Task 4 (atomic stamp on completion via `read_actual_cost_from_run_dir`), Task 6 (CLI wiring raises `BudgetExceededError` exit 22).
+- DONE: Plan acknowledges the cost-telemetry gap baseline-rerun found: subscription-billed Claude emits `agent_result.cost_usd: null`. Budget gate distinguishes 'no cost data available' from 'cost data present' and degrades gracefully.
+  Task 1 file format carries `cost_known: bool|null` (true/false/in-flight); Task 4 `read_actual_cost_from_run_dir` returns `(None, False)` for the null-cost path; Task 5 dedicated tests; `current_total_usd` counts `cost_known=false` invocations at their estimate (conservative). Cites Phase 0 baseline-rerun §"Phase 0 side findings" item C.
+- DONE: Plan reads phase1's plan doc for the rk run structure; budget gate hooks into the same harbor-delegation seam phase1 designs.
+  Task 6 names the wiring zones: pre-launch hooks after pre-checks + before `_invoke_harbor`; post-completion hooks after `_invoke_harbor` returns 0 + before provenance artifact write. Cites Phase 1's structure by concept (pre-checks zone; `_invoke_harbor` seam) per dispatch instructions.
+
+### Summary
+
+Plan covers all seven ACs with eight tasks, riskiest-contract-first. Three contracts are validated in isolation before the integration test exercises the full two-invocation refusal against the deterministic smoke spec: the on-disk JSON file format (Task 1), the atomic writer's crash invariant (Task 4), and the subscription-auth `cost_usd: null` graceful-degradation path (Tasks 4-5). The plan adds one new spec-schema slot (`experiment_meta.estimated_cost_usd`) that PKG-8 `rk freeze` will populate; coordination with PKG-8 is flagged as an escalation point in Task 3 if the existing schema's `experiment` field shape collides.
