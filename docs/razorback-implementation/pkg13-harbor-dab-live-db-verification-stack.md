@@ -1,13 +1,13 @@
 ---
 id: bafje0bpa1c8jvz9vtbs2q5q
 title: PKG-13 — harbor-DAB live-DB verification stack (Phase 2 + Phase 4a remediation)
-status: validation
+status: done
 source: T14 false-positive investigation 2026-05-20 (docs/superpowers/plans/2026-05-20-t14-false-positive-investigation.md)
 started: 2026-05-20T16:49:49Z
-completed:
-verdict:
+completed: 2026-05-20T19:22:44Z
+verdict: PASSED
 score: 1.0
-worktree: .worktrees/spacedock-ensign-pkg13-harbor-dab-live-db-verification-stack
+worktree: 
 issue:
 pr:
 mod-block:
