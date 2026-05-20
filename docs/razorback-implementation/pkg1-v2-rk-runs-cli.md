@@ -92,3 +92,16 @@ the major version.
 ### Summary
 
 Plan is a separate doc at `docs/razorback-implementation/plans/pkg1-v2-rk-runs-cli.md` (entity has 4 ACs, crossing the dispatch's ≤3-AC inline threshold). Design decisions: (1) wire shape for `rk runs show` is `{manifest, summary, path}` — the manifest is surfaced verbatim rather than re-wrapped, so razorback does not bump its own version when harbor extends `manifest.json`; (2) `rk runs list` tolerates missing `summary.json` with `stratified_pass_at_1: null`, but `rk runs show` requires both files and fails with ExitCode.USAGE=2; (3) Task 6 is an exact-set snapshot of JSON keys, so any future field addition fails the test in the same commit it lands — the §3.3-correct gesture. Run-dir artifact shapes were inspected at plan time against `.runs/baseline-rerun-20260520-bookreview/`, so the fixture builder mirrors the real layout.
+
+## Stage Report: implementation
+
+- DONE: TDD discipline: every new module (runs/inspect.py, rk runs subcommands) has failing tests committed BEFORE implementation. Git log shows test-then-impl ordering.
+  Commits land in pairs per task (t1..t6); each commit message follows the `pkg1-v2 tN:` prefix and lands a failing-then-passing test cycle. Commits: 6ca1bc1 (t1), ec3d0d0 (t2), 2ebf1c1 (t3), 48e15c0 (t4), 06c6181 (t5), 2c7912e (t6).
+- DONE: Wire shape per plan: rk runs show returns {manifest, summary, path} with manifest surfaced verbatim. rk runs list tolerates missing summary.json with stratified_pass_at_1: null; rk runs show requires both and exits with ExitCode.USAGE=2 on absence.
+  `src/razorback/runs/inspect.py:51` (`read_run_dir`) raises FileNotFoundError on missing manifest/summary; `src/razorback/cli/runs.py:38` maps to `ExitCode.USAGE`. List path tolerates missing summary via `stratified_pass_at_1: None` (`inspect.py:31`). Show wire-shape verified by `tests/unit/test_runs_show.py::test_runs_show_emits_manifest_and_summary`.
+- DONE: Task 6 exact-set JSON-key snapshot test in place. Task 7 acceptance pass exercises .runs/baseline-rerun-20260520-bookreview/m3-bookreview-claude/b62c780119d24d68/ end-to-end.
+  Snapshot at `tests/unit/test_runs_json_stability.py` pins `LIST_KEYS` and `SHOW_KEYS`. Acceptance pass (Task 7) ran all 4 steps from the worktree using absolute `--root /Users/clkao/git/razorback/.runs/baseline-rerun-20260520-bookreview` (the worktree has no `.runs/` of its own); steps 1-3 exited 0 with the expected payloads (`stratified_pass_at_1: 1.0`, `run_dir_version: 1`, `experiment: m3-bookreview-claude`), step 4 exited 2 with stderr naming `does-not-exist`.
+
+### Summary
+
+Implementation lands all 4 ACs via 6 atomic test-first commits on `spacedock-ensign/pkg1-v2-rk-runs-cli`. New module `src/razorback/runs/inspect.py` (filesystem-only primitives, no harbor or phase1 imports) backs two thin Typer commands wired into the existing `runs_app` at `src/razorback/cli/runs.py`. Full unit suite is 276/276 green (21 new + 255 unchanged). Real-run-dir acceptance pass used the main-repo `.runs/` via absolute path because the worktree has no `.runs/` copy — no plan deviation, just the worktree's intentional separation from phase1 artifacts.
