@@ -216,3 +216,42 @@ def test_compute_provenance_hash_changes_when_content_changes(tmp_path: Path):
     a.write_text("harbor_version: 0.6.6\n")
     b.write_text("harbor_version: 0.6.7\n")
     assert compute_provenance_hash(a) != compute_provenance_hash(b)
+
+
+def test_safe_aggregate_run_dir_returns_warnings_on_partial_input(tmp_path: Path):
+    """An empty run-dir (harbor crashed before any trial dirs) still aggregates
+    cleanly: manifest written with n_trials_total=0; no exception."""
+    from razorback.runs.aggregate import safe_aggregate_run_dir
+
+    work = tmp_path / "exp" / "job"
+    work.mkdir(parents=True)
+    (work / "spec.frozen.yaml").write_text("version: 1\n")
+    (work / "provenance.yaml").write_text("harbor_version: 0.6.6\n")
+
+    warnings = safe_aggregate_run_dir(
+        work,
+        spec_path=Path("/x"),
+        frozen_spec_hash="a" * 64,
+        provenance_hash="b" * 64,
+        harbor_job_name="job",
+        benchmark_kind=None,
+    )
+    assert isinstance(warnings, list)
+    manifest = json.loads((work / "manifest.json").read_text())
+    assert manifest["n_trials_total"] == 0
+
+
+def test_safe_aggregate_run_dir_catches_unexpected_failure(tmp_path: Path):
+    """A non-existent run-dir → safe_aggregate emits a warning, does NOT raise."""
+    from razorback.runs.aggregate import safe_aggregate_run_dir
+
+    warnings = safe_aggregate_run_dir(
+        tmp_path / "nope" / "job",
+        spec_path=Path("/x"),
+        frozen_spec_hash="a" * 64,
+        provenance_hash="b" * 64,
+        harbor_job_name="job",
+        benchmark_kind=None,
+    )
+    assert warnings
+    assert any("aggregate" in w.lower() for w in warnings)

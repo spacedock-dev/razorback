@@ -353,3 +353,33 @@ def aggregate_run_dir(
 def compute_provenance_hash(provenance_path: Path) -> str:
     """sha256 hex digest of provenance.yaml bytes."""
     return hashlib.sha256(provenance_path.read_bytes()).hexdigest()
+
+
+def safe_aggregate_run_dir(
+    run_dir: Path,
+    *,
+    spec_path: Path,
+    frozen_spec_hash: str,
+    provenance_hash: str,
+    harbor_job_name: str,
+    benchmark_kind: str | None,
+) -> list[str]:
+    """Run aggregate_run_dir; collect warnings instead of raising.
+
+    Harbor's exit code is what the user gates on; the aggregator must not mask
+    it with a Python traceback. Returns a list of human-readable warning strings;
+    empty list = clean run.
+    """
+    warnings: list[str] = []
+    try:
+        aggregate_run_dir(
+            run_dir,
+            spec_path=spec_path,
+            frozen_spec_hash=frozen_spec_hash,
+            provenance_hash=provenance_hash,
+            harbor_job_name=harbor_job_name,
+            benchmark_kind=benchmark_kind,
+        )
+    except Exception as exc:
+        warnings.append(f"aggregate_run_dir failed: {type(exc).__name__}: {exc}")
+    return warnings
