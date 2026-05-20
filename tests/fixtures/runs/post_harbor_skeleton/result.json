@@ -1,0 +1,17 @@
+{
+  "id": "fixture-job",
+  "started_at": "2026-05-20T10:00:00",
+  "finished_at": "2026-05-20T10:05:00",
+  "n_total_trials": 3,
+  "stats": {
+    "n_completed_trials": 2,
+    "n_errored_trials": 1,
+    "evals": {
+      "claude-cli__claude-opus-4-5__adhoc": {
+        "reward_stats": {"reward": {"1.0": ["bookreview-q1__a"], "0.0": ["bookreview-q2__b"]}},
+        "exception_stats": {}
+      }
+    },
+    "cost_usd": null
+  }
+}

@@ -1,0 +1,257 @@
+# ABOUTME: Unit tests for src/razorback/runs/aggregate.py (PKG-17).
+# ABOUTME: AC-1: manifest.json schema; AC-2: summary aggregator; AC-3: events concat.
+
+import json
+import shutil
+from pathlib import Path
+
+import pytest
+
+from razorback.runs.aggregate import (
+    MANIFEST_SCHEMA_VERSION,
+    write_manifest,
+)
+
+
+FIXTURE_RUN = (
+    Path(__file__).resolve().parents[1]
+    / "fixtures"
+    / "runs"
+    / "post_harbor_skeleton"
+)
+
+
+def test_write_manifest_schema_fields_present(tmp_path: Path):
+    run_dir = tmp_path / "exp" / "job_abc"
+    run_dir.mkdir(parents=True)
+    write_manifest(
+        run_dir,
+        spec_path=Path("examples/specs/pkg13-bookreview-claude-harbor-dab-n3.yaml"),
+        frozen_spec_hash="deadbeef" * 8,
+        provenance_hash="cafef00d" * 8,
+        harbor_job_name="job_abc",
+        n_trials_total=3,
+        n_trials_completed=3,
+        n_trials_errored=0,
+        per_trial_paths=["bookreview-q1__a", "bookreview-q2__b", "bookreview-q3__c"],
+        benchmark_kind="harbor_dab",
+    )
+    payload = json.loads((run_dir / "manifest.json").read_text())
+    assert payload["run_dir_version"] == MANIFEST_SCHEMA_VERSION
+    assert payload["experiment"] == "exp"
+    assert payload["job_name"] == "job_abc"
+    assert payload["spec_path"].endswith("pkg13-bookreview-claude-harbor-dab-n3.yaml")
+    assert payload["frozen_spec_hash"] == "deadbeef" * 8
+    assert payload["provenance_hash"] == "cafef00d" * 8
+    assert payload["harbor_job_name"] == "job_abc"
+    assert payload["n_trials_total"] == 3
+    assert payload["n_trials_completed"] == 3
+    assert payload["n_trials_errored"] == 0
+    assert payload["per_trial_paths"] == [
+        "bookreview-q1__a",
+        "bookreview-q2__b",
+        "bookreview-q3__c",
+    ]
+    assert payload["benchmark_kind"] == "harbor_dab"
+    assert payload["created_at"].endswith("Z") or "+" in payload["created_at"]
+
+
+def test_write_manifest_validates_against_schema(tmp_path: Path):
+    """The written manifest validates against manifest_schema.json (AC-1 verified-by)."""
+    import jsonschema
+
+    schema_path = (
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "razorback"
+        / "runs"
+        / "manifest_schema.json"
+    )
+    schema = json.loads(schema_path.read_text())
+
+    run_dir = tmp_path / "exp" / "job_abc"
+    run_dir.mkdir(parents=True)
+    write_manifest(
+        run_dir,
+        spec_path=Path("/spec.yaml"),
+        frozen_spec_hash="a" * 64,
+        provenance_hash="b" * 64,
+        harbor_job_name="job_abc",
+        n_trials_total=1,
+        n_trials_completed=1,
+        n_trials_errored=0,
+        per_trial_paths=["t1"],
+        benchmark_kind="nop",
+    )
+    payload = json.loads((run_dir / "manifest.json").read_text())
+    jsonschema.validate(payload, schema)
+
+
+def _copy_fixture(src: Path, dst: Path) -> None:
+    dst.mkdir(parents=True, exist_ok=True)
+    for child in src.iterdir():
+        target = dst / child.name
+        if child.is_dir():
+            shutil.copytree(child, target)
+        else:
+            shutil.copy(child, target)
+
+
+def test_aggregate_summary_per_trial_rewards_and_stratified(tmp_path: Path):
+    from razorback.runs.aggregate import aggregate_summary
+
+    work = tmp_path / "exp" / "job"
+    _copy_fixture(FIXTURE_RUN, work)
+
+    aggregate_summary(work)
+    summary = json.loads((work / "summary.json").read_text())
+
+    trial_ids = {t["trial_id"] for t in summary["trials"]}
+    assert trial_ids == {"bookreview-q1__a", "bookreview-q2__b", "bookreview-q3__c"}
+    by_id = {t["trial_id"]: t for t in summary["trials"]}
+    assert by_id["bookreview-q1__a"]["reward"] == 1.0
+    assert by_id["bookreview-q2__b"]["reward"] == 0.0
+    assert by_id["bookreview-q3__c"]["reward"] is None
+    assert by_id["bookreview-q3__c"]["error_reason"] == "AgentTimeoutError"
+
+    assert summary["n_trials_total"] == 3
+    assert summary["n_trials_completed"] == 2
+    assert summary["n_trials_errored"] == 1
+
+    assert summary["datasets"]["bookreview"]["dataset_pass_at_1"] == 0.5
+    assert summary["stratified_pass_at_1"] == 0.5
+
+    assert summary["cost_usd"] is None
+    assert summary["summary_version"] == 1
+
+
+def test_write_per_trial_outcomes_matches_pairing_loader_contract(tmp_path: Path):
+    from razorback.runs.aggregate import write_per_trial_outcomes
+    from razorback.diff.pairing import load_run_outcomes
+
+    work = tmp_path / "exp" / "job"
+    _copy_fixture(FIXTURE_RUN, work)
+
+    write_per_trial_outcomes(work)
+
+    trials = load_run_outcomes(work)
+    by_q = {(t["dataset"], t["query_id"]): t for t in trials}
+    assert by_q[("bookreview", 1)]["reward"] == 1.0
+    assert by_q[("bookreview", 2)]["reward"] == 0.0
+    # Errored trials get reward=0.0 per legacy aggregate_job_result (legacy line 102-106).
+    assert by_q[("bookreview", 3)]["reward"] == 0.0
+    assert all(t["trial_index"] == 0 for t in trials)
+
+
+def test_aggregate_run_dir_writes_all_four_artifacts(tmp_path: Path):
+    """One call after harbor exits → manifest + summary + events + per_trial_outcomes."""
+    from razorback.runs.aggregate import aggregate_run_dir
+
+    work = tmp_path / "exp" / "job"
+    _copy_fixture(FIXTURE_RUN, work)
+    (work / "spec.frozen.yaml").write_text("version: 1\nexperiment: exp\n")
+    (work / "provenance.yaml").write_text("harbor_version: 0.6.6\n")
+
+    aggregate_run_dir(
+        work,
+        spec_path=Path("/fixtures/spec.yaml"),
+        frozen_spec_hash="a" * 64,
+        provenance_hash="b" * 64,
+        harbor_job_name="job",
+        benchmark_kind="dab",
+    )
+
+    for name in ("manifest.json", "summary.json", "events.jsonl", "per_trial_outcomes.json"):
+        assert (work / name).is_file(), f"missing {name}"
+
+    manifest = json.loads((work / "manifest.json").read_text())
+    assert manifest["n_trials_total"] == 3
+    assert manifest["n_trials_completed"] == 2
+    assert manifest["n_trials_errored"] == 1
+    assert manifest["per_trial_paths"] == sorted(manifest["per_trial_paths"])
+
+
+def test_aggregate_run_dir_idempotent(tmp_path: Path):
+    """Calling aggregate_run_dir twice yields byte-identical outputs (except manifest.created_at)."""
+    from razorback.runs.aggregate import aggregate_run_dir
+
+    work = tmp_path / "exp" / "job"
+    _copy_fixture(FIXTURE_RUN, work)
+    (work / "spec.frozen.yaml").write_text("version: 1\nexperiment: exp\n")
+    (work / "provenance.yaml").write_text("harbor_version: 0.6.6\n")
+
+    aggregate_run_dir(
+        work, spec_path=Path("/x"), frozen_spec_hash="a" * 64,
+        provenance_hash="b" * 64, harbor_job_name="job", benchmark_kind="dab",
+    )
+    first_summary = (work / "summary.json").read_text()
+    first_outcomes = (work / "per_trial_outcomes.json").read_text()
+    first_events = (work / "events.jsonl").read_text()
+
+    aggregate_run_dir(
+        work, spec_path=Path("/x"), frozen_spec_hash="a" * 64,
+        provenance_hash="b" * 64, harbor_job_name="job", benchmark_kind="dab",
+    )
+    assert (work / "summary.json").read_text() == first_summary
+    assert (work / "per_trial_outcomes.json").read_text() == first_outcomes
+    assert (work / "events.jsonl").read_text() == first_events
+
+
+def test_compute_provenance_hash_is_stable_for_identical_input(tmp_path: Path):
+    from razorback.runs.aggregate import compute_provenance_hash
+
+    p = tmp_path / "provenance.yaml"
+    p.write_text("harbor_version: 0.6.6\nmodel_resolved_version: claude-opus-4-5\n")
+    h1 = compute_provenance_hash(p)
+    h2 = compute_provenance_hash(p)
+    assert h1 == h2
+    assert len(h1) == 64
+
+
+def test_compute_provenance_hash_changes_when_content_changes(tmp_path: Path):
+    from razorback.runs.aggregate import compute_provenance_hash
+
+    a = tmp_path / "a.yaml"
+    b = tmp_path / "b.yaml"
+    a.write_text("harbor_version: 0.6.6\n")
+    b.write_text("harbor_version: 0.6.7\n")
+    assert compute_provenance_hash(a) != compute_provenance_hash(b)
+
+
+def test_safe_aggregate_run_dir_returns_warnings_on_partial_input(tmp_path: Path):
+    """An empty run-dir (harbor crashed before any trial dirs) still aggregates
+    cleanly: manifest written with n_trials_total=0; no exception."""
+    from razorback.runs.aggregate import safe_aggregate_run_dir
+
+    work = tmp_path / "exp" / "job"
+    work.mkdir(parents=True)
+    (work / "spec.frozen.yaml").write_text("version: 1\n")
+    (work / "provenance.yaml").write_text("harbor_version: 0.6.6\n")
+
+    warnings = safe_aggregate_run_dir(
+        work,
+        spec_path=Path("/x"),
+        frozen_spec_hash="a" * 64,
+        provenance_hash="b" * 64,
+        harbor_job_name="job",
+        benchmark_kind=None,
+    )
+    assert isinstance(warnings, list)
+    manifest = json.loads((work / "manifest.json").read_text())
+    assert manifest["n_trials_total"] == 0
+
+
+def test_safe_aggregate_run_dir_catches_unexpected_failure(tmp_path: Path):
+    """A non-existent run-dir → safe_aggregate emits a warning, does NOT raise."""
+    from razorback.runs.aggregate import safe_aggregate_run_dir
+
+    warnings = safe_aggregate_run_dir(
+        tmp_path / "nope" / "job",
+        spec_path=Path("/x"),
+        frozen_spec_hash="a" * 64,
+        provenance_hash="b" * 64,
+        harbor_job_name="job",
+        benchmark_kind=None,
+    )
+    assert warnings
+    assert any("aggregate" in w.lower() for w in warnings)
