@@ -1,13 +1,13 @@
 ---
 id: ayf9mczntgnp808z8ggpjzf4
 title: Goal 1 — DAB paper reproduction (opus-4.7 + hints × 3 variants × 12 datasets × N=5)
-status: plan
+status: implementation
 source: handoff "Two named research goals" + reconciliation plan Phase 4a end note
 started: 2026-05-20T16:33:40Z
 completed:
 verdict:
 score: 0.65
-worktree:
+worktree: .worktrees/spacedock-ensign-goal1-dab-paper-reproduction
 issue:
 pr:
 mod-block:
