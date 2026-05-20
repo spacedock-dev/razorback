@@ -1,0 +1,31 @@
+# ABOUTME: Phase 0 deterministic smoke micro-spec — walking-skeleton anchor for Phases 1-3.
+# ABOUTME: One task, N=1, temp=0.0, fixed seed. Re-runs MUST produce identical outputs.
+version: 1
+experiment: _deterministic-smoke
+agent:
+  kind: claude-cli
+  model: claude-opus-4-5
+  sampling:
+    temperature: 0.0
+    seed: 1
+  tools_allowed: [Bash, Read, Write, Edit, Glob, Grep]
+benchmark:
+  kind: dab
+  data_root: /Users/clkao/git/dataagentbench/data
+  datasets:
+    - bookreview
+trials: 1
+observers:
+  - kind: jsonl
+    path: events.jsonl
+  - kind: stdout
+
+# Expected outcome (recorded 2026-05-20 against razorback v1 at commit <SHA>):
+#   pass: TBD: fill in from AC-0.1(a) baseline run
+#   final answer substring: TBD: fill in from AC-0.1(a) baseline run
+#   notes: TBD: fill in from AC-0.1(a) baseline run
+#
+# Determinism caveats (per spec §9.5): Anthropic models do not honor seed;
+# same-prompt+same-seed+same-model may still drift. The `seed: 1` field is
+# present so the runtime records it; reproducibility checks ride on
+# temperature=0.0 + trials=1 + dataset-frozen prompt content.
