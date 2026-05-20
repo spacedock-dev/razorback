@@ -57,6 +57,27 @@ def test_postgres_volume_name_stable_across_invocations(tmp_path: Path):
     assert "dab-postgres-data-bookreview-v1" in yaml2
 
 
+def test_named_volume_and_readonly_bindmount_coexist(tmp_path: Path):
+    """AC-10: in one compose file, the postgres service has BOTH a NAMED data
+    volume (writable) AND a read-only bind-mount for the dump."""
+    data_root = tmp_path / "data"
+    cfg = _bookreview_cfg(data_root)
+    yaml_text = generate_compose(
+        db_config=cfg, dataset_name="bookreview", data_root=data_root,
+    )
+    compose = yaml.safe_load(yaml_text)
+    pg_volumes = compose["services"]["dab-postgres"]["volumes"]
+    assert len(pg_volumes) >= 2, (
+        f"AC-10: expected NAMED data volume + read-only dump mount; got {pg_volumes}"
+    )
+    named = [v for v in pg_volumes if v.startswith("dab-postgres-data-")]
+    assert len(named) == 1
+    assert not named[0].endswith(":ro"), "PGDATA must be writable"
+    dump_mounts = [v for v in pg_volumes if "/docker-entrypoint-initdb.d/" in v]
+    assert len(dump_mounts) >= 1
+    assert all(v.endswith(":ro") for v in dump_mounts)
+
+
 def test_schema_version_v2_yields_distinct_volume_name(tmp_path: Path):
     """AC-9: bumping schema_version invalidates the v1 volume — new v2 name."""
     data_root = tmp_path / "data"
