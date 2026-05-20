@@ -20,21 +20,29 @@ observers:
     path: events.jsonl
   - kind: stdout
 
-# Expected outcome (recorded 2026-05-20 against razorback v1 at commit 2a2be8c):
-#   pass: false (3/3 trials fail; stratified_pass_at_1 = 0.0)
-#   final answer substring: n/a — agent.cost_usd is null and no answers.json
-#     is produced on the host side; every trial fails at the verifier step
-#     with harbor.verifier.verifier.RewardFileNotFoundError before any answer
-#     is graded. Trial result.json's step_results[0].exception_info captures
-#     the typed exception and traceback.
+# Expected outcome (recorded 2026-05-20 against razorback v1 at commit 5e5123a,
+# rerun with --runs-dir under /Users/ for Colima virtiofs visibility):
+#   pass: true (3/3 trials pass; stratified_pass_at_1 = 1.0)
+#   per-trial reward: q1=1.0, q2=1.0, q3=1.0 (bookreview.dataset_pass_at_1 = 1.0)
+#   wall-clock: 6:30 job total; per-trial agent execution 128s / 88s / 133s
+#   cost: $0 (subscription-billed via CLAUDE_CODE_OAUTH_TOKEN;
+#     agent_result.cost_usd is null on every step result — subscription auth
+#     does not surface per-call metering, this is a known telemetry gap to be
+#     addressed by Phase 4a, not a determinism deviation).
 #   notes: This spec declares `datasets: [bookreview]` and the v1 DAB adapter
 #     expands that to all 3 query subdirs under query_bookreview/, so the run
 #     executes 3 trials (one per task at N=1), not 1. AC-0.1(b)'s "one task"
 #     intent is not realized by the current spec schema — there is no
-#     per-query selector. Determinism still holds: any deviation from the
-#     3/3 RewardFileNotFoundError outcome on this commit catches a regression.
+#     per-query selector. Determinism rides on temperature=0.0 + trials=1 +
+#     dataset-frozen prompt content; any deviation from the 3/3 reward=1.0
+#     outcome on this commit catches a regression.
+#   colima discipline: --runs-dir MUST resolve under /Users/ on macOS+Colima.
+#     A /tmp- or /private/tmp-rooted runs-dir produces a silent 0/3 outcome
+#     because Colima's VM only bind-mounts /Users/<user>. The original 2026-05-20
+#     baseline (commit e9d7c43) hit this and was diagnosed in
+#     docs/superpowers/plans/2026-05-20-v1-bookreview-regression-investigation.md.
 #     See docs/superpowers/plans/2026-05-19-reconciliation-baseline.md for
-#     the full pre-correction reference and the Phase 0 side findings.
+#     the corrected headline and the Phase 0 side findings.
 #
 # Determinism caveats (per spec §9.5): Anthropic models do not honor seed;
 # same-prompt+same-seed+same-model may still drift. The `seed: 1` field is
