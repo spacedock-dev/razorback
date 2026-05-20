@@ -148,6 +148,19 @@ class ProvenanceBlock(BaseModel):
     prompt_file_hashes: dict[str, str] | None = None
 
 
+class ExperimentMetaBlock(BaseModel):
+    """Phase 4a — experiment-level budget metadata.
+
+    `max_budget_usd` is the per-experiment cap the `rk run` budget gate
+    (`--max-budget-usd-running`) refuses against. `estimated_cost_usd`
+    is populated by `rk freeze` (PKG-8) and consumed by the gate as the
+    pre-launch cost estimate.
+    """
+    model_config = ConfigDict(extra="forbid")
+    max_budget_usd: float | None = None
+    estimated_cost_usd: float | None = None
+
+
 class Spec(BaseModel):
     model_config = ConfigDict(extra="forbid")
     version: int
@@ -157,3 +170,4 @@ class Spec(BaseModel):
     trials: int = 1
     observers: list[ObserverBlock] = Field(default_factory=list)
     provenance: ProvenanceBlock = Field(default_factory=ProvenanceBlock)
+    experiment_meta: ExperimentMetaBlock | None = None

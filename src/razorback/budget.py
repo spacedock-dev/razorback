@@ -86,6 +86,25 @@ def current_total_usd(rt: RunningTotal) -> float:
     return total
 
 
+def read_estimate_from_spec(spec) -> float:
+    """Return the spec's pre-launch cost estimate.
+
+    AC-3: the source is the frozen spec's experiment_meta.estimated_cost_usd
+    field (populated by `rk freeze` per PKG-8). Missing field is a hard error:
+    the operator must re-freeze with cost-estimation logic before the gate can
+    run.
+    """
+    meta = getattr(spec, "experiment_meta", None)
+    estimate = getattr(meta, "estimated_cost_usd", None) if meta else None
+    if estimate is None:
+        raise ConfigInvalidError(
+            "spec is missing experiment_meta.estimated_cost_usd; "
+            "re-freeze with `rk freeze` (PKG-8 adds cost-estimation) before "
+            "passing --max-budget-usd-running."
+        )
+    return float(estimate)
+
+
 def decide_budget(rt: RunningTotal, *, estimate_usd: float) -> None:
     """Raise BudgetExceededError if running_total + estimate would exceed the cap.
 
