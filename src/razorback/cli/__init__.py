@@ -41,3 +41,7 @@ app.add_typer(registry_app, name="registry")
 from razorback.cli.score import score_command
 
 app.command("score")(score_command)
+
+from razorback.provenance.freeze_cmd import freeze_command
+
+app.command("freeze")(freeze_command)
