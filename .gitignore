@@ -10,6 +10,7 @@ __pycache__/
 
 # Run dirs written by `rk run`
 _runs/
+.runs/
 .worktrees/
 
 # Sandboxed HOME used by FU-1 live AC-5 (harbor's ~/.cache/harbor must be writable)
