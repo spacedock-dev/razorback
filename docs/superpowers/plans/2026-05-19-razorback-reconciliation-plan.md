@@ -145,8 +145,9 @@ writes per trial under `logs_dir/` are listed. Razorback's
 `agent_freeze/` subtree assumption (writable under `logs_dir/`,
 non-colliding) is confirmed.
 
-**AC-0.7 — D2 decided.** Captain has picked: claude-only at v2.0
-(codex/pi NotImplemented stubs), or all three runtimes.
+**AC-0.7 — D2 decided.** Captain has picked: claude-only at
+first-ship (codex/pi NotImplemented stubs), or all three runtimes
+implemented up-front.
 
 **AC-0.8 — D5 decided.** Captain has picked: sibling-package
 (`packages/razorback-plugin-dab/`) or new repo for the DAB harbor
@@ -414,11 +415,19 @@ integration test); `sealed_hash.txt` lands in `agent_freeze/`. (When
 the harbor-DAB adapter is ready, Phase 6's promotion smoke validates
 the v2 class against it; Phase 3 does not block on that adapter.)
 
-**AC-3.6 — halt-resume smoke succeeds.** A bookreview trial is
-halted at turn cap; `agent_freeze/.git` shows workspace snapshots;
-a resume spec pointing at that freeze proceeds without
-`SeedMismatchError` when sealed inputs match, and refuses with
-`SeedMismatchError` (exit 20) when a sealed input is perturbed.
+**AC-3.6 — halt-resume smoke succeeds (hand-faked freeze writes).**
+A bookreview trial is halted at turn cap; the test harness writes
+the `agent_freeze/.git` workspace snapshots and `sealed_hash.txt`
+that the freeze-mod would otherwise produce; a resume spec pointing
+at that freeze proceeds without `SeedMismatchError` when sealed
+inputs match, and refuses with `SeedMismatchError` (exit 20) when a
+sealed input is perturbed. **Halt-resume's real-mod validation
+(workflow mods firing on stage-completion signals) defers with the
+mod machinery to whenever the autoresearch loop's first halt-resume
+hypothesis run is planned — see spec §5.2's deferral note.** Goals
+1+2 run single straight-through solves and never exercise the real
+freeze path; the hand-faked smoke here proves the resume mechanic
+in isolation.
 
 **AC-3.7 — entry-point registration verified.** Per D1's outcome
 (AC-0.2): either `pyproject.toml`'s
@@ -447,62 +456,44 @@ at this phase.
 - Whether harbor's installed `claude_code` agent's workspace-bootstrap
   semantics let razorback copy `solver_workflow` into the trial
   workspace at a known path (AC-3.5 risk; surfaced if the test fails).
-- Whether the workflow mods (Phase 5) actually fire on stage
-  boundaries when the v2 class runs — this can't be fully tested
-  until Phase 5 ships the mods. AC-3.6's halt-resume smoke uses
-  hand-faked freeze writes; Phase 5 closes this gap.
+- Whether the real freeze path (workflow writing
+  `agent_freeze/.git` and `phase_stats.json` at stage boundaries)
+  works end-to-end. AC-3.6's halt-resume smoke uses hand-faked
+  writes; the real-path validation defers with halt-resume itself
+  per the spec §5.2 deferral. Not a goal-1/2 dependency.
 
 **Sideline at phase end.** None. v1 class stays canonical until
 Phase 6.
 
 ---
 
-## Phase 4: `rk diff` and extended `rk freeze`
+## Phase 4a: First-cut CLI completion (`rk score`, `rk audit`, `rk runs cost`, `rk run` budget gate, extended `rk freeze`)
 
 **Acceptance criteria.**
 
-**AC-4.1 — walking skeleton holds.** All cells from Phase 3 still
-produce summary.json; Phase 4 adds the ability to compare across them
-statistically.
+**AC-4a.1 — walking skeleton holds.** All cells from Phase 3 still
+produce summary.json; Phase 4a adds the remaining first-cut CLI
+surfaces: scored readout, post-hoc trajectory audit, cumulative
+cost tracking, and the per-experiment budget gate on `rk run`.
 
-**AC-4.2 — `rk diff` produces spec §8.3 statistics.** Given two
-harbor run-dirs paired by `(task, query, trial_index)`, the output
-JSON carries: per-arm per-query Wilson 95% CI on pass@1 (level via
-`--alpha`); per-query exact-McNemar p with exact-binomial fallback
-for small discordant counts AND family-wise-adjusted p-values via
-Holm-Bonferroni (at `--family-wise-alpha`, default 0.05) — both raw
-and adjusted p's are emitted; paired bootstrap CI on the stratified
-delta (B via `--bootstrap-iters`, default 10000, percentile method)
-**resampling at the cluster level via `--bootstrap-cluster` (default
-`query`, since N trials of the same query are not independent
-observations)**; MDE at fixed N; achieved-power-at-observed-effect.
-`--format markdown` produces a human-readable equivalent. Refuses on
-seed-asymmetry between the two runs.
+**AC-4a.2 — `rk score` produces spec §8.3a statistics.** Given one
+harbor run-dir, output JSON carries: per-stratum (typically per-dataset)
+pass@1 with Wilson 95% CI (level via `--alpha`); overall stratified
+pass@1 per the adapter's stratum tagging; per-stratum trial counts
+with errored-vs-completed distinction; when invoked with
+`--against-constant <name=value>`, a "matches" / "outside-CI" line
+per stratum. `--format markdown` produces a human-readable
+equivalent. **Folds PKG-2 surviving content for counting honesty**
+(errored trials not counted as fails; silent-drop guard flags missing
+trials).
 
-**AC-4.3 — fixture-driven correctness, including cluster +
-family-wise.** Hand-computed expected values for Wilson CI, exact
-McNemar p (raw + Holm-Bonferroni-adjusted), and paired bootstrap CI
-(cluster-bootstrap at the query level) on synthetic paired data
-match `rk diff`'s output within tolerance. Cross-checks against
-`statsmodels` reference implementations where possible.
-**Cluster-bootstrap fixture is load-bearing**: a synthetic dataset
-where intra-query trials are perfectly correlated (all N=5 trials
-agree per query) shows the trial-level bootstrap CI as
-anti-conservatively narrow vs. the query-cluster bootstrap CI; the
-test asserts the latter is wider, matching analytical expectation.
-**Family-wise fixture is load-bearing**: 12-dataset synthetic where
-no real effect exists but uncorrected per-dataset p-values produce
-~46% family-wise error rate; Holm-Bonferroni-adjusted p-values bring
-family-wise error to the nominal α.
+**AC-4a.3 — fixture-driven correctness.** Hand-computed Wilson CI
+values for synthetic single-run pass@1 data match `rk score`'s
+output within tolerance. The `--against-constant` flag's
+"inside-CI" / "outside-CI" decision matches a hand-computed
+membership test.
 
-**AC-4.4 — PKG-2 surviving content folded in.** The diff
-implementation honors: errored-vs-completed counting (errored trials
-are not counted as fails); trial-pairing under retries (a trial that
-retried still pairs to its baseline counterpart correctly); silent-drop
-guard (trials missing from one arm but not the other are flagged, not
-silently dropped from denominators).
-
-**AC-4.5 — `rk freeze` extended with v2 sealed inputs.**
+**AC-4a.4 — `rk freeze` extended with v2 sealed inputs.**
 `provenance.yaml` now includes `solver_workflow_hash` (recursive
 content hash of the solver_workflow dir), `spacedock_skill_version`
 (from `importlib.metadata.version` with per-install-shape fallback),
@@ -511,145 +502,269 @@ kwargs). The existing pinning (model alias resolved, image digest,
 agent CLI binary hash, prompt content hashes, harbor version) is
 preserved.
 
-**AC-4.6 — extractions preserved.** Provider model-version resolution
+**AC-4a.5 — extractions preserved.** Provider model-version resolution
 (Anthropic + OpenAI API calls with retry), Docker image digest pinning
 (`docker image inspect` wrapper), agent CLI binary hashing, prompt
 content hashing — all extracted from current `provenance/` with
 attribution.
 
-**AC-4.7 — same-spec self-diff is statistically null.** Two
-back-to-back runs of the same frozen spec produce `rk diff` output
-whose stratified-delta paired bootstrap CI includes zero at N=5 (the
-runs may differ due to provider non-determinism but should not show
-systematic bias).
+**AC-4a.6 — paper-reproduction readout shape works.**
+`rk score <run-dir> --against-constant stratified_pass_at_1=0.577`
+returns "inside-CI" or "outside-CI" with the Wilson CI bounds on the
+run's stratified pass@1. This is the operational shape goal 1's
+analyze step uses to answer "did we reproduce".
 
-**AC-4.8 — same-adapter cross-class diff is statistically null.** A
-run via (v1-class + harbor adapter) and a run via (v2-class + harbor
-adapter), both with the same model + sampling + solver_workflow,
-produce `rk diff` output whose stratified-delta paired bootstrap CI
-includes zero. **This is the load-bearing test that the v2 agent
-class does not change benchmark semantics versus v1.** The comparator
-is same-adapter, not against the v1 dump-file baseline.
+**AC-4a.7 — `rk audit` works.** Port of dataagentbench's
+`benchmark/lib/taint.py` mechanism with attribution (spec §3.2 +
+§9.4). Walks a run-dir's trial traces (parent agent logs, subagent
+trace manifests, recursive subagent traces); pattern-matches against
+forbidden shell commands, web-search tool calls, and the same
+patterns hidden inside heredocs / `python -c` strings; emits per-trial
+taint status (`clean` / `suspect` / `tainted` / `coverage_missing`)
+with findings. `--policy strict` exits with `TaintFindingsError`
+(exit 23) on any non-`clean` trial; `--policy audit` (default)
+reports without failing.
 
-**AC-4.9 — `uv run pytest` exits 0.**
+**AC-4a.8 — `rk audit` fixture-driven correctness.** Hand-crafted
+trial-trace fixtures exercise each pattern category: a clean
+trajectory passes; a `pip install datasets` Bash command flags
+tainted; the same hidden in a `python -c "subprocess.run(['pip',
+'install', 'datasets'])"` flags tainted (heredoc / python-c decoder
+working); a subagent trace with a forbidden invocation flags tainted
+(recursive scan working); a trace with a missing manifest flags
+`coverage_missing` not `clean`.
 
-**Walking-skeleton check.** AC-4.7 + AC-4.8 are the walking-skeleton
-checks at this phase: razorback can run, freeze, and diff;
-statistical equivalence under nominally-equivalent specs is
-demonstrated.
+**AC-4a.9 — `rk runs cost` works.** Given a directory of run-dirs,
+reads each run's cost from `summary.json` (or the harbor-emitted
+cost field) and emits the cumulative sum. Pairs with AC-4a.10's
+budget gate.
+
+**AC-4a.10 — `rk run --max-budget-usd-running <file>` enforces
+running budget.** Reads `<file>` (a running-total JSON the
+matrix dispatcher passes across invocations); adds this invocation's
+estimated cost; refuses with `BudgetExceededError` (exit 22) when
+the total would exceed the frozen spec's `experiment.max_budget_usd`;
+on completion appends the actual cost to `<file>`. Fixture test:
+two sequential `rk run` invocations against a budget that allows
+one but not both — the second refuses.
+
+**AC-4a.11 — agent block `tools_denied` field validated and
+plumbed.** Razorback's pydantic schema for `agent.kind:
+spacedock_solver` accepts `tools_denied: list[string]` (spec §6.2);
+the per-runtime adapter sub-modules (Phase 3) install the list as
+PreToolUse hooks in the inner harbor installed-agent. Fixture test:
+a spec with `tools_denied: ["Bash(pip install datasets*)"]` produces
+an inner `claude_code` agent whose configured PreToolUse hooks
+include the deny pattern. Goal-1 specs hard-code DAB's full
+DISALLOWED_TOOLS list in this field; this is the Layer 2 leak
+guard the spec §9.4 calls out as required for goal-1 defensibility.
+
+**AC-4a.12 — matrix dispatcher script exists.**
+`examples/drivers/dab-paper-matrix.sh` (or equivalent Python driver)
+dispatches the 180-cell goal-1 matrix as `for spec in matrix: rk
+freeze; rk run --max-budget-usd-running budget.json; rk score
+--against-constant ...; rk audit --policy strict`. Failure-recovery
+and partial-resume semantics are scripted, not interactive: a failed
+cell logs its identity; the driver continues with the next cell;
+re-running the driver skips already-completed cells (idempotent
+on `rk run`'s `(jobs_dir, job_name)` content-hash determinism).
+
+**AC-4a.13 — v2-class × harbor-DAB end-to-end smoke succeeds.** A
+spec with `agent.kind: spacedock_solver_v2` + `runtime: claude` +
+the new harbor-DAB adapter (Phase 2) + a minimal solver_workflow
++ DAB's full `tools_denied` list runs bookreview at N=3
+end-to-end. `rk freeze` produces provenance.yaml; `rk run` enforces
+budget; the inner claude_code agent receives the PreToolUse hooks;
+`rk score` emits per-stratum Wilson CIs; `rk audit --policy audit`
+runs over the trial traces and produces `clean` (or names any
+tainted trial for inspection). This is the mechanism-validation
+smoke before goal-1's $300-500 burn — every first-cut surface
+exercised against a real harbor-DAB run.
+
+**AC-4a.14 — goal-2 readout shape decided.** Captain picks: goal-2
+runs at N≥3 (paying ~$60-120 more for usable per-task Wilson CIs),
+or `rk score` documents a "single-trial regime" output mode for N=1
+that emits only the 48-task aggregate proportion CI and suppresses
+per-task CIs (per ML round-2 review M2). Decision recorded in this
+plan or as a referenced amendment; goal-2's spec matrix reflects
+the decision before goal-2 dispatch.
+
+**AC-4a.15 — `uv run pytest` exits 0.**
+
+**Walking-skeleton check.** AC-4a.13 (v2-class × harbor-DAB
+end-to-end smoke) is the load-bearing integration test for goals
+1+2: every first-cut surface (rk freeze, rk run with budget gate,
+rk score with constant check, rk audit, tools_denied PreToolUse
+hooks, v2 SpacedockSolverAgent + harbor-DAB adapter) ran against a
+real harbor trial and produced expected outputs. The deterministic
+micro-spec from AC-0.1(b) continues to pass at this phase's end
+as the structural regression catcher.
 
 **Uncertainty surfaced.**
 - Whether `spacedock_skill_version` is reliably detectable across the
-  plugin-vs-package install shapes spacedock uses. If not, the
-  fallback names what happens; AC-4.5 includes the fallback semantics.
-- Whether the same-adapter cross-class null (AC-4.8) actually holds.
-  If it does not, the v2 class is doing something semantically
-  different from v1 that the implementation needs to chase down
-  before Phase 6 promotion.
+  plugin-vs-package install shapes spacedock uses. Fallback semantics
+  documented in the implementation.
+- Whether the adapter's stratum tagging (AC-2.8 contract) is rich
+  enough to drive `rk score`'s stratified mean. Surfaced if `rk
+  score` returns a strange value on a known DAB run; resolved by
+  inspecting the stratum tags the adapter emits.
 
 **Sideline at phase end.** Old `rk freeze` implementation files
-replaced or substantially edited by Phase 4 work move to
-`src/razorback/_legacy/` if there's a non-trivial divergence;
-otherwise extension-in-place is fine.
+replaced or substantially edited move to `src/razorback/_legacy/` if
+there's a non-trivial divergence; otherwise extension-in-place is
+fine.
 
 ---
 
-## Phase 5: Workflow templates + generic mods
+## Phase 4b: `rk diff` paired statistics (ships when autoresearch loop needs it)
+
+**Phase status.** Sequenced after Phases 4a/5/6/7/8. The first-ship
+deliverables (paper reproduction, ade-bench Haiku baseline) do not
+require paired comparison — paper reproduction is a one-sided test
+against published constants (handled by `rk score
+--against-constant`); ade-bench Haiku is an establishing
+measurement. Paired comparison machinery lands when the
+autoresearch loop's analyze stage needs it.
+
+**Acceptance criteria (when this phase activates).**
+
+**AC-4b.1 — walking skeleton holds.** All first-ship surfaces still
+work; `rk diff` ships additively without changing them.
+
+**AC-4b.2 — `rk diff` produces spec §8.3 statistics.** Given two
+harbor run-dirs paired by `(task, query, trial_index)`, the output
+JSON carries: per-arm per-query Wilson 95% CI on pass@1; per-query
+exact-McNemar p with exact-binomial fallback for small discordant
+counts AND family-wise-adjusted p-values via Holm-Bonferroni; paired
+bootstrap CI on the stratified delta resampling at the cluster level
+(default `query`); MDE at fixed N; achieved-power-at-observed-effect.
+Refuses on seed-asymmetry.
+
+**AC-4b.3 — fixture-driven correctness, including cluster +
+family-wise.** Hand-computed expected values match within tolerance.
+**Cluster-bootstrap fixture is load-bearing**: synthetic dataset
+where intra-query trials are perfectly correlated shows the
+trial-level bootstrap CI as anti-conservatively narrow vs. the
+query-cluster bootstrap CI; test asserts the latter is wider.
+**Family-wise fixture is load-bearing**: 12-dataset synthetic with no
+real effect produces ~46% uncorrected family-wise error;
+Holm-Bonferroni brings it to nominal α.
+
+**AC-4b.4 — same-spec self-diff is statistically null.** Two
+back-to-back runs of the same frozen spec produce paired bootstrap CI
+including zero at N=5.
+
+**AC-4b.5 — same-adapter cross-class diff is statistically null** (if
+v1 class still exists at this phase's ship time). Confirms v2 agent
+class does not change benchmark semantics vs v1. Lands as a
+regression gate, not as a feature.
+
+**AC-4b.6 — `uv run pytest` exits 0.**
+
+**Trigger for activation.** When the autoresearch experiment workflow's
+analyze stage needs to make a "hypothesis X beats baseline" claim with
+paired-statistics defensibility. Until then, `rk score` against the
+registered baseline run-dir (treating the baseline's headline as the
+constant) is the operational shape.
+
+---
+
+## Phase 5: Workflow templates (no mods first-cut)
+
+**Phase sequencing note.** Phase 5 lands AFTER goal-1 (paper
+reproduction) and goal-2 (ade-bench Haiku baseline) ship via
+captain-driven dispatch using the deterministic CLI (the
+`examples/drivers/dab-paper-matrix.sh` from AC-4a.12). Goals 1+2
+do not require workflow templates. Phase 5 ships the
+spacedock-workflow scaffolding for the autoresearch loop's first
+hypothesis runs.
+
+**Sequencing dependency on Phase 6.** Phase 5's templates reference
+`agent.kind: spacedock_solver` (the canonical name post-Phase-6).
+Phase 6 (which promotes v2 to canonical and sidelines v1) must
+land before Phase 5 ships, or the templates dangle pointing at the
+intermediate `spacedock_solver_v2` discriminator. Plan order is
+therefore Phase 6 → Phase 5, even though Phase 5's section appears
+before Phase 6 in this document. The numbering reflects logical
+grouping (Phase 5 = workflow templates; Phase 6 = sideline cleanup);
+the dispatch order is reversed.
 
 **Acceptance criteria.**
 
 **AC-5.1 — walking skeleton holds.** Razorback continues to run DAB
-end-to-end via all Phase 4 paths.
+end-to-end via the direct CLI; Phase 5 adds the workflow templates
+without breaking direct CLI use.
 
-**AC-5.2 — workflow README templates exist and declare
-`experiment.max_budget_usd`.**
+**AC-5.2 — workflow README templates exist.**
 - `docs/templates/experiment-workflow/README.md` per spec §5.1:
   six stages (pending, propose, smoke, full, analyze, conclude);
-  sd-b32 ID style; required mods named (leak-guard,
-  tool-deny-runtime, baseline-compare, cost-ceiling). The template
-  spec includes a `experiment.max_budget_usd` field; the
-  experiment-workflow's cost-ceiling enforcement reads it.
-- `docs/templates/run-workflow/README.md` per spec §5.2: four stages
-  (pending, reconciling, completed, failed); required mods named
-  (stage-boundary-freeze, phase-stats-writer).
+  sd-b32 ID style; `experiment.max_budget_usd` declared in the
+  template spec. Per-stage prompt content carries the stage-level
+  behavior the prior mod design enumerated:
+  - **propose** prompt: instructs the operator-ensign on what the
+    solver-workflow README must not reference (answer keys,
+    ground-truth columns, per-task hints); captain reviews at the
+    gate.
+  - **smoke** / **full** prompts: instruct the operator to run
+    `rk runs cost <root>` before dispatch and refuse if running
+    total + estimate exceeds `experiment.max_budget_usd`; the
+    `rk run --max-budget-usd-running <file>` flag is the
+    invocation-time backstop.
+  - **analyze** prompt: instructs the operator to run `rk score
+    --against-constant <baseline-headline>` (first-cut) or
+    `rk diff` (when shipped), paste the JSON output into the entity
+    body, write a verdict.
+- `docs/templates/run-workflow/README.md` per spec §5.2: four
+  stages (pending, reconciling, completed, failed). No
+  stage-completion-signal mods required because halt-resume's
+  real-mod machinery defers (per AC-3.6 hand-fake note).
 - Both parse against spacedock's workflow-README schema.
 
-**AC-5.3 — generic mods exist.** Six mods under
-`docs/templates/mods/`:
-- `leak-guard.md` — at propose, runs the static constraints check
-  against the solver workflow README; refuses on violation.
-- `tool-deny-runtime.md` — wires PreToolUse hooks into the
-  spacedock-solver agent; blocks the benchmark's `DISALLOWED_TOOLS`
-  list at runtime. Required alongside `leak-guard` for two-layer
-  leak defense.
-- `baseline-compare.md` — at analyze, invokes `rk diff` and writes
-  the result into the entity body.
-- `cost-ceiling.md` — at smoke and full, maintains a **running
-  total** of spent budget across all dispatched runs in the
-  experiment; refuses dispatch when running-total + next-estimate
-  would exceed `experiment.max_budget_usd`. Per-trial enforcement
-  is harbor's installed agent; per-experiment enforcement is this
-  mod.
-- `stage-boundary-freeze.md` — fires on the spacedock-solver's
-  stage-completion signal; commits the workspace to
-  `agent_freeze/.git`.
-- `phase-stats-writer.md` — fires at the same boundary; writes
-  per-stage tokens (in/out/reasoning/cache-read/cache-write) +
-  cost + wallclock to `phase_stats.json`.
-
-**AC-5.4 — mod schema + hook-fire tests pass for all six mods.** Each
-mod parses against spacedock's mod schema; each mod's declared hook
-fires on the expected event in a fixture workflow. **The
-tool-deny-runtime test specifically verifies that a fixture spec with
-a forbidden tool invocation (e.g., `pip install datasets`) inside
-the agent's trajectory triggers a PreToolUse denial event in
-`events.jsonl`.** **The cost-ceiling test verifies running-total
-behavior**: two sequential dispatches each within per-trial budget but
-whose sum exceeds the experiment ceiling trigger refusal on the
-second dispatch.
-
-**AC-5.5 — package data shipping.** `pyproject.toml` ships
+**AC-5.3 — package data shipping.** `pyproject.toml` ships
 `docs/templates/` so a captain can copy templates into a new
 project.
 
-**AC-5.6 — phase-stats integration works.** The
-`stage-boundary-freeze` + `phase-stats-writer` mods, when wired into
-a workflow that runs under `agent.kind: spacedock_solver_v2`, produce
-`agent_freeze/.git` snapshots and a `phase_stats.json` whose schema
-validates against `assert_phase_stats_schema`. This closes the gap
-AC-3.6 noted (the v2 class's freeze contract was tested with
-hand-faked writes; Phase 5 tests it with the real mods firing).
-
-**AC-5.7 — end-to-end hypothesis smoke.** A captain copies the
+**AC-5.4 — end-to-end hypothesis smoke.** A captain copies the
 experiment-workflow template into a fresh dir, instantiates it
 against DAB via the new harbor adapter, runs ONE hypothesis
-end-to-end (propose → freeze → smoke → analyze → conclude). The full
-path works; the analyze stage produces a `rk diff` against a chosen
-baseline; the conclude stage is reachable.
+end-to-end (propose → freeze → smoke → analyze → conclude). The
+full path works; propose-stage prompt + captain gate catch a
+deliberate leak-guard violation; smoke-stage prompt enforces budget
+via `rk runs cost`; analyze stage produces `rk score
+--against-constant` output in the entity body; conclude stage is
+reachable.
 
-**AC-5.8 — `uv run pytest` exits 0.**
+**AC-5.5 — `uv run pytest` exits 0.**
 
-**Walking-skeleton check.** AC-5.7's end-to-end hypothesis smoke is
+**Walking-skeleton check.** AC-5.4 (end-to-end hypothesis smoke) is
 the strongest single demonstration of v2 razorback's integration
 shape working as a unit.
 
 **Uncertainty surfaced.**
-- Whether spacedock's mod-hook contract matches what razorback's
-  generic mods assume (AC-5.4 risk; reference shape:
-  `docs/razorback-implementation/_mods/pr-merge.md`).
-- Whether the `leak-guard` constraints file format is rich enough
-  for real solver-workflow READMEs (AC-5.3; the format starts small
-  — YAML allow/deny lists for paths — and expands when real workflows
-  surface needs).
-- Whether the `cost-ceiling` mod's cost estimate is accurate enough
-  to be useful (rough estimate may over- or under-shoot real
-  per-trial cost by 2x; surface the actual numbers from AC-5.7).
+- Whether per-stage prompt content alone (without razorback-shipped
+  mods) is sufficient leak-guard / cost-gate discipline for
+  hypothesis runs at scale. Mitigation: real consumer (the first
+  autoresearch hypothesis run) surfaces gaps; missing enforcement
+  can become a mod later if the prompt-driven discipline fails.
+- Whether spacedock's workflow-README schema accepts razorback's
+  template shape without local extensions (AC-5.2). Reference
+  shape: `docs/razorback-implementation/README.md` is the working
+  example.
 
 **Sideline at phase end.** None — no legacy templates to displace.
 
 ---
 
 ## Phase 6: Promote v2 to canonical, sideline superseded v1
+
+**Phase sequencing note.** Phase 6 dispatches *before* Phase 5 even
+though Phase 5 is numbered earlier in this document — Phase 5's
+workflow templates reference the canonical `agent.kind:
+spacedock_solver` name, which Phase 6 produces by renaming v2.
+Goals 1+2 ship from Phase 4a's end (using the intermediate
+`spacedock_solver_v2` discriminator); Phase 6 lands shortly after
+to clean the canonical surface; Phase 5 ships templates against
+that clean surface.
 
 **Acceptance criteria.**
 
@@ -776,17 +891,21 @@ available) freezes, runs, and produces a run-dir with
 
 **AC-8.2 — `spacedock_solver` smoke succeeds.** A spec with
 `agent.kind: spacedock_solver` + a minimal solver_workflow freezes,
-runs, produces `agent_freeze/sealed_hash.txt`, and the
-`phase_stats.json` written by the mods is schema-valid.
+runs, produces `agent_freeze/sealed_hash.txt`. (`phase_stats.json`
+production via real workflow mods is part of the halt-resume
+deferral; the smoke writes it via the test harness if needed for
+schema validation, matching AC-3.6's hand-faked discipline.)
 
-**AC-8.3 — `rk diff` smoke succeeds.** Same frozen spec run twice
-with `trials: 5`; `rk diff` produces the full JSON output (Wilson
-CIs, McNemar p, paired bootstrap CI, MDE).
+**AC-8.3 — `rk audit` smoke succeeds.** `rk audit --policy strict`
+runs over a clean trial trajectory and exits 0; a fixture trajectory
+with a forbidden `pip install datasets` invocation flags tainted
+and exits 23.
 
 **AC-8.4 — resume smoke succeeds.** Halt-resume cycle on the
-canonical v2 path; sealed-hash check passes; resume proceeds.
+canonical v2 path with hand-faked freeze writes (per AC-3.6);
+sealed-hash check passes; resume proceeds.
 
-**AC-8.5 — experiment-workflow smoke succeeds.** Phase 5's AC-5.7
+**AC-8.5 — experiment-workflow smoke succeeds.** Phase 5's AC-5.4
 hypothesis smoke, re-run post-Phase-6/7, still works end-to-end.
 
 **AC-8.6 — `uv run pytest` exits 0** from a clean checkout.
@@ -817,11 +936,13 @@ and the most likely to surface late issues.
 | 1 — `rk run` v2 wrapper | runs via in-tree adapter | new code from spec + extractions; sideline old `run.py` |
 | 2 — DAB harbor adapter (sibling) | runs via in-tree adapter AND harbor adapter | sibling +1500; razorback unchanged |
 | 3 — SpacedockSolverAgent v2 (alongside) | runs via both agent classes | new `_v2` module from spec + extractions; v1 stays canonical |
-| 4 — `rk diff` + extended `rk freeze` | freeze → run × 2 → diff works | new code from spec + provenance extractions; same-adapter cross-class null required |
-| 5 — Templates + mods | end-to-end hypothesis smoke runs | new markdown |
-| 6 — Promote v2, sideline v1 | canonical = v2; same-canonical cross-history null required | rename + `git mv` to `_legacy/` |
+| 4a — First-cut CLI completion (`rk score`, `rk audit`, `rk runs cost`, `rk run` budget gate, extended `rk freeze`) | v2-class × harbor-DAB end-to-end smoke succeeds at N=3 bookreview; every first-cut surface exercised | new code from spec + provenance extractions + taint.py port |
+| **Goals 1+2 ship here** via the matrix dispatcher (AC-4a.12) — `for spec in matrix: rk freeze; rk run --max-budget-usd-running budget.json; rk score --against-constant; rk audit --policy strict` | — | — |
+| 6 — Promote v2, sideline v1 (lands BEFORE Phase 5 so the templates can reference canonical `agent.kind: spacedock_solver`) | canonical = v2; same-canonical cross-history null required | rename + `git mv` to `_legacy/` |
+| 5 — Workflow templates (no mods first-cut) | end-to-end hypothesis smoke runs (autoresearch loop begins) | new markdown |
 | 7 — Delete `_legacy/` (optional) | v2-only canonical surface; same headline score | -delete |
 | 8 — Validate + release | tagged release | docs + verification |
+| 4b — `rk diff` paired statistics | full paired-comparison statistics available | new code from spec — sequenced after the autoresearch loop's first run surfaces the need |
 
 **Walking-skeleton invariant.** Per AC-0.9: the invariant is
 *runnability* (DAB runs end-to-end, produces non-degraded
@@ -838,12 +959,12 @@ These need a captain decision; the plan does not pre-decide them.
 **D1 — Harbor plugin contract** (probed in AC-0.2; locked in AC-3.7).
 Entry-point registration or fallback CLI spec-translation.
 
-**D2 — Codex / pi support timing** (AC-0.7). Claude-only at v2.0 with
-stubs, or all three runtimes implemented up-front.
+**D2 — Codex / pi support timing** (AC-0.7). Claude-only at
+first-ship with stubs, or all three runtimes implemented up-front.
 
 **D3 — Optional CLI commands** (Phase 4 / future). Whether
 `rk constraints check`, `rk baseline promote/verify`, `rk registry`
-ship in v2.0 or defer until a consumer surfaces.
+ship at first or defer until a consumer surfaces.
 
 **D4 — `rk init` subcommand** (Phase 5). Whether to ship a scaffolding
 command or document the copy-and-modify procedure only.
@@ -895,11 +1016,17 @@ draft phase:
 - Power analysis at observed effect — already partly addressed by
   AC-4.2's achieved-power line; richer interpretation aids defer.
 
-**Package J — future trajectory auditing.** A `rk audit <run-dir>`
-subcommand that post-hoc greps trial transcripts for benchmark-name
-strings, dataset-name strings, and known answer-key fragments.
-Defense-in-depth on top of the Package A + B combo. **Lands when:**
-a suspected leak surfaces that runtime hooks did not catch.
+**Package J — future trajectory auditing.** **Folded into the
+first-cut surface as `rk audit`.** Phase 4a's AC-4a.7 + AC-4a.8
+ship a port of dataagentbench's `benchmark/lib/taint.py` mechanism
+(see spec §3.2 + §9.4). The first-cut audit covers shell-command
+patterns, web-search tool calls, heredoc / `python -c` decoding,
+and subagent-trace recursion. **Remaining deferred extensions:**
+benchmark-name / dataset-name / answer-key string scanning over
+trial transcripts (a separate pattern category from forbidden tool
+invocations); harbor's reward_hacking-rubric `harbor analyze`
+delegation as a second-layer post-hoc check. Lands when a suspected
+leak surfaces that the first-cut audit patterns did not catch.
 
 ---
 
@@ -922,14 +1049,16 @@ a suspected leak surfaces that runtime hooks did not catch.
 - The 2026-05-19 v2 spec is the source of truth.
 - The razorback-implementation workflow's backlog reflects v2 scope
   and is resumable.
-- The five primary commands (`rk run`, `rk freeze`, `rk diff`,
-  `rk runs list/show`) work against real harbor invocations.
+- The first-cut commands (`rk run`, `rk freeze`, `rk score`,
+  `rk audit`, `rk runs list/show/cost`) work against real harbor
+  invocations. `rk diff` ships later (Phase 4b).
 - `SpacedockSolverAgent` is the v2 runtime-adapter class at the
   canonical name.
-- Workflow templates + mods exist as package data.
+- Workflow templates (no razorback-shipped mods first-cut) exist as
+  package data.
 - A captain can copy the experiment-workflow template, instantiate
   it, and run a hypothesis end-to-end against DAB via the new harbor
-  adapter (AC-5.7 + AC-8.5).
+  adapter (AC-5.4 + AC-8.5).
 - Walking-skeleton invariant held at every phase boundary
   (runnability never broke).
 - All tests pass; `uv run pytest` exits 0 from a clean checkout.
