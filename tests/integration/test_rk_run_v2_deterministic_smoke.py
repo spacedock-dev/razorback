@@ -54,10 +54,14 @@ def test_deterministic_smoke_runs_end_to_end(colima_safe_tmp_path: Path):
     # AC-3: provenance.yaml present.
     assert (run_dir / "provenance.yaml").is_file()
 
-    # AC-1: summary.json parses (harbor writes it; razorback does not).
-    summary_paths = list(run_dir.glob("**/summary.json"))
-    assert summary_paths, f"no summary.json found under {run_dir}"
-    summary = json.loads(summary_paths[0].read_text())
-    if "n_completed_trials" in summary:
-        assert summary["n_completed_trials"] >= 1
-        assert summary.get("n_errored_trials", 0) == 0
+    # AC-1: harbor writes result.json at the job root; mechanism check is that
+    # it parses and that all trials completed without harbor-runtime exceptions.
+    result_path = run_dir / "result.json"
+    assert result_path.is_file(), f"no result.json found under {run_dir}"
+    harbor_result = json.loads(result_path.read_text())
+    stats = harbor_result.get("stats", {})
+    assert stats.get("n_completed_trials", 0) >= 1
+    assert stats.get("n_errored_trials", 0) == 0, (
+        f"harbor reported {stats.get('n_errored_trials')} errored trials; "
+        f"deterministic-smoke baseline expects 0"
+    )
