@@ -1,13 +1,13 @@
 ---
 id: v4fz9wwrm3f2cv800zdp6wdv
 title: PKG-9 v2 — tools_denied agent block field
-status: validation
+status: done
 source: spec §6.2 + §8.5 + §9.4 (v2 spec at docs/superpowers/specs/2026-05-19-razorback-on-harbor.md)
 started: 2026-05-20T06:37:04Z
-completed:
-verdict:
+completed: 2026-05-20T15:10:26Z
+verdict: PASSED
 score:
-worktree: .worktrees/spacedock-ensign-pkg9-v2-tools-denied-field
+worktree: 
 issue:
 pr:
 mod-block:
