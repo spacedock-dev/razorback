@@ -55,13 +55,29 @@ def test_deterministic_smoke_runs_end_to_end(colima_safe_tmp_path: Path):
     assert (run_dir / "provenance.yaml").is_file()
 
     # AC-1: harbor writes result.json at the job root; mechanism check is that
-    # it parses and that all trials completed without harbor-runtime exceptions.
+    # all trials complete and reward matches the deterministic-smoke baseline
+    # recorded in examples/specs/_deterministic-smoke.yaml lines 23-31:
+    # 3/3 pass, reward=1.0 on every trial, stratified_pass_at_1 = 1.0.
     result_path = run_dir / "result.json"
     assert result_path.is_file(), f"no result.json found under {run_dir}"
     harbor_result = json.loads(result_path.read_text())
     stats = harbor_result.get("stats", {})
-    assert stats.get("n_completed_trials", 0) >= 1
+    assert stats.get("n_completed_trials", 0) == 3, (
+        f"expected 3 completed trials, got {stats.get('n_completed_trials')}"
+    )
     assert stats.get("n_errored_trials", 0) == 0, (
         f"harbor reported {stats.get('n_errored_trials')} errored trials; "
         f"deterministic-smoke baseline expects 0"
+    )
+
+    evals = stats.get("evals", {})
+    assert evals, f"no evals block in result.json stats: {stats}"
+    (eval_key, eval_block), = evals.items()
+    metrics = eval_block.get("metrics") or []
+    assert metrics, f"no metrics in eval {eval_key}: {eval_block}"
+    mean = metrics[0].get("mean")
+    assert mean == 1.0, (
+        f"deterministic-smoke baseline at e014dbf is mean reward=1.0; got "
+        f"mean={mean} for eval={eval_key}. Per-trial rewards: "
+        f"{eval_block.get('reward_stats')}"
     )
