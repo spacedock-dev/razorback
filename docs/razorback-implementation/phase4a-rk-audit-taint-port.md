@@ -1,7 +1,7 @@
 ---
 id: v6r0x3hhh4cbnvsnjz3mk6nt
 title: Phase 4a — rk audit (taint.py port)
-status: implementation
+status: validation
 source: plan Phase 4a + spec §3.2 + §9.4 (v2 spec at docs/superpowers/specs/2026-05-19-razorback-on-harbor.md)
 started: 2026-05-20T07:03:12Z
 completed:
