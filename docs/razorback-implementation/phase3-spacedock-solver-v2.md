@@ -1,9 +1,9 @@
 ---
 id: d5gxb8p7eea6nk85nja5zmbr
 title: Phase 3 — SpacedockSolverAgent v2
-status: backlog
+status: plan
 source: plan Phase 3 + spec §4 + §8.4 (v2 spec at docs/superpowers/specs/2026-05-19-razorback-on-harbor.md)
-started:
+started: 2026-05-20T06:37:04Z
 completed:
 verdict:
 score: 0.9
