@@ -144,3 +144,16 @@ audit test suite.
 ### Summary
 
 Plan committed to docs/razorback-implementation/plans/phase4a-rk-audit-taint-port.md (8 tasks, 7 ACs covered, riskiest-mechanism-first ordering per CL's "Validating new mechanisms" rule: verbatim port → KEEP-VERBATIM tests → razorback glue → integration test). Key decisions: (1) port subagent_traces.py partially (read-side closure only — capture-side helpers live in Phase 3's spacedock-solver runtime, not razorback's post-hoc audit); (2) per-trial reducer rule mapping the upstream finding shape to clean/tainted/coverage_missing is named explicitly in Task 4; (3) trial-root discovery walks by sentinel-file presence (codex-output.jsonl / claude-output.jsonl / traces/manifest.json) rather than hardcoded path globs, to stay robust against harbor's run-dir layout. Risk: closure-determination in Task 3 — mitigated by KEEP-VERBATIM tests at Task 5 catching missing helpers before any glue lands.
+
+## Stage Report: implementation
+
+- DONE: Verbatim port of taint.py from dataagentbench (Task 2) with attribution; PARTIAL port of subagent_traces.py per plan (read-side closure only).
+  src/razorback/audit/taint.py is verbatim modulo the import re-point (diff confirms one-line delta vs source); src/razorback/audit/subagent_traces.py ports IGNORED_TRACE_ROOT_PARTS + _codex_trace_paths + _read_jsonl + _collab_item + _stage_from_prompt + parse_parent_lifecycle + parent_has_completed_spawns + _under_ignored_trace_root + iter_trace_roots + _hook_event_counts + hook_reconciliation_issues; capture-side symbols dropped per plan.
+- DONE: KEEP-VERBATIM tests from dataagentbench/benchmark/tests/test_taint.py (18 tests) re-anchored to razorback import paths (Task 5).
+  tests/unit/audit/test_taint_keep_verbatim.py: 18/18 pass. Sole edit vs source is `from benchmark.lib import taint` → `from razorback.audit import taint`.
+- DONE: razorback CLI glue (Tasks 4, 6, 8) wires rk audit; AC-5 uses TaintFindingsError + ExitCode.TAINT_FINDINGS from phase1's errors.py.
+  src/razorback/audit/cli.py implements per-trial reducer (forbidden_lookup→tainted; trace_coverage missing/partial + attempt_incomplete + scanner_error→coverage_missing; else clean) + `--policy {audit,strict}` flag + sentinel-file trial-root discovery + JSON/markdown formatters. src/razorback/cli/__init__.py registers `audit` next to `run`. tests/unit/audit/test_rk_audit_cli.py: 6/6 pass (AC-1 per-trial status, AC-5 strict→23 and audit→0, all-clean→0 under strict, markdown format, unknown-policy rejection).
+
+### Summary
+
+All 7 ACs satisfied. 18 KEEP-VERBATIM unit tests + 6 razorback-CLI integration tests pass (24/24 audit suite); `uv run pytest tests/unit --ignore=tests/unit/test_translator_harbor_dab.py` exits 0 with 248 tests passing. One pre-existing collection error (`tests/unit/test_translator_harbor_dab.py` imports `razorback.compat` which P1-T4 moved to `_legacy/`) was confirmed to predate Phase 4a — stashing all worktree changes and re-running the sweep against the bare branch tip reproduces the same error; out of scope for this entity. Six pre-existing integration-test failures (`tests/integration/test_rk_run_*`) similarly predate Phase 4a (walking-skeleton AC gaps + docker required); same reproduction confirms they are not regressions introduced by the audit module.
