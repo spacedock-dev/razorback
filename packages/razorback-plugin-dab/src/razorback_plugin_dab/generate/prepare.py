@@ -122,19 +122,8 @@ def _materialize_task_dir(
             task_name=task_name,
             docker_image=docker_image,
             container_workdir=container_workdir,
-            has_compose=bool(db_config),
         )
     )
-
-    if db_config:
-        compose_text = generate_compose(
-            db_config=db_config,
-            dataset_name=dataset_meta.name,
-            data_root=dataset_dir.parent,
-            docker_image=docker_image,
-            container_workdir=container_workdir,
-        )
-        (task_dir / "docker-compose.yaml").write_text(compose_text)
 
     instruction = _instruction(
         query_dir=query_dir,
@@ -150,6 +139,19 @@ def _materialize_task_dir(
         "# Unused — [environment].docker_image selects the prebuilt image.\n"
     )
     write_settings_json(env_dir / "settings.json", task_name=task_name)
+
+    if db_config:
+        # PKG-13 T1: harbor's compose discovery hard-codes
+        # environment_dir / docker-compose.yaml as the task-author override
+        # slot. Writing anywhere else means harbor never loads the file.
+        compose_text = generate_compose(
+            db_config=db_config,
+            dataset_name=dataset_meta.name,
+            data_root=dataset_dir.parent,
+            docker_image=docker_image,
+            container_workdir=container_workdir,
+        )
+        (env_dir / "docker-compose.yaml").write_text(compose_text)
 
     tests_dir = task_dir / "tests"
     tests_dir.mkdir()
@@ -210,20 +212,19 @@ def _task_toml(
     task_name: str,
     docker_image: str,
     container_workdir: str,
-    has_compose: bool,
 ) -> str:
-    body = (
+    # PKG-13 T1: harbor's EnvironmentConfig has no docker_compose field;
+    # any [environment].docker_compose value is silently dropped by pydantic.
+    # Compose discovery is purely positional: environment_dir / docker-compose.yaml.
+    return (
         'schema_version = "1.2"\n\n'
         f'[task]\nname = "razorback-plugin-dab/{task_name}"\n'
         f'description = "DAB {task_name} as a harbor task."\n\n'
         "[environment]\n"
         f'docker_image = "{_toml_escape(docker_image)}"\n'
         f'workdir = "{_toml_escape(container_workdir)}"\n'
+        f'\n[[steps]]\nname = "{_STEP_NAME}"\n'
     )
-    if has_compose:
-        body += 'docker_compose = "docker-compose.yaml"\n'
-    body += f'\n[[steps]]\nname = "{_STEP_NAME}"\n'
-    return body
 
 
 def _toml_escape(value: str) -> str:

@@ -60,7 +60,10 @@ def test_task_dir_layout(tmp_path: Path):
 
     task_dir = entry["task_dir"]
     assert (task_dir / "task.toml").exists()
-    assert (task_dir / "docker-compose.yaml").exists()
+    # PKG-13 T1: compose lives under environment/, not at task-dir root, so
+    # harbor's compose discovery (environment_dir / docker-compose.yaml) loads it.
+    assert (task_dir / "environment" / "docker-compose.yaml").exists()
+    assert not (task_dir / "docker-compose.yaml").exists()
     assert (task_dir / "instruction.md").exists()
     assert (task_dir / "environment" / "Dockerfile").exists()
     assert (task_dir / "environment" / "settings.json").exists()
@@ -71,7 +74,34 @@ def test_task_dir_layout(tmp_path: Path):
     assert (task_dir / "steps" / "main" / "workdir" / "README.md").exists()
 
 
-def test_task_toml_schema_and_compose_ref(tmp_path: Path):
+def test_compose_bind_mount_sources_resolve_to_real_files(tmp_path: Path):
+    """PKG-13 T1 / AC-4: bind-mount sources in the generated compose, when
+    resolved relative to the compose file's parent (environment/), must
+    point at existing files. With compose at environment/docker-compose.yaml,
+    the sql_file source must be ../steps/main/workdir/<sql_file>.
+    """
+    data_root = _build_synthetic_data_root(tmp_path)
+    out = tmp_path / "tasks"
+    manifest = prepare_dataset_tasks(
+        data_root=data_root, dataset="bookreview", tasks_root=out
+    )
+    compose_path = manifest[0]["task_dir"] / "environment" / "docker-compose.yaml"
+    compose = yaml.safe_load(compose_path.read_text())
+    pg_volumes = compose["services"]["dab-postgres"]["volumes"]
+    assert pg_volumes, "expected at least one postgres init volume"
+    for entry in pg_volumes:
+        src = entry.split(":", 1)[0]
+        resolved = (compose_path.parent / src).resolve()
+        assert resolved.exists(), f"bind-mount source missing: {resolved}"
+
+
+def test_task_toml_schema_and_no_dead_docker_compose_key(tmp_path: Path):
+    """PKG-13 T1: harbor's EnvironmentConfig has no docker_compose field, so
+    the previously emitted `[environment].docker_compose` line is dead weight
+    that pydantic silently drops. The emitted task.toml must not include it.
+    Compose discovery happens via the file's physical location under
+    environment/, not via a toml reference.
+    """
     data_root = _build_synthetic_data_root(tmp_path)
     out = tmp_path / "tasks"
     manifest = prepare_dataset_tasks(
@@ -79,7 +109,7 @@ def test_task_toml_schema_and_compose_ref(tmp_path: Path):
     )
     toml_text = (manifest[0]["task_dir"] / "task.toml").read_text()
     assert 'schema_version = "1.2"' in toml_text
-    assert 'docker_compose = "docker-compose.yaml"' in toml_text
+    assert 'docker_compose' not in toml_text
     assert 'name = "main"' in toml_text
 
 
