@@ -1,7 +1,7 @@
 ---
 id: e34q91ykfa8g281cdf523b1v
 title: Phase 1 — rk run v2 wrapper
-status: implementation
+status: validation
 source: plan Phase 1 + spec §3.2 + §8.1 (v2 spec at docs/superpowers/specs/2026-05-19-razorback-on-harbor.md)
 started: 2026-05-20T06:23:05Z
 completed:
