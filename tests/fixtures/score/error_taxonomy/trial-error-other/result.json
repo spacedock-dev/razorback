@@ -1,0 +1,21 @@
+{
+  "id": "00000000-0000-0000-0000-00000000a004",
+  "task_name": "razorback/bookreview-q4",
+  "trial_name": "trial-error-other",
+  "trial_uri": "file:///fixture/error_taxonomy/trial-error-other",
+  "task_id": {"path": "/fixture/tasks/bookreview/bookreview-q4"},
+  "source": null,
+  "task_checksum": "deadbeef",
+  "config": {},
+  "agent_info": {"name": "fixture", "version": "0", "model_info": {"name": "fixture", "provider": null}},
+  "agent_result": null,
+  "verifier_result": null,
+  "exception_info": {
+    "exception_type": "TimeoutError",
+    "exception_message": "agent exceeded wall clock budget",
+    "exception_traceback": "",
+    "occurred_at": "2026-05-20T00:00:45Z"
+  },
+  "started_at": "2026-05-20T00:00:00Z",
+  "finished_at": "2026-05-20T00:00:45Z"
+}
