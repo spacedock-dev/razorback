@@ -1,9 +1,9 @@
 ---
 id: bafje0bpa1c8jvz9vtbs2q5q
 title: PKG-13 — harbor-DAB live-DB verification stack (Phase 2 + Phase 4a remediation)
-status: backlog
+status: plan
 source: T14 false-positive investigation 2026-05-20 (docs/superpowers/plans/2026-05-20-t14-false-positive-investigation.md)
-started:
+started: 2026-05-20T16:49:49Z
 completed:
 verdict:
 score: 1.0
