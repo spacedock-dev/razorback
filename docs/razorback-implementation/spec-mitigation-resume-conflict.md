@@ -78,3 +78,16 @@ Plan separates the four ACs cleanly: three spec edits (§4.4 narrative, §7.1 la
 ### Summary
 
 Three commits land the four spec edits per plan.md's task map; the §7.1 commit also reconciled four downstream path strings (§4.2 spec example, §4.3 class responsibility item 4, §4.4 contract bullet, §8.4 init sketch) that contradicted the new layout — done per plan Task 2 Step 4's "fix it in the same commit" instruction. AC-4 verification confirmed Phase 3 cites this entity in both its Problem section (line 29) and Depends on section (line 158) with the load-bearing pre-condition framing intact; no Phase 3 edits needed.
+
+## Stage Report: validation
+
+- DONE: Run the entity's AC-1/AC-2/AC-3 verification commands (grep for sealed_hash, agent_freeze, canonicalization) and confirm each returns the expected pattern; AC-4's phase3 forward-reference is intact.
+  AC-1: `sealed_hash` hits 19 lines (incl. §4.4 lines 428/430/439/444/449); `outside harbor's per-trial scratch zone` hits §4.3 line 373 and §4.4 line 427; probe doc cited §3.1/§4.4/§7.1. AC-2: `agent_freeze` grep returns empty (exit 1); negative grep for `trials/.../agent_freeze` returns empty; `_razorback/freeze` hits 7 spec locations. AC-3: `canonicaliz` hits §3.1 line 168 and §8.1 line 761; probe doc cited from §3.1. AC-4: Phase 3 cites `spec-mitigation-resume-conflict` at lines 29 (Problem) and 158 (Depends on) with load-bearing pre-condition framing.
+- DONE: Cross-check internal consistency: §4.4 / §7.1 / §4.2 / §4.3 / §8.4 all reference the same _razorback/freeze/<sealed_hash>/ path; no leftover trial-scratch references; no §-to-§ contradictions.
+  Path literal identical across §3.2 line 349, §4.3 line 369, §4.4 lines 399/429/449, §7.1 lines 685-690+693, §8.4 line 881. §4.4 sealed_hash-keying rationale (trial_name regenerates on resume) matches §7.1 paragraph rationale (sealed_hash derives from spec.frozen.yaml). §3.1 canonicalization (jobs_dir) stays orthogonal to AC-1/2 freeze relocation; no contradictions found.
+- DONE: Run superpowers:requesting-code-review against the worktree branch; classify findings blocking vs non-blocking; recommend PASSED or REJECTED with feedback-to: implementation.
+  Reviewed diff `2f6599a..3e65dc7` inline (doc-only changes, no test suite to run). Strengths: harbor source citations line-pinned, bidirectional §-cross-refs, probe doc + commit `1569853` cited from every claiming section, AC-3 stays orthogonal to AC-1/2. Findings: 0 critical, 0 important, 2 minor non-blocking (§3.1 "freeze writer" is forward-looking; "Caveat" heading reference in probe doc is auditable via pinned SHA). Decision: APPROVE to `done`.
+
+### Summary
+
+All four ACs verify mechanically against the verifiers the entity names; internal consistency across §3.1/§4.2/§4.3/§4.4/§7.1/§8.1/§8.4 holds with one path literal and no `trial_name`-keyed remnants. Code review finds no blocking issues. Validation report written to `docs/razorback-implementation/validation/spec-mitigation-resume-conflict.md`. Recommended gate decision: approve to `done`; the implementation worker does not need to be re-engaged.
