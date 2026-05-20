@@ -162,3 +162,16 @@ branch tip. Per plan AC-3.9.
   model per AC-7; n_attempts field naming; §7.1 path literal)
 - `phase1-rk-run-v2-wrapper` (provides the spec→JobConfig
   translator that invokes the v2 agent class via `import_path`)
+
+## Stage Report: plan
+
+- DONE: Plan consumes b5's load-bearing freeze design (sealed_hash-keyed external freeze at <harbor-run-dir>/_razorback/freeze/<sealed_hash>/) as a pre-condition; SpacedockSolverAgent class shape implements the 5-point contract from b5's plan doc verbatim, not as a discovery.
+  Plan body's "Load-bearing pre-condition from `b5`" section (lines 23-47) quotes the 5-point contract verbatim from `docs/razorback-implementation/plans/spec-mitigation-resume-conflict.md` lines 58-66; Tasks 1+2+5 each cite the specific b5 point they implement (compute_sealed_hash extension; __init__ sealed_hash + refusal; resolve_freeze_dir + setup() lifecycle).
+- DONE: Plan covers the halt-and-resume lifecycle (first-stage write, every-stage-commit, harbor-resume recovery, cross-job resume validation, done, GC) with file:line targets in src/razorback/agents/ + new modules where needed.
+  Task 5's lifecycle table enumerates all six states with code targets in `spacedock_solver_v2.py`; GC is named out of scope per b5 line 54; cross-job resume refusal lives in __init__ (Task 2), in-place harbor-resume restore lives in setup() (Task 5); first-stage write + git init in setup() first-stage branch; per-stage commit helper `_commit_stage` exposed for the workflow mod.
+- DONE: Riskiest-contract-first ordering: the sealed_hash-keyed freeze read/write contract lands BEFORE the halt-resume orchestration; integration mechanism check (a stage-commit + harbor jobs resume round-trip) BEFORE the bookreview-claude end-to-end.
+  Task 6 (mechanism validation: stub-environment exercise of freeze-dir write + harbor jobs resume round-trip) precedes Task 7 (bookreview-claude end-to-end + hand-faked halt-resume integration); the plan body's "Riskiest-contract-first ordering" section enumerates the dependency chain explicitly. Citation: CL's "Validating new mechanisms" rule.
+
+### Summary
+
+Plan saved to `docs/razorback-implementation/plans/phase3-spacedock-solver-v2.md`. 10 tasks map 1:1 to the 9 entity ACs with the riskiest contract (sealed_hash-keyed external freeze read/write) validated by a stub-environment mechanism test (Task 6) before any bookreview-claude run (Task 7). Plan consumes b5's 5-point contract verbatim (not re-derived), expands `compute_sealed_hash` to the six v2 sealed inputs per spec §4.3.5, ships per-runtime adapter sub-modules (claude functional; codex/pi NotImplementedError stubs per D2 default), and adds the `spacedock_solver_v2` schema discriminator alongside v1's `spacedock-solver` so AC-8's v1 regression continues to pass. Em-dash sweep applied per commit `a2e9c49`.
