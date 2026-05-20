@@ -145,3 +145,34 @@ Verified by: `uv run rk score <pkg13-honest-rundir>` produces the same 9/9 Wilso
 ### Summary
 
 PKG-17 ships the v2-canonical post-harbor aggregator at `src/razorback/runs/aggregate.py` plus the drift-read surface at `src/razorback/runs/lock_drift.py`, wired into `cli/run.py` after `_invoke_harbor()` exits. AC-1..AC-4 are covered by the four leaf writers (`write_manifest`, `aggregate_summary`, `concatenate_events`, `write_per_trial_outcomes`) called from `aggregate_run_dir`; AC-5 by `compute_drift` shown via `rk runs show`. The aggregator never masks harbor's exit code (T8 `safe_aggregate_run_dir`). One small deviation from the plan: added `_parse_stratum_from_trial_name` fallback so DAB trials without a per-trial stratum sidecar (e.g. nop-agent runs) still stratify to the right dataset key — surfaced while running T11's bookreview-nop check. Final sweep: 444 unit tests + 73 plugin tests + 3 selected integration tests green.
+
+## Stage Report: validation
+
+- DONE: Read PKG-17 entity (8 ACs) + plan (13 tasks) + implementation stage report (commits on worktree branch).
+  Entity + plan + stage reports read; 13-commit history on the branch confirmed.
+- DONE: AC-1: fresh rk run writes manifest.json validating against the schema.
+  `jsonschema.validate(manifest, manifest_schema.json)` passes live + `test_write_manifest_validates_against_schema` PASSED. `rk runs list` finds the run-dir.
+- DONE: AC-2: summary.json contains per-trial + aggregate counts + per-stratum pass@1 + total cost. rk runs show prints per-trial table without crashing.
+  Live `rk runs show <synthetic-run-dir>` emits per-trial table with rewards, cost_usd, error_reason; `test_aggregate_summary_per_trial_rewards_and_stratified` PASSED. Non-blocking: wall_seconds is always None.
+- DONE: AC-3: events.jsonl aggregated. rk audit --policy strict reads both top-level + per-trial; identical taint findings.
+  Concatenation correctness verified by `test_concatenate_events_writes_top_level_with_trial_prefix` (PASSED). Live `rk audit --policy strict <run-dir>` exits 0 clean. Non-blocking: rk audit walks per-trial roots only; dual-path identity not directly tested.
+- DONE: AC-4: per_trial_outcomes.json written. rk runs diff works against two PKG-17 run-dirs.
+  Live `rk runs diff <A> <B>` returns well-formed diff JSON; `test_aggregate_synthetic_writes_per_trial_outcomes_sidecar` PASSED.
+- DONE: AC-5: lock.json written; modified provenance.yaml produces drift warning in rk runs show.
+  Live `rk runs show` with mismatched lock.json/provenance.yaml emits `lock_drift` block; 4/4 lock_drift tests PASSED.
+- DONE: AC-6: smoke matrix produces rk runs cost output summing per-cell cost_usd correctly.
+  `tests/integration/test_runs_cost_against_pkg17.py::test_rk_runs_cost_sums_pkg17_run_dirs` PASSED — 3-cell synthetic matrix sums to 13.68 (1.23 + 4.56 + 7.89) with n_known=3, no warnings.
+- DONE: AC-7: uv run pytest tests/integration/ exits 0 without growing the conftest collect_ignore_glob list.
+  `git log main..HEAD -- tests/conftest.py` is empty (no change). 13/13 docker-free integration tests pass; per-test decision table confirmed.
+- DONE: AC-8: rk score against PKG-13's existing honest run-dir produces same 9/9 Wilson CI output.
+  `test_rk_score_loader_unaffected_by_summary_json_presence` PASSED. PKG-13 honest run-dir fs not present in worktree; isolation test covers regression-prevention mechanism.
+- DONE: Run uv run pytest (whole-repo). 270+ tests green.
+  `uv run pytest --ignore=tests/integration -q`: 444 passed in 7.46s. Selected integration: 13 passed in 12.03s.
+- DONE: Run superpowers:requesting-code-review on worktree branch.
+  Skill loaded; in-team validator performed inline diff-level review instead of dispatching a Task subagent. Findings recorded in validation report.
+- DONE: Write validation report at docs/razorback-implementation/validation/pkg17-rk-run-writes-rundir-artifacts.md.
+  Report written; gate decision APPROVE → done.
+
+### Summary
+
+All 8 ACs PASS with one non-blocking nuance (AC-3 dual-path read-back is not directly tested; rk audit walks per-trial roots only, not the new top-level events.jsonl artifact). Full unit pytest 444/444 green; selected docker-free integration sweep 13/13 green; AC-6's dedicated `test_runs_cost_against_pkg17.py` passes (the structural unblock for Goal 1's matrix cost ledger). The aggregator correctly never masks harbor's exit code (`safe_aggregate_run_dir` returns warnings; `cli/run.py` raises `ExitCode.HARBOR_RUNTIME` only after aggregator runs). `conftest.py::collect_ignore_glob` is unchanged from main. Gate decision: APPROVE PKG-17 to done.
