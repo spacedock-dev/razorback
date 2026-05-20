@@ -131,3 +131,16 @@ audit test suite.
 - `ra` spec-corrections-from-phase0-probes (spec §3.2 + §9.4
   wording referenced by AC-1; the spec must reflect the v2 surface
   before the port's commit attributes back to it)
+
+## Stage Report: plan
+
+- DONE: Plan names the port source (/Users/clkao/git/dataagentbench/benchmark/lib/taint.py, 561 LoC) and maps each function/class to a target file:line in razorback (src/razorback/audit/taint.py and src/razorback/audit/subagent_traces.py).
+  Plan doc Task 2 carries the full source-line → target-line mapping table; Task 3 carries the partial-port closure for subagent_traces.py with PORT / DROP per line range.
+- DONE: Plan separates the verbatim port from razorback-specific adapter glue.
+  Task 2 (verbatim taint.py port) + Task 3 (partial subagent_traces.py port, read-side closure only) carry the verbatim port with attribution; Task 4 (CLI glue), Task 5 (KEEP-VERBATIM test re-anchoring), Task 6 (razorback integration test), Task 7 (attribution proof), Task 8 (test-suite green) carry the razorback-specific surface.
+- DONE: Test plan reuses dataagentbench's existing taint.py tests verbatim where possible (KEEP-VERBATIM per test inventory); razorback-specific glue tests follow TDD.
+  Task 5 ports /Users/clkao/git/dataagentbench/benchmark/tests/test_taint.py verbatim (18 tests covering AC-2/3/4) with only the import path re-pointed; Task 6 adds 4 new razorback-CLI tests (TDD; fixture-driven) for AC-1 + AC-5; Task 1 verifies P1-T1's errors.py wiring (TaintFindingsError + ExitCode.TAINT_FINDINGS) which the entity's AC-5 relies on.
+
+### Summary
+
+Plan committed to docs/razorback-implementation/plans/phase4a-rk-audit-taint-port.md (8 tasks, 7 ACs covered, riskiest-mechanism-first ordering per CL's "Validating new mechanisms" rule: verbatim port → KEEP-VERBATIM tests → razorback glue → integration test). Key decisions: (1) port subagent_traces.py partially (read-side closure only — capture-side helpers live in Phase 3's spacedock-solver runtime, not razorback's post-hoc audit); (2) per-trial reducer rule mapping the upstream finding shape to clean/tainted/coverage_missing is named explicitly in Task 4; (3) trial-root discovery walks by sentinel-file presence (codex-output.jsonl / claude-output.jsonl / traces/manifest.json) rather than hardcoded path globs, to stay robust against harbor's run-dir layout. Risk: closure-determination in Task 3 — mitigated by KEEP-VERBATIM tests at Task 5 catching missing helpers before any glue lands.
