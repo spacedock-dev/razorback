@@ -165,6 +165,18 @@ benchmark.
   classes, trial dataclasses, or internal enums.
 - Stable exit codes. Each subcommand enumerates them; workflow
   operators branch on the codes.
+- Path canonicalization. Commands that emit a spec for harbor to
+  consume (`rk run`, the freeze writer) resolve `jobs_dir` to an
+  absolute, symlink-resolved path before passing it to harbor. This
+  ensures that `harbor jobs resume -p <run-dir>` and `harbor jobs
+  resume` against the config resolve to the same directory; harbor's
+  resume reads the config's `jobs_dir` to enumerate trial subdirs
+  (`harbor/cli/jobs.py:1444-1477`), and a mismatch between the `-p`
+  argument's on-disk location and the config's `jobs_dir` causes the
+  resume to silently scan a different directory than the operator
+  intended (see AC-0.5 probe at
+  `docs/superpowers/plans/2026-05-19-harbor-resume-probe.md`,
+  commit `1569853`, "Caveat from the first (invalid) attempt").
 - The CLI is the operator's uniform surface. Subcommands that
   delegate to harbor (`rk run`) stay under `rk *` so the operator
   does not context-switch between two CLIs.
@@ -334,7 +346,7 @@ agent:
   max_turns: 200
   max_budget_usd: 10
   tools_allowed: []
-  resume_from_freeze: <prior-run-dir>/trials/<task>-NNNN/logs_dir/agent_freeze/   # optional
+  resume_from_freeze: <prior-run-dir>/_razorback/freeze/<sealed_hash>/   # optional
 ```
 
 ### 4.3 Class responsibilities
@@ -353,10 +365,14 @@ agent:
    workflow at /workspace/solver/; begin the Startup procedure." For
    codex and pi: the equivalent per-runtime configuration. The class
    knows the mapping.
-4. **Freeze-dir contract.** Expose `self.logs_dir / "agent_freeze/"`
-   as the durable per-stage write surface. The workflow's mods commit
-   into the embedded git at stage boundaries; the class does not write
-   here itself.
+4. **Freeze-dir contract.** Expose
+   `<harbor-run-dir>/_razorback/freeze/<sealed_hash>/` as the durable
+   per-stage write surface, resolved from the run-dir root rather than
+   from `self.logs_dir`. The workflow's mods commit into the embedded
+   git at stage boundaries; the class does not write here itself. This
+   location lives outside harbor's per-trial scratch zone so it
+   survives `harbor jobs resume`; see §4.4's "Harbor-resume
+   interaction" and §7.1.
 5. **Sealed-hash refusal.** In `__init__`, before any harbor I/O,
    compute the sealed-input hash from `(model, sampling, solver_workflow
    content hash, prompt content hashes, spacedock skill version, harbor
@@ -380,8 +396,8 @@ surface:
 - **The workflow's mods** (provided by razorback as generic mods)
   write `phase_stats.json` and commit the workspace at stage
   boundaries.
-- **The trial's `logs_dir/agent_freeze/`** is the on-disk surface
-  shared between the class and the mods. It contains:
+- **The run-dir's `_razorback/freeze/<sealed_hash>/`** is the on-disk
+  surface shared between the class and the mods. It contains:
   - `.git/`, a private git repo holding workspace snapshots per stage
   - `phase_stats.json`, per-stage tokens/cost/wallclock
   - `sealed_hash.txt`, the sealed-input hash, written at first stage
@@ -394,6 +410,50 @@ cost per stage. They are not part of the halt-resume contract itself.
 based on its inner runtime's reset capability; harbor's docker
 environment guarantees per-trial container resets which covers most of
 the picture.
+
+**Harbor-resume interaction.** `harbor jobs resume`
+(`harbor/cli/jobs.py:1361-1430` → `harbor/job.py:_maybe_init_existing_job:192-228`)
+rmtree's any trial directory that lacks `result.json` and re-runs the
+trial under a freshly randomised `trial_name`
+(`harbor/models/trial/config.py:213-222`). Razorback's freeze tree
+therefore cannot live inside harbor's per-trial scratch zone: if a
+`SpacedockSolverAgent` halts mid-trial (process killed, container
+evicted, `harbor run` Ctrl-C'd) before `result.json` is written,
+harbor's resume destroys the trial directory and every razorback file
+under it, and the re-executed trial gets a new `trial_name` that
+would not match any `trial_name`-keyed sibling store.
+
+The mitigation: razorback writes the freeze tree to a sibling
+directory **outside harbor's per-trial scratch zone**, keyed by
+`sealed_hash` rather than `trial_name`. The freeze location is
+`<harbor-run-dir>/_razorback/freeze/<sealed_hash>/` (see §7.1).
+`sealed_hash` is the §4.3 + §8.4 sealed-input hash, identical across
+the initial run and any subsequent `harbor jobs resume` because the
+sealed inputs (model, sampling, solver_workflow content, prompts,
+spacedock skill version, harbor agent kwargs) are read from
+`spec.frozen.yaml`, which itself survives resume.
+
+Consequences:
+
+- **In-place resume of a halted trial is supported.** The re-executed
+  trial recomputes `sealed_hash` from the unchanged `spec.frozen.yaml`,
+  locates the existing freeze tree at the same path, and restores the
+  workspace from its embedded `.git/` before invoking the inner
+  runtime.
+- **Cross-job `resume_from_freeze` is supported the same way.** The
+  cross-job resume reads `<path>/sealed_hash.txt`, refuses on
+  mismatch (`SeedMismatchError`, exit 20), and restores from
+  `<path>/.git/` otherwise. The two resume mechanisms share the same
+  freeze layout.
+- **No partial-credit recovery on rmtree'd stages remains acceptable.**
+  Stage commits are written to `_razorback/freeze/<sealed_hash>/`
+  immediately as the freeze mod produces them, so per-stage cost
+  attribution survives the rmtree even though the trial's `agent/`
+  subtree does not.
+
+Empirically verified by AC-0.5's probe at
+`docs/superpowers/plans/2026-05-19-harbor-resume-probe.md`
+(commit `1569853`).
 
 ### 4.5 Registration with harbor
 
@@ -618,20 +678,33 @@ of the layout is harbor's.
 ```
 <harbor-run-dir>/
 ├── (harbor's standard run-dir layout)
+├── trials/<task>-NNNN__<uuid7>/  # harbor owns; rmtree'd on resume if incomplete
+│   └── (harbor's standard trial layout — razorback never writes here)
 ├── spec.frozen.yaml              # razorback writes at `rk freeze`
 ├── provenance.yaml               # razorback writes at `rk freeze`
-└── trials/<task>-NNNN/
-    ├── (harbor's standard trial layout)
-    └── logs_dir/
-        └── agent_freeze/         # SpacedockSolverAgent contract
+└── _razorback/                   # razorback's sibling directory; harbor never touches
+    └── freeze/
+        └── <sealed_hash>/        # SpacedockSolverAgent contract; survives `harbor jobs resume`
             ├── .git/             # workspace snapshots per stage (mods write)
             ├── phase_stats.json  # per-stage tokens/cost/wallclock (mods write)
             └── sealed_hash.txt   # sealed-input hash (class writes at first stage)
 ```
 
-`logs_dir/agent_freeze/` is the only razorback-owned subtree under
-harbor's run-dir layout. Razorback does not modify harbor's `agent/`,
-`verifier/`, or `artifacts/` subtrees.
+`_razorback/freeze/<sealed_hash>/` is the only razorback-owned subtree
+under harbor's run-dir layout. It lives **outside** harbor's
+`trials/<name>/` so that `harbor jobs resume`'s rmtree of incomplete
+trials (`harbor/job.py:_maybe_init_existing_job:192-228`) cannot
+destroy the freeze tree. The directory is keyed by `sealed_hash` (the
+§4.3 + §8.4 sealed-input hash) rather than by `trial_name`, because
+`harbor jobs resume` regenerates `trial_name` for re-executed trials
+(`harbor/models/trial/config.py:213-222`); `sealed_hash` is derived
+from `spec.frozen.yaml`, which itself survives resume, so the same
+freeze tree is addressable by the re-executed agent instance. See
+§4.4's "Harbor-resume interaction" subsection for the empirical
+basis (AC-0.5 probe at
+`docs/superpowers/plans/2026-05-19-harbor-resume-probe.md`,
+commit `1569853`). Razorback does not modify harbor's `trials/`,
+`agent/`, `verifier/`, or `artifacts/` subtrees.
 
 ### 7.2 `phase_stats.json`
 
@@ -680,16 +753,22 @@ This section describes razorback's modules. Operators do not read it.
 `rk run` is a thin wrapper. It:
 
 1. Reads the frozen spec.
-2. Re-resolves the model alias against the provider API; refuses
+2. Canonicalizes the frozen spec's `jobs_dir` to an absolute,
+   symlink-resolved path (`Path(jobs_dir).expanduser().resolve()`)
+   before invoking harbor. This keeps `harbor jobs resume -p
+   <run-dir>` and `harbor jobs resume` against the config in
+   agreement on which directory to scan. See §3.1 design-rule on
+   path canonicalization.
+3. Re-resolves the model alias against the provider API; refuses
    with `AliasDriftError` if the resolved version differs from
    `provenance.yaml.model_resolved_version` unless
    `--allow-alias-drift` is passed.
-3. Invokes `harbor run` in-process (via harbor's Python API) or by
+4. Invokes `harbor run` in-process (via harbor's Python API) or by
    subprocess (via the harbor CLI), passing the frozen spec through
    unchanged.
-4. Surfaces harbor's exit code as-is (exit 30 reserved for harbor
+5. Surfaces harbor's exit code as-is (exit 30 reserved for harbor
    runtime failures; razorback's own exit codes do not collide).
-5. Writes `spec.frozen.yaml` and `provenance.yaml` into the
+6. Writes `spec.frozen.yaml` and `provenance.yaml` into the
    harbor-produced run-dir.
 
 Implementation note: razorback does not own JobConfig construction
@@ -799,7 +878,7 @@ __init__(...):
 setup(env):
     # 1. workspace bootstrap: copy solver_workflow contents into the env
     # 2. if resume_from_freeze: git restore the workspace from the freeze
-    # 3. write sealed_hash.txt to logs_dir/agent_freeze/
+    # 3. write sealed_hash.txt to <run-dir>/_razorback/freeze/<sealed_hash>/
     # 4. delegate to inner.setup(env)
 
 run():
