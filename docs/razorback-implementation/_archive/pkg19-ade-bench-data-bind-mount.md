@@ -1,16 +1,17 @@
 ---
 id: bx7vd4n8mc2r9q5z3kpwhftj
 title: PKG-19 — ade-bench harbor integration reuses ~/git/ade-bench data via bind-mount (no fresh copy)
-status: validation
+status: done
 source: Captain directive 2026-05-20 "but can we reuse the data files from ade-bench directly, not a fresh copy"; ade-bench probe Phase 1 finding (disk at 100%, blocked); analog of PKG-14 for ade-bench (mirror of DAB data bind-mount discipline)
 started: 2026-05-20T21:16:11Z
-completed:
-verdict:
+completed: 2026-05-20T22:42:05Z
+verdict: PASSED
 score: 0.85
-worktree: .worktrees/spacedock-ensign-pkg19-ade-bench-data-bind-mount
+worktree: 
 issue:
 pr:
 mod-block:
+archived: 2026-05-20T22:42:05Z
 ---
 
 ## Problem
