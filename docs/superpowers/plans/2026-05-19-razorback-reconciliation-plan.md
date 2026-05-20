@@ -952,6 +952,27 @@ baseline.
 
 ---
 
+## Captain decisions resolved (Phase 0)
+
+Two decisions in the list below have been resolved by the captain
+during Phase 0. They are recorded here as the durable record so
+downstream entity authors (Phase 1, Phase 2, Phase 3) can cite
+"reconciliation plan §Captain decisions resolved" rather than
+re-derive.
+
+- **D2 (codex/pi support timing, AC-0.7):** Captain decision —
+  **claude-only at first ship.** `codex.py` and `pi.py` adapter
+  sub-modules ship as `NotImplementedError` stubs in the first cut.
+  Functional implementations land when a consumer (a second-runtime
+  experiment, a paper-reproduction targeting codex) demands them.
+  Recorded 2026-05-19; consumed by `phase3-spacedock-solver-v2.md`
+  (id `d5gxb8p7eea6nk85nja5zmbr`).
+- **D5 (DAB harbor adapter packaging, AC-0.8):** Captain decision —
+  **sibling package.** The DAB adapter ships as
+  `packages/razorback-plugin-dab/`, a parallel sibling package to
+  razorback's core, not as a subpackage. Recorded 2026-05-19;
+  consumed by `phase2-dab-harbor-adapter.md`.
+
 ## Decision points
 
 These need a captain decision; the plan does not pre-decide them.
