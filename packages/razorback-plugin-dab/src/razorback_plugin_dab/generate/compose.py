@@ -14,8 +14,13 @@ MONGO_IMAGE = "mongo:8"
 DEFAULT_AGENT_IMAGE = "dab-agent:latest"
 DEFAULT_CONTAINER_WORKDIR = "/workspace"
 
-POSTGRES_USER = "dabench"
-POSTGRES_PASSWORD = "dabench"
+# PKG-13 T10 finding: upstream DAB SQL dumps assume the default `postgres`
+# superuser (ALTER TABLE ... OWNER TO postgres in books_info.sql). Configuring
+# a different POSTGRES_USER makes the init SQL fail with role-not-found and
+# the container exits with code 3 before becoming healthy. Use the default
+# superuser name to match the dump's role references.
+POSTGRES_USER = "postgres"
+POSTGRES_PASSWORD = "postgres"
 
 
 class ComposeError(RuntimeError):

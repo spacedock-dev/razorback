@@ -37,7 +37,7 @@ Answer the query in `query.json` using the databases described in
 ## Database access
 
 Connect to each database declared in `db_config.yaml`:
-- `postgres` clients: host `dab-postgres`, port 5432, user `dabench`, password `dabench`.
+- `postgres` clients: host `dab-postgres`, port 5432, user `postgres`, password `postgres`.
 - `mongo` clients: host `dab-mongo`, port 27017.
 - `sqlite` / `duckdb` clients: open the file under `query_dataset/`.
 
@@ -70,7 +70,7 @@ stages and commit a final answer that survives an honest verifier.
 ## Database access
 
 Connect to each database declared in `db_config.yaml`:
-- `postgres` clients: host `dab-postgres`, port 5432, user `dabench`, password `dabench`.
+- `postgres` clients: host `dab-postgres`, port 5432, user `postgres`, password `postgres`.
 - `mongo` clients: host `dab-mongo`, port 27017.
 - `sqlite` / `duckdb` clients: open the file under `query_dataset/`.
 
