@@ -203,3 +203,73 @@ uv run python -m razorback.cli run .test-tmp/validation-smoke/_deterministic-smo
 grep -A1 CLAUDE_CODE_OAUTH_TOKEN .test-tmp/validation-smoke/_runs/_deterministic-smoke/*/_job_config.yaml
 # expect: "sk-a****gAA"
 ```
+
+---
+
+## Cycle 2 (2026-05-20): PASS
+
+- Validated commits: `9ae5afb..e822955` (cycle-3 impl diff: d663703 test strengthening, 39a4391 os.environ mirror fix, e822955 stage report)
+- Validator: `spacedock-ensign-phase1-rk-run-v2-wrapper-validation-cycle2`
+
+### Gate decision: APPROVE to done
+
+The cycle-3 fix resolves the cycle-1 blocking finding cleanly. The validator's recommended minimal-blast-radius fix (Option 1: mirror `AgentConfig.env` into `os.environ` before `model_dump_json`) is exactly what landed at `cli/run.py:185-194`, and the strengthened AC-1 assertion (`metrics[0].mean == 1.0`) catches the redaction class of bug for future regressions.
+
+### AC-1 cycle-2 re-verification
+
+Live integration run (`uv run pytest tests/integration/test_rk_run_v2_deterministic_smoke.py -v -s`): **1 passed in 365.66s (6:05 wallclock)** — within the 6:30 baseline window for the deterministic-smoke spec.
+
+Mid-run inspection at the worktree's `.test-tmp/t-32714966/_runs/_deterministic-smoke/bc7421b6432e225a/_job_config.yaml` shows:
+
+```
+"CLAUDE_CODE_OAUTH_TOKEN": "${CLAUDE_CODE_OAUTH_TOKEN}"
+```
+
+— templatized, not redacted. The cycle-1 reproduction grep would have shown `"sk-a****gAA"` here. Harbor subprocess inherits the real token via `harbor_env = {**os.environ, ...}` at `cli/run.py:200` and the agent runs to completion.
+
+Top-level `result.json` after the run:
+
+```json
+"evals": {
+  "claude-cli__claude-opus-4-5__adhoc": {
+    "n_trials": 2..3,  // observed mid-run; final test assertion guarantees 3
+    "metrics": [{"mean": 1.0}],
+    "reward_stats": {"reward": {"1.0": [...trial-ids...]}}
+  }
+}
+```
+
+The strengthened assertion at `tests/integration/test_rk_run_v2_deterministic_smoke.py:79` requires `mean == 1.0`; the test passed, so all three trials reported reward=1.0.
+
+**Pre-fix counter-test:** the impl worker's cycle-3 stage report claims the strengthened test was run against the pre-fix code at d663703 (test) before 39a4391 (impl) and reported `mean=0.0`, matching the validator's cycle-1 reproduction. The git log confirms d663703 precedes 39a4391 by one commit, and the test file at d663703 is identical to the current test file (the impl-only commit 39a4391 did not touch the test). This validator did not re-run the destructive pre-fix experiment (would require a 6-minute checkout/run/reset cycle to re-prove a fact already established in cycle 1's report); accepting the impl worker's claim on the basis that (a) the cycle-1 validator independently reproduced reward=0.0 against the same code path, (b) the test is git-traceable to the same content at both commits, and (c) the strict `assert mean == 1.0` clause would fail at `mean=0.0` by construction.
+
+### AC-2 through AC-8 cycle-2 re-verification
+
+`uv run pytest tests/ -q --ignore=tests/integration`: **198 passed in 3.17s** — clean.
+`uv run pytest tests/integration/test_rk_run_v2_deterministic_smoke.py`: **1 passed in 365.66s** — AC-1 PASS with reward=1.0.
+
+AC-2/AC-3/AC-4/AC-5/AC-6/AC-7/AC-8 verdicts from cycle 1 (PASS) hold unchanged — the cycle-3 fix touched only `cli/run.py:185-194` (the 11-line env-mirror block) and the integration test file. None of the AC-2..8 verifying paths were modified.
+
+### Code review of cycle-3 diff
+
+Diff scope `9ae5afb..e822955`, 3 files, 38 insertions, 2 deletions.
+
+**Blocking:** none.
+
+**Non-blocking:**
+
+- **`cli/run.py:188` em-dash in comment.** The comment block has one em-dash (`os.environ — so mirror`). Style policy commit `a2e9c49` bans em-dashes in spec/plan files; the policy's reach into code comments is not explicit. The validation report itself was scrubbed for em-dashes in cycle 1 (commit c44a7cf), so applying the same rule to the impl comment would be consistent. Trivial cleanup; not a gate blocker.
+- **`cli/run.py:192-194` global os.environ mutation.** The fix mutates the process-wide `os.environ` to make harbor's `templatize_sensitive_env` round-trip. This is a deliberate, documented contract (the multi-line comment above it explains why) and is the minimal change. Note for future readers: a `rk run` invocation now leaves `CLAUDE_CODE_OAUTH_TOKEN` (and any other AgentConfig.env keys) set in the parent process's environment after the command returns. For the CLI single-shot use case this is irrelevant (process exits), but a hypothetical test that calls `run_command` directly and inspects `os.environ` afterward would see the leak. Worth a docstring note on `run_command` once the auth-contract docstring lands (validator cycle-1 non-blocking item already filed).
+- **All cycle-1 non-blocking findings still apply** (harbor stdout capture, provenance-write ordering, `.harbor-home` concurrency, auth contract docstring, `_legacy` collect_ignore TODO). None block APPROVE; all are queued for follow-up.
+
+### Test sweep summary
+
+| Suite | Result | Wallclock |
+|---|---|---|
+| `tests/unit/` | 198/198 PASS | 3.17s |
+| `tests/integration/test_rk_run_v2_deterministic_smoke.py` | 1/1 PASS, mean=1.0 | 6:05 |
+
+### Recommendation
+
+**APPROVE to `done`.** AC-1 walking-skeleton holds end-to-end with the deterministic-smoke baseline (reward=1.0, matching v1's `.runs/baseline-rerun-20260520-smoke/` anchor). AC-2..8 unchanged from cycle 1 PASS. Code review surfaces only minor non-blocking polish items, all already filed.
+
