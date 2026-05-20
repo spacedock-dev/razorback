@@ -55,8 +55,19 @@ def _invoke_harbor(job_config_yaml: Path) -> int:
 
 
 def _write_provenance_artifacts(spec_bytes: bytes, spec, run_dir: Path) -> None:
-    """Phase 1 Task 8 fills this; placeholder echoes the input bytes."""
+    """AC-3: byte-for-byte echo of the input frozen spec + provenance.yaml writer.
+
+    `spec_bytes` is the raw bytes of the input frozen spec; `spec` is its
+    parsed form (used to extract the provenance block for provenance.yaml).
+    """
+    from razorback.provenance.provenance_yaml import write_provenance_yaml
+
     (run_dir / "spec.frozen.yaml").write_bytes(spec_bytes)
+    frozen_provenance = spec.model_dump(mode="json").get("provenance") or {}
+    if frozen_provenance:
+        write_provenance_yaml(
+            run_dir / "provenance.yaml", frozen_provenance, drift_record=None
+        )
 
 
 def run_command(
