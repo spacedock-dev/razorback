@@ -1,5 +1,5 @@
 # ABOUTME: Typer application root for the `rk` binary.
-# ABOUTME: Subcommands attach here; M1 wires up `rk run` only.
+# ABOUTME: Subcommands attach here; v2 wires up `rk run` only at Phase 1.
 
 import typer
 
@@ -17,14 +17,6 @@ def _root() -> None:
 
 
 app.command("run")(run_command)
-
-from razorback.cli.validate import validate_command
-
-app.command("validate")(validate_command)
-
-from razorback.cli.spec import app as spec_app
-
-app.add_typer(spec_app, name="spec")
 
 from razorback.cli.runs import runs_app
 

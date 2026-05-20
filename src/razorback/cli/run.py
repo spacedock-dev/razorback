@@ -1,11 +1,11 @@
-# ABOUTME: `rk run` Typer command. M1: parse spec, freeze, run harbor, write run-dir.
-# ABOUTME: Maps razorback typed errors to documented exit codes (§3.2).
+# ABOUTME: `rk run` Typer command. Phase 1: parse spec, run pre-checks, delegate to harbor run.
+# ABOUTME: Maps razorback typed errors to documented exit codes (§3.4).
 
 from pathlib import Path
 
 import typer
 
-from razorback.errors import ExitCode, RazorbackError, SpecError
+from razorback.errors import ExitCode, SpecError
 from razorback.spec.parse import parse_spec_file
 
 
@@ -20,15 +20,9 @@ def run_command(
 ) -> None:
     """Execute a frozen spec against harbor and write a run-dir."""
     try:
-        spec = parse_spec_file(spec_path)
+        parse_spec_file(spec_path)
     except SpecError as exc:
         typer.echo(f"SpecError: {exc}", err=True)
         raise typer.Exit(ExitCode.SPEC_ERROR)
 
-    from razorback.run import execute_run
-
-    try:
-        execute_run(spec=spec, runs_dir=runs_dir, allow_alias_drift=allow_alias_drift)
-    except RazorbackError as exc:
-        typer.echo(f"{type(exc).__name__}: {exc}", err=True)
-        raise typer.Exit(exc.exit_code)
+    raise RuntimeError("rk run v2 wrapper not yet implemented — Phase 1 Task 7")
