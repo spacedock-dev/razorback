@@ -1,7 +1,7 @@
 ---
 id: v4fz9wwrm3f2cv800zdp6wdv
 title: PKG-9 v2 — tools_denied agent block field
-status: implementation
+status: validation
 source: spec §6.2 + §8.5 + §9.4 (v2 spec at docs/superpowers/specs/2026-05-19-razorback-on-harbor.md)
 started: 2026-05-20T06:37:04Z
 completed:
