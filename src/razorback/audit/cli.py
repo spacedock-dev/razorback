@@ -1,4 +1,4 @@
-# ABOUTME: `rk audit` Typer command — Layer 3 post-hoc trajectory scan over a run-dir.
+# ABOUTME: `rk audit` Typer command (Layer 3 post-hoc trajectory scan over a run-dir).
 # ABOUTME: Maps --policy strict + any non-clean trial to TaintFindingsError (exit 23).
 
 import json
@@ -18,7 +18,7 @@ def _discover_trial_roots(run_dir: Path) -> list[Path]:
 
     A trial root is any directory containing one of `codex-output.jsonl`,
     `claude-output.jsonl`, or `traces/manifest.json`. Mirrors the upstream
-    discover_scan_inputs semantics but operates one level up — at the
+    discover_scan_inputs semantics but operates one level up, at the
     per-trial granularity that `rk audit` surfaces.
     """
     seen: set[Path] = set()
@@ -120,7 +120,7 @@ def audit_command(
             "",
         ]
         for trial in result["trials"]:
-            lines.append(f"## {trial['trial_id']} — {trial['taint_status']}")
+            lines.append(f"## {trial['trial_id']}: {trial['taint_status']}")
             if not trial["findings"]:
                 lines.append("")
                 lines.append("No findings.")
