@@ -116,3 +116,32 @@ Verified by: `uv run rk score <pkg13-honest-rundir>` produces the same 9/9 Wilso
 ### Summary
 
 13-task TDD plan: new `src/razorback/runs/aggregate.py` module (manifest/summary/events/per_trial_outcomes writers) invoked from `cli/run.py` after `_invoke_harbor()` exits regardless of harbor's rc. Harbor 0.6.6 writes `lock.json` itself, so AC-5 is implemented as a drift READ surface in `rk runs show` via new `src/razorback/runs/lock_drift.py`. Mechanism check (T6) validates the on-disk read path against a fixture skeleton before wiring (T9), per the "validate the smallest end-to-end exercise of the riskiest contract FIRST" rule. AC-7's 8 broken integration tests are mostly already-aligned — only `test_rk_run_v2_deterministic_smoke.py` needs an additive assertion. AC-8 no-regression is guarded by an isolation test that exercises `score/load.py` before and after PKG-17 writes.
+
+## Stage Report: implementation
+
+- DONE: Read PKG-17 entity (8 ACs) + plan at docs/razorback-implementation/plans/pkg17-rk-run-writes-rundir-artifacts.md (13 tasks, TDD-first, mechanism-check first).
+  Entity 8 ACs + plan 13 tasks reviewed before any code change; AC ↔ Task table memorised.
+- DONE: Execute T1-T13 in order. T1 manifest schema test (RED). T2 summary aggregator core (RED→GREEN). T3 events.jsonl concat. T4 per_trial_outcomes.json. T5 lock_drift.py reader for rk runs show.
+  Commits 4387e5f (T1), 9a79b4e (T2), 0a17749 (T3), 8220542 (T4), dba95e6 (T5).
+- DONE: T6 mechanism-check: validate aggregator's on-disk read path against a fixture skeleton BEFORE wiring (T9). This is the riskiest contract.
+  Commit 0e868a7. `aggregate_run_dir` exercised end-to-end against `post_harbor_skeleton` fixture before any cli/run.py changes.
+- DONE: T7 provenance hash helper for AC-5 drift detection.
+  Commit 9275095. `compute_provenance_hash` returns sha256 hex digest of provenance.yaml bytes.
+- DONE: T8 failure-path test: aggregator never masks harbor exit code (runs even when harbor fails).
+  Commit f0eebda. `safe_aggregate_run_dir` returns warnings list; never raises.
+- DONE: T9 wire aggregate.py into cli/run.py after _invoke_harbor() exits, regardless of harbor rc.
+  Commit 352c09c. 3 wiring tests cover (success, harbor-failure-with-aggregator, aggregator-exception-does-not-mask-harbor-rc).
+- DONE: T10 AC-6 rk runs cost smoke against a fresh PKG-17 run-dir.
+  Commit 2827fc2. `test_rk_runs_cost_sums_pkg17_run_dirs` exercises 3-cell synthetic matrix; cost ledger returns honest sums with no warnings.
+- DONE: T11 AC-7 integration test un-break: per-test decision table from the plan (7 of 8 already-aligned; only test_rk_run_v2_deterministic_smoke.py needs an additive assertion block).
+  Commit 761bfc7. Additive assertion block added to deterministic smoke for manifest/summary/events/per_trial_outcomes. Also: added trial-name stratum fallback in aggregate.py (`_parse_stratum_from_trial_name`) so DAB trials without per-trial stratum.json sidecars still aggregate to the right dataset key (uncovered while inspecting test_rk_run_bookreview_nop.py).
+- DONE: T12 AC-8 no-regression isolation test: exercise score/load.py before and after PKG-17 writes; confirm 9/9 Wilson CI output unchanged.
+  Commit 761bfc7. `test_score_no_regression_pkg17.py` confirms loader output is byte-equivalent before and after aggregate_run_dir.
+- DONE: T13 full plugin + razorback pytest sweep. 270+ tests still green.
+  Final sweep: 444 razorback unit tests + 73 plugin unit tests + 3 selected integration tests all pass; no regressions.
+- DONE: Write impl-stage stage report at the bottom of the entity file with per-task DONE/SKIPPED/FAILED entries.
+  This section.
+
+### Summary
+
+PKG-17 ships the v2-canonical post-harbor aggregator at `src/razorback/runs/aggregate.py` plus the drift-read surface at `src/razorback/runs/lock_drift.py`, wired into `cli/run.py` after `_invoke_harbor()` exits. AC-1..AC-4 are covered by the four leaf writers (`write_manifest`, `aggregate_summary`, `concatenate_events`, `write_per_trial_outcomes`) called from `aggregate_run_dir`; AC-5 by `compute_drift` shown via `rk runs show`. The aggregator never masks harbor's exit code (T8 `safe_aggregate_run_dir`). One small deviation from the plan: added `_parse_stratum_from_trial_name` fallback so DAB trials without a per-trial stratum sidecar (e.g. nop-agent runs) still stratify to the right dataset key — surfaced while running T11's bookreview-nop check. Final sweep: 444 unit tests + 73 plugin tests + 3 selected integration tests green.
