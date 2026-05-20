@@ -130,27 +130,27 @@ Plan covers all seven ACs with eight tasks, riskiest-contract-first. Three contr
 
 ## Stage Report: implementation
 
-- DONE: TDD — failing tests committed before implementation for each task; file format (T1), atomic writer crash invariant (T4), subscription-auth cost_usd:null graceful degradation (T4-T5) validated in isolation.
+- DONE: TDD - failing tests committed before implementation for each task; file format (T1), atomic writer crash invariant (T4), subscription-auth cost_usd:null graceful degradation (T4-T5) validated in isolation.
   Commits: a7e29df (T1), 76c09ed (T2), a05805a (T3), cecd9f5 (T4), a7b82cf (T5).
 - DONE: Hooks land at phase1's pre-checks zone + `_invoke_harbor` seam per plan Task 6.
   Pre-launch gate at `cli/run.py` after pre-checks + run_dir derivation, before `_invoke_harbor`; post-completion stamp after `_invoke_harbor` returns 0, before provenance artifact write. Commit c32b4f4.
 - DONE: Integration test exercises the two-invocation refusal against the deterministic smoke spec; BudgetExceededError raises with ExitCode.BUDGET_EXCEEDED (22).
   `tests/integration/test_budget_gate_two_invocations.py` + smoke spec `experiment_meta: {max_budget_usd: 1.0, estimated_cost_usd: 0.6}`. Commit 5d288c3. Mechanism check (real `rk run` subprocess against pre-populated budget file) returned exit 22 with the expected message; file unchanged on refusal.
-- DONE: AC-1 — `--max-budget-usd-running <file>` reads running total and refuses on overage.
+- DONE: AC-1 - `--max-budget-usd-running <file>` reads running total and refuses on overage.
   `tests/unit/test_rk_run_budget_gate.py::test_budget_gate_refuses_when_over` PASS; harbor not invoked on refusal.
-- DONE: AC-2 — On completion, actual cost appends to the running-total file.
+- DONE: AC-2 - On completion, actual cost appends to the running-total file.
   `test_budget_gate_allows_when_under_then_appends` PASS; atomic append via fcntl.flock + tempfile-rename in `budget.py::stamp_completed`.
-- DONE: AC-3 — Pre-launch estimate uses frozen spec's `experiment_meta.estimated_cost_usd`.
+- DONE: AC-3 - Pre-launch estimate uses frozen spec's `experiment_meta.estimated_cost_usd`.
   Spec schema slot added in `schema.py::ExperimentMetaBlock`; `budget.py::read_estimate_from_spec` enforces presence with "rk freeze" hint on absence.
-- DONE: AC-4 — Exit code 22 reserved for `BudgetExceededError`; message names budget, total, estimate.
+- DONE: AC-4 - Exit code 22 reserved for `BudgetExceededError`; message names budget, total, estimate.
   `decide_budget` formats message with all three fields; CLI surfaces `ExitCode.BUDGET_EXCEEDED`.
-- DONE: AC-5 — Without `--max-budget-usd-running`, `rk run` behaves unchanged.
+- DONE: AC-5 - Without `--max-budget-usd-running`, `rk run` behaves unchanged.
   `test_without_flag_behavior_unchanged` PASS; flag default `None` skips all budget logic.
-- DONE: AC-6 — Atomic append survives crash; running total invariant holds.
+- DONE: AC-6 - Atomic append survives crash; running total invariant holds.
   `cost_known: null` records (in-flight/crashed) excluded from total; `test_crash_between_start_and_complete_leaves_in_flight` + `test_crash_invariant_holds_for_rk_runs_cost_consumer` PASS.
-- DONE: AC-7 — `uv run pytest` exits 0 for Phase 4a-owned tests.
+- DONE: AC-7 - `uv run pytest` exits 0 for Phase 4a-owned tests.
   29 Phase 4a tests pass (6 + 4 + 3 + 6 + 5 + 5). Full-suite unit sweep: 253 passed (excluding pre-existing `test_translator_harbor_dab.py` import failure unrelated to budget work; integration `test_rk_run_nop.py` etc. failures reproduce at base commit and are pre-existing Phase 1 v2 layout issues).
 
 ### Summary
 
-Eight-task plan executed riskiest-contract-first per CL's "Validating new mechanisms" rule. The three risky contracts — file format (T1), atomic writer crash invariant (T4), and subscription-auth `cost_usd: null` graceful degradation (T4-T5) — were each validated in isolation before CLI wiring (T6) integrated them; mechanism check via subprocess `rk run` against the smoke spec with a pre-populated over-budget file confirmed exit 22 + file unchanged. Added `experiment_meta` block to spec schema as the home for `max_budget_usd` + `estimated_cost_usd` (PKG-8 v2 `rk freeze` will populate `estimated_cost_usd`; the field is consumer-only here). Pre-existing test failures (`test_translator_harbor_dab.py` module import, integration nop tests' missing `manifest.json`) are out of scope per plan Task 8 Step 2.
+Eight-task plan executed riskiest-contract-first per CL's "Validating new mechanisms" rule. The three risky contracts - file format (T1), atomic writer crash invariant (T4), and subscription-auth `cost_usd: null` graceful degradation (T4-T5) - were each validated in isolation before CLI wiring (T6) integrated them; mechanism check via subprocess `rk run` against the smoke spec with a pre-populated over-budget file confirmed exit 22 + file unchanged. Added `experiment_meta` block to spec schema as the home for `max_budget_usd` + `estimated_cost_usd` (PKG-8 v2 `rk freeze` will populate `estimated_cost_usd`; the field is consumer-only here). Pre-existing test failures (`test_translator_harbor_dab.py` module import, integration nop tests' missing `manifest.json`) are out of scope per plan Task 8 Step 2.
