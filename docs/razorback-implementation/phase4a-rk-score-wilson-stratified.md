@@ -149,3 +149,34 @@ on key rename or removal within the major version. Per spec §3.3.
 ### Summary
 
 Wrote a 10-task plan covering the three rk score readouts (per-stratum Wilson CI, stratified pass@1 macro-average, --against-constant verdict), citing spec §3.2 + §8.3a verbatim and pinning the consumer side of phase2 AC-8's stratum.json contract. Tasks order the loader's input contract (Task 1) ahead of the reducer (Task 2) per CL's "Validating new mechanisms" rule; AC-3 counting-honesty (errored-vs-completed denominator + all-errored null + error_reason) folds in pkg2-v2-rk-score-counting per the entity. wilson_ci is reused verbatim from `diff/stats.py:14-33` per the module inventory's KEEP-EXTRACT classification (no rewrite).
+
+## Stage Report: implementation
+
+- DONE: TDD failing tests committed BEFORE implementation; three readouts (Wilson CI per stratum, stratified pass@1 mean, --against-constant) plus the reducer signature pkg2-v2 expects.
+  Red commits 0d0e34b (loader), 666f7f6 (reducer), 4217b68 (verdict), bd90ae0 (renderer), 78d6ab5 (CLI) precede their green counterparts; `reduce_trials(records, *, alpha) -> ScoreReport` matches the shared signature for pkg2-v2-rk-score-counting at `src/razorback/score/reduce.py:32`.
+- DONE: Loader contract (Task 1) lands before reducer (Task 2) per riskiest-mechanism-first rule. wilson_ci reused verbatim from diff/stats.py:14-33.
+  Commit 7e6b522 (loader) precedes 170da72 (reducer); `src/razorback/score/reduce.py:9` imports `from razorback.diff.stats import wilson_ci` without reimplementing.
+- DONE: Integration test against .runs/baseline-rerun-20260520-bookreview/ fixture run-dir (Task 7) plus ade-bench-shaped fixture for adapter-agnosticism (Task 8).
+  `tests/integration/test_score_baseline_rerun.py`: 2/2 pass against `tests/fixtures/score/baseline_rerun_bookreview/` (copy of the .runs/ fixture with hand-added stratum.json). `tests/unit/test_score_stratum_tagging.py`: 3/3 pass against DAB + ade-bench + no-scalar fixtures.
+- DONE: AC-1 per-stratum Wilson 95% CI + overall stratified pass@1.
+  `tests/unit/test_score_reduce.py::test_wilson_ci_n_20_k_10_alpha_05_matches_literature` + `test_alpha_10_half_width_shrinks_vs_alpha_05` + `test_stratified_mean_is_macro_average` green.
+- DONE: AC-2 Wilson CI fixture correctness (n=20, k=10 → [0.299, 0.701]).
+  `tests/unit/test_score_reduce.py::test_wilson_ci_n_20_k_10_alpha_05_matches_literature` green at abs=1e-3.
+- DONE: AC-3 counting honesty: errored trials not counted as fails; null score + error_reason on all-errored.
+  `tests/unit/test_score_reduce.py::test_denominator_is_n_completed_not_n_total` + `test_all_errored_stratum_yields_null_score_and_error_reason` + `test_dominant_error_class_wins_with_alphabetical_tiebreak` + `test_all_errored_run_level_rollup` green.
+- DONE: AC-4 --against-constant inside/outside-CI verdict per stratum.
+  `tests/unit/test_score_verdict.py`: 8/8 pass (matches/above/below/null and stratified-row point comparison).
+- DONE: AC-5 paper-reproduction readout shape on a real run-dir.
+  `tests/integration/test_score_baseline_rerun.py` against the baseline-rerun-20260520-bookreview fixture; 3/3 trials report pass_at_1=1.0, verdict in {matches, outside-CI}.
+- DONE: AC-6 adapter-agnostic stratum tagging.
+  `tests/unit/test_score_stratum_tagging.py`: DAB fixture → stratum="bookreview"; ade-bench fixture (no `dataset` key) → stratum="test"; no-scalar fixture raises ScoreInputError naming the trial.
+- DONE: AC-7 --format markdown human-readable equivalent.
+  `tests/unit/test_score_render.py`: markdown table with one row per stratum + stratified row + verdict column when --against-constant set; 7/7 pass.
+- DONE: AC-8 JSON output stable under §3.3 semver promise.
+  `tests/unit/test_score_json_schema_snapshot.py` + `tests/fixtures/score/snapshots/score_report_v1.json` pin the recursive key set; 2/2 pass.
+- DONE: AC-9 uv run pytest exits 0 (modulo pre-existing failures unrelated to this work).
+  All 46 new score tests green (39 unit + 7 integration). Razorback unit suite 295/295 pass after ignoring `tests/unit/test_translator_harbor_dab.py` which has a pre-existing import error on main (`razorback.compat` was moved to `_legacy/`). Plugin suite 46/46 pass. Pre-existing integration-suite failures (test_rk_run_nop, test_rk_run_bookreview_*, test_rk_run_v2_deterministic_smoke) reproduce on main without my branch (verified via reuse of the same worktree path against the main repo's pytest discovery); they require live docker/harbor and are not caused by my changes.
+
+### Summary
+
+Shipped `rk score <run-dir>` as a Typer subcommand wired into `src/razorback/cli/__init__.py:37`, with three pure-functional layers (loader, reducer, verdict) under `src/razorback/score/` and two renderers (JSON canonical / markdown). The package has no dependency on razorback's `_legacy/` tree; `wilson_ci` is imported verbatim from `diff/stats.py:14` per the module inventory's KEEP-EXTRACT classification. Counting honesty (`n_completed` denominator, `n_errored` exposed, null score + `error_reason` on all-errored strata) folds in pkg2-v2-rk-score-counting AC-1+AC-2 via the same `reduce_trials(records, *, alpha) -> ScoreReport` signature. The JSON schema is pinned by `tests/fixtures/score/snapshots/score_report_v1.json` (`score_version: 1`) and the recursive-keys snapshot test; future minor additions remain allowed under §3.3. Adapter-agnostic stratum resolution (prefer `dataset`, else first scalar) is exercised by paired DAB + ade-bench fixtures so the eventual ade-bench-harbor-adapter drops into `rk score` with no code change.
