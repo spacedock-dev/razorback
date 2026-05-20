@@ -99,6 +99,25 @@ per-trial `stratum: {dataset: bookreview, ...}` records in
 `summary.json`; `rk score` against the same run-dir computes a
 per-stratum readout. Per plan AC-2.8 (D7 split).
 
+**AC-9 — Dataset hydration semantics named and honored.**
+The DAB harbor adapter has an explicit answer for how the 12 DAB
+datasets reach the per-task container at run time. v1's pattern
+was a manual user prereq (`git lfs pull` in
+`dataagentbench/data/` per `dataagentbench/benchmark/setup.sh:84`).
+v2's adapter chooses between (a) auto-hydration triggered by the
+adapter on first use, (b) enforced prereq with a clean
+missing-dataset error message at adapter-install time, or (c) a
+hybrid (cache check + lazy pull). The plan stage names the
+choice; the implementation honors it; validation confirms by
+deleting the cached dataset and observing the chosen behavior
+(auto-pull, clean error, or hybrid).
+Verified by: a fresh checkout (`git clone` + no `git lfs pull`)
+followed by `uv run rk run examples/specs/bookreview-claude.frozen.yaml`
+either (a) succeeds with adapter-triggered hydration, (b) fails
+with the documented missing-dataset error message naming the fix,
+or (c) caches per the hybrid policy. The validator runs whichever
+of (a)/(b)/(c) the plan committed to.
+
 ## Test plan
 
 - **Adapter unit tests:** per-task prepare + verify scripts run
