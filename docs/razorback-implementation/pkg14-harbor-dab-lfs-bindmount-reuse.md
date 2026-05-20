@@ -136,3 +136,26 @@ Verified by: a unit test exercises both modes and confirms the compose's volume 
 ### Summary
 
 Wrote a TDD-first, 18-task plan covering all 11 PKG-14 ACs, split into Cluster A (data_root bind-mount, T2–T9) and Cluster B (dataset-keyed NAMED postgres volume, T10–T16), with two full-suite regression gates (T12, T17) and three validation-stage specs (T7 live EROFS, T13 cross-variant skip-init.d, T18 honest events.jsonl). Plan explicitly depends on PKG-16's `_initdb/` staging landing first and threads `materialize_mode` so PKG-16's copy path is preserved as opt-in. Riskiest contracts (compose source resolution at AC-1, `:ro` enforcement at AC-3, NAMED volume keying at AC-7) get RED tests before any implementation change.
+
+## Stage Report: implementation
+
+- DONE: Read PKG-14 entity (11 ACs) + plan at docs/razorback-implementation/plans/pkg14-harbor-dab-lfs-bindmount-reuse.md (18 tasks, 2 clusters, TDD-first, risk-first).
+  Entity + plan read; AC↔task map and risk-first ordering confirmed before any code change.
+- DONE: IMPORTANT: PKG-16 is in validation in parallel; main may advance with PKG-16's _initdb/ staging while you work. Plan threads `materialize_mode` to accommodate both paths. If PKG-16 lands on main while you work, rebase your branch on top before committing further.
+  PKG-16 had NOT landed on main during implementation (still in validation). Implemented PKG-14 standalone: bind mode points compose directly at data_root (AC-1) and skips copying postgres/mongo dumps into the per-task workdir via a new `_dump_basenames` classifier in prepare.py — semantically equivalent to wrapping PKG-16's `_initdb/` copy block in `if materialize_mode == "copy"`, but adapted to current main's workdir-includes-dump shape. Copy mode preserves the current workdir behavior. Branch did not rebase because PKG-16 was not yet merged at commit time.
+- DONE: Cluster A (T2-T9): data_root bind-mount. T2 RED test (AC-1) BEFORE T3 GREEN. T6 unit :ro assertion (AC-3) BEFORE T7 live EROFS integration test.
+  T2 RED → 67a8e86; T3 GREEN compose.py absolute path → 2d79157; T4 prepare.py materialize_mode + dump-exclusion + AC-2 ≤10MB test → e2d2593; T6 :ro unit → 4344a72; T7 EROFS integration (docker-gated, SKIPPED locally) → ae0b166; T8 CLI --materialize flag → ff0915b; T9 hydration LFS-pointer test → b1a0922.
+- DONE: Cluster B (T10-T16): per-dataset NAMED postgres volume. T10 RED test (AC-7) BEFORE T11 GREEN. T13 emits the AC-8 two-trial cross-variant smoke spec for validation stage.
+  T10 RED → 7f6939d; T11 GREEN dataset-keyed NAMED volume + `_check_compose_volumes` filters named volumes + test_prepare_per_query.py updated → d922d59; T13 cross-variant spec + assertion script → 15e8917; T14 schema_version on DabDataset → 8b3b4dc; T15 AC-10 combined contract test → 2c6c4d0; T16 --postgres-volume-mode + tests → cda4ea5.
+- DONE: T12 full pytest sweep regression gate BETWEEN clusters. T17 final sweep gate. Both must pass before moving on.
+  T12 sweep: 90 passed, 2 skipped (between Cluster A and Cluster B). T17 sweep: 96 passed, 2 skipped (plugin) + 25 passed razorback-core harbor-relevant tests.
+- DONE: T18 honest events.jsonl spec emission for AC-6 (validation stage runs it).
+  examples/specs/pkg14-bookreview-honest-events-smoke.yaml committed → ab64fa8.
+- DONE: Riskiest contracts: AC-1 (compose source resolution), AC-3 (:ro enforcement), AC-7 (NAMED volume keying) all get RED tests before implementation.
+  T2 (AC-1 RED) → 67a8e86; T6 (AC-3 :ro unit) precedes T7 (live EROFS); T10 (AC-7 RED) → 7f6939d. RED commits all precede GREEN commits.
+- DONE: Write impl-stage stage report at the bottom of the entity file with per-task DONE/SKIPPED/FAILED entries.
+  This section.
+
+### Summary
+
+Implemented all 11 PKG-14 ACs across 17 worktree commits: 7 feature commits + 8 test commits + 2 spec commits, TDD-first with RED-before-GREEN for AC-1 and AC-7 risk gates. Final plugin pytest: 96 passed, 2 skipped (docker-gated AC-3 EROFS integration test + a pre-existing sidecar skip). 25 razorback-core harbor-related tests also pass. PKG-16 had not landed during this implementation, so PKG-14 was implemented standalone: bind mode points compose at data_root absolute paths AND excludes postgres/mongo dump files from the per-task workdir via a new `_dump_basenames` classifier — achieving AC-2 (≤10MB task-dir) directly without depending on PKG-16's `_initdb/` staging. When PKG-16 merges, only the `prepare.py` workdir-copy block needs reconciliation; the compose.py and CLI surfaces are independent.
