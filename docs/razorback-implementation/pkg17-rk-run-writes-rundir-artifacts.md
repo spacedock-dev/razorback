@@ -1,13 +1,13 @@
 ---
 id: pj4nm6c2qhxv9k1z8gwrtb5y
 title: PKG-17 — rk run writes summary/manifest/events/per_trial_outcomes/lock to v2 run-dir
-status: validation
+status: done
 source: Staff SWE review 2026-05-20 finding F2; captain decision "File as PKG-18, ship before Goal 1" (filed here as PKG-17 per ID sequencing); Goal 1 AC-7 cost-ledger blocker
 started: 2026-05-20T20:58:39Z
-completed:
-verdict:
+completed: 2026-05-20T21:37:26Z
+verdict: PASSED
 score: 0.9
-worktree: .worktrees/spacedock-ensign-pkg17-rk-run-writes-rundir-artifacts
+worktree: 
 issue:
 pr:
 mod-block:
