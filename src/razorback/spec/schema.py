@@ -84,6 +84,22 @@ class DabBenchmarkBlock(BaseModel):
     datasets: list[str] = Field(min_length=1)
 
 
+class HarborDabBenchmarkBlock(BaseModel):
+    """Phase 2 — DAB harbor adapter (sibling-package task generator).
+
+    Translates in `rk run` to a subprocess invocation of
+    `razorback-plugin-dab generate`, then a harbor `JobConfig` whose
+    `tasks:` references the emitted task directories. Razorback core
+    never imports from the plugin at runtime.
+    """
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["harbor_dab"]
+    data_root: Path
+    datasets: list[str] = Field(min_length=1)
+    workspace_variant: Literal["direct-minimal", "direct-structured", "spacedock"] = "direct-minimal"
+    hints: bool = False
+
+
 class AdeBenchTaskEntry(BaseModel):
     """FU-1 AC-3 — git-task entry matching harbor's TaskConfig git-task shape.
 
@@ -106,7 +122,7 @@ class AdeBenchBenchmarkBlock(BaseModel):
 
 
 BenchmarkBlock = Annotated[
-    Union[LocalBenchmarkBlock, DabBenchmarkBlock, AdeBenchBenchmarkBlock],
+    Union[LocalBenchmarkBlock, DabBenchmarkBlock, HarborDabBenchmarkBlock, AdeBenchBenchmarkBlock],
     Field(discriminator="kind"),
 ]
 

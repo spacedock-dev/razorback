@@ -25,6 +25,7 @@ from razorback.spec.schema import (
     AdeBenchBenchmarkBlock,
     ClaudeCliAgentBlock,
     DabBenchmarkBlock,
+    HarborDabBenchmarkBlock,
     LocalBenchmarkBlock,
     NopAgentBlock,
     SpacedockSolverAgentBlock,
@@ -68,6 +69,18 @@ def spec_to_job_config(
             tasks_root=Path(tasks_root),
             agent_cfg=agent_cfg,
             task_env=task_env,
+        )
+    if isinstance(spec.benchmark, HarborDabBenchmarkBlock):
+        if tasks_root is None:
+            raise SpecError(
+                "harbor_dab specs require tasks_root (the run orchestrator passes it)."
+            )
+        return _build_harbor_dab(
+            spec=spec,
+            job_name=job_name,
+            jobs_dir=jobs_dir,
+            tasks_root=Path(tasks_root),
+            agent_cfg=agent_cfg,
         )
     if isinstance(spec.benchmark, AdeBenchBenchmarkBlock):
         return (
@@ -259,6 +272,75 @@ def _build_dab(
         # delete=False preserves the prebuilt dab-agent:latest image across runs.
         # Default delete=True invokes `docker compose down --rmi all`, which removes
         # the prebuilt image and forces a rebuild before every subsequent run.
+        environment=EnvironmentConfig(delete=False),
+    )
+    return cfg, trial_name_map
+
+
+def _build_harbor_dab(
+    *,
+    spec: Spec,
+    job_name: str,
+    jobs_dir: Path,
+    tasks_root: Path,
+    agent_cfg: AgentConfig,
+) -> tuple[JobConfig, dict[str, tuple[str, int]]]:
+    """Phase 2 — translate harbor_dab block by invoking the sibling plugin.
+
+    Calls `razorback-plugin-dab generate` as a subprocess, collects emitted
+    task directories under `tasks_root`, and builds a harbor JobConfig that
+    points `tasks:` at each emitted (dataset, query) directory. Razorback
+    core never imports from the plugin.
+    """
+    import subprocess
+
+    assert isinstance(spec.benchmark, HarborDabBenchmarkBlock)
+
+    task_dirs: list[Path] = []
+    trial_name_map: dict[str, tuple[str, int]] = {}
+    for dataset in spec.benchmark.datasets:
+        out_dir = tasks_root / dataset
+        out_dir.mkdir(parents=True, exist_ok=True)
+        cmd = [
+            "uv", "run", "razorback-plugin-dab", "generate",
+            "--datasets", dataset,
+            "--data-root", str(Path(spec.benchmark.data_root).resolve()),
+            "--out", str(out_dir.resolve()),
+            "--workspace-variant", spec.benchmark.workspace_variant,
+        ]
+        if spec.benchmark.hints:
+            cmd.append("--hints")
+        else:
+            cmd.append("--no-hints")
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise SpecError(
+                f"razorback-plugin-dab generate failed for dataset {dataset!r} "
+                f"(exit {result.returncode}): {result.stderr.strip()}"
+            )
+        for entry in sorted(out_dir.iterdir()):
+            if not entry.is_dir():
+                continue
+            task_name = entry.name
+            task_dirs.append(entry)
+            # Parse "<dataset>-q<n>" → (dataset, n) for the trial-name map.
+            if "-q" in task_name:
+                ds, qpart = task_name.rsplit("-q", 1)
+                try:
+                    trial_name_map[task_name] = (ds, int(qpart))
+                except ValueError:
+                    pass
+
+    tasks = [TaskConfig(path=p) for p in task_dirs]
+    cfg = JobConfig(
+        job_name=job_name,
+        jobs_dir=jobs_dir,
+        n_concurrent_trials=1,
+        n_attempts=spec.trials,
+        agents=[agent_cfg],
+        tasks=tasks,
+        verifier=VerifierConfig(disable=False),
+        retry=RetryConfig(max_retries=0),
         environment=EnvironmentConfig(delete=False),
     )
     return cfg, trial_name_map
