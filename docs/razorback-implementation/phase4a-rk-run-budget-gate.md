@@ -1,13 +1,13 @@
 ---
 id: r447te87yycw1wxmb5q3dp6s
 title: Phase 4a — rk run budget gate (--max-budget-usd-running)
-status: validation
+status: done
 source: plan Phase 4a + spec §3.1 (v2 spec at docs/superpowers/specs/2026-05-19-razorback-on-harbor.md)
 started: 2026-05-20T07:03:12Z
-completed:
-verdict:
+completed: 2026-05-20T08:37:54Z
+verdict: PASSED
 score: 0.8
-worktree: .worktrees/spacedock-ensign-phase4a-rk-run-budget-gate
+worktree: 
 issue:
 pr:
 mod-block:
