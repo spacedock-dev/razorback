@@ -158,6 +158,43 @@ class SpacedockSolverAgent(BaseAgent):
     def supported_sampling() -> set[str]:
         return {"temperature"}
 
+    def resolve_freeze_dir(self) -> Path:
+        """Per b5 contract point 2 + spec §4.3.4: sealed_hash-keyed external freeze.
+
+        Harbor's per-trial logs_dir is <run-dir>/trials/<trial_name>/logs/agent/.
+        Walk up until we find the run-dir sentinel (spec.frozen.yaml or trials/).
+        The freeze tree lives at <run-dir>/_razorback/freeze/<sealed_hash>/,
+        outside the trial subtree that harbor jobs resume rmtree's.
+        """
+        run_dir = self._resolve_run_dir_from_logs_dir(Path(self.logs_dir))
+        return run_dir / "_razorback" / "freeze" / self.sealed_hash
+
+    @staticmethod
+    def _resolve_run_dir_from_logs_dir(logs_dir: Path) -> Path:
+        """Back out from harbor's per-trial logs_dir to the run-dir root."""
+        p = logs_dir.resolve()
+        for _ in range(6):
+            p = p.parent
+            if (p / "trials").exists() or (p / "spec.frozen.yaml").exists():
+                return p
+        # Fallback to b5 line 61's stated default (three .parent calls).
+        return logs_dir.resolve().parent.parent.parent
+
+    async def _commit_stage(
+        self, environment: BaseEnvironment, stage: str
+    ) -> None:
+        """Per-stage commit helper exposed for the workflow's freeze mod."""
+        freeze_dir = self.resolve_freeze_dir()
+        for cmd in (
+            f"git -C {freeze_dir} add -A",
+            f"git -C {freeze_dir} commit -q --allow-empty -m 'stage: {stage}'",
+        ):
+            r = await environment.exec(cmd)
+            if r.return_code != 0:
+                raise SpacedockSolverAgentError(
+                    f"freeze stage commit failed at: {cmd} (rc={r.return_code})"
+                )
+
     def _build_inner_agent(self) -> BaseAgent:
         """Dispatch to the per-runtime adapter sub-module (spec §8.4)."""
         from razorback.agents._runtime import claude as _claude
@@ -178,8 +215,48 @@ class SpacedockSolverAgent(BaseAgent):
         )
 
     async def setup(self, environment: BaseEnvironment) -> None:
-        """Stub setup; full lifecycle wiring lands in Task 5."""
-        raise NotImplementedError("setup() lands in Task 5")
+        """Per spec §8.4: bootstrap workspace; write sealed_hash.txt; delegate to inner.
+
+        First-stage path: create freeze dir, git init, write sealed_hash.txt.
+        Resume path (sealed_hash.txt exists with matching hash): restore from .git.
+        Resume mismatch: SeedMismatchError (exit 20).
+        """
+        freeze_dir = self.resolve_freeze_dir()
+        sealed_file = freeze_dir / "sealed_hash.txt"
+
+        if sealed_file.exists():
+            prior = sealed_file.read_text().strip()
+            if prior != self.sealed_hash:
+                raise SeedMismatchError(
+                    f"freeze dir {freeze_dir} sealed_hash ({prior}) does not match "
+                    f"this agent's sealed_hash ({self.sealed_hash})."
+                )
+            r = await environment.exec(f"git -C {freeze_dir} checkout -- .")
+            if r.return_code != 0:
+                raise SpacedockSolverAgentError(
+                    f"resume restore via git checkout failed at {freeze_dir} "
+                    f"(rc={r.return_code})"
+                )
+        else:
+            freeze_dir.mkdir(parents=True, exist_ok=True)
+            sealed_file.write_text(self.sealed_hash)
+            for cmd in (
+                f"git -C {freeze_dir} init -q",
+                f"git -C {freeze_dir} config user.email razorback@local",
+                f"git -C {freeze_dir} config user.name razorback",
+                f"git -C {freeze_dir} config commit.gpgsign false",
+                f"git -C {freeze_dir} add -A",
+                f"git -C {freeze_dir} commit -q --allow-empty -m seed",
+            ):
+                r = await environment.exec(cmd)
+                if r.return_code != 0:
+                    raise SpacedockSolverAgentError(
+                        f"freeze repo init failed at: {cmd} (rc={r.return_code})"
+                    )
+
+        if self._inner is None:
+            self._inner = self._build_inner_agent()
+        await self._inner.setup(environment)
 
     async def run(self, instruction, environment, context):
         if self._inner is None:
