@@ -148,3 +148,115 @@ def test_macro_average_drops_null_strata() -> None:
     assert report["strata"]["B"]["pass_at_1"] == pytest.approx(0.0)
     assert report["strata"]["C"]["pass_at_1"] is None
     assert report["stratified_pass_at_1"] == pytest.approx(0.5)
+
+
+# Task 3 — Error-reason rule.
+
+
+def test_single_class_all_errored_names_the_class() -> None:
+    """All three errored as SubprocessError → error_reason == 'SubprocessError'."""
+    records = [_errored(f"e{i}", "A", "SubprocessError") for i in range(3)]
+    report = reduce_trials(records, alpha=0.05)
+    assert report["strata"]["A"]["error_reason"] == "SubprocessError"
+
+
+def test_mixed_class_all_errored_picks_dominant() -> None:
+    """2 SubprocessError + 1 TimeoutError → SubprocessError dominates (count 2 > 1)."""
+    records = [
+        _errored("e1", "A", "SubprocessError"),
+        _errored("e2", "A", "SubprocessError"),
+        _errored("e3", "A", "TimeoutError"),
+    ]
+    report = reduce_trials(records, alpha=0.05)
+    assert report["strata"]["A"]["error_reason"] == "SubprocessError"
+
+
+def test_error_reason_tie_broken_alphabetically() -> None:
+    """1 SubprocessError + 1 TimeoutError (tied at 1) → 'SubprocessError' wins by alphabetical order."""
+    records = [
+        _errored("e1", "A", "SubprocessError"),
+        _errored("e2", "A", "TimeoutError"),
+    ]
+    report = reduce_trials(records, alpha=0.05)
+    assert report["strata"]["A"]["error_reason"] == "SubprocessError"
+
+
+def test_error_reason_tie_alphabetical_when_first_letter_decides() -> None:
+    """'AError' tied 1:1 with 'ZError' → 'AError' wins. Confirms sort order is alphabetical, not insertion."""
+    records = [
+        _errored("e1", "A", "ZError"),
+        _errored("e2", "A", "AError"),
+    ]
+    report = reduce_trials(records, alpha=0.05)
+    assert report["strata"]["A"]["error_reason"] == "AError"
+
+
+def test_top_level_error_reason_aggregates_across_strata() -> None:
+    """A: 3 Subprocess; B: 1 Subprocess + 2 Timeout. Total: 4 Subprocess + 2 Timeout → 'SubprocessError'."""
+    records = [
+        _errored("a1", "A", "SubprocessError"),
+        _errored("a2", "A", "SubprocessError"),
+        _errored("a3", "A", "SubprocessError"),
+        _errored("b1", "B", "SubprocessError"),
+        _errored("b2", "B", "TimeoutError"),
+        _errored("b3", "B", "TimeoutError"),
+    ]
+    report = reduce_trials(records, alpha=0.05)
+    assert report["error_reason"] == "SubprocessError"
+
+
+def test_mixed_stratum_has_no_per_stratum_error_reason() -> None:
+    """n_completed > 0 ⇒ error_reason absent (None) on the stratum, even when one trial errored."""
+    records = [
+        _completed("p", "A", True),
+        _errored("e", "A", "SubprocessError"),
+    ]
+    report = reduce_trials(records, alpha=0.05)
+    assert report["strata"]["A"]["n_completed"] == 1
+    assert report["strata"]["A"]["n_errored"] == 1
+    assert report["strata"]["A"]["error_reason"] is None
+
+
+def test_top_level_error_reason_absent_when_any_stratum_has_completions() -> None:
+    """If at least one stratum has a pass@1, top-level error_reason is None (signal lives in pass@1)."""
+    records = [
+        _completed("p", "A", True),
+        _errored("e1", "B", "SubprocessError"),
+        _errored("e2", "B", "SubprocessError"),
+    ]
+    report = reduce_trials(records, alpha=0.05)
+    assert report["stratified_pass_at_1"] is not None
+    assert report["error_reason"] is None
+
+
+def test_missing_verifier_result_surfaces_as_error_class() -> None:
+    """Loader maps verifier_result=null + exception_info=null to error_class='MissingVerifierResult'.
+
+    Plan named the fallback 'UnknownError'; the implementation chose the more specific
+    'MissingVerifierResult' to identify the cause (missing verifier output) rather than
+    a generic catch-all. The reducer is agnostic to the literal: whatever the loader
+    emits as error_class propagates verbatim into error_reason. Documented as
+    plan-vs-implementation drift in the entity stage report.
+    """
+    records = [_errored(f"e{i}", "A", "MissingVerifierResult") for i in range(3)]
+    report = reduce_trials(records, alpha=0.05)
+    assert report["strata"]["A"]["error_reason"] == "MissingVerifierResult"
+
+
+# Wire-shape invariants — error_reason key present-with-null on no-error and mixed paths (spec §3.3 stability).
+
+
+def test_error_reason_key_present_with_null_on_clean_stratum() -> None:
+    """error_reason MUST be a key (value None) on no-error stratum so schema snapshot is stable."""
+    records = [_completed("p", "A", True)]
+    report = reduce_trials(records, alpha=0.05)
+    assert "error_reason" in report["strata"]["A"]
+    assert report["strata"]["A"]["error_reason"] is None
+
+
+def test_top_level_error_reason_key_present_with_null_on_clean_run() -> None:
+    """Top-level error_reason MUST be a key (value None) on a run that has any pass@1."""
+    records = [_completed("p", "A", True)]
+    report = reduce_trials(records, alpha=0.05)
+    assert "error_reason" in report
+    assert report["error_reason"] is None
