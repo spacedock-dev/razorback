@@ -283,15 +283,9 @@ def run_command(
     if docker_host is not None:
         harbor_env["DOCKER_HOST"] = docker_host
     rc = _invoke_harbor(job_config_yaml, harbor_env)
-    if rc != 0:
-        typer.echo(f"harbor run failed (exit {rc}); surfacing as exit 30", err=True)
-        raise typer.Exit(ExitCode.HARBOR_RUNTIME)
 
-    # Phase 4a: post-completion budget stamp. Read the harbor-produced cost
-    # field from the run-dir and append it to the running-total file. When
-    # cost telemetry is null (subscription auth per Phase 0 baseline), the
-    # record is stamped with cost_known=False so the gate's next decision
-    # falls back to the pre-launch estimate.
+    # Phase 4a: post-completion budget stamp. Runs regardless of harbor rc so
+    # the running-total file always reflects the latest run-dir.
     if max_budget_usd_running is not None:
         from razorback.budget import (
             read_actual_cost_from_run_dir,
@@ -306,7 +300,38 @@ def run_command(
             cost_known=cost_known,
         )
 
-    # AC-3 (Task 8 finishes the writer): write spec.frozen.yaml + provenance.yaml.
+    # AC-3: write spec.frozen.yaml + provenance.yaml BEFORE the aggregator so
+    # it can hash provenance.yaml into manifest.json.
     _write_provenance_artifacts(
         spec_bytes, spec, run_dir, plugin_drift_record=plugin_drift_record
     )
+
+    # PKG-17 §AC-1..AC-4: write the canonical aggregator artifacts. Runs after
+    # harbor exit regardless of rc; failures collected as warnings so harbor's
+    # exit code remains the user-facing signal.
+    import hashlib
+
+    from razorback.runs import aggregate as _aggregate_module
+
+    provenance_path = run_dir / "provenance.yaml"
+    provenance_hash = (
+        _aggregate_module.compute_provenance_hash(provenance_path)
+        if provenance_path.exists()
+        else hashlib.sha256(b"").hexdigest()
+    )
+    frozen_spec_hash = hashlib.sha256(spec_bytes).hexdigest()
+    benchmark_kind = getattr(spec.benchmark, "kind", None)
+    warnings = _aggregate_module.safe_aggregate_run_dir(
+        run_dir,
+        spec_path=spec_path,
+        frozen_spec_hash=frozen_spec_hash,
+        provenance_hash=provenance_hash,
+        harbor_job_name=job_name,
+        benchmark_kind=benchmark_kind,
+    )
+    for w in warnings:
+        typer.echo(f"warning: {w}", err=True)
+
+    if rc != 0:
+        typer.echo(f"harbor run failed (exit {rc}); surfacing as exit 30", err=True)
+        raise typer.Exit(ExitCode.HARBOR_RUNTIME)
