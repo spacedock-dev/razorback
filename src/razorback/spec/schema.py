@@ -65,8 +65,38 @@ class SpacedockSolverAgentBlock(BaseModel):
         return self
 
 
+class SpacedockSolverV2AgentBlock(BaseModel):
+    """Spec-level agent block for v2 (spec §6.2 + §4).
+
+    Unfrozen specs carry the path `solver_workflow:`; freeze resolves the
+    directory content hash and writes `solver_workflow_content_hash` into the
+    frozen spec. `sealed_hash` is populated by freeze.
+    """
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["spacedock_solver_v2"]
+    runtime: Literal["claude", "codex", "pi"] = "claude"
+    model: str = "claude-opus-4-5"
+    sampling: SamplingBlock = Field(default_factory=SamplingBlock)
+    solver_workflow: Path
+    solver_workflow_content_hash: str | None = None
+    max_turns: int = 200
+    max_budget_usd: float | None = None
+    tools_allowed: list[str] = Field(default_factory=list)
+    tools_denied: list[str] = Field(default_factory=list)
+    append_system_prompt: str | None = None
+    resume_from_freeze: Path | None = None
+    sealed_hash: str | None = None
+    spacedock_skill_version: str | None = None
+    prompt_content_hashes: dict[str, str] = Field(default_factory=dict)
+
+
 AgentBlock = Annotated[
-    Union[NopAgentBlock, ClaudeCliAgentBlock, SpacedockSolverAgentBlock],
+    Union[
+        NopAgentBlock,
+        ClaudeCliAgentBlock,
+        SpacedockSolverAgentBlock,
+        SpacedockSolverV2AgentBlock,
+    ],
     Field(discriminator="kind"),
 ]
 
