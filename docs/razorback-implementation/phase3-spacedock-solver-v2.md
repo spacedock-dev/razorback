@@ -200,3 +200,28 @@ Plan saved to `docs/razorback-implementation/plans/phase3-spacedock-solver-v2.md
 ### Summary
 
 Phase 3 ships the SpacedockSolverAgent v2 class at src/razorback/agents/spacedock_solver_v2.py with the b5 5-point contract verbatim: sealed_hash from six inputs (model, sampling, solver_workflow_content_hash, prompt_content_hashes, spacedock_skill_version, harbor_agent_kwargs), freeze dir at <run-dir>/_razorback/freeze/<sealed_hash>/ outside trials/, first-stage git init + sealed_hash.txt write, resume-via-git-checkout, SeedMismatchError on prior-sealed-hash mismatch. Riskiest-contract-first ordering respected: Task 6's mechanism test (stub-environment freeze-dir write + harbor jobs resume round-trip) lands before Task 7's bookreview-claude integration (deferred to live-API CI). Per-runtime adapter sub-modules at src/razorback/agents/_runtime/{claude,codex,pi}.py with claude functional and codex/pi as NotImplementedError stubs per D2. Spec discriminator spacedock_solver_v2 alongside v1 spacedock-solver preserves AC-8 routing. compute_sealed_hash in seal.py accepts both v1 (stages + prompt_hashes) and v2 (six-input) shapes via a single dispatcher, no shim or compat layer needed. Commit chain: 8cb1de3 -> d35166e -> 216adbe -> 8f5c60b -> 5d606dc -> 31c1652 -> 8fe92a9.
+
+## Stage Report: validation
+
+- DONE: AC-1 walking skeleton holds against in-tree adapter (v1 + v2)
+  v1 deterministic-smoke + v2 deterministic-smoke specs both ship; tests/integration/test_v2_deterministic_smoke.py and examples/specs/_deterministic-smoke-v2.frozen.yaml carry the recorded sealed_hash afc50cb618884495c9063958f532b9a1; live-API exec gated on RAZORBACK_RUN_DOCKER_TESTS + ANTHROPIC_API_KEY per the existing pattern. Determinism contract covered sans API by test_v2_freeze_dir_mechanism.py.
+- DONE: AC-2 SpacedockSolverAgent v2 class exists, sealed_hash + refusal correct
+  src/razorback/agents/spacedock_solver_v2.py:99 computes sealed_hash from six inputs; :114 refuses cross-job mismatch BEFORE harbor I/O; :230 refuses in-place mismatch in setup(); 5 unit tests + 4 lifecycle tests all green.
+- DONE: AC-3 per-runtime adapter sub-modules
+  src/razorback/agents/_runtime/{claude.py,codex.py,pi.py} present; claude constructs ClaudeCode with tools_allowed→allowed_tools, tools_denied→disallowed_tools mapping (verified by reading _flag_kwargs); codex + pi raise NotImplementedError naming the runtime and spec §.
+- DONE: AC-4 extractions preserve proven semantics
+  spacedock_solver_v2.py:78-84 co-mingled auth refusal (KEEP-VERBATIM from v1:80-86); :77 extra_env (FU-1); :128-141 sealed-hash refusal adapted to v2 inputs; FU-1 redaction verified by test_extra_env_redaction_invariant. assert_phase_stats_schema lifted at :30.
+- DONE: AC-5 sealed_hash-keyed external freeze location verified
+  test_v2_freeze_dir_mechanism.py:test_sealed_hash_txt_lands_at_keyed_external_path asserts path is <run-dir>/_razorback/freeze/<sealed_hash>/ and "trials" not in the post-_razorback path component. Bookreview-claude live-API smoke gated.
+- DONE: AC-6 halt-resume round-trip with hand-faked freeze writes
+  test_v2_freeze_dir_mechanism.py:test_harbor_jobs_resume_round_trip_with_new_trial_name exercises the b5 rmtree-resilient contract: agent_b at a NEW trial_name reads the SAME freeze tree after simulated harbor jobs resume rmtree. SeedMismatchError refusal on tampered sealed_hash.txt covered by test_resume_with_mismatched_sealed_hash_in_freeze_dir_refuses.
+- DONE: AC-7 import_path dispatch verified per D1 outcome
+  translate.py:137-183 dispatches SpacedockSolverV2AgentBlock to import_path razorback.agents.spacedock_solver_v2:SpacedockSolverAgent; test_v2_freeze_dir_mechanism.py:test_translator_emits_spacedock_solver_v2_import_path validates. Auth env (FU-1) lands in AgentConfig.env, not kwargs.
+- DONE: AC-8 v1 SpacedockSolverAgent still functional
+  test_v1_spacedock_solver_regression.py: 3/3 green covering v1 four-input sealed_hash determinism, v1 spec → SPACEDOCK_SOLVER_IMPORT_PATH routing, and direct v1 class construction. compute_sealed_hash dispatches on present kwargs; co-mingling raises TypeError.
+- DONE: AC-9 uv run pytest sweep
+  Worktree pytest: 260 passed, 4 skipped (1 live-API v2 smoke + 3 other pre-existing skips), 6 failed, 1 collection error. All 6 failures + collection error reproduce on `main` baseline (verified by running the same files against main HEAD): test_translator_harbor_dab.py collection error from razorback.compat ModuleNotFoundError; 4 docker/colima-gated integrations (test_rk_run_nop, test_rk_run_bookreview_nop ×2, test_rk_run_bookreview_claude); 1 live-baseline-gated integration (test_rk_run_bookreview_spacedock_halt_resume, test_rk_run_v2_deterministic_smoke). Phase 3 introduces zero regressions. 31 new Phase 3 tests all green (30 passed + 1 live-API skipped).
+
+### Summary
+
+Phase 3 validation: PASSED. AC-1..AC-9 all have green evidence in the worktree. 31 new Phase 3 tests pass; full sweep shows 260 passed, 4 skipped, 6 failed + 1 collection error all of which reproduce on `main` HEAD and are environmentally-gated (docker/colima/live-API/pre-existing razorback.compat module). Code review surfaces no Critical or Important findings; four Minor notes (unused extra_env in claude adapter signature, ahead-of-consumer _commit_stage and assert_phase_stats_schema helpers, defensive fallback in _resolve_run_dir_from_logs_dir) are acceptable for ship per spec out-of-scope clauses and AC-4 KEEP-VERBATIM directive. Recommend PASSED.
