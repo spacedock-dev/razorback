@@ -52,3 +52,16 @@ Verified by: when Phase 3's entity is filed, this entity's id (`b5f4zn4vd74yvrmp
 - Implementing the mitigation in `SpacedockSolverAgent` v2 — that's Phase 3's work, gated on this spec correction landing.
 - Razorback's response to harbor `jobs resume`'s rename of `trial_name` (separate from the freeze-tree question) — folded into Phase 3's plan stage discovery, not this entity.
 - Patching harbor — out of scope; razorback works around harbor's behavior, not against it.
+
+## Stage Report: plan
+
+- DONE: Plan separates spec-edit work (§4.4 + §7.1 + §3.1) from forward-reference dependency (Phase 3 AC-4); names the file:line spec changes precisely.
+  Plan at `docs/razorback-implementation/plans/spec-mitigation-resume-conflict.md` Tasks 1-3 carry the spec edits to §4.4 (pre-edit lines 373-396), §7.1 (lines 616-634), §3.1 (lines 156-170) + §8.1 (lines 678-698); Task 4 is verification-only against phase3 body lines 29-35 and 156-162.
+- DONE: Plan's sealed_hash-keyed external freeze design is specific enough that Phase 3 implementation consumes it without re-discovery — names the freeze location convention, the lifecycle, and the contract between SpacedockSolverAgent and the external freeze tree.
+  Plan section "Sealed_hash-keyed external freeze design (load-bearing for Phase 3)" names the location convention (`<harbor-run-dir>/_razorback/freeze/<sealed_hash>/`), a lifecycle table (first-stage, every-stage-commit, harbor-resume, cross-job resume, done, GC), and a 5-point contract Phase 3's class must satisfy.
+- DONE: Plan's verification approach for AC-1 / AC-2 / AC-3 uses the grep-style commands named in the entity AC list (mechanically verifiable at validation stage).
+  Task 1 Step 3 runs greps for `sealed_hash`, `outside harbor's per-trial scratch zone`, and `2026-05-19-harbor-resume-probe`; Task 2 Step 3+4 runs `grep -n "agent_freeze"` + a negative grep for trial-keyed paths; Task 3 Step 3 runs `grep -n "canonicaliz"` + the probe-doc citation count.
+
+### Summary
+
+Plan separates the four ACs cleanly: three spec edits (§4.4 narrative, §7.1 layout block, §3.1+§8.1 canonicalization rule) and one verification-only task against Phase 3's already-filed dependency citation. The sealed_hash-keyed external freeze design is specified at the location-convention + lifecycle + contract level so Phase 3 reads paths from this plan rather than re-deriving them. Plan also flags the supersession of `ra` AC-5 by this entity's AC-2 with a concrete reconciliation instruction for ra's plan-stage worker.
