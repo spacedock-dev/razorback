@@ -15,6 +15,12 @@ benchmark:
   datasets:
     - bookreview
 trials: 1
+experiment_meta:
+  # Phase 4a budget gate: cap chosen so two invocations exceed (0.6 + 0.6 > 1.0).
+  # The 0.6 estimate is conservative; subscription-auth runs (which emit null
+  # cost) fall back to this estimate, so two back-to-back runs trip the gate.
+  max_budget_usd: 1.0
+  estimated_cost_usd: 0.6
 observers:
   - kind: jsonl
     path: events.jsonl
