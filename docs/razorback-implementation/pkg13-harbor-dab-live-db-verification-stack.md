@@ -83,3 +83,34 @@ After AC-1 through AC-5 land, re-run T14 (bookreview-claude live-DB, N=3) and re
 ### Summary
 
 Wrote a separate plan doc at docs/razorback-implementation/plans/pkg13-harbor-dab-live-db-verification-stack.md (6 ACs > 3 threshold). Plan opens with a harbor contract verification block (no `docker_compose` field; compose at `environment/docker-compose.yaml`) and codifies it as the first failing-test task (T0) so the rest of the plan's ordering is defensible. Eleven tasks total, ordered riskiest-mechanism-first; AC-1+AC-2+AC-3 land before AC-6's re-run. No em-dashes; "load-bearing" replaced with "critical" per the recent style cleanup.
+
+## Stage Report: implementation
+
+- DONE: T0 harbor contract assertion (mechanism check)
+  Commit 8317337; tests/unit/test_harbor_contract.py asserts EnvironmentConfig has no docker_compose field and _environment_docker_compose_path returns environment_dir / docker-compose.yaml. 2/2 pass.
+- DONE: T1 move compose write to environment/docker-compose.yaml (AC-1, AC-4)
+  Commit 7c441ba; compose now lives under environment/, bind-mount sources rebased to ../steps/main/workdir/{sql_file|dump_folder}, dead [environment].docker_compose toml line removed. Three new/updated tests cover layout, bind-mount resolution, and the dropped key.
+- DONE: T2 generator-side schema lint for task.toml (AC-1 guard)
+  Commit e05e8df; _check_task_toml_environment_keys raises TaskTomlError on any [environment].* key harbor's EnvironmentConfig does not honour. test_task_toml_lint.py covers accept-real, reject-unknown, accept-missing-section.
+- DONE: T3 compose-loading observability sidecar (AC-2)
+  Commit 1affcf0 (combined with T7); environment/.compose-services.json sidecar enumerates emitted services per task. Sidecar lists dab-postgres + main for a bookreview-shaped fixture.
+- DONE: T4 live docker compose config verification test (AC-2 runtime)
+  Commit 0a0b3c9; integration test runs `docker compose -f <env>/docker-compose.yaml config -q` against generated tree; skips when docker CLI absent.
+- DONE: T5 bookreview reachability gate plugin-side (AC-3)
+  Commit 992f3eb; task.toml carries [steps.healthcheck] with a psql probe against dab-postgres when db_clients includes postgres; sqlite-only datasets get no gate. Verified harbor TaskConfig.model_validate_toml accepts the emitted text.
+- DONE: T6 reachability-gate negative test (AC-3 verified-by)
+  Commit 1d17acc; integration test runs the generated healthcheck command directly, asserts non-zero exit with recognisable connection-failure stderr text. Skips when psql client unavailable.
+- DONE: T7 bind-mount source-file existence post-generate check (AC-4)
+  Commit 1affcf0 (combined with T3); _check_compose_volumes walks the parsed compose, resolves each volumes[].src against the compose file's parent, raises ComposeError on missing source. Wired at end of _materialize_task_dir after workdir is populated.
+- DONE: T8 validator hardening q1 bounded-decade match (AC-5)
+  Combined T8+T9 commit; verify/validators/bookreview_q1.py wraps the upstream substring check with a `^\s*(\d{4})s?\s*$` parse + ground-truth-decade equality. Six cases pass: 2020s and 2020 accepted; essay-style "published in 2020", "2020-01-01", "02020", and "the 2020s decade" rejected.
+- DONE: T9 validator hardening q2/q3 length cap (AC-5)
+  Same commit as T8; verify/validators/bookreview_q2_q3.py wraps upstream with `_ANSWER_MAX_LEN = 2000` cap. Short canonical answer passes; SQL-dump-style answer (titles + 4kb padding) fails with `too long`; missing-title regression-guarded.
+- FAILED: T10 stack-level smoke before AC-6 re-run
+  Awaiting team-lead approval for live rk run against bookreview-claude (real Claude $ + postgres:17 image pull). Disk now sufficient (13Gi free) so the docker pull is feasible.
+- FAILED: T11 AC-6 T14 re-run + reconciliation update
+  Awaiting approval to spend on N=3 trials and to update docs/superpowers/plans/2026-05-19-reconciliation-baseline.md with the supersedes-T14 result.
+
+### Summary
+
+T0 through T9 land all of AC-1, AC-2, AC-3, AC-4, AC-5 with TDD-first coverage and 72/72 plugin tests green (2 env-dependent skips: T4 docker CLI, T6 psql client). The four shipped bugs identified by the T14 investigation are closed: compose now writes to the harbor-loaded path (cause-1), [environment].* schema drift is caught at generation time (cause-2), bind-mount paths resolve to real files via a post-generate gate (cause-3), and a per-step psql reachability healthcheck fails fast when postgres is unreachable (cause-4). The verifier-side substring leak (cause-5) is closed by hardened q1/q2/q3 validator templates that wrap the upstream substring check with bounded-answer conditions. T10 (single-trial smoke) and T11 (N=3 re-run + reconciliation doc update) are deferred pending team-lead approval to spend on live Claude trials. Host disk was at 100% for the first half of this stage and forced a brief mid-T2 stall; recovery was clean once disk freed.
