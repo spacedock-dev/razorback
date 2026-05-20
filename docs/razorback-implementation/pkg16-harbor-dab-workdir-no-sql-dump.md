@@ -87,3 +87,20 @@ Verified by: the doc's "Run" table contains both rows; the methodology section d
 
 - Goal 1 — DAB paper reproduction. Goal 1 cannot dispatch honestly until the workdir leak closes. Captain authorized this sequencing.
 - (Indirectly) Re-anchoring the pre-registered shift bands at opus-4.7 (F7) depends on the AC-3 re-smoke. Goal 1's pre-reg validity is conditional on AC-3.
+
+## Stage Report: plan
+
+- DONE: Read PKG-16 entity (6 ACs) and identified the smallest change to prepare.py that exposes only metadata + file-backed live-DB files to the agent workdir while preserving the postgres/mongo init bind-mount path.
+  Reviewed prepare.py:41-46 + prepare.py:202-210 + compose.py:56-73; the cut point is the workdir-copy loop plus the compose bind-mount source path.
+- DONE: Identified the smallest change to prepare.py — replace the blanket `_DATASET_SAFE` copy with a classifier that excludes `db_config.sql_file`/`dump_folder` paths from the workdir, stages them under `<task_dir>/environment/_initdb/`, and re-points compose bind-mount sources to `./_initdb/{name}`. File-backed sqlite/duckdb files stay in the workdir because they ARE the live DB.
+  Plan Task 3, prepare.py:39-46 + 202-210 + compose.py:56-73.
+- DONE: Wrote a TDD-first plan that ships AC-1..AC-6 in risk-first order. T2 RED unit test (AC-1) before T3 GREEN impl; T5 12-dataset catalog walk (AC-4) after the bookreview case proves the mechanism; T6 docker-compose-config regression (AC-2); T7 full pytest sweep (AC-5); T8 opus-4.7 spec (AC-3) and T9 reconciliation doc-update spec (AC-6) for the validation stage to execute.
+  Plan written at docs/razorback-implementation/plans/pkg16-harbor-dab-workdir-no-sql-dump.md.
+- DONE: Cross-referenced PKG-13 prepare.py changes — Task 4 explicitly updates the PKG-13 `test_compose_bind_mount_sources_resolve_to_real_files` assertion (which encoded the OLD `steps/main/workdir/` contract) to assert the new `environment/_initdb/` contract, AND Task 7 re-runs PKG-13's reachability-gate / validator-hardening / task-toml-lint tests to confirm no regression.
+  Plan Tasks 4 and 7.
+- DONE: Wrote plan to docs/razorback-implementation/plans/pkg16-harbor-dab-workdir-no-sql-dump.md.
+  Single file, 9 tasks, AC↔task map at top.
+
+### Summary
+
+Designed a structural fix at `prepare.py:_materialize_task_dir`: classify each `query_dataset/` entry against `db_config.yaml`'s `sql_file` / `dump_folder` references and copy only non-dump entries into the agent workdir, staging dumps under `<task_dir>/environment/_initdb/` and re-pointing `compose.py`'s postgres/mongo bind-mount source from `../steps/main/workdir/{sql_file}` to `./_initdb/{basename}`. Sqlite/duckdb live-DB files remain in the workdir because they ARE the live DB the agent must query directly. The plan deliberately stages dumps under the task-dir (not via PKG-14's data_root bind-mount) so PKG-16 lands independently of PKG-14; the riskiest contract (compose source resolution) is validated by Task 2's RED unit test before any code moves.
