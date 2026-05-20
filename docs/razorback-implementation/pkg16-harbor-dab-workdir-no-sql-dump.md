@@ -7,7 +7,7 @@ started: 2026-05-20T20:54:07Z
 completed:
 verdict:
 score: 0.95
-worktree:
+worktree: .worktrees/spacedock-ensign-pkg16-harbor-dab-workdir-no-sql-dump
 issue:
 pr:
 mod-block:
