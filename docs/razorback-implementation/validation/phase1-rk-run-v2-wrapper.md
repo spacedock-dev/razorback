@@ -217,7 +217,7 @@ The cycle-3 fix resolves the cycle-1 blocking finding cleanly. The validator's r
 
 ### AC-1 cycle-2 re-verification
 
-Live integration run (`uv run pytest tests/integration/test_rk_run_v2_deterministic_smoke.py -v -s`): **1 passed in 365.66s (6:05 wallclock)** — within the 6:30 baseline window for the deterministic-smoke spec.
+Live integration run (`uv run pytest tests/integration/test_rk_run_v2_deterministic_smoke.py -v -s`): **1 passed in 365.66s (6:05 wallclock)**, within the 6:30 baseline window for the deterministic-smoke spec.
 
 Mid-run inspection at the worktree's `.test-tmp/t-32714966/_runs/_deterministic-smoke/bc7421b6432e225a/_job_config.yaml` shows:
 
@@ -225,7 +225,7 @@ Mid-run inspection at the worktree's `.test-tmp/t-32714966/_runs/_deterministic-
 "CLAUDE_CODE_OAUTH_TOKEN": "${CLAUDE_CODE_OAUTH_TOKEN}"
 ```
 
-— templatized, not redacted. The cycle-1 reproduction grep would have shown `"sk-a****gAA"` here. Harbor subprocess inherits the real token via `harbor_env = {**os.environ, ...}` at `cli/run.py:200` and the agent runs to completion.
+templatized, not redacted. The cycle-1 reproduction grep would have shown `"sk-a****gAA"` here. Harbor subprocess inherits the real token via `harbor_env = {**os.environ, ...}` at `cli/run.py:200` and the agent runs to completion.
 
 Top-level `result.json` after the run:
 
@@ -245,10 +245,10 @@ The strengthened assertion at `tests/integration/test_rk_run_v2_deterministic_sm
 
 ### AC-2 through AC-8 cycle-2 re-verification
 
-`uv run pytest tests/ -q --ignore=tests/integration`: **198 passed in 3.17s** — clean.
-`uv run pytest tests/integration/test_rk_run_v2_deterministic_smoke.py`: **1 passed in 365.66s** — AC-1 PASS with reward=1.0.
+`uv run pytest tests/ -q --ignore=tests/integration`: **198 passed in 3.17s**, clean.
+`uv run pytest tests/integration/test_rk_run_v2_deterministic_smoke.py`: **1 passed in 365.66s**, AC-1 PASS with reward=1.0.
 
-AC-2/AC-3/AC-4/AC-5/AC-6/AC-7/AC-8 verdicts from cycle 1 (PASS) hold unchanged — the cycle-3 fix touched only `cli/run.py:185-194` (the 11-line env-mirror block) and the integration test file. None of the AC-2..8 verifying paths were modified.
+AC-2/AC-3/AC-4/AC-5/AC-6/AC-7/AC-8 verdicts from cycle 1 (PASS) hold unchanged: the cycle-3 fix touched only `cli/run.py:185-194` (the 11-line env-mirror block) and the integration test file. None of the AC-2..8 verifying paths were modified.
 
 ### Code review of cycle-3 diff
 
@@ -258,7 +258,7 @@ Diff scope `9ae5afb..e822955`, 3 files, 38 insertions, 2 deletions.
 
 **Non-blocking:**
 
-- **`cli/run.py:188` em-dash in comment.** The comment block has one em-dash (`os.environ — so mirror`). Style policy commit `a2e9c49` bans em-dashes in spec/plan files; the policy's reach into code comments is not explicit. The validation report itself was scrubbed for em-dashes in cycle 1 (commit c44a7cf), so applying the same rule to the impl comment would be consistent. Trivial cleanup; not a gate blocker.
+- **`cli/run.py:188` em-dash in comment.** The new comment block has one em-dash glyph (`os.environ, so mirror` would be the consistent form). Style policy commit `a2e9c49` bans em-dashes in spec/plan files; the policy's reach into code comments is not explicit. The validation report itself was scrubbed for em-dashes in cycle 1 (commit c44a7cf), so applying the same rule to the impl comment would be consistent. Trivial cleanup; not a gate blocker.
 - **`cli/run.py:192-194` global os.environ mutation.** The fix mutates the process-wide `os.environ` to make harbor's `templatize_sensitive_env` round-trip. This is a deliberate, documented contract (the multi-line comment above it explains why) and is the minimal change. Note for future readers: a `rk run` invocation now leaves `CLAUDE_CODE_OAUTH_TOKEN` (and any other AgentConfig.env keys) set in the parent process's environment after the command returns. For the CLI single-shot use case this is irrelevant (process exits), but a hypothetical test that calls `run_command` directly and inspects `os.environ` afterward would see the leak. Worth a docstring note on `run_command` once the auth-contract docstring lands (validator cycle-1 non-blocking item already filed).
 - **All cycle-1 non-blocking findings still apply** (harbor stdout capture, provenance-write ordering, `.harbor-home` concurrency, auth contract docstring, `_legacy` collect_ignore TODO). None block APPROVE; all are queued for follow-up.
 
