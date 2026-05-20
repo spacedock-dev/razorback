@@ -30,6 +30,7 @@ collect_ignore_glob = [
     "unit/test_registry_resolve.py",
     "unit/test_run_drift_wired.py",
     "unit/test_spec_freeze_cli.py",
+    "unit/test_spec_freeze_cli_pkg8.py",
     "unit/test_spacedock_cli_seed_mismatch_exit_code.py",
 ]
 

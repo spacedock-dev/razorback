@@ -13,6 +13,7 @@ ALL_RESOLVED = {
     "harness_git_sha": "0123456789abcdef",
     "harbor_version": "0.6.6",
     "prompt_file_hashes": {"p.md": "sha256:fed"},
+    "plugins": [],
 }
 
 

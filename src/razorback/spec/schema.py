@@ -176,6 +176,9 @@ class ProvenanceBlock(BaseModel):
     harness_git_sha: str | None = None
     harbor_version: str | None = None
     prompt_file_hashes: dict[str, str] | None = None
+    # PKG-8 v2 (spec §3.2 + §8.2): plugin inventory + solver_workflow content hash.
+    plugins: list[dict[str, str]] | None = None
+    solver_workflow_hash: str | None = None
 
 
 class ExperimentMetaBlock(BaseModel):
