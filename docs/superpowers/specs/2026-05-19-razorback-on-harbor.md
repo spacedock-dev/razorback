@@ -457,29 +457,41 @@ Empirically verified by AC-0.5's probe at
 
 ### 4.5 Registration with harbor
 
-`SpacedockSolverAgent` registers with harbor via harbor's agent-plugin
-discovery mechanism. The expected shape is a `pyproject.toml` entry-point
-group that harbor scans at `harbor run` time; razorback's package
-declares:
+`SpacedockSolverAgent` registers with harbor via harbor's
+**`import_path` dispatch mechanism** (`harbor/agents/factory.py:95-133`,
+`AgentFactory.create_agent_from_import_path`). Harbor does **not**
+enumerate setuptools / PEP-621 entry-point groups for agents; the
+dispatch surface is a Python dotted import-path string on the harbor
+`JobConfig`. Specifically, `AgentConfig.import_path: "module.path:ClassName"`
+(`harbor/models/trial/config.py:44-63`) names the class harbor loads
+and instantiates per trial. The class must subclass
+`harbor.agents.base.BaseAgent` and implement `name()`, `version()`,
+`setup()`, `run()`.
 
-```toml
-[project.entry-points."harbor.agents.installed"]
-spacedock_solver = "razorback.agents.spacedock_solver:SpacedockSolverAgent"
-```
+Razorback's `rk run` is a thin **spec translator**. It rewrites
+razorback's spec.yaml shape into a harbor `JobConfig`:
 
-Users write `agent.kind: spacedock_solver` in their spec and harbor
-routes to razorback's class. No harbor monorepo PR is required.
+- razorback's singular `agent: { kind: spacedock_solver, ... }` block
+  becomes harbor's plural
+  `agents: [{ import_path: "razorback.agents.spacedock_solver:SpacedockSolverAgent", kwargs: { ... } }]`.
+- razorback-only fields on the agent block (`model`, `sampling`,
+  `solver_workflow`, `tools_allowed`, `tools_denied`, etc.) flow
+  through harbor's `AgentConfig.kwargs` dict, which `AgentFactory`
+  splats into the class constructor (`harbor/agents/factory.py:161,170`).
 
-**Open question.** The exact entry-point group name and registration
-shape depends on harbor's published plugin contract. Razorback's
-`harbor publish` / `cli/template-adapter` surface implies such a
-mechanism exists, but the contract must be confirmed against the
-pinned harbor version before implementation. **Fallback if no
-plugin contract exists:** razorback's CLI grows a thin spec-translation
-pre-pass (`rk run` rewrites `agent.kind: spacedock_solver` to
-`agent.kind: claude_code` with appropriate kwargs, then invokes
-`harbor run`). This trades the wire-through cleanness for keeping the
-solver-agent abstraction owned by razorback.
+No setuptools entry-point declaration is needed in razorback's
+`pyproject.toml`. Harbor finds `SpacedockSolverAgent` by import path
+because razorback's package is installed into the same Python
+environment as harbor; harbor calls `importlib.import_module` against
+the `module.path` half of `import_path` and `getattr`s the `ClassName`
+half (`harbor/agents/factory.py:95-133`).
+
+Empirically verified by AC-0.2's probe at
+`docs/superpowers/plans/2026-05-19-harbor-entry-point-probe.md`
+("Agent dispatch probe" section): an external pip-installed package
+with `import_path: probe_agent:ProbeAgent` had its `setup()` and
+`run()` invoked by harbor without any entry-point declaration in the
+package's `pyproject.toml`.
 
 ---
 
@@ -953,11 +965,18 @@ release cadence.
 
 ### 9.2 Harbor's agent-plugin discovery contract
 
-`SpacedockSolverAgent` registers via `[project.entry-points."harbor.agents.installed"]`.
-This is the documented harbor extension contract. If harbor changes the
-entry-point group name or the registration shape, razorback's
-`pyproject.toml` updates and the change propagates to users via a
-razorback release.
+`SpacedockSolverAgent` registers via harbor's `AgentConfig.import_path`
+dispatch (`harbor/agents/factory.py:95-133`). The dispatch surface is
+not setuptools entry-point groups — `rk run` emits a harbor
+`JobConfig` with
+`agents: [{ import_path: "razorback.agents.spacedock_solver:SpacedockSolverAgent", kwargs: {...} }]`
+and harbor's `AgentFactory` resolves the class by Python import. If
+harbor changes its `AgentConfig` schema or its factory's resolution
+shape, razorback's `rk run` translator updates and the change
+propagates to users via a razorback release. No razorback
+`pyproject.toml` entry-point declaration exists or is needed; see
+§4.5 for the mechanism and AC-0.2's probe doc for empirical
+verification.
 
 ### 9.3 Skills as a runtime-specific concept
 
