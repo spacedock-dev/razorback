@@ -90,6 +90,30 @@ spec-corrections-from-phase0-probes landing first.
 Verified by: pytest exits 0 from a clean checkout of the worktree
 branch tip. Per plan AC-1.6.
 
+**AC-8 — Runs-dir mount-visibility canary at start of run.**
+Before any agent invocation, `rk run` verifies the resolved
+`--runs-dir` is visible to the harbor-orchestrated docker
+containers. v1's `tests/conftest.py:12-23` `colima_safe_tmp_path`
+fixture encodes this discipline for tests; v2's `rk run` lifts it
+to the CLI boundary via a runtime probe (write a canary file under
+the resolved runs-dir, exec `ls <canary>` inside the planned
+container environment, abort with `ExitCode.CONFIG_INVALID` and a
+clean diagnostic if the canary is missing). The check is robust to
+non-`/Users/` virtiofs mounts (configurable via `colima.yaml`) —
+it probes actual visibility, not a hardcoded path prefix. On
+non-macOS systems the canary still runs and succeeds in the
+normal case; the same error class fires if `runs-dir` is on a
+filesystem the container can't see (NFS-restricted mount,
+unmounted volume).
+Verified by: a synthetic test invokes `rk run --runs-dir /tmp/...`
+on a macOS+Colima environment and asserts (a) the run aborts with
+`ExitCode.CONFIG_INVALID` before any agent step; (b) the error
+message names the runs-dir, its resolved path, and the fix (e.g.,
+"use --runs-dir under /Users/... or a virtiofs-mounted volume").
+A positive test under `/Users/.../.runs/...` confirms the canary
+passes and the run proceeds normally. Reference investigation:
+`docs/superpowers/plans/2026-05-20-v1-bookreview-regression-investigation.md`.
+
 ## Test plan
 
 - **Unit tests:** alias-drift pre-check (mocked provider API);
