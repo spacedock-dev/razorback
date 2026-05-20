@@ -1,13 +1,13 @@
 ---
 id: xmnmxmphkmvdysatn39awsyp
 title: Phase 4a — rk score Wilson CIs + stratified mean + against-constant
-status: plan
+status: implementation
 source: plan Phase 4a + spec §3.2 + §8.3a (v2 spec at docs/superpowers/specs/2026-05-19-razorback-on-harbor.md)
 started: 2026-05-20T07:12:27Z
 completed:
 verdict:
 score: 0.85
-worktree:
+worktree: .worktrees/spacedock-ensign-phase4a-rk-score-wilson-stratified
 issue:
 pr:
 mod-block:
