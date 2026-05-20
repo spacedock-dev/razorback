@@ -141,3 +141,57 @@ def test_write_per_trial_outcomes_matches_pairing_loader_contract(tmp_path: Path
     # Errored trials get reward=0.0 per legacy aggregate_job_result (legacy line 102-106).
     assert by_q[("bookreview", 3)]["reward"] == 0.0
     assert all(t["trial_index"] == 0 for t in trials)
+
+
+def test_aggregate_run_dir_writes_all_four_artifacts(tmp_path: Path):
+    """One call after harbor exits → manifest + summary + events + per_trial_outcomes."""
+    from razorback.runs.aggregate import aggregate_run_dir
+
+    work = tmp_path / "exp" / "job"
+    _copy_fixture(FIXTURE_RUN, work)
+    (work / "spec.frozen.yaml").write_text("version: 1\nexperiment: exp\n")
+    (work / "provenance.yaml").write_text("harbor_version: 0.6.6\n")
+
+    aggregate_run_dir(
+        work,
+        spec_path=Path("/fixtures/spec.yaml"),
+        frozen_spec_hash="a" * 64,
+        provenance_hash="b" * 64,
+        harbor_job_name="job",
+        benchmark_kind="dab",
+    )
+
+    for name in ("manifest.json", "summary.json", "events.jsonl", "per_trial_outcomes.json"):
+        assert (work / name).is_file(), f"missing {name}"
+
+    manifest = json.loads((work / "manifest.json").read_text())
+    assert manifest["n_trials_total"] == 3
+    assert manifest["n_trials_completed"] == 2
+    assert manifest["n_trials_errored"] == 1
+    assert manifest["per_trial_paths"] == sorted(manifest["per_trial_paths"])
+
+
+def test_aggregate_run_dir_idempotent(tmp_path: Path):
+    """Calling aggregate_run_dir twice yields byte-identical outputs (except manifest.created_at)."""
+    from razorback.runs.aggregate import aggregate_run_dir
+
+    work = tmp_path / "exp" / "job"
+    _copy_fixture(FIXTURE_RUN, work)
+    (work / "spec.frozen.yaml").write_text("version: 1\nexperiment: exp\n")
+    (work / "provenance.yaml").write_text("harbor_version: 0.6.6\n")
+
+    aggregate_run_dir(
+        work, spec_path=Path("/x"), frozen_spec_hash="a" * 64,
+        provenance_hash="b" * 64, harbor_job_name="job", benchmark_kind="dab",
+    )
+    first_summary = (work / "summary.json").read_text()
+    first_outcomes = (work / "per_trial_outcomes.json").read_text()
+    first_events = (work / "events.jsonl").read_text()
+
+    aggregate_run_dir(
+        work, spec_path=Path("/x"), frozen_spec_hash="a" * 64,
+        provenance_hash="b" * 64, harbor_job_name="job", benchmark_kind="dab",
+    )
+    assert (work / "summary.json").read_text() == first_summary
+    assert (work / "per_trial_outcomes.json").read_text() == first_outcomes
+    assert (work / "events.jsonl").read_text() == first_events

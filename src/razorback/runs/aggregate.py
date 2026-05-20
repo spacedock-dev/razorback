@@ -307,3 +307,43 @@ def write_per_trial_outcomes(run_dir: Path) -> None:
     (run_dir / "per_trial_outcomes.json").write_text(
         json.dumps({"outcomes_version": OUTCOMES_VERSION, "trials": rows}, indent=2) + "\n"
     )
+
+
+def aggregate_run_dir(
+    run_dir: Path,
+    *,
+    spec_path: Path,
+    frozen_spec_hash: str,
+    provenance_hash: str,
+    harbor_job_name: str,
+    benchmark_kind: str | None,
+) -> None:
+    """Single post-harbor entrypoint. Writes the four canonical PKG-17 artifacts.
+
+    Idempotent for summary / events / per_trial_outcomes (deterministic inputs);
+    manifest.created_at re-stamps on each call by design.
+    """
+    trial_dirs = _iter_trial_dirs(run_dir)
+    n_total = len(trial_dirs)
+    n_errored = 0
+    for td in trial_dirs:
+        result = _read_json(td / "result.json") or {}
+        if result.get("exception_info") is not None or result.get("verifier_result") is None:
+            n_errored += 1
+    n_completed = n_total - n_errored
+
+    write_manifest(
+        run_dir,
+        spec_path=spec_path,
+        frozen_spec_hash=frozen_spec_hash,
+        provenance_hash=provenance_hash,
+        harbor_job_name=harbor_job_name,
+        n_trials_total=n_total,
+        n_trials_completed=n_completed,
+        n_trials_errored=n_errored,
+        per_trial_paths=sorted(td.name for td in trial_dirs),
+        benchmark_kind=benchmark_kind,
+    )
+    aggregate_summary(run_dir)
+    concatenate_events(run_dir)
+    write_per_trial_outcomes(run_dir)
