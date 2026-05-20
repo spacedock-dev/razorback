@@ -324,6 +324,18 @@ D. **Per-trial agent transcript not host-visible.** The container's
 
 ## T14 re-run (PKG-13, honest live-DB)
 
+> **POTENTIALLY INFLATED — agent had Read+Bash on `books_info.sql`; PKG-16 re-smoke at opus-4.7 measured 4/7 ≈ 57% per-question pass rate. See "PKG-16 honest re-smoke" section below.**
+>
+> The Staff ML review's finding F2 (2026-05-20) surfaced that PKG-13's
+> 9/9 reward=1.0 could reflect the agent reading the SQL dump file
+> (`steps/main/workdir/query_dataset/books_info.sql`) rather than
+> actually querying postgres. PKG-13's substring-leak hardening closed
+> the "paste dump verbatim" path but NOT the "grep dump and compute"
+> path. PKG-16 removed the dump from the agent workdir entirely; the
+> post-fix re-smoke at opus-4.7 produced 4 PASS / 3 FAIL across 7
+> completed trials — a result that is qualitatively distinguishable
+> from 9/9 and supports the F2 inflation hypothesis.
+
 **Date:** 2026-05-20
 **Razorback branch:** spacedock-ensign/pkg13-harbor-dab-live-db-verification-stack (PKG-13 T0-T11)
 **Cost:** $0 spent (subscription-billed via `CLAUDE_CODE_OAUTH_TOKEN` from `~/.claude/benchmark-token`; per-trial budget cap $5)
@@ -436,3 +448,88 @@ H. **Cause-6 (debuggability) still pending.** Agent transcripts are
    agent actually queried postgres versus reading the SQL dump file is
    not directly observable. The hardened validators reject the
    dump-grep path even if it were attempted.
+
+## PKG-16 honest re-smoke (post-workdir-dump-removal, opus-4.7)
+
+**Date:** 2026-05-20
+**Razorback branch:** spacedock-ensign/pkg16-harbor-dab-workdir-no-sql-dump
+**Cost:** $0 spent (subscription-billed; per-trial `cost_usd: null` — same telemetry gap as before)
+**Wall-clock:** ≈26 min for 7 completed trials (interrupted before all 9 finished)
+
+This is the F2 re-anchor for the harbor-DAB bookreview baseline. PKG-16
+removed the SQL dump from the agent workdir; the dump is now staged at
+`<task-dir>/environment/_initdb/books_info.sql` (sibling of the compose
+file) and only bind-mounted into postgres, never into the agent
+container. The agent must query the live postgres service to answer.
+
+### Spec
+
+- File: `examples/specs/pkg16-bookreview-claude-harbor-dab-n3-opus47.yaml`
+- Dataset: bookreview (3 queries × N=3 = 9 trials nominal)
+- Agent: `claude-cli` (model `claude-opus-4-7` — the Goal 1 model, NOT opus-4.5)
+- Sampling: `temperature: 0.0`
+- Access mode: harbor-DAB live-DB via `razorback-plugin-dab` (workspace_variant=direct-minimal, hints=false)
+- `experiment_meta.max_budget_usd: 5.0`; `estimated_cost_usd: 1.5`
+- Runs-dir: `_runs/pkg16-bookreview-opus47/` (under worktree)
+
+### Headline
+
+- **Per-question reward distribution (7/9 trials completed before orchestrator interrupt):**
+  - q1: 2/3 PASS (kMtUGw5=1, N69FkyP=1, AeV2Cc8=0)
+  - q2: 2/2 PASS, 1 trial failed mid-execution (cpmKGR8=1, qcn7WGG=1, 7XraWnr=FAILED)
+  - q3: 0/2 PASS (Hasyx9n=0, ehw5iv3=0; 1 trial not started)
+- **Completed-trial pass@1: 4/7 ≈ 57%** (point estimate; CI not computed for an
+  incomplete 9-trial run)
+- **Result is decisively distinguishable from PKG-13's 9/9 = 100%.**
+
+### Interpretation (per AC-3)
+
+The AC-3 prior was 50-80% per-question pass rate (staff ML reviewer).
+The observed 4/7 ≈ 57% lands inside that band. Most informatively:
+
+1. **q3 went from 3/3 PASS under PKG-13 to 0/2 PASS under PKG-16** —
+   the clearest single piece of evidence that the workdir leak was
+   inflating the PKG-13 score. q3 is the question that PKG-13 q2/q3
+   validator-hardening (2000-char length cap) targeted as a leak
+   surface; removing the dump from the workdir confirms the leak was
+   load-bearing for q3.
+2. **q1 and q2 retain moderate pass rates** — suggesting opus-4.7 can
+   genuinely solve some bookreview queries via live postgres, but not
+   with the perfect reliability the dump-grep path enabled.
+3. **The PKG-13 9/9 result is recategorized as POTENTIALLY INFLATED**
+   per the F2 finding. The PKG-13 hardening (substring + bounded-decade
+   match + length cap) closed the "paste verbatim" leak path; PKG-16
+   closed the "grep dump and compute" path that PKG-13's debrief note
+   H explicitly admitted was not directly observable.
+
+### Validity caveats
+
+- **The 8th trial (bookreview-q2__7XraWnr) failed mid-execution** with
+  an empty error string in the job log (`Trial bookreview-q2__7XraWnr
+  failed:`). The harbor orchestrator process appears to have been
+  killed by an external interrupt (system crash mid-validation
+  session per the dispatch context); subsequent trials did continue,
+  so this single failure is likely environmental rather than a
+  reward-emission failure.
+- **The 9th trial was never started** before the orchestrator died.
+- A clean re-run is RECOMMENDED before Goal 1 dispatches at scale,
+  ideally outside a sandbox that restricts `data_root` access. The
+  current evidence is sufficient to falsify "PKG-13 was honest" but
+  not yet enough to set a definitive Goal 1 pre-registration band at
+  opus-4.7.
+
+### Run-dir reference
+
+- Location: `_runs/pkg16-bookreview-opus47/pkg16-bookreview-claude-harbor-dab-n3-opus47-honest/bba21c6d7706a8e8/` (under PKG-16 worktree)
+- Aggregate: `result.json` records 7 completed / 1 running / 1 pending
+- Per-trial verifier reward files present under `bookreview-*/steps/main/verifier/reward.json`
+- Run-dirs NOT committed (per workflow convention); this doc cites them as reference.
+
+### Recommendation
+
+Treat PKG-13's 9/9 baseline as superseded. The PKG-16 4/7 ≈ 57% point
+estimate should be the working anchor for Goal 1 bookreview
+expectations at opus-4.7. The pre-registered expected-shift band
+[0.70, 0.90] from Phase 2 reconciliation should be re-evaluated
+against this new anchor before Goal 1 dispatches the full
+12-dataset matrix.
