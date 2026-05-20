@@ -241,3 +241,34 @@ def aggregate_summary(run_dir: Path) -> None:
         "cost_usd": _job_cost_usd(run_dir),
     }
     (run_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+
+
+def concatenate_events(run_dir: Path) -> None:
+    """AC-3: write <run_dir>/events.jsonl, the per-trial concatenation.
+
+    Each line carries `{trial_id, line_offset}` so `rk audit` can correlate a
+    finding back to the per-trial events.jsonl. Trials with no per-trial
+    events.jsonl contribute nothing (errored-before-publisher trials are valid).
+    """
+    out_lines: list[str] = []
+    for trial_dir in _iter_trial_dirs(run_dir):
+        per_trial = trial_dir / "events.jsonl"
+        if not per_trial.exists():
+            continue
+        try:
+            text = per_trial.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for offset, raw in enumerate(text.splitlines()):
+            stripped = raw.strip()
+            if not stripped:
+                continue
+            try:
+                payload = json.loads(stripped)
+            except json.JSONDecodeError:
+                payload = {"raw": stripped}
+            payload = {"trial_id": trial_dir.name, "line_offset": offset, **payload}
+            out_lines.append(json.dumps(payload))
+    (run_dir / "events.jsonl").write_text(
+        ("\n".join(out_lines) + "\n") if out_lines else ""
+    )
