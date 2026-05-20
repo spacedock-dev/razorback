@@ -18,6 +18,10 @@ def _root() -> None:
 
 app.command("run")(run_command)
 
+from razorback.audit.cli import audit_command
+
+app.command("audit")(audit_command)
+
 from razorback.cli.runs import runs_app
 
 app.add_typer(runs_app, name="runs")
