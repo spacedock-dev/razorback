@@ -1,6 +1,7 @@
 # ABOUTME: `rk run` Typer command (Phase 1 v2). Parse, pre-check, translate, delegate to harbor.
 # ABOUTME: Maps razorback typed errors to documented exit codes (§3.4).
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -42,16 +43,34 @@ def _run_canary(runs_dir: Path) -> None:
     check_runs_dir_visible(runs_dir, container_probe=probe)
 
 
-def _invoke_harbor(job_config_yaml: Path) -> int:
+def _invoke_harbor(job_config_yaml: Path, env: dict[str, str]) -> int:
     """Subprocess-invoke `harbor run -c <yaml>`; wrapped for test patching.
 
-    Returns harbor's exit code. Razorback surfaces this as exit 30 if non-zero.
+    `env` is the full environment for the harbor subprocess. Callers stage
+    HOME under the runs-dir so harbor's hardcoded `~/.cache/harbor` and
+    `~/.harbor` resolve to writable paths in sandboxed environments
+    (CI, agent sandboxes, Colima). Returns harbor's exit code; razorback
+    surfaces non-zero as exit 30.
     """
     proc = subprocess.run(
         ["uv", "run", "harbor", "run", "-c", str(job_config_yaml)],
+        env=env,
         capture_output=False,
     )
     return proc.returncode
+
+
+def _stage_harbor_home(runs_dir_resolved: Path) -> Path:
+    """Create a sandbox-safe HOME for harbor under the user's runs-dir.
+
+    Harbor hardcodes `~/.cache/harbor` and `~/.harbor` via Path.expanduser.
+    Pointing HOME under the runs-dir keeps both inside the user-chosen,
+    canary-checked runs-dir tree.
+    """
+    harbor_home = runs_dir_resolved / ".harbor-home"
+    (harbor_home / ".cache" / "harbor").mkdir(parents=True, exist_ok=True)
+    (harbor_home / ".harbor").mkdir(parents=True, exist_ok=True)
+    return harbor_home
 
 
 def _write_provenance_artifacts(spec_bytes: bytes, spec, run_dir: Path) -> None:
@@ -135,7 +154,9 @@ def run_command(
     job_config_yaml = run_dir / "_job_config.yaml"
     job_config_yaml.write_text(job_config.model_dump_json(indent=2))
 
-    rc = _invoke_harbor(job_config_yaml)
+    harbor_home = _stage_harbor_home(runs_dir_resolved)
+    harbor_env = {**os.environ, "HOME": str(harbor_home)}
+    rc = _invoke_harbor(job_config_yaml, harbor_env)
     if rc != 0:
         typer.echo(f"harbor run failed (exit {rc}); surfacing as exit 30", err=True)
         raise typer.Exit(ExitCode.HARBOR_RUNTIME)
