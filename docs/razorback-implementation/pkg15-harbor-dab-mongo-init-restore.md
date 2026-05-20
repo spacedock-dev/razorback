@@ -1,7 +1,7 @@
 ---
 id: m7x4d2pkq8r3v6n9zwfgh1p2
 title: PKG-15 — harbor-DAB mongo init mechanism (BSON restore on first start)
-status: implementation
+status: validation
 source: dab-mongo-probe report 2026-05-20 (commit 3987ca1); mongo path FAIL across agnews+yelp; agent loop 4/4 reward=0.0 with "empty answer" fingerprint
 started: 2026-05-20T21:16:11Z
 completed:
