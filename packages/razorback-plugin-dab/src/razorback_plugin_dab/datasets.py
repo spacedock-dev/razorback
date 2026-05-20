@@ -11,6 +11,7 @@ class DabDataset:
     name: str
     backends: tuple[str, ...]
     query_count: int
+    schema_version: str = "v1"
 
 
 DAB_DATASETS: tuple[DabDataset, ...] = (

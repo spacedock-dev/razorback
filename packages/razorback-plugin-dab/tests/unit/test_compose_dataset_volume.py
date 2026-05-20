@@ -57,6 +57,23 @@ def test_postgres_volume_name_stable_across_invocations(tmp_path: Path):
     assert "dab-postgres-data-bookreview-v1" in yaml2
 
 
+def test_schema_version_v2_yields_distinct_volume_name(tmp_path: Path):
+    """AC-9: bumping schema_version invalidates the v1 volume — new v2 name."""
+    data_root = tmp_path / "data"
+    cfg = _bookreview_cfg(data_root)
+    yaml_v1 = generate_compose(
+        db_config=cfg, dataset_name="bookreview", data_root=data_root,
+        schema_version="v1",
+    )
+    yaml_v2 = generate_compose(
+        db_config=cfg, dataset_name="bookreview", data_root=data_root,
+        schema_version="v2",
+    )
+    assert "dab-postgres-data-bookreview-v1" in yaml_v1
+    assert "dab-postgres-data-bookreview-v2" in yaml_v2
+    assert "dab-postgres-data-bookreview-v1" not in yaml_v2
+
+
 def test_postgres_volume_name_lowercased_for_caps_datasets(tmp_path: Path):
     """Docker volume names should be case-stable; the catalog names like
     PANCANCER_ATLAS must lowercase to a valid volume name."""
