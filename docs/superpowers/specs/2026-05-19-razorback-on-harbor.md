@@ -16,37 +16,37 @@ for leaks the runtime hooks missed. One `rk` CLI carries every stage;
 one frozen spec carries every rerun.
 
 Razorback ships a small Python tool (`rk`) and one custom harbor
-agent — a multi-runtime spacedock-solver that drives a workflow
+agent: a multi-runtime spacedock-solver that drives a workflow
 README through a benchmark task, with halt-and-resume across stage
-boundaries. The first-cut CLI surface is `rk freeze`, `rk run`,
+boundaries. The initial CLI surface is `rk freeze`, `rk run`,
 `rk score`, `rk audit`, plus run-directory navigation helpers.
 
 Razorback is the smallest layer that turns a harbor benchmark run
-into a paper-citable result. Everything above it — the autoresearch
-loop, the hypothesis-lifecycle workflow, the baseline registry —
-is research code in the consuming repo, built on this surface once
-the goal-1 and goal-2 reproductions land.
+into a publishable result. Everything above it (the autoresearch
+loop, the hypothesis-lifecycle workflow, the baseline registry) is
+research code in the consuming repo, built on this surface once the
+goal-1 and goal-2 reproductions land.
 
 ### 1.2 Glossary
 
-- **Harbor** — the agent-benchmark engine razorback consumes
+- **Harbor**: the agent-benchmark engine razorback consumes
   (`github.com/harbor-framework/harbor`). Owns job execution, the
   installed-agent catalog (claude_code, codex, pi, and ~20 others),
   the verifier framework, the environment framework, and its own CLI.
-- **Spacedock** — the workflow framework razorback's solver agent
+- **Spacedock**: the workflow framework razorback's solver agent
   loads as a plugin. An **operator** (an LLM-driven actor) runs
   against a markdown workflow definition.
-- **Workflow README** — a markdown file that defines a spacedock
+- **Workflow README**: a markdown file that defines a spacedock
   workflow: its stages, entity schema, gates, mods, and per-stage
   behavior.
-- **Solver workflow README** — the workflow README a
+- **Solver workflow README**: the workflow README a
   `SpacedockSolverAgent` loads at trial start. Defines how the
   solver tackles one benchmark task. Lives in the consuming
   research repo; hypothesis variants are git diffs over it.
-- **Trial** — one execution of one agent on one task.
-- **Run** — one invocation of `rk run`; produces a run-directory
+- **Trial**: one execution of one agent on one task.
+- **Run**: one invocation of `rk run`; produces a run-directory
   containing many trials.
-- **Hypothesis** — one entity in the autoresearch loop: a
+- **Hypothesis**: one entity in the autoresearch loop: a
   solver-workflow-README variant plus the experiments that test it.
 
 ### 1.3 Non-goals
@@ -92,19 +92,19 @@ the goal-1 and goal-2 reproductions land.
 ┌──────────────────────────────────────────────────────────────────────┐
 │ Razorback (this project)                                             │
 │                                                                      │
-│ CLI (first-cut):                                                     │
-│   rk freeze           — resolve and pin runtime provenance           │
-│   rk run              — drift pre-check + budget gate, then          │
-│                         pass-through to `harbor run`                 │
-│   rk score            — Wilson CIs + stratified means                │
-│   rk audit            — post-hoc trajectory taint scan               │
-│   rk runs list/show/cost — run-dir and budget helpers                │
+│ CLI:                                                                 │
+│   rk freeze              resolve and pin runtime provenance          │
+│   rk run                 drift pre-check + budget gate, then         │
+│                          pass-through to `harbor run`                │
+│   rk score               Wilson CIs + stratified means               │
+│   rk audit               post-hoc trajectory taint scan              │
+│   rk runs list/show/cost run-dir and budget helpers                  │
 │                                                                      │
 │ Agent class:                                                         │
-│   SpacedockSolverAgent — multi-runtime, halt-resume,                 │
+│   SpacedockSolverAgent   multi-runtime, halt-resume,                 │
 │                          agent.kind: spacedock_solver                │
 │                                                                      │
-│ Workflow README templates (no mods first-cut):                       │
+│ Workflow README templates (no mods at first):                        │
 │   experiment-workflow/  run-workflow/                                │
 └──────────────────────────────┬───────────────────────────────────────┘
                                │ rk freeze writes provenance;           
@@ -122,13 +122,13 @@ the goal-1 and goal-2 reproductions land.
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-Deferred: `rk diff` (paired statistics) — adds when the autoresearch
+Deferred: `rk diff` (paired statistics), adds when the autoresearch
 loop's analyze stage needs paired comparison.
 
 ### 2.2 Where razorback sits
 
 Razorback is the thin layer between a harbor benchmark run and a
-paper-citable result. Harbor owns everything that produces trials;
+publishable result. Harbor owns everything that produces trials;
 razorback owns everything that turns trials into a defensible number.
 
 Harbor's side: job execution, trial fan-out, the installed-agent
@@ -140,7 +140,7 @@ gating cost before the run burns budget, scoring with confidence
 intervals (`rk score`), and auditing trajectories for leaks the
 runtime hooks missed (`rk audit`). The spacedock-solver agent
 (`agent.kind: spacedock_solver`) is razorback's only contribution
-*inside* the trial — multi-runtime, halt-and-resume, README-driven.
+*inside* the trial, multi-runtime, halt-and-resume, README-driven.
 
 A third-party adopter publishes their adapter via `harbor publish`,
 then drives every rerun through `rk freeze; rk run; rk score`. They
@@ -161,7 +161,7 @@ benchmark.
 - Idempotent where possible. Re-running `rk freeze` on a spec already
   frozen produces an identical output.
 - No harbor types on the surface. Subcommand arguments, output, and
-  exit codes use razorback's own shapes — never harbor's job-config
+  exit codes use razorback's own shapes, never harbor's job-config
   classes, trial dataclasses, or internal enums.
 - Stable exit codes. Each subcommand enumerates them; workflow
   operators branch on the codes.
@@ -204,13 +204,13 @@ rk registry <list|resolve|add|remove> [args]
 
 Each command:
 
-- **`rk freeze`** — resolve every dynamic input (model alias →
+- **`rk freeze`**: resolve every dynamic input (model alias →
   provider-resolved version, image tag → digest, agent CLI →
   binary hash, prompt file → content hash, harbor version,
   spacedock skill version, solver-workflow content hash) and write
   `<spec>.frozen.yaml` + `provenance.yaml` alongside. Refuses on
   any unresolved field unless `--allow-missing` is passed.
-- **`rk run`** — runs two pre-checks against the frozen spec, then
+- **`rk run`**: runs two pre-checks against the frozen spec, then
   invokes `harbor run`. The alias-drift check re-resolves the
   model alias and refuses with `AliasDriftError` on drift (override
   with `--allow-alias-drift`). The budget check reads
@@ -222,13 +222,13 @@ Each command:
   `spec.frozen.yaml` artifacts in the run-dir; the run-dir layout,
   exit codes for harbor failures (exit 30), and JSON output for
   harbor-side errors pass through unchanged.
-- **`rk score`** — read one run-dir's trial results, emit
+- **`rk score`**: read one run-dir's trial results, emit
   per-stratum pass@1 with Wilson 95% CI (level via `--alpha`) and
   the run's overall stratified mean per the adapter's stratum
   tagging. With `--against-constant <name=value>`, emits an
-  inside-CI / outside-CI line per stratum — the paper-reproduction
+  inside-CI / outside-CI line per stratum, the paper-reproduction
   readout. No paired comparison; that's `rk diff`'s job.
-- **`rk audit`** — post-hoc trajectory scanner. Walks a run-dir's
+- **`rk audit`**: post-hoc trajectory scanner. Walks a run-dir's
   trial traces (parent agent logs, subagent trace manifests,
   recursive subagent traces) and pattern-matches for forbidden
   behavior the runtime PreToolUse hooks missed: dataset-download
@@ -239,24 +239,24 @@ Each command:
   / `coverage_missing`) with findings, plus a run-level summary.
   `--policy strict` exits non-zero on any non-`clean` trial;
   `--policy audit` (default) reports without failing. Layer 3 of
-  the leak-protection stack — layers 1 (propose-stage prompt +
+  the leak-protection stack, layers 1 (propose-stage prompt +
   captain gate) and 2 (agent block `tools_denied`) are upstream
   of the run; this catches what they let through. See §9.4. Ports
   dataagentbench's `benchmark/lib/taint.py` mechanism with
   attribution.
-- **`rk runs list`** — list run-dirs under a root, optionally
+- **`rk runs list`**: list run-dirs under a root, optionally
   filtered by experiment. Emits JSON with paths, timestamps, and
   headline scores. **Defer to `harbor job list` if and when harbor
   ships one.**
-- **`rk runs show`** — print a run's summary, per-stratum scores,
+- **`rk runs show`**: print a run's summary, per-stratum scores,
   trial counts. **Defer to `harbor job show` if and when harbor
   ships one.**
-- **`rk runs cost`** — read a directory of run-dirs and emit the
+- **`rk runs cost`**: read a directory of run-dirs and emit the
   cumulative cost across them. Pairs with `rk run
   --max-budget-usd-running <file>` for two-layer budget
   enforcement: the matrix dispatcher calls `rk runs cost` before
   each dispatch; `rk run` enforces the running total at invocation.
-- **`rk diff`** *(ships later)* — compare two run-dirs paired by
+- **`rk diff`** *(ships later)*: compare two run-dirs paired by
   `(task, query, trial_index)`. Emits per-query Wilson CIs,
   family-wise-adjusted exact-McNemar p-values (Holm-Bonferroni at
   `--family-wise-alpha`), a paired bootstrap CI on the stratified
@@ -297,13 +297,13 @@ Workflow markdown pins razorback by major version (e.g.,
 | 0 | Success |
 | 1 | Generic error |
 | 2 | Usage / argument error |
-| 10 | `SpecError` — spec validation failure |
-| 11 | `ProvenanceError` — unresolved provenance field |
-| 12 | `ConstraintViolation` — constraints check failed |
-| 20 | `SeedMismatchError` — resume input hash mismatch |
-| 21 | `AliasDriftError` — provider model alias resolved differently than frozen |
-| 22 | `BudgetExceededError` — `--max-budget-usd-running` running-total + estimate exceeds `experiment.max_budget_usd` |
-| 23 | `TaintFindingsError` — `rk audit --policy strict` found at least one non-`clean` trial |
+| 10 | `SpecError`, spec validation failure |
+| 11 | `ProvenanceError`, unresolved provenance field |
+| 12 | `ConstraintViolation`, constraints check failed |
+| 20 | `SeedMismatchError`, resume input hash mismatch |
+| 21 | `AliasDriftError`, provider model alias resolved differently than frozen |
+| 22 | `BudgetExceededError`, `--max-budget-usd-running` running-total + estimate exceeds `experiment.max_budget_usd` |
+| 23 | `TaintFindingsError`, `rk audit --policy strict` found at least one non-`clean` trial |
 | 30 | Harbor runtime failure (passed through from `harbor run`) |
 
 ---
@@ -313,7 +313,7 @@ Workflow markdown pins razorback by major version (e.g.,
 ### 4.1 Why razorback owns this class
 
 Razorback ships exactly one custom harbor agent: `SpacedockSolverAgent`.
-It exists because there is real adaptation work — knowing how to make
+It exists because there is real adaptation work, knowing how to make
 claude vs codex vs pi each behave as a spacedock first-officer is
 runtime-specific glue that a spec author should not have to write
 inline. Encapsulating that glue behind one parameterizable class lets
@@ -382,9 +382,9 @@ surface:
   boundaries.
 - **The trial's `logs_dir/agent_freeze/`** is the on-disk surface
   shared between the class and the mods. It contains:
-  - `.git/` — a private git repo holding workspace snapshots per stage
-  - `phase_stats.json` — per-stage tokens/cost/wallclock
-  - `sealed_hash.txt` — the sealed-input hash, written at first stage
+  - `.git/`, a private git repo holding workspace snapshots per stage
+  - `phase_stats.json`, per-stage tokens/cost/wallclock
+  - `sealed_hash.txt`, the sealed-input hash, written at first stage
 
 Downstream consumers (`rk diff`, an experiment-workflow analyze stage)
 read `phase_stats.json` and the trial's `result.json` to attribute
@@ -442,7 +442,7 @@ discard).
 | Stage | Owner | Action |
 |-------|-------|--------|
 | `pending` | captain | seeded entity; awaits captain greenlight |
-| `propose` | operator | author or edit the solver-workflow README; `rk freeze` the spec; captain reviews at the gate (the propose-stage prompt instructs the operator on what the README must not reference — answer-key files, ground-truth columns, per-task hints the benchmark forbids — and the captain's gate review confirms) |
+| `propose` | operator | author or edit the solver-workflow README; `rk freeze` the spec; captain reviews at the gate (the propose-stage prompt instructs the operator on what the README must not reference, answer-key files, ground-truth columns, per-task hints the benchmark forbids, and the captain's gate review confirms) |
 | `smoke` | operator | check the running cost via `rk runs cost <root>` against `experiment.max_budget_usd`, refuse dispatch on overrun; dispatch a run-workflow entity for a one-task subset; check against a tripwire; advance or fall back |
 | `full` | operator | same cost check as `smoke`; dispatch a run-workflow entity for the full benchmark slice at target N |
 | `analyze` | operator | run `rk score --against-constant <baseline-headline>` (first-ship) or `rk diff <baseline-run> <this-run>` (when available); paste the output into the entity body and write a verdict |
@@ -459,7 +459,7 @@ dispatcher and by the smoke/full stage prompts.
 
 Halt-resume-related mods (`stage-boundary-freeze`,
 `phase-stats-writer`) ship when halt-resume hypothesis testing
-arrives as a consumer; the run workflow's first-cut shape (§5.2)
+arrives as a consumer; the run workflow's initial shape (§5.2)
 does not require them.
 
 **ID style.** sd-b32 (hypotheses run in parallel; reconcile without
@@ -485,7 +485,7 @@ spacedock-solver agent's stage-completion signal
 (`stage-boundary-freeze` for workspace `git commit`,
 `phase-stats-writer` for `phase_stats.json`) are halt-resume +
 per-stage-cost-attribution machinery. They ship when those use cases
-have consumers — halt-resume hypothesis testing for the freeze mod,
+have consumers, halt-resume hypothesis testing for the freeze mod,
 multi-stage solver workflows for the phase-stats mod. Goals 1+2 run
 single straight-through solves; neither use case fires for them.
 
@@ -493,7 +493,7 @@ single straight-through solves; neither use case fires for them.
 
 The solver workflow README is the artifact a `SpacedockSolverAgent`
 loads via its `solver_workflow` parameter. Razorback does not ship
-solver workflow READMEs — they are project-specific and live in the
+solver workflow READMEs, they are project-specific and live in the
 research project's repo. Razorback specifies the contract:
 
 - **Standard spacedock workflow README shape.** Stages, entity
@@ -742,7 +742,7 @@ override.
 
 Implementation is small: Wilson CI plus the stratified-mean reducer
 the adapter's stratum tags feed into. No paired-bootstrap, no
-McNemar, no family-wise correction — those are paired-comparison
+McNemar, no family-wise correction, those are paired-comparison
 machinery and live in `rk diff` (ships later).
 
 ### 8.3 `rk diff`: paired statistics (ships later)
@@ -803,7 +803,7 @@ setup(env):
     # 4. delegate to inner.setup(env)
 
 run():
-    # delegate to inner.run() — the workflow mods do the rest
+    # delegate to inner.run(), the workflow mods do the rest
 
 cleanup():
     # delegate to inner.cleanup()
@@ -813,7 +813,7 @@ Per-runtime adapter sub-modules (`_claude.py`, `_codex.py`, `_pi.py`)
 hold the per-runtime kwarg construction. Each is ~50-100 LoC of
 parameter translation.
 
-### 8.5 Workflow templates (no first-cut mods)
+### 8.5 Workflow templates (no initial mods)
 
 The two workflow README templates live as plain markdown under
 `docs/templates/{experiment,run}-workflow/README.md`. Razorback's
@@ -823,7 +823,7 @@ at runtime for the captain to copy.
 **Razorback ships no mods in the first cut.** The stage-level
 behavior the workflows depend on lives in:
 
-- **Per-stage prompt content** in the workflow README itself —
+- **Per-stage prompt content** in the workflow README itself,
   what the operator-ensign at each stage is instructed to do (run
   `rk freeze`, run `rk score --against-constant`, check
   `rk runs cost <root>` against `experiment.max_budget_usd`, paste
@@ -894,7 +894,7 @@ to passing the spacedock plugin's full system-prompt content via
 Razorback's leak guard is three-layered. All three are required for
 goal-1-grade defensibility.
 
-**Layer 1 — static (propose-stage prompt + captain gate).** The
+**Layer 1, static (propose-stage prompt + captain gate).** The
 operator-ensign at the experiment workflow's propose stage is
 instructed not to reference forbidden things in the solver workflow
 README (answer-key files, ground-truth columns, per-task hints the
@@ -902,7 +902,7 @@ benchmark forbids). The captain reviews at the propose gate before
 the README ships to a frozen spec. Catches authored leaks in the
 workflow definition.
 
-**Layer 2 — runtime (`tools_denied` PreToolUse hooks).** The agent
+**Layer 2, runtime (`tools_denied` PreToolUse hooks).** The agent
 block's `tools_denied` field (§6.2) installs PreToolUse hooks in
 the inner runtime that block matching tool invocations at
 execution time. Catches the case where an agent under a clean
@@ -912,7 +912,7 @@ recommended `tools_denied` list (e.g., for DAB, the verbatim
 `DISALLOWED_TOOLS` list from dataagentbench's reference impl) as
 documentation; the captain pastes it into the spec.
 
-**Layer 3 — post-hoc (`rk audit`).** Wraps a port of
+**Layer 3, post-hoc (`rk audit`).** Wraps a port of
 dataagentbench's `benchmark/lib/taint.py` mechanism. After a trial
 completes, walks the recorded traces (parent log, subagent trace
 manifest, recursive subagent traces) and pattern-matches against
@@ -979,7 +979,7 @@ solver workflow's mods must rebuild external state on resume.
 | `SpacedockSolverAgent` (class + per-runtime adapter sub-modules) | 300-500 | first |
 | Pydantic schema for the spacedock_solver agent block (incl. `tools_denied`) | 100-140 | first |
 | Tests (unit + integration; includes `rk audit` fixtures) | 600-800 | first |
-| Workflow README templates (no razorback-shipped mods first-cut) | (markdown) | first (after goal-1/2 runs) |
+| Workflow README templates (no razorback-shipped mods initial) | (markdown) | first (after goal-1/2 runs) |
 | `rk diff` (paired statistics) | 200-300 | later (when autoresearch loop needs paired stats) |
 
 **First-ship total: ~2400-3100 LoC of Python** + workflow
@@ -1008,9 +1008,9 @@ This design fits when:
 Alternatives are worth considering when:
 
 - A single benchmark is the only target and no second benchmark is
-  anticipated — workflow-private Python helpers may be lighter than
+  anticipated, workflow-private Python helpers may be lighter than
   razorback.
 - The research methodology does not need paired statistical comparison
-  — harbor's `analyze` and `sweeps` may suffice alone.
-- Halt-resume is not required — a vanilla `harbor run` with
+ , harbor's `analyze` and `sweeps` may suffice alone.
+- Halt-resume is not required, a vanilla `harbor run` with
   `claude_code` covers the case without razorback's agent class.

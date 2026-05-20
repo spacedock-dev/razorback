@@ -59,7 +59,7 @@ Phase 0's task list is dominated by probes, not edits.
   for documented extractions.
 - Every extraction names the source path + attribution in a commit
   message and (where helpful) an ABOUTME comment.
-- Sidelining is `git mv` only — code moves, but is preserved.
+- Sidelining is `git mv` only, code moves, but is preserved.
 - Each phase has explicit acceptance criteria. The plan does not
   proceed past a phase whose ACs are not all satisfied.
 
@@ -78,14 +78,14 @@ Phase 0's task list is dominated by probes, not edits.
 
 **Acceptance criteria.**
 
-**AC-0.1 — v1 reconciliation baseline + deterministic micro-spec
-captured.** Two artifacts:
+**AC-0.1** v1 reconciliation baseline + deterministic micro-spec
+captured. Two artifacts:
 
 (a) A full DAB-claude experiment ran against current razorback in its
 current shape (in-tree adapter, dump-file mode); the run-dir headline
 score and per-dataset breakdown are committed to
 `docs/superpowers/plans/2026-05-19-reconciliation-baseline.md`. This
-is the **pre-correction reference** — it captures behavior on the
+is the **pre-correction reference**, it captures behavior on the
 degraded access path and is used for Phase 2's expected-shift-band
 documentation, not as the structural walking-skeleton anchor.
 
@@ -94,12 +94,12 @@ documentation, not as the structural walking-skeleton anchor.
 simplest query), one trial, `temperature: 0.0`, fixed seed where the
 runtime honors it, content-hashed prompt content. Its expected
 pass/fail outcome is recorded. **This micro-spec is the
-walking-skeleton anchor for Phases 1-3** — eyeball comparison of
+walking-skeleton anchor for Phases 1-3**, eyeball comparison of
 full-DAB headlines at N=5 is too noisy to catch a 5-10pp regression;
 the deterministic smoke is.
 
-**AC-0.2 — harbor plugin contract validated by execution (resolves
-D1).** The entry-point group name + registration shape for external
+**AC-0.2** harbor plugin contract validated by execution (resolves
+D1). The entry-point group name + registration shape for external
 installed agents AND external benchmark adapters are documented from
 harbor's source (`cli/template-adapter/`, `cli/adapter_wizard.py`,
 `publisher/publisher.py`). **Validation is by execution, not by
@@ -120,40 +120,40 @@ If either entry-point dispatch fails, the fallback path (razorback's
 `rk run` does spec translation before invoking `harbor run`) is the
 chosen route. Mechanism validation precedes Phase 3's commitment.
 
-**AC-0.3 — harbor's spec format compatibility probed.** Razorback's
+**AC-0.3** harbor's spec format compatibility probed. Razorback's
 current spec format is compared field-by-field against the JobConfig
 harbor's `harbor run` accepts. Any razorback fields harbor does not
 accept (e.g., razorback's `spacedock_solver` agent block kwargs
 specifically) are documented with a translation strategy (entry-point
 direct or `rk run` rewrite, decided by AC-0.2).
 
-**AC-0.4 — harbor installed-agent constructor probed.**
+**AC-0.4** harbor installed-agent constructor probed.
 `harbor.agents.installed.claude_code.ClaudeCode.__init__` signature is
 documented. Razorback's runtime-adapter `SpacedockSolverAgent` MUST be
 able to construct an instance via the kwargs path; if there's a
 hidden coupling (mandatory kwarg razorback can't supply), it is named
 and a mitigation is documented.
 
-**AC-0.5 — harbor's job-resume mechanism probed.**
+**AC-0.5** harbor's job-resume mechanism probed.
 `harbor jobs resume` is invoked against a known-incomplete fixture
 run-dir; the resume semantics are documented. Razorback's halt-resume
 contract (spec §4.4) is checked against what harbor actually does on
 resume. Conflicts named explicitly.
 
-**AC-0.6 — harbor's run-dir layout probed.** The actual files harbor
+**AC-0.6** harbor's run-dir layout probed. The actual files harbor
 writes per trial under `logs_dir/` are listed. Razorback's
 `agent_freeze/` subtree assumption (writable under `logs_dir/`,
 non-colliding) is confirmed.
 
-**AC-0.7 — D2 decided.** Captain has picked: claude-only at
+**AC-0.7** D2 decided. Captain has picked: claude-only at
 first-ship (codex/pi NotImplemented stubs), or all three runtimes
 implemented up-front.
 
-**AC-0.8 — D5 decided.** Captain has picked: sibling-package
+**AC-0.8** D5 decided. Captain has picked: sibling-package
 (`packages/razorback-plugin-dab/`) or new repo for the DAB harbor
 adapter.
 
-**AC-0.9 — baseline-comparator policy locked.**
+**AC-0.9** baseline-comparator policy locked.
 
 - **Phases 1-3 walking-skeleton check:** the deterministic
   micro-spec from AC-0.1(b). Its pass/fail is reproducible across
@@ -168,13 +168,13 @@ adapter.
 - **Phase 4+ acceptance:** `rk diff` paired-bootstrap CI (cluster
   bootstrap by query per AC-4.2) on same-adapter, same-agent pairs.
 
-**AC-0.10 — module inventory committed with file:line citations.**
+**AC-0.10** module inventory committed with file:line citations.
 `src/razorback/` modules are classified KEEP-EXTRACT, ADAPT-EXTRACT,
 DROP, or PORT-OUT against the v2 spec at
 `docs/superpowers/plans/2026-05-19-razorback-inventory.md`. Every src
 module classified; every v2-spec-named artifact accounted for. **For
 each KEEP-EXTRACT and ADAPT-EXTRACT module, the inventory cites
-specific file:line ranges of the proven behavior to preserve** —
+specific file:line ranges of the proven behavior to preserve**,
 especially for freeze-resolver internals (retry/backoff against
 provider 503s, provider-specific error-class taxonomy, Anthropic 503
 patterns vs OpenAI auth-vs-org-quota distinctions), auth handling
@@ -183,7 +183,7 @@ the FU-1/FU-2 acceptance-test contracts (image-override semantics,
 `extra_env` mechanism). Phase 4 + Phase 1 extractions reference these
 citations.
 
-**AC-0.14 — test classification committed.** Symmetric to AC-0.10:
+**AC-0.14** test classification committed. Symmetric to AC-0.10:
 every test file under `tests/` is classified KEEP-VERBATIM (lift into
 v2's test tree as-is, just re-pointed at v2 paths), RE-AUTHOR
 (behavior survives in v2 but the test needs new framing), or DROP
@@ -193,15 +193,15 @@ Specifically: every FU-1 / FU-2 acceptance test is KEEP-VERBATIM
 unless its target behavior moves to the DAB harbor adapter (then
 PORT-OUT to the adapter's test suite).
 
-**AC-0.11 — `src/razorback/_legacy/` exists.** Empty (with
+**AC-0.11** `src/razorback/_legacy/` exists. Empty (with
 `__init__.py` carrying the holding-tank convention docstring).
 
-**AC-0.12 — in-flight backlog re-filed under v2 shape.**
+**AC-0.12** in-flight backlog re-filed under v2 shape.
 PKG-3/4/5/6/7/10 archived; PKG-1, PKG-2, PKG-8, PKG-9 re-scoped to
 their v2-surviving content; razorback-implementation workflow
 dispatch paused.
 
-**AC-0.13 — 2026-05-18 design doc marked SUPERSEDED** with a pointer
+**AC-0.13, 2026-05-18 design doc marked SUPERSEDED** with a pointer
 to the v2 spec.
 
 **Walking-skeleton check.** AC-0.1's baseline run itself confirms
@@ -225,12 +225,12 @@ current razorback runs DAB end-to-end.
 
 **Acceptance criteria.**
 
-**AC-1.1 — walking skeleton holds.** `rk run
+**AC-1.1** walking skeleton holds. `rk run
 examples/specs/<benchmark>-claude.frozen.yaml` produces a run-dir
 with `summary.json` against the in-tree DAB adapter (unchanged from
 Phase 0).
 
-**AC-1.2 — `rk run` is the v2 wrapper per spec §3.2 + §8.1.** Reads
+**AC-1.2** `rk run` is the v2 wrapper per spec §3.2 + §8.1. Reads
 frozen spec; runs alias-drift pre-check (re-resolves model alias,
 refuses with `AliasDriftError` on drift unless `--allow-alias-drift`);
 delegates execution to `harbor run`; passes exit code through (exit
@@ -238,7 +238,7 @@ delegates execution to `harbor run`; passes exit code through (exit
 `spec.frozen.yaml` + `provenance.yaml` into the harbor-produced
 run-dir.
 
-**AC-1.3 — extractions preserved.** Proven behavior from the current
+**AC-1.3** extractions preserved. Proven behavior from the current
 codebase has been extracted with attribution into the v2 implementation:
 - alias-drift detection (resolved-version comparison against
   `provenance.yaml.model_resolved_version`)
@@ -246,16 +246,16 @@ codebase has been extracted with attribution into the v2 implementation:
   the FU-1 M3 AC-3 contract)
 - run-dir creation helpers (path conventions, manifest write)
 
-**AC-1.4 — superseded `run.py` and helpers sidelined.** The previous
+**AC-1.4** superseded `run.py` and helpers sidelined. The previous
 `src/razorback/run.py` and any orchestration helpers replaced by the
 new `rk run` live under `src/razorback/_legacy/` via `git mv`.
 
-**AC-1.5 — unit tests cover the alias-drift pre-check** (mocked
+**AC-1.5, unit tests cover the alias-drift pre-check** (mocked
 provider API) and the harbor-passthrough behavior. Extracted
 behaviors (auth, alias-drift logic) keep their existing tests,
 re-pointed at v2 paths.
 
-**AC-1.6 — `uv run pytest` exits 0.**
+**AC-1.6** `uv run pytest` exits 0.
 
 **Walking-skeleton check.** `rk run` against bookreview-claude
 produces a runnable run-dir. The score is not parity-checked at this
@@ -274,34 +274,34 @@ orchestration helpers → `src/razorback/_legacy/run.py` etc.
 
 ---
 
-## Phase 2: DAB harbor adapter — parallel sibling project
+## Phase 2: DAB harbor adapter, parallel sibling project
 
 **Acceptance criteria.**
 
-**AC-2.1 — walking skeleton holds (both paths).** Razorback can still
+**AC-2.1** walking skeleton holds (both paths). Razorback can still
 run DAB via the in-tree adapter (Phase 1 path); razorback can also run
 DAB via the new harbor-DAB adapter via `rk run`. Both produce
 runnable run-dirs.
 
-**AC-2.2 — DAB harbor adapter exists and publishes.** The new package
+**AC-2.2** DAB harbor adapter exists and publishes. The new package
 (at the location D5 decided) builds; `harbor adapter list` (or
 local-discovery equivalent) shows the new DAB adapter.
 
-**AC-2.3 — per-task content ported.** All 12 DAB datasets are
+**AC-2.3** per-task content ported. All 12 DAB datasets are
 represented as harbor task definitions in the new package; prepare,
 verify, per-task environment (including the live-DB compose stack
 that was PKG-3's surviving content), and per-task hook config
 (DISALLOWED_TOOLS + workspace-README variants from PKG-9's surviving
 content) are present.
 
-**AC-2.4 — live-DB mode confirmed.** A bookreview run via the new
+**AC-2.4** live-DB mode confirmed. A bookreview run via the new
 harbor-DAB adapter shows postgres-protocol evidence in the agent's
 trajectory (a `psql --host dab-postgres` invocation or
 `dab-postgres:5432` connection string in `events.jsonl`), confirming
 live-DB access rather than dump-file grepping.
 
-**AC-2.5 — live-DB baseline established and promoted to canonical
-anchor.** The headline score and per-dataset breakdown of a full
+**AC-2.5** live-DB baseline established and promoted to canonical
+anchor. The headline score and per-dataset breakdown of a full
 DAB-claude run via the new harbor-DAB adapter are committed to
 `docs/superpowers/plans/2026-05-19-reconciliation-baseline.md` as the
 **canonical baseline from Phase 3 onward**. The v1 dump-file baseline
@@ -310,8 +310,8 @@ status in the same file with a note explaining why
 (dump-file-leakage means the v1 score is methodologically tainted
 relative to the live-DB protocol).
 
-**AC-2.6 — per-dataset expected-shift bands pre-registered before
-the v1-vs-v2 comparison.** Before running the comparison that
+**AC-2.6** per-dataset expected-shift bands pre-registered before
+the v1-vs-v2 comparison. Before running the comparison that
 produces AC-2.5's baseline, a per-dataset prediction is committed to
 the baseline doc: for each of the 12 DAB datasets, the expected
 direction + rough magnitude of the live-DB-vs-dump-file score shift
@@ -322,13 +322,13 @@ comparison's acceptance criterion is "observed shifts fall within
 the pre-registered direction; magnitudes within 2x of prediction",
 not "scores match". A surprise reversal flags a real bug.
 
-**AC-2.7 — in-tree adapter still functional.**
+**AC-2.7** in-tree adapter still functional.
 `src/razorback/benchmarks/dab/` is unchanged from Phase 1; an
 in-tree-adapter smoke run still produces the v1-baseline-comparable
 result.
 
-**AC-2.8 — cross-dataset aggregation architecture decided
-(resolves D7).** The DAB paper's stratified pass@1 across 12
+**AC-2.8** cross-dataset aggregation architecture decided
+(resolves D7). The DAB paper's stratified pass@1 across 12
 datasets is computed by razorback's `rk diff` operating on a
 **stratum-tagged trial table** the adapter emits. The adapter is
 responsible for tagging each trial with its stratum metadata
@@ -337,7 +337,7 @@ is responsible for the stratified aggregation math. This split
 keeps `rk diff` benchmark-agnostic and the adapter
 benchmark-specific. Phase 2's smoke run validates the contract.
 
-**Walking-skeleton check.** TWO smokes at Phase 2's end — in-tree
+**Walking-skeleton check.** TWO smokes at Phase 2's end, in-tree
 adapter path and harbor adapter path. Both produce summary.json.
 Scores are NOT compared directly to each other (access mode differs
 by design per AC-0.9 policy).
@@ -363,13 +363,13 @@ its canonical location until Phase 6.
 
 ---
 
-## Phase 3: SpacedockSolverAgent v2 — runtime adapter alongside
+## Phase 3: SpacedockSolverAgent v2, runtime adapter alongside
 
 **Acceptance criteria.**
 
-**AC-3.1 — walking skeleton holds; Phase 3 does NOT depend on Phase 2.**
+**AC-3.1** walking skeleton holds; Phase 3 does NOT depend on Phase 2.
 The v2 SpacedockSolverAgent class is exercised against the **in-tree
-DAB adapter** (which is still functional per AC-2.7) — Phase 3 ships
+DAB adapter** (which is still functional per AC-2.7), Phase 3 ships
 without requiring Phase 2's harbor-DAB adapter to be complete. The
 deterministic micro-spec (AC-0.1(b)) passes against both
 (v1-agent × in-tree adapter) and (v2-agent × in-tree adapter). When
@@ -378,7 +378,7 @@ class runs against it too (validated by Phase 6's promotion smoke);
 Phase 3 itself does not block on it. This decouples the critical
 path.
 
-**AC-3.2 — new `SpacedockSolverAgent` class exists and works.** At
+**AC-3.2** new `SpacedockSolverAgent` class exists and works. At
 `src/razorback/agents/spacedock_solver_v2.py`, written from spec §4 +
 §8.4. Routes via `agent.kind: spacedock_solver_v2` (the canonical
 name `spacedock_solver` still routes to the v1 class). Constructor
@@ -388,13 +388,13 @@ hashes, spacedock skill version, harbor agent kwargs)`; refuses on
 resume mismatch; constructs the inner harbor installed-agent via the
 per-runtime adapter sub-module.
 
-**AC-3.3 — per-runtime adapter sub-modules exist.**
+**AC-3.3** per-runtime adapter sub-modules exist.
 `src/razorback/agents/_runtime/claude.py` is implemented (functional
 per AC-3.5). `_runtime/codex.py` and `_runtime/pi.py` exist as
 NotImplemented stubs per D2 if claude-only was chosen, or as
 functional implementations if all-three was chosen.
 
-**AC-3.4 — extractions preserved.** Proven behavior extracted from
+**AC-3.4** extractions preserved. Proven behavior extracted from
 current code:
 - `compute_sealed_hash`, `prompt_sha256` from `agents/seal.py`
 - `assert_phase_stats_schema` from current
@@ -406,7 +406,7 @@ current code:
 - FU-1 `extra_env` mechanism (auth via harbor's `extra_env` kwarg,
   env-field redaction on disk)
 
-**AC-3.5 — claude runtime smoke succeeds against in-tree adapter.**
+**AC-3.5** claude runtime smoke succeeds against in-tree adapter.
 A spec with `agent.kind: spacedock_solver_v2` + `runtime: claude` +
 the **in-tree DAB adapter** + a minimal solver_workflow dir (one
 stage, one mod) runs bookreview end-to-end. The inner `claude_code`
@@ -415,7 +415,7 @@ integration test); `sealed_hash.txt` lands in `agent_freeze/`. (When
 the harbor-DAB adapter is ready, Phase 6's promotion smoke validates
 the v2 class against it; Phase 3 does not block on that adapter.)
 
-**AC-3.6 — halt-resume smoke succeeds (hand-faked freeze writes).**
+**AC-3.6** halt-resume smoke succeeds (hand-faked freeze writes).
 A bookreview trial is halted at turn cap; the test harness writes
 the `agent_freeze/.git` workspace snapshots and `sealed_hash.txt`
 that the freeze-mod would otherwise produce; a resume spec pointing
@@ -424,12 +424,12 @@ inputs match, and refuses with `SeedMismatchError` (exit 20) when a
 sealed input is perturbed. **Halt-resume's real-mod validation
 (workflow mods firing on stage-completion signals) defers with the
 mod machinery to whenever the autoresearch loop's first halt-resume
-hypothesis run is planned — see spec §5.2's deferral note.** Goals
+hypothesis run is planned, see spec §5.2's deferral note.** Goals
 1+2 run single straight-through solves and never exercise the real
 freeze path; the hand-faked smoke here proves the resume mechanic
 in isolation.
 
-**AC-3.7 — entry-point registration verified.** Per D1's outcome
+**AC-3.7** entry-point registration verified. Per D1's outcome
 (AC-0.2): either `pyproject.toml`'s
 `[project.entry-points."harbor.agents.installed"]` is set and harbor
 routes `agent.kind: spacedock_solver_v2` to razorback's class; or
@@ -437,13 +437,13 @@ the fallback spec-translation pre-pass in `rk run` rewrites the
 agent block before invoking `harbor run`. The chosen path works on
 the smoke.
 
-**AC-3.8 — v1 SpacedockSolverAgent still functional.** A spec with
+**AC-3.8** v1 SpacedockSolverAgent still functional. A spec with
 `agent.kind: spacedock_solver` (v1 routing) against either adapter
 still runs end-to-end. The v1 class is not edited in this phase.
 
-**AC-3.9 — `uv run pytest` exits 0.**
+**AC-3.9** `uv run pytest` exits 0.
 
-**Walking-skeleton check.** At least two smokes — v1-class on
+**Walking-skeleton check.** At least two smokes, v1-class on
 in-tree adapter (still works) and v2-class on harbor adapter (newly
 works). Both produce summary.json. Score comparability not asserted
 at this phase.
@@ -471,12 +471,12 @@ Phase 6.
 
 **Acceptance criteria.**
 
-**AC-4a.1 — walking skeleton holds.** All cells from Phase 3 still
-produce summary.json; Phase 4a adds the remaining first-cut CLI
+**AC-4a.1, walking skeleton holds.** All cells from Phase 3 still
+produce summary.json; Phase 4a adds the remaining initial CLI
 surfaces: scored readout, post-hoc trajectory audit, cumulative
 cost tracking, and the per-experiment budget gate on `rk run`.
 
-**AC-4a.2 — `rk score` produces spec §8.3a statistics.** Given one
+**AC-4a.2, `rk score` produces spec §8.3a statistics.** Given one
 harbor run-dir, output JSON carries: per-stratum (typically per-dataset)
 pass@1 with Wilson 95% CI (level via `--alpha`); overall stratified
 pass@1 per the adapter's stratum tagging; per-stratum trial counts
@@ -487,13 +487,13 @@ equivalent. **Folds PKG-2 surviving content for counting honesty**
 (errored trials not counted as fails; silent-drop guard flags missing
 trials).
 
-**AC-4a.3 — fixture-driven correctness.** Hand-computed Wilson CI
+**AC-4a.3, fixture-driven correctness.** Hand-computed Wilson CI
 values for synthetic single-run pass@1 data match `rk score`'s
 output within tolerance. The `--against-constant` flag's
 "inside-CI" / "outside-CI" decision matches a hand-computed
 membership test.
 
-**AC-4a.4 — `rk freeze` extended with v2 sealed inputs.**
+**AC-4a.4, `rk freeze` extended with v2 sealed inputs.**
 `provenance.yaml` now includes `solver_workflow_hash` (recursive
 content hash of the solver_workflow dir), `spacedock_skill_version`
 (from `importlib.metadata.version` with per-install-shape fallback),
@@ -502,19 +502,19 @@ kwargs). The existing pinning (model alias resolved, image digest,
 agent CLI binary hash, prompt content hashes, harbor version) is
 preserved.
 
-**AC-4a.5 — extractions preserved.** Provider model-version resolution
+**AC-4a.5, extractions preserved.** Provider model-version resolution
 (Anthropic + OpenAI API calls with retry), Docker image digest pinning
 (`docker image inspect` wrapper), agent CLI binary hashing, prompt
-content hashing — all extracted from current `provenance/` with
+content hashing, all extracted from current `provenance/` with
 attribution.
 
-**AC-4a.6 — paper-reproduction readout shape works.**
+**AC-4a.6, paper-reproduction readout shape works.**
 `rk score <run-dir> --against-constant stratified_pass_at_1=0.577`
 returns "inside-CI" or "outside-CI" with the Wilson CI bounds on the
 run's stratified pass@1. This is the operational shape goal 1's
 analyze step uses to answer "did we reproduce".
 
-**AC-4a.7 — `rk audit` works.** Port of dataagentbench's
+**AC-4a.7, `rk audit` works.** Port of dataagentbench's
 `benchmark/lib/taint.py` mechanism with attribution (spec §3.2 +
 §9.4). Walks a run-dir's trial traces (parent agent logs, subagent
 trace manifests, recursive subagent traces); pattern-matches against
@@ -525,7 +525,7 @@ with findings. `--policy strict` exits with `TaintFindingsError`
 (exit 23) on any non-`clean` trial; `--policy audit` (default)
 reports without failing.
 
-**AC-4a.8 — `rk audit` fixture-driven correctness.** Hand-crafted
+**AC-4a.8, `rk audit` fixture-driven correctness.** Hand-crafted
 trial-trace fixtures exercise each pattern category: a clean
 trajectory passes; a `pip install datasets` Bash command flags
 tainted; the same hidden in a `python -c "subprocess.run(['pip',
@@ -534,21 +534,21 @@ working); a subagent trace with a forbidden invocation flags tainted
 (recursive scan working); a trace with a missing manifest flags
 `coverage_missing` not `clean`.
 
-**AC-4a.9 — `rk runs cost` works.** Given a directory of run-dirs,
+**AC-4a.9, `rk runs cost` works.** Given a directory of run-dirs,
 reads each run's cost from `summary.json` (or the harbor-emitted
 cost field) and emits the cumulative sum. Pairs with AC-4a.10's
 budget gate.
 
-**AC-4a.10 — `rk run --max-budget-usd-running <file>` enforces
+**AC-4a.10, `rk run --max-budget-usd-running <file>` enforces
 running budget.** Reads `<file>` (a running-total JSON the
 matrix dispatcher passes across invocations); adds this invocation's
 estimated cost; refuses with `BudgetExceededError` (exit 22) when
 the total would exceed the frozen spec's `experiment.max_budget_usd`;
 on completion appends the actual cost to `<file>`. Fixture test:
 two sequential `rk run` invocations against a budget that allows
-one but not both — the second refuses.
+one but not both, the second refuses.
 
-**AC-4a.11 — agent block `tools_denied` field validated and
+**AC-4a.11, agent block `tools_denied` field validated and
 plumbed.** Razorback's pydantic schema for `agent.kind:
 spacedock_solver` accepts `tools_denied: list[string]` (spec §6.2);
 the per-runtime adapter sub-modules (Phase 3) install the list as
@@ -559,7 +559,7 @@ include the deny pattern. Goal-1 specs hard-code DAB's full
 DISALLOWED_TOOLS list in this field; this is the Layer 2 leak
 guard the spec §9.4 calls out as required for goal-1 defensibility.
 
-**AC-4a.12 — matrix dispatcher script exists.**
+**AC-4a.12, matrix dispatcher script exists.**
 `examples/drivers/dab-paper-matrix.sh` (or equivalent Python driver)
 dispatches the 180-cell goal-1 matrix as `for spec in matrix: rk
 freeze; rk run --max-budget-usd-running budget.json; rk score
@@ -569,7 +569,7 @@ cell logs its identity; the driver continues with the next cell;
 re-running the driver skips already-completed cells (idempotent
 on `rk run`'s `(jobs_dir, job_name)` content-hash determinism).
 
-**AC-4a.13 — v2-class × harbor-DAB end-to-end smoke succeeds.** A
+**AC-4a.13, v2-class × harbor-DAB end-to-end smoke succeeds.** A
 spec with `agent.kind: spacedock_solver_v2` + `runtime: claude` +
 the new harbor-DAB adapter (Phase 2) + a minimal solver_workflow
 + DAB's full `tools_denied` list runs bookreview at N=3
@@ -578,10 +578,10 @@ budget; the inner claude_code agent receives the PreToolUse hooks;
 `rk score` emits per-stratum Wilson CIs; `rk audit --policy audit`
 runs over the trial traces and produces `clean` (or names any
 tainted trial for inspection). This is the mechanism-validation
-smoke before goal-1's $300-500 burn — every first-cut surface
+smoke before goal-1's $300-500 burn, every initial surface
 exercised against a real harbor-DAB run.
 
-**AC-4a.14 — goal-2 readout shape decided.** Captain picks: goal-2
+**AC-4a.14, goal-2 readout shape decided.** Captain picks: goal-2
 runs at N≥3 (paying ~$60-120 more for usable per-task Wilson CIs),
 or `rk score` documents a "single-trial regime" output mode for N=1
 that emits only the 48-task aggregate proportion CI and suppresses
@@ -589,11 +589,11 @@ per-task CIs (per ML round-2 review M2). Decision recorded in this
 plan or as a referenced amendment; goal-2's spec matrix reflects
 the decision before goal-2 dispatch.
 
-**AC-4a.15 — `uv run pytest` exits 0.**
+**AC-4a.15, `uv run pytest` exits 0.**
 
 **Walking-skeleton check.** AC-4a.13 (v2-class × harbor-DAB
-end-to-end smoke) is the load-bearing integration test for goals
-1+2: every first-cut surface (rk freeze, rk run with budget gate,
+end-to-end smoke) is the critical integration test for goals
+1+2: every initial surface (rk freeze, rk run with budget gate,
 rk score with constant check, rk audit, tools_denied PreToolUse
 hooks, v2 SpacedockSolverAgent + harbor-DAB adapter) ran against a
 real harbor trial and produced expected outputs. The deterministic
@@ -620,7 +620,7 @@ fine.
 
 **Phase status.** Sequenced after Phases 4a/5/6/7/8. The first-ship
 deliverables (paper reproduction, ade-bench Haiku baseline) do not
-require paired comparison — paper reproduction is a one-sided test
+require paired comparison, paper reproduction is a one-sided test
 against published constants (handled by `rk score
 --against-constant`); ade-bench Haiku is an establishing
 measurement. Paired comparison machinery lands when the
@@ -628,10 +628,10 @@ autoresearch loop's analyze stage needs it.
 
 **Acceptance criteria (when this phase activates).**
 
-**AC-4b.1 — walking skeleton holds.** All first-ship surfaces still
+**AC-4b.1, walking skeleton holds.** All first-ship surfaces still
 work; `rk diff` ships additively without changing them.
 
-**AC-4b.2 — `rk diff` produces spec §8.3 statistics.** Given two
+**AC-4b.2, `rk diff` produces spec §8.3 statistics.** Given two
 harbor run-dirs paired by `(task, query, trial_index)`, the output
 JSON carries: per-arm per-query Wilson 95% CI on pass@1; per-query
 exact-McNemar p with exact-binomial fallback for small discordant
@@ -640,26 +640,26 @@ bootstrap CI on the stratified delta resampling at the cluster level
 (default `query`); MDE at fixed N; achieved-power-at-observed-effect.
 Refuses on seed-asymmetry.
 
-**AC-4b.3 — fixture-driven correctness, including cluster +
+**AC-4b.3, fixture-driven correctness, including cluster +
 family-wise.** Hand-computed expected values match within tolerance.
-**Cluster-bootstrap fixture is load-bearing**: synthetic dataset
+**Cluster-bootstrap fixture is critical**: synthetic dataset
 where intra-query trials are perfectly correlated shows the
 trial-level bootstrap CI as anti-conservatively narrow vs. the
 query-cluster bootstrap CI; test asserts the latter is wider.
-**Family-wise fixture is load-bearing**: 12-dataset synthetic with no
+**Family-wise fixture is critical**: 12-dataset synthetic with no
 real effect produces ~46% uncorrected family-wise error;
 Holm-Bonferroni brings it to nominal α.
 
-**AC-4b.4 — same-spec self-diff is statistically null.** Two
+**AC-4b.4, same-spec self-diff is statistically null.** Two
 back-to-back runs of the same frozen spec produce paired bootstrap CI
 including zero at N=5.
 
-**AC-4b.5 — same-adapter cross-class diff is statistically null** (if
+**AC-4b.5, same-adapter cross-class diff is statistically null** (if
 v1 class still exists at this phase's ship time). Confirms v2 agent
 class does not change benchmark semantics vs v1. Lands as a
 regression gate, not as a feature.
 
-**AC-4b.6 — `uv run pytest` exits 0.**
+**AC-4b.6, `uv run pytest` exits 0.**
 
 **Trigger for activation.** When the autoresearch experiment workflow's
 analyze stage needs to make a "hypothesis X beats baseline" claim with
@@ -669,7 +669,7 @@ constant) is the operational shape.
 
 ---
 
-## Phase 5: Workflow templates (no mods first-cut)
+## Phase 5: Workflow templates (no mods initial)
 
 **Phase sequencing note.** Phase 5 lands AFTER goal-1 (paper
 reproduction) and goal-2 (ade-bench Haiku baseline) ship via
@@ -691,11 +691,11 @@ the dispatch order is reversed.
 
 **Acceptance criteria.**
 
-**AC-5.1 — walking skeleton holds.** Razorback continues to run DAB
+**AC-5.1** walking skeleton holds. Razorback continues to run DAB
 end-to-end via the direct CLI; Phase 5 adds the workflow templates
 without breaking direct CLI use.
 
-**AC-5.2 — workflow README templates exist.**
+**AC-5.2** workflow README templates exist.
 - `docs/templates/experiment-workflow/README.md` per spec §5.1:
   six stages (pending, propose, smoke, full, analyze, conclude);
   sd-b32 ID style; `experiment.max_budget_usd` declared in the
@@ -711,7 +711,7 @@ without breaking direct CLI use.
     `rk run --max-budget-usd-running <file>` flag is the
     invocation-time backstop.
   - **analyze** prompt: instructs the operator to run `rk score
-    --against-constant <baseline-headline>` (first-cut) or
+    --against-constant <baseline-headline>` (initial) or
     `rk diff` (when shipped), paste the JSON output into the entity
     body, write a verdict.
 - `docs/templates/run-workflow/README.md` per spec §5.2: four
@@ -720,11 +720,11 @@ without breaking direct CLI use.
   real-mod machinery defers (per AC-3.6 hand-fake note).
 - Both parse against spacedock's workflow-README schema.
 
-**AC-5.3 — package data shipping.** `pyproject.toml` ships
+**AC-5.3** package data shipping. `pyproject.toml` ships
 `docs/templates/` so a captain can copy templates into a new
 project.
 
-**AC-5.4 — end-to-end hypothesis smoke.** A captain copies the
+**AC-5.4** end-to-end hypothesis smoke. A captain copies the
 experiment-workflow template into a fresh dir, instantiates it
 against DAB via the new harbor adapter, runs ONE hypothesis
 end-to-end (propose → freeze → smoke → analyze → conclude). The
@@ -734,7 +734,7 @@ via `rk runs cost`; analyze stage produces `rk score
 --against-constant` output in the entity body; conclude stage is
 reachable.
 
-**AC-5.5 — `uv run pytest` exits 0.**
+**AC-5.5** `uv run pytest` exits 0.
 
 **Walking-skeleton check.** AC-5.4 (end-to-end hypothesis smoke) is
 the strongest single demonstration of v2 razorback's integration
@@ -751,14 +751,14 @@ shape working as a unit.
   shape: `docs/razorback-implementation/README.md` is the working
   example.
 
-**Sideline at phase end.** None — no legacy templates to displace.
+**Sideline at phase end.** None, no legacy templates to displace.
 
 ---
 
 ## Phase 6: Promote v2 to canonical, sideline superseded v1
 
 **Phase sequencing note.** Phase 6 dispatches *before* Phase 5 even
-though Phase 5 is numbered earlier in this document — Phase 5's
+though Phase 5 is numbered earlier in this document, Phase 5's
 workflow templates reference the canonical `agent.kind:
 spacedock_solver` name, which Phase 6 produces by renaming v2.
 Goals 1+2 ship from Phase 4a's end (using the intermediate
@@ -768,17 +768,17 @@ that clean surface.
 
 **Acceptance criteria.**
 
-**AC-6.1 — walking skeleton holds.** A DAB benchmark runs end-to-end
+**AC-6.1** walking skeleton holds. A DAB benchmark runs end-to-end
 via the canonical v2 path (`agent.kind: spacedock_solver` routing to
 the v2 class) after the rename + sideline.
 
-**AC-6.2 — `spacedock_solver` routes to v2.**
+**AC-6.2** `spacedock_solver` routes to v2.
 `agent.kind: spacedock_solver` invokes the v2 runtime-adapter class.
 `pyproject.toml`'s entry-point (or the `rk run` translation, per D1)
 is updated. The previous `spacedock_solver_v2` discriminator is
 removed.
 
-**AC-6.3 — v1 class sidelined.** The previous standalone
+**AC-6.3** v1 class sidelined. The previous standalone
 `SpacedockSolverAgent` moves to
 `src/razorback/_legacy/agents/spacedock_solver_legacy.py`. Optionally
 accessible via `agent.kind: spacedock_solver_legacy` for emergency
@@ -786,7 +786,7 @@ rollback during the reconciliation window; carries a DeprecationWarning
 on instantiation. **This is its own commit** (`sideline: v1
 SpacedockSolverAgent → _legacy`).
 
-**AC-6.4 — non-survivor modules sidelined, one commit per logical
+**AC-6.4, non-survivor modules sidelined, one commit per logical
 group, in this order:**
 
 | Commit | Sideline target | Reason |
@@ -803,28 +803,28 @@ sidelined modules remain importable from `_legacy/`); the canonical
 surface progressively shrinks. **No commit combines a sideline with
 an unrelated edit; no commit combines two unrelated sidelines.**
 
-**AC-6.5 — trimmed canonical surface.**
+**AC-6.5** trimmed canonical surface.
 `src/razorback/{spec,agents,cli}` contain only v2-spec-named
 artifacts. Removed pieces are in `_legacy/`. `agents/registry.py`
 holds the spacedock_solver pydantic schema only.
 
-**AC-6.6 — examples reflect v2.** `examples/specs/` flips to
+**AC-6.6** examples reflect v2. `examples/specs/` flips to
 v2-canonical agent kinds and the harbor-DAB adapter reference.
 
-**AC-6.7 — same-canonical cross-history diff is statistically null.**
+**AC-6.7** same-canonical cross-history diff is statistically null.
 A full DAB benchmark via the post-Phase-6 canonical path produces a
 `rk diff` against a pre-Phase-6 v2-class-on-harbor-adapter run (Phase
 3's smoke result) whose stratified-delta paired bootstrap CI includes
 zero. This confirms that the rename + sideline did not change v2
 behavior.
 
-**AC-6.8 — razorback-implementation workflow dispatch can resume.**
+**AC-6.8** razorback-implementation workflow dispatch can resume.
 The Phase 0 pause is lifted; new v2-shaped backlog entities can flow
 through the dispatch path.
 
-**AC-6.9 — `uv run pytest` exits 0.**
+**AC-6.9** `uv run pytest` exits 0.
 
-**Walking-skeleton check.** AC-6.7 — full DAB benchmark via canonical
+**Walking-skeleton check.** AC-6.7, full DAB benchmark via canonical
 v2 path produces a statistically-null diff against the pre-promotion
 v2-path run.
 
@@ -847,21 +847,21 @@ v2-path run.
 
 **Acceptance criteria.**
 
-**AC-7.1 — walking skeleton holds.** A DAB benchmark runs end-to-end
+**AC-7.1** walking skeleton holds. A DAB benchmark runs end-to-end
 via the canonical v2 path after the deletion.
 
-**AC-7.2 — `_legacy/` audited.** Every module under
+**AC-7.2** `_legacy/` audited. Every module under
 `src/razorback/_legacy/` has a status: imported-by-parity-test (keep
 or retire test); imported-by-deprecation-alias (decide whether the
 deprecation alias is still needed); unreferenced (delete).
 
-**AC-7.3 — `_legacy/` removed or trimmed.** Per the audit decisions.
+**AC-7.3** `_legacy/` removed or trimmed. Per the audit decisions.
 One commit per logical deletion group for bisect-friendliness.
 
-**AC-7.4 — `grep -r 'from razorback._legacy'` returns no hits**
+**AC-7.4, `grep -r 'from razorback._legacy'` returns no hits**
 (or only hits the captain explicitly chose to retain).
 
-**AC-7.5 — `uv run pytest` exits 0** after the deletion.
+**AC-7.5, `uv run pytest` exits 0** after the deletion.
 
 **Walking-skeleton check.** Post-deletion DAB smoke runs and produces
 the same headline score as Phase 6's smoke.
@@ -871,10 +871,10 @@ the same headline score as Phase 6's smoke.
   import from `_legacy/`. Mitigation: razorback has no external
   consumers yet, so this is local-only at the time of this plan.
 
-**Sideline at phase end.** N/A — this phase performs the deletion.
+**Sideline at phase end.** N/A, this phase performs the deletion.
 
 **Phase status.** Optional. The plan does not gate later work on this
-phase. `_legacy/` is harmless — it doesn't pollute the canonical
+phase. `_legacy/` is harmless, it doesn't pollute the canonical
 surface, doesn't get imported in normal use. The captain decides
 whether to execute Phase 7 at all.
 
@@ -884,38 +884,38 @@ whether to execute Phase 7 at all.
 
 **Acceptance criteria.**
 
-**AC-8.1 — `nop`-agent smoke succeeds.** A spec with the simplest
+**AC-8.1** `nop`-agent smoke succeeds. A spec with the simplest
 possible agent (`agent.kind: claude_code` or harbor's `nop` if
 available) freezes, runs, and produces a run-dir with
 `provenance.yaml`.
 
-**AC-8.2 — `spacedock_solver` smoke succeeds.** A spec with
+**AC-8.2** `spacedock_solver` smoke succeeds. A spec with
 `agent.kind: spacedock_solver` + a minimal solver_workflow freezes,
 runs, produces `agent_freeze/sealed_hash.txt`. (`phase_stats.json`
 production via real workflow mods is part of the halt-resume
 deferral; the smoke writes it via the test harness if needed for
 schema validation, matching AC-3.6's hand-faked discipline.)
 
-**AC-8.3 — `rk audit` smoke succeeds.** `rk audit --policy strict`
+**AC-8.3** `rk audit` smoke succeeds. `rk audit --policy strict`
 runs over a clean trial trajectory and exits 0; a fixture trajectory
 with a forbidden `pip install datasets` invocation flags tainted
 and exits 23.
 
-**AC-8.4 — resume smoke succeeds.** Halt-resume cycle on the
+**AC-8.4** resume smoke succeeds. Halt-resume cycle on the
 canonical v2 path with hand-faked freeze writes (per AC-3.6);
 sealed-hash check passes; resume proceeds.
 
-**AC-8.5 — experiment-workflow smoke succeeds.** Phase 5's AC-5.4
+**AC-8.5** experiment-workflow smoke succeeds. Phase 5's AC-5.4
 hypothesis smoke, re-run post-Phase-6/7, still works end-to-end.
 
-**AC-8.6 — `uv run pytest` exits 0** from a clean checkout.
+**AC-8.6, `uv run pytest` exits 0** from a clean checkout.
 
-**AC-8.7 — README at repo root reflects v2.**
+**AC-8.7** README at repo root reflects v2.
 
-**AC-8.8 — CHANGELOG lists every sideline + every new addition,**
+**AC-8.8, CHANGELOG lists every sideline + every new addition,**
 citing v2 spec sections.
 
-**AC-8.9 — version tag exists.** Major version bump.
+**AC-8.9** version tag exists. Major version bump.
 
 **Walking-skeleton check.** AC-8.1 through AC-8.5 collectively
 exercise every public surface of v2 razorback.
@@ -932,17 +932,17 @@ and the most likely to surface late issues.
 
 | Phase | Walking-skeleton state | Code change shape |
 |---|---|---|
-| 0 — Probe, decide, baseline | unchanged | +docs |
-| 1 — `rk run` v2 wrapper | runs via in-tree adapter | new code from spec + extractions; sideline old `run.py` |
-| 2 — DAB harbor adapter (sibling) | runs via in-tree adapter AND harbor adapter | sibling +1500; razorback unchanged |
-| 3 — SpacedockSolverAgent v2 (alongside) | runs via both agent classes | new `_v2` module from spec + extractions; v1 stays canonical |
-| 4a — First-cut CLI completion (`rk score`, `rk audit`, `rk runs cost`, `rk run` budget gate, extended `rk freeze`) | v2-class × harbor-DAB end-to-end smoke succeeds at N=3 bookreview; every first-cut surface exercised | new code from spec + provenance extractions + taint.py port |
-| **Goals 1+2 ship here** via the matrix dispatcher (AC-4a.12) — `for spec in matrix: rk freeze; rk run --max-budget-usd-running budget.json; rk score --against-constant; rk audit --policy strict` | — | — |
-| 6 — Promote v2, sideline v1 (lands BEFORE Phase 5 so the templates can reference canonical `agent.kind: spacedock_solver`) | canonical = v2; same-canonical cross-history null required | rename + `git mv` to `_legacy/` |
-| 5 — Workflow templates (no mods first-cut) | end-to-end hypothesis smoke runs (autoresearch loop begins) | new markdown |
-| 7 — Delete `_legacy/` (optional) | v2-only canonical surface; same headline score | -delete |
-| 8 — Validate + release | tagged release | docs + verification |
-| 4b — `rk diff` paired statistics | full paired-comparison statistics available | new code from spec — sequenced after the autoresearch loop's first run surfaces the need |
+| 0, Probe, decide, baseline | unchanged | +docs |
+| 1, `rk run` v2 wrapper | runs via in-tree adapter | new code from spec + extractions; sideline old `run.py` |
+| 2, DAB harbor adapter (sibling) | runs via in-tree adapter AND harbor adapter | sibling +1500; razorback unchanged |
+| 3, SpacedockSolverAgent v2 (alongside) | runs via both agent classes | new `_v2` module from spec + extractions; v1 stays canonical |
+| 4a, First-cut CLI completion (`rk score`, `rk audit`, `rk runs cost`, `rk run` budget gate, extended `rk freeze`) | v2-class × harbor-DAB end-to-end smoke succeeds at N=3 bookreview; every initial surface exercised | new code from spec + provenance extractions + taint.py port |
+| **Goals 1+2 ship here** via the matrix dispatcher (AC-4a.12), `for spec in matrix: rk freeze; rk run --max-budget-usd-running budget.json; rk score --against-constant; rk audit --policy strict` |, |, |
+| 6, Promote v2, sideline v1 (lands BEFORE Phase 5 so the templates can reference canonical `agent.kind: spacedock_solver`) | canonical = v2; same-canonical cross-history null required | rename + `git mv` to `_legacy/` |
+| 5, Workflow templates (no mods initial) | end-to-end hypothesis smoke runs (autoresearch loop begins) | new markdown |
+| 7, Delete `_legacy/` (optional) | v2-only canonical surface; same headline score | -delete |
+| 8, Validate + release | tagged release | docs + verification |
+| 4b, `rk diff` paired statistics | full paired-comparison statistics available | new code from spec, sequenced after the autoresearch loop's first run surfaces the need |
 
 **Walking-skeleton invariant.** Per AC-0.9: the invariant is
 *runnability* (DAB runs end-to-end, produces non-degraded
@@ -956,26 +956,26 @@ baseline.
 
 These need a captain decision; the plan does not pre-decide them.
 
-**D1 — Harbor plugin contract** (probed in AC-0.2; locked in AC-3.7).
+**D1, Harbor plugin contract** (probed in AC-0.2; locked in AC-3.7).
 Entry-point registration or fallback CLI spec-translation.
 
-**D2 — Codex / pi support timing** (AC-0.7). Claude-only at
+**D2, Codex / pi support timing** (AC-0.7). Claude-only at
 first-ship with stubs, or all three runtimes implemented up-front.
 
-**D3 — Optional CLI commands** (Phase 4 / future). Whether
+**D3, Optional CLI commands** (Phase 4 / future). Whether
 `rk constraints check`, `rk baseline promote/verify`, `rk registry`
 ship at first or defer until a consumer surfaces.
 
-**D4 — `rk init` subcommand** (Phase 5). Whether to ship a scaffolding
+**D4, `rk init` subcommand** (Phase 5). Whether to ship a scaffolding
 command or document the copy-and-modify procedure only.
 
-**D5 — DAB harbor adapter packaging** (AC-0.8). Sibling package
+**D5, DAB harbor adapter packaging** (AC-0.8). Sibling package
 (`packages/razorback-plugin-dab/`) or new repo.
 
-**D6 — `_legacy/` retention** (Phase 7). Whether to execute Phase 7
+**D6, `_legacy/` retention** (Phase 7). Whether to execute Phase 7
 at all, or keep `_legacy/` indefinitely.
 
-**D7 — Cross-dataset stratified aggregator architecture** (AC-2.8).
+**D7, Cross-dataset stratified aggregator architecture** (AC-2.8).
 Plan recommends: razorback's `rk diff` owns the stratified math; the
 benchmark adapter owns stratum *tagging* (each trial emits stratum
 metadata). This split keeps `rk diff` benchmark-agnostic and the
@@ -986,11 +986,11 @@ all-in-adapter alternative.
 
 ## Deferred review findings (Packages G, H, I, J from 2026-05-19 staff reviews)
 
-The following findings are captured but deferred — their impact is
+The following findings are captured but deferred, their impact is
 scoped, and the named deliverables (paper reproduction + ade-bench
 Haiku baseline) work without them.
 
-**Package G — halt-resume infra-change correctness.** The sealed-input
+**Package G, halt-resume infra-change correctness.** The sealed-input
 hash inputs (spec §4.4 + §8.4) cover model, sampling, solver_workflow
 content hash, prompt content hashes, spacedock skill version, harbor
 agent kwargs. Missing: docker image digest + harbor version. A
@@ -999,34 +999,34 @@ mixes conditions. **Lands when:** the autoresearch loop's first
 halt-resume hypothesis run is planned. Not on the path for
 deliverables 1+2 (both run full trials, no halt-resume).
 
-**Package H — multi-benchmark stratified aggregator (full architecture).**
+**Package H, multi-benchmark stratified aggregator (full architecture).**
 AC-2.8 commits to the split (math in `rk diff`, strata in adapter)
 but doesn't ship the full abstraction. Cross-benchmark reuse of
 `rk diff` against τ-bench, HAL, etc. may surface stratification
 shapes DAB doesn't cover. **Lands when:** the second benchmark's
 `rk diff` consumer surfaces a stratification difference.
 
-**Package I — paper-writing caveats.** Three items defer to paper
+**Package I, paper-writing caveats.** Three items defer to paper
 draft phase:
 - `provider_determinism_class: seed_honored | seed_ignored | unknown`
   in provenance.yaml; `rk diff` warns when both runs are
   `seed_ignored` at low N.
 - Between-run variance accounting: run the headline reproduction
   twice and report between-run variance once.
-- Power analysis at observed effect — already partly addressed by
+- Power analysis at observed effect, already partly addressed by
   AC-4.2's achieved-power line; richer interpretation aids defer.
 
-**Package J — future trajectory auditing.** **Folded into the
-first-cut surface as `rk audit`.** Phase 4a's AC-4a.7 + AC-4a.8
+**Package J, future trajectory auditing.** **Folded into the
+initial surface as `rk audit`.** Phase 4a's AC-4a.7 + AC-4a.8
 ship a port of dataagentbench's `benchmark/lib/taint.py` mechanism
-(see spec §3.2 + §9.4). The first-cut audit covers shell-command
+(see spec §3.2 + §9.4). The initial audit covers shell-command
 patterns, web-search tool calls, heredoc / `python -c` decoding,
 and subagent-trace recursion. **Remaining deferred extensions:**
 benchmark-name / dataset-name / answer-key string scanning over
 trial transcripts (a separate pattern category from forbidden tool
 invocations); harbor's reward_hacking-rubric `harbor analyze`
 delegation as a second-layer post-hoc check. Lands when a suspected
-leak surfaces that the first-cut audit patterns did not catch.
+leak surfaces that the initial audit patterns did not catch.
 
 ---
 
@@ -1049,12 +1049,12 @@ leak surfaces that the first-cut audit patterns did not catch.
 - The 2026-05-19 v2 spec is the source of truth.
 - The razorback-implementation workflow's backlog reflects v2 scope
   and is resumable.
-- The first-cut commands (`rk run`, `rk freeze`, `rk score`,
+- The initial commands (`rk run`, `rk freeze`, `rk score`,
   `rk audit`, `rk runs list/show/cost`) work against real harbor
   invocations. `rk diff` ships later (Phase 4b).
 - `SpacedockSolverAgent` is the v2 runtime-adapter class at the
   canonical name.
-- Workflow templates (no razorback-shipped mods first-cut) exist as
+- Workflow templates (no razorback-shipped mods initial) exist as
   package data.
 - A captain can copy the experiment-workflow template, instantiate
   it, and run a hypothesis end-to-end against DAB via the new harbor
