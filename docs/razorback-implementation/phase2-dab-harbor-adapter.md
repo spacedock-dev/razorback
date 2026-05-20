@@ -157,3 +157,24 @@ of (a)/(b)/(c) the plan committed to.
 - `ra` spec-corrections-from-phase0-probes (benchmark-adapter
   framing as offline task generators per AC-2; the spec must
   reflect this before the adapter's contract is finalized)
+
+## Stage Report: plan
+
+- DONE: Plan covers all 9 ACs (including AC-9 dataset hydration semantics) with a clear path/file structure for the new sibling package packages/razorback-plugin-dab/, pyproject.toml shape, module layout, harbor adapter discovery via import_path.
+  Plan at `docs/razorback-implementation/plans/phase2-dab-harbor-adapter.md` carries an AC-task map (9 rows), a `File structure` block laying out `packages/razorback-plugin-dab/` (pyproject.toml, src layout, tests), and an `Architecture` paragraph that names harbor's adapter-dispatch contract (filesystem task-tree consumed via `JobConfig.tasks[].path`, NOT `AgentConfig.import_path`) per the AC-0.2 probe at `docs/superpowers/plans/2026-05-19-harbor-entry-point-probe.md`. The `import_path` mechanism is still load-bearing for `SpacedockSolverAgent` in Phase 3; Phase 2's plugin does not register a harbor agent or environment via that mechanism.
+- DONE: AC-9 hydration decision is made explicitly in the plan, auto-hydrate vs enforced prereq vs hybrid. Plan names the choice and its trade-offs; validation will confirm the chosen behavior works under the documented condition (missing-dataset scenario).
+  Plan §`AC-9 hydration decision` selects **option (b) enforced prereq with a clean missing-dataset error message** with a 3-row trade-offs table. Task 6 implements the LFS-pointer check; Task 13 is the validator that deletes the cached dataset, observes the exact stderr message + exit-code 2, hydrates, and re-runs.
+- DONE: Mechanism validation discipline, a per-task live-DB compose stack runs end-to-end against bookreview (smallest dataset) BEFORE the comparison runs across all 12 datasets. The expected-shift-band pre-registration (AC-6) is part of the plan, not a post-hoc commitment.
+  `Riskiest contract first` section names two integration-level gates: Task 1 (plugin discoverability via harbor's filesystem task-tree contract) and Task 7 (bookreview live-DB compose end-to-end before porting the other 11 datasets). Task 12 commits the per-dataset expected-shift table to `docs/superpowers/plans/2026-05-19-reconciliation-baseline.md` in a commit that precedes the Task 15 run-dir commit; the TDD checkpoint table makes the ordering an explicit acceptance check.
+
+### Summary
+
+Wrote a 15-task implementation plan covering all 9 ACs at
+`docs/razorback-implementation/plans/phase2-dab-harbor-adapter.md`.
+The riskiest contracts (harbor adapter consumption shape; live-DB
+compose-stack reachability on bookreview) are gated by Tasks 1 and
+7, ahead of the 12-dataset port. AC-9 is resolved by option (b)
+enforced-prereq with a documented missing-dataset error; rationale
+is recorded in the plan body and the validator is Task 13. AC-6's
+pre-registration ordering is enforced by commit ordering (Task 12
+precedes Task 15) so it cannot be retrofitted.
