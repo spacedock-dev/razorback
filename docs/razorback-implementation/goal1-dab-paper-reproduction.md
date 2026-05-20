@@ -154,3 +154,18 @@ caught any overage attempt.
 - `phase1-rk-run-v2-wrapper` (`rk run` base)
 - AC-4a.13 mechanism-validation smoke clean (every surface
   exercised at N=3 bookreview before the $300-500 burn)
+
+## Stage Report: plan
+
+- DONE: Plan names the dispatch shape: matrix-driver script at examples/drivers/dab-paper-matrix.sh per AC-4a.12 (create if absent); 3 workspace-README variants × 12 datasets × N=5 = 180 trials; opus-4.7 + hints ON.
+  Plan §Architecture + §Tasks T1/T2 names the script path and its flag surface (`--budget`, `--output-dir`, `--dry-run`, `--continue-on-fail`); T1 generates the 36 frozen specs (3 variants × 12 datasets) carrying `model: claude-opus-4-7`, `hints: true`, `trials: 5`; the loop dispatches 36 specs × N=5 = 180 trials. Script does not yet exist on main (verified `ls examples/drivers/` returned no such directory); T2 creates it.
+- DONE: Plan acknowledges T14 cost-shape evidence and names cost-verification step BEFORE the matrix burn.
+  T0 is the explicit cost-shape verification task with two branches: Branch A (subscription covers opus-4.7) records "$0/trial" and proceeds; Branch B (subscription does NOT cover opus-4.7) projects the matrix cost from a measured per-trial `cost_usd`, sets `experiment.max_budget_usd: 600` (20% headroom above $500), and gates on captain approval before T2 dispatches. T0 explicitly precedes T1-T5 in the riskiest-contract-first ordering.
+- DONE: Plan covers the scoring step: rk score --against-constant against 0.577 (spacedock) and 0.4376 (direct-baseline).
+  Plan §Architecture "Scoring contract" table maps each variant to its `--against-constant` target (spacedock=0.577, direct-minimal/direct-structured=direct_baseline=0.4376); T5 dispatches per-cell `rk score --against-constant` and the aggregate-per-variant script computes the stratified-mean pass@1 + Wilson CI + per-stratum verdicts; T7's result summary section 2 carries the headline reproduction verdict for each variant.
+- DONE: Plan records the PKG-13 blocker surfaced mid-plan by the team lead.
+  Top-level "Blocker" section names PKG-13 — harbor-DAB compose generator workdir-path correctness — as the gate on T1+; explains the two coupled defects (bind-mount source resolving to non-existent `./workdir/` instead of `steps/main/workdir/`; verifier silently defaulting to `reward=1.0`); names the PKG-13 success criteria (corrected mount path, real verifier, fail-closed smoke, T14-shape re-run); states the matrix-dispatch design itself remains valid, only the burn is blocked.
+
+### Summary
+
+Wrote a 7-task plan at `docs/razorback-implementation/plans/goal1-dab-paper-reproduction.md` covering all 7 ACs. T0 (cost-shape verification) precedes T1-T7 per riskiest-contract-first discipline; T1 generates 36 frozen specs (3 variants × 12 datasets); T2-T4 ship the bash matrix driver + budget-gate threading; T5 wires per-cell and aggregate `rk score --against-constant` and `rk audit --policy strict`; T6 spot-checks provenance for AC-2; T7 commits the result-summary doc. The plan explicitly blocks on PKG-13 (harbor-DAB compose generator bind-mount fix; T14's 100% bookreview was a false positive per captain's docker-ps review); the design is unchanged but T1+ cannot start until PKG-13 ships and the corrected smoke supersedes the T14 entry in the baseline doc.
