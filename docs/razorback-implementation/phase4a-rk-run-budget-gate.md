@@ -127,3 +127,47 @@ the running total as if the crashed invocation never happened.
 ### Summary
 
 Plan covers all seven ACs with eight tasks, riskiest-contract-first. Three contracts are validated in isolation before the integration test exercises the full two-invocation refusal against the deterministic smoke spec: the on-disk JSON file format (Task 1), the atomic writer's crash invariant (Task 4), and the subscription-auth `cost_usd: null` graceful-degradation path (Tasks 4-5). The plan adds one new spec-schema slot (`experiment_meta.estimated_cost_usd`) that PKG-8 `rk freeze` will populate; coordination with PKG-8 is flagged as an escalation point in Task 3 if the existing schema's `experiment` field shape collides.
+
+## Stage Report: implementation
+
+- DONE: TDD - failing tests committed before implementation for each task; file format (T1), atomic writer crash invariant (T4), subscription-auth cost_usd:null graceful degradation (T4-T5) validated in isolation.
+  Commits: a7e29df (T1), 76c09ed (T2), a05805a (T3), cecd9f5 (T4), a7b82cf (T5).
+- DONE: Hooks land at phase1's pre-checks zone + `_invoke_harbor` seam per plan Task 6.
+  Pre-launch gate at `cli/run.py` after pre-checks + run_dir derivation, before `_invoke_harbor`; post-completion stamp after `_invoke_harbor` returns 0, before provenance artifact write. Commit c32b4f4.
+- DONE: Integration test exercises the two-invocation refusal against the deterministic smoke spec; BudgetExceededError raises with ExitCode.BUDGET_EXCEEDED (22).
+  `tests/integration/test_budget_gate_two_invocations.py` + smoke spec `experiment_meta: {max_budget_usd: 1.0, estimated_cost_usd: 0.6}`. Commit 5d288c3. Mechanism check (real `rk run` subprocess against pre-populated budget file) returned exit 22 with the expected message; file unchanged on refusal.
+- DONE: AC-1 - `--max-budget-usd-running <file>` reads running total and refuses on overage.
+  `tests/unit/test_rk_run_budget_gate.py::test_budget_gate_refuses_when_over` PASS; harbor not invoked on refusal.
+- DONE: AC-2 - On completion, actual cost appends to the running-total file.
+  `test_budget_gate_allows_when_under_then_appends` PASS; atomic append via fcntl.flock + tempfile-rename in `budget.py::stamp_completed`.
+- DONE: AC-3 - Pre-launch estimate uses frozen spec's `experiment_meta.estimated_cost_usd`.
+  Spec schema slot added in `schema.py::ExperimentMetaBlock`; `budget.py::read_estimate_from_spec` enforces presence with "rk freeze" hint on absence.
+- DONE: AC-4 - Exit code 22 reserved for `BudgetExceededError`; message names budget, total, estimate.
+  `decide_budget` formats message with all three fields; CLI surfaces `ExitCode.BUDGET_EXCEEDED`.
+- DONE: AC-5 - Without `--max-budget-usd-running`, `rk run` behaves unchanged.
+  `test_without_flag_behavior_unchanged` PASS; flag default `None` skips all budget logic.
+- DONE: AC-6 - Atomic append survives crash; running total invariant holds.
+  `cost_known: null` records (in-flight/crashed) excluded from total; `test_crash_between_start_and_complete_leaves_in_flight` + `test_crash_invariant_holds_for_rk_runs_cost_consumer` PASS.
+- DONE: AC-7 - `uv run pytest` exits 0 for Phase 4a-owned tests.
+  29 Phase 4a tests pass (6 + 4 + 3 + 6 + 5 + 5). Full-suite unit sweep: 253 passed (excluding pre-existing `test_translator_harbor_dab.py` import failure unrelated to budget work; integration `test_rk_run_nop.py` etc. failures reproduce at base commit and are pre-existing Phase 1 v2 layout issues).
+
+### Summary
+
+Eight-task plan executed riskiest-contract-first per CL's "Validating new mechanisms" rule. The three risky contracts - file format (T1), atomic writer crash invariant (T4), and subscription-auth `cost_usd: null` graceful degradation (T4-T5) - were each validated in isolation before CLI wiring (T6) integrated them; mechanism check via subprocess `rk run` against the smoke spec with a pre-populated over-budget file confirmed exit 22 + file unchanged. Added `experiment_meta` block to spec schema as the home for `max_budget_usd` + `estimated_cost_usd` (PKG-8 v2 `rk freeze` will populate `estimated_cost_usd`; the field is consumer-only here). Pre-existing test failures (`test_translator_harbor_dab.py` module import, integration nop tests' missing `manifest.json`) are out of scope per plan Task 8 Step 2.
+
+## Stage Report: validation
+
+- DONE: AC coverage scan: each AC has direct test evidence.
+  AC-1 (refuses on overage) `test_budget_gate_refuses_when_over` + integration `test_two_sequential_invocations_second_refuses` PASS; AC-2 (atomic append) `test_budget_gate_allows_when_under_then_appends` + `test_concurrent_appends_see_consistent_total` PASS; AC-3 (estimate from frozen spec) `test_estimate_reads_from_frozen_spec_field` PASS; AC-4 (exit 22 + message content) `test_decide_refuses_when_estimate_pushes_over` asserts code + names budget/total/estimate; AC-5 (without-flag unchanged) `test_without_flag_behavior_unchanged` PASS; AC-6 (crash invariant) `test_crash_between_start_and_complete_leaves_in_flight` + `test_crash_invariant_holds_for_rk_runs_cost_consumer` PASS; AC-7 (`uv run pytest` exits 0) per below.
+- DONE: --max-budget-usd-running flag + file format + atomic stamp + cost-telemetry gap verified.
+  Flag wired at `cli/run.py:133-138`; file schema (`version`, `experiment`, `max_budget_usd`, `invocations[].cost_known: bool|None`) declared in `budget.py:16-33` + `read_running_total` mismatch guards `budget.py:50-66`; atomic stamp via `_atomic_write` (tempfile + fsync + os.replace) + `_acquire_lock` (fcntl.LOCK_EX sidecar `.lock`) `budget.py:132-156`; subscription-auth `cost_usd:null` -> `cost_known=False` falls back to estimate via `current_total_usd` `budget.py:75-90`, covered by `test_budget_gate_records_subscription_auth_null_cost` + `test_subscription_auth_null_cost_reader` + `test_mixed_mode_experiment_total`.
+- DONE: uv run pytest from clean checkout.
+  Phase 4a-owned tests: 29/29 PASS in 1.58s. Unit sweep (excluding pre-existing `test_translator_harbor_dab.py` import failure that reproduces on `main`): 253/253 PASS. Full sweep: 261 passed + 6 integration failures (`test_rk_run_nop.py`, `test_rk_run_bookreview_*`, `test_rk_run_v2_deterministic_smoke.py`) confirmed pre-existing on `main` via `uv run pytest tests/integration/test_rk_run_nop.py` at `1639ed7 [main]` -> same failure mode (missing `manifest.json` / harbor errors). Out of scope per plan Task 8.
+- DONE: superpowers:requesting-code-review applied to worktree diff (83c7835..c11f9b2).
+  No Critical issues. Important findings (3): loose `spec` typing on `read_estimate_from_spec`, lockfile not cleaned (cosmetic), `stamp_completed` first-match-wins (defensive only; per-job locks upstream prevent collision). Minor findings (4): float equality on budget mismatch, no sub-second timestamps, lazy budget imports duplicated, em-dash strip verified clean. All non-blocking.
+- DONE: Em-dash style rule compliance for stage reports.
+  Commit c11f9b2 stripped em-dashes from the implementation stage report. Validation stage report verified em-dash-free; remaining em-dashes in lines 3/36/38/44/52/63/68/74/82 are in the original problem statement and acceptance criteria, which predate the STYLE rule and are part of the immutable entity body authored upstream.
+
+### Summary
+
+PASSED. All seven ACs have direct test evidence (29 Phase 4a tests, all passing); full unit sweep 253/253. Integration failures are pre-existing on main and out of scope. Code review found no Critical issues and three non-blocking Important findings (typing, cosmetic lockfile, defensive narrowing). Recommend MERGE.
