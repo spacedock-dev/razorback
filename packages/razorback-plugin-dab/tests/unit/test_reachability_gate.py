@@ -43,7 +43,15 @@ def _scaffold(root: Path, *, dataset: str, db_config: dict, sql_present: bool = 
     return data_root
 
 
-def test_bookreview_emits_psql_reachability_healthcheck(tmp_path: Path):
+def test_bookreview_emits_postgres_reachability_healthcheck(tmp_path: Path):
+    """PKG-13 T5 / T10: the gate is a python3 TCP probe against dab-postgres.
+
+    dab-agent:latest does not ship a postgres client; the probe is a python
+    socket.create_connection. Postgres-protocol readiness is enforced by
+    compose's depends_on: condition: service_healthy + dab-postgres's
+    pg_isready healthcheck, so the TCP probe is the right shape for
+    fail-fast detection.
+    """
     data_root = _scaffold(tmp_path, dataset="bookreview", db_config=_BOOKREVIEW_DB_CONFIG)
     out = tmp_path / "tasks"
     manifest = prepare_dataset_tasks(data_root=data_root, dataset="bookreview", tasks_root=out)
@@ -51,9 +59,9 @@ def test_bookreview_emits_psql_reachability_healthcheck(tmp_path: Path):
     steps = task_toml["steps"]
     assert len(steps) == 1
     hc = steps[0]["healthcheck"]
-    assert "psql" in hc["command"]
+    assert "python3" in hc["command"]
     assert "dab-postgres" in hc["command"]
-    assert "bookreview_db" in hc["command"]
+    assert "5432" in hc["command"]
     assert hc["retries"] == 6
     assert hc["start_period_sec"] == 30
 

@@ -45,39 +45,39 @@ def _scaffold(root: Path) -> Path:
     return data_root
 
 
-def test_psql_gate_fails_when_dab_postgres_unreachable(tmp_path: Path):
+def test_reachability_gate_fails_when_dab_postgres_unreachable(tmp_path: Path):
     """AC-3 negative path: when dab-postgres can't be resolved (postgres
     container not running or compose stack not loaded), the healthcheck
-    command exits non-zero with a psql / hostname-resolution error.
+    command exits non-zero with a socket / hostname-resolution error.
 
-    We exercise the failure shape directly with `psql` rather than
-    bringing up a deliberately broken compose stack — pulling postgres:17
-    is expensive and the failure shape is what AC-3 actually verifies.
+    The gate is a python3 socket.create_connection probe (see PKG-13 T10
+    finding: dab-agent ships no postgres client). Run from the host where
+    `dab-postgres` does not resolve, so this models the "compose not loaded"
+    failure mode AC-3 fails fast on.
     """
-    if shutil.which("psql") is None:
-        pytest.skip("psql client not installed on host")
+    if shutil.which("python3") is None:
+        pytest.skip("python3 not on host PATH")
 
     data_root = _scaffold(tmp_path)
     out = tmp_path / "tasks"
     manifest = prepare_dataset_tasks(data_root=data_root, dataset="bookreview", tasks_root=out)
     task_toml = tomllib.loads((manifest[0]["task_dir"] / "task.toml").read_text())
-    command = task_toml["steps"][0]["healthcheck"]["command"]
+    # The toml-stored command is escaped for shell-via-toml; un-escape \" for
+    # a direct python3 -c invocation on the host.
+    command = task_toml["steps"][0]["healthcheck"]["command"].replace('\\"', '"')
 
-    # Run the command as the host would — `dab-postgres` does not resolve from
-    # outside the compose network, so this models the "compose not loaded /
-    # postgres not running" failure mode AC-3 fails fast on.
     result = subprocess.run(
         command,
         shell=True,
         capture_output=True,
         text=True,
         timeout=15,
-        env={"PGCONNECT_TIMEOUT": "3"},
     )
     assert result.returncode != 0, (
-        f"psql gate unexpectedly succeeded: stdout={result.stdout!r} stderr={result.stderr!r}"
+        f"gate unexpectedly succeeded: stdout={result.stdout!r} stderr={result.stderr!r}"
     )
     combined = (result.stdout + result.stderr).lower()
-    assert re.search(r"(could not translate host name|connection refused|could not connect|name or service not known|name resolution|unknown host)", combined), (
-        f"expected connection-failure text in psql output; got: {combined!r}"
-    )
+    assert re.search(
+        r"(nodename nor servname|name or service not known|getaddrinfo|connection refused|host)",
+        combined,
+    ), f"expected connection-failure text; got: {combined!r}"

@@ -254,13 +254,21 @@ def _task_toml(
         # per-step healthcheck after setup and before the agent; on failure
         # it aborts the step with a typed error, which is the fail-fast
         # shape AC-3 requires. The command exits non-zero if dab-postgres
-        # is unreachable or the schema is not initialized.
-        psql_cmd = (
-            f"psql -h dab-postgres -U {POSTGRES_USER} -d {_toml_escape(postgres_db)} -tAc 'select 1'"
+        # is unreachable.
+        #
+        # Implementation note: dab-agent:latest does not ship a postgres
+        # client (no psql / pg_isready), so the probe is a python3 TCP
+        # connect against the dab-postgres service. Postgres-protocol
+        # readiness is already guaranteed by compose's depends_on:
+        # condition: service_healthy + dab-postgres's container-level
+        # pg_isready healthcheck, so this TCP probe is the right shape for
+        # fail-fast detection of compose-not-loaded / network-broken paths.
+        probe = (
+            "python3 -c \\\"import socket; s=socket.create_connection(('dab-postgres', 5432), timeout=5); s.close()\\\""
         )
         body += (
             "\n[steps.healthcheck]\n"
-            f'command = "{psql_cmd}"\n'
+            f'command = "{probe}"\n'
             "interval_sec = 5\n"
             "timeout_sec = 10\n"
             "start_period_sec = 30\n"
