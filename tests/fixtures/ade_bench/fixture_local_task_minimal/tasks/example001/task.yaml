@@ -1,0 +1,9 @@
+task_id: example001
+status: ready
+description: Tiny test fixture
+prompts:
+  - key: base
+    prompt: |
+      Do the example task.
+author_name: pkg19-test
+difficulty: easy
