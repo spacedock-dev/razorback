@@ -78,3 +78,52 @@ def read_run_cost(run_dir: Path) -> tuple[float | None, bool, str | None]:
         return (None, False, "result_step_agent")
 
     return (None, False, None)
+
+
+def aggregate_costs(root: Path, *, experiment: str | None = None) -> dict:
+    """Sum cost across run-dirs under <root>, optionally filtered by experiment.
+
+    Returns a §3.3-stable dict: top-level total_usd/n_runs/n_known/n_unknown/runs/warnings.
+    Per-run entries carry path/experiment/created_at/cost_usd/cost_unknown/cost_source.
+    Unknown-cost runs are excluded from total_usd and named in warnings (AC-4).
+    """
+    if not root.exists():
+        raise FileNotFoundError(f"root does not exist: {root}")
+
+    entries = list_run_dirs(root, experiment=experiment)
+    runs: list[dict] = []
+    total = 0.0
+    n_known = 0
+    n_unknown = 0
+    warnings: list[str] = []
+
+    for entry in entries:
+        run_path = Path(entry["path"])
+        cost_usd, cost_known, cost_source = read_run_cost(run_path)
+        runs.append(
+            {
+                "path": entry["path"],
+                "experiment": entry.get("experiment"),
+                "created_at": entry.get("created_at"),
+                "cost_usd": cost_usd if cost_known else None,
+                "cost_unknown": not cost_known,
+                "cost_source": cost_source,
+            }
+        )
+        if cost_known:
+            total += float(cost_usd)
+            n_known += 1
+        else:
+            n_unknown += 1
+            warnings.append(
+                f"{entry['path']}: cost unknown (source checked: {cost_source})"
+            )
+
+    return {
+        "total_usd": total,
+        "n_runs": len(entries),
+        "n_known": n_known,
+        "n_unknown": n_unknown,
+        "runs": runs,
+        "warnings": warnings,
+    }
