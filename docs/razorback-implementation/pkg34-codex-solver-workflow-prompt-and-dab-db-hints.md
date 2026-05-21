@@ -10,7 +10,7 @@ score: 0.94
 worktree: .worktrees/spacedock-ensign-pkg34-codex-solver-workflow-prompt-and-dab-db-hints
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 ---
 
 ## Problem
