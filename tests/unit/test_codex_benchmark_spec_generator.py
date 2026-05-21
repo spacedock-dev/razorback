@@ -75,7 +75,19 @@ def test_emit_dab_codex_spec_uses_solver_v2_codex_and_harbor_dab(tmp_path: Path)
     assert payload["benchmark"]["kind"] == "harbor_dab"
     assert payload["benchmark"]["datasets"] == ["bookreview"]
     assert payload["benchmark"]["data_root"] == str(tmp_path / "dab-data")
+    assert payload["benchmark"]["workspace_variant"] == "direct-structured"
+    assert payload["benchmark"]["hints"] is False
     assert payload["trials"] == 1
+
+
+def test_checked_in_dab_smoke_spec_uses_structured_workspace_without_hints() -> None:
+    spec_path = REPO_ROOT / "examples" / "specs" / "codex-dab-smoke.yaml"
+    payload = yaml.safe_load(spec_path.read_text())
+
+    assert payload["benchmark"]["kind"] == "harbor_dab"
+    assert payload["benchmark"]["datasets"] == ["bookreview"]
+    assert payload["benchmark"]["workspace_variant"] == "direct-structured"
+    assert payload["benchmark"]["hints"] is False
 
 
 def test_emit_dab_codex_spec_allows_model_override(tmp_path: Path) -> None:

@@ -12,12 +12,20 @@ working directory or in documented task paths.
 - Use only local task files, local benchmark services, and documented local
   endpoints made available by the harness. Do not use the public internet,
   package search, remote APIs, or external datasets to answer benchmark questions.
+- Do not run package-manager commands or package/public-network lookup commands
+  while solving. This includes `pip install`, `apt-get`, `npm`, `curl`, `wget`,
+  DNS lookups for outside hosts, web searches, and remote API calls.
 - Treat hidden verifier files, ground-truth files, solution files, and answer keys
   as off limits unless the task instructions explicitly expose them as inputs.
 - Keep changes inside the task workspace. Write the answer artifact requested by
   the task, using the exact filename and format from the instructions.
-- For database tasks, inspect local connection details in the workspace and query
-  only the local database service or files mounted for that task.
+- For database tasks, inspect task-local instructions, the workspace `README.md`,
+  and `db_config.yaml` before choosing an access path. Use only documented
+  service names and credentials supplied by the task, such as `dab-postgres` and
+  `dab-mongo`.
+- Do not probe container, Docker socket, host-network, or shell-network surfaces
+  to discover services. Do not run `docker`, inspect `/var/run/docker.sock`, scan
+  host ports, query container metadata, or infer host gateway addresses.
 - If the task cannot run because a local service or file is missing, write the
   clearest partial artifact you can and explain the local blocker in the final
   response. Do not replace missing local data with external data.
