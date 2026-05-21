@@ -80,3 +80,16 @@ Wrote the standard separate plan doc at `docs/razorback-implementation/plans/pkg
 ### Summary
 
 Implemented PKG-39 in commits `d08c3ba`, `467c88a`, and `6c7d251`. The generator now supports `--solver-workflow`, Harbor-shaped ADE roots with string task entries, and DAB `--workspace-variant` plus `--hints/--no-hints` while preserving default DAB output. Verification commands run: missing-workflow red test, full red generator suite, focused pytest twice, generated ADE spec smoke, and freeze smoke; no full benchmark datasets were launched.
+
+## Stage Report: validation
+
+- DONE: Focused generator tests pass from the validation worktree, and validation records any `uv.lock` churn or confirms none.
+  Evidence: `uv run --frozen pytest tests/unit/test_codex_benchmark_spec_generator.py` passed 17/17; unfrozen validation commands briefly removed the existing `uv.lock` `[options] exclude-newer` block and it was restored before commit.
+- DONE: AC-1 through AC-4 are independently verified with concrete file/spec/freeze/doc evidence, including the checked-in ADE dbt-repair workflow, Harbor-shaped ADE support, DAB workspace/hints knobs, and DAB variant note.
+  Evidence: validation report `docs/razorback-implementation/validation/pkg39-benchmark-variant-spec-generation.md` records AC command output, generated Harbor-shaped ADE spec evidence, freeze hashes, and DAB note grep output.
+- DONE: Code review covers the generator, tests, solver workflow, and DAB note, classifies findings as blocking/non-blocking, and gives a clear gate recommendation.
+  Evidence: manual application of `superpowers:requesting-code-review` protocol found no PKG-39 blocking or non-blocking findings; gate recommendation is PASSED.
+
+### Summary
+
+Validation reran the focused acceptance suite, generated and froze a one-task Harbor-shaped ADE spec with `codex-ade-dbt-repair`, checked the DAB variant documentation, and reviewed the implementation diff. Full `uv run pytest` was attempted and failed on non-PKG-39 integration prerequisites/residuals; the focused ACs passed and the gate recommendation is PASSED to `done`.
