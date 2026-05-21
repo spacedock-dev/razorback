@@ -3,7 +3,7 @@
 
 import pytest
 
-from razorback.agents.auth import AuthResolution, resolve_claude_auth
+from razorback.agents.auth import AuthResolution, resolve_claude_auth, resolve_codex_auth
 
 
 def test_anthropic_api_key_from_dotenv_wins(tmp_path):
@@ -73,3 +73,35 @@ def test_anthropic_api_key_in_dotenv_with_empty_value_is_treated_as_missing(tmp_
 
     resolution = resolve_claude_auth(project_root=tmp_path, home=home)
     assert resolution.mode == "oauth"
+
+
+def test_codex_openai_api_key_from_dotenv(tmp_path):
+    (tmp_path / ".env").write_text("OPENAI_API_KEY=sk-openai\n")
+
+    resolution = resolve_codex_auth(project_root=tmp_path)
+
+    assert resolution == AuthResolution(
+        mode="api-key",
+        env={"OPENAI_API_KEY": "sk-openai"},
+    )
+
+
+def test_codex_auth_carries_openai_base_url_when_present(tmp_path):
+    (tmp_path / ".env").write_text(
+        "OPENAI_API_KEY=sk-openai\nOPENAI_BASE_URL=https://proxy.example/v1\n"
+    )
+
+    resolution = resolve_codex_auth(project_root=tmp_path)
+
+    assert resolution.env == {
+        "OPENAI_API_KEY": "sk-openai",
+        "OPENAI_BASE_URL": "https://proxy.example/v1",
+    }
+
+
+def test_codex_auth_does_not_read_os_environ(tmp_path, monkeypatch):
+    (tmp_path / ".env").write_text("# empty\n")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-from-os-environ")
+
+    with pytest.raises(Exception):
+        resolve_codex_auth(project_root=tmp_path)

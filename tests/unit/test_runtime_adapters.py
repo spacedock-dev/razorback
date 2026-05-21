@@ -1,20 +1,46 @@
-# ABOUTME: AC-3, per-runtime adapter sub-modules exist; codex + pi raise NotImplementedError.
-# ABOUTME: claude.py constructs a harbor ClaudeCode instance with the expected kwargs.
+# ABOUTME: AC-3, per-runtime adapter sub-modules exist; pi raises NotImplementedError.
+# ABOUTME: claude.py and codex.py construct harbor installed agents with expected kwargs.
 
 import pytest
 
 from razorback.agents._runtime import claude as claude_adapter
 from razorback.agents._runtime import codex as codex_adapter
 from razorback.agents._runtime import pi as pi_adapter
+from razorback.agents.spacedock_solver_v2 import SpacedockSolverAgentError
 
 
-def test_codex_raises_not_implemented(tmp_path):
-    with pytest.raises(NotImplementedError, match="codex"):
+def test_codex_constructs_inner_agent_with_supported_kwargs(tmp_path):
+    inner = codex_adapter.build_inner_agent(
+        logs_dir=tmp_path,
+        model="gpt-5.1-codex",
+        harbor_agent_kwargs={"reasoning_effort": "high", "reasoning_summary": "auto"},
+        extra_env={"OPENAI_API_KEY": "sk-fake"},
+    )
+    assert inner.__class__.__name__ == "Codex"
+    assert inner.model_name == "gpt-5.1-codex"
+    assert getattr(inner, "_extra_env", {}) == {"OPENAI_API_KEY": "sk-fake"}
+    flag_kwargs = getattr(inner, "_flag_kwargs", {})
+    assert flag_kwargs["reasoning_effort"] == "high"
+    assert flag_kwargs["reasoning_summary"] == "auto"
+
+
+@pytest.mark.parametrize(
+    "kwarg",
+    [
+        {"max_turns": 3},
+        {"tools_allowed": ["Read"]},
+        {"tools_denied": ["Bash(rm*)"]},
+        {"append_system_prompt": "extra system text"},
+    ],
+)
+def test_codex_rejects_unsupported_contract_kwargs(tmp_path, kwarg):
+    name = next(iter(kwarg))
+    with pytest.raises(SpacedockSolverAgentError, match=name):
         codex_adapter.build_inner_agent(
             logs_dir=tmp_path,
-            model="any",
-            harbor_agent_kwargs={},
-            extra_env={},
+            model="gpt-5.1-codex",
+            harbor_agent_kwargs=kwarg,
+            extra_env={"OPENAI_API_KEY": "sk-fake"},
         )
 
 

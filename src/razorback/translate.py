@@ -13,7 +13,7 @@ from harbor.models.trial.config import (
     VerifierConfig,
 )
 
-from razorback.agents.auth import resolve_claude_auth
+from razorback.agents.auth import resolve_claude_auth, resolve_codex_auth
 from razorback.agents.proxy import PROXY_BLOCK_ENV
 from razorback.errors import SpecError
 from razorback.spec.schema import (
@@ -158,7 +158,10 @@ def _build_agent_config(
             raise SpecError(
                 "spacedock_solver_v2 spec must be frozen (agent.sealed_hash missing)."
             )
-        resolution = resolve_claude_auth(project_root=project_root, home=home)
+        if spec.agent.runtime == "codex":
+            resolution = resolve_codex_auth(project_root=project_root)
+        else:
+            resolution = resolve_claude_auth(project_root=project_root, home=home)
         harbor_agent_kwargs: dict[str, Any] = {
             "max_turns": spec.agent.max_turns,
             "tools_allowed": list(spec.agent.tools_allowed),

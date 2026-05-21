@@ -1,0 +1,26 @@
+# ABOUTME: PKG-26 Codex v2 smoke spec against the in-tree hello-world local task.
+# ABOUTME: Live execution is credential/container gated; use rk freeze then rk run.
+version: 1
+experiment: _codex-smoke-v2
+agent:
+  kind: spacedock_solver_v2
+  runtime: codex
+  model: gpt-5.1-codex
+  sampling:
+    temperature: 0.0
+    top_p: null
+    seed: 1
+  solver_workflow: ./examples/solver_workflows/_smoke
+  spacedock_skill_version: "1.0.0"
+  max_turns: 200
+  tools_allowed: []
+  tools_denied: []
+benchmark:
+  kind: local
+  task_paths:
+    - ./examples/tasks/hello-world
+trials: 1
+observers:
+  - kind: jsonl
+    path: events.jsonl
+  - kind: stdout
