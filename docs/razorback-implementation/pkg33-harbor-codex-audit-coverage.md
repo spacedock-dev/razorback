@@ -88,3 +88,16 @@ Validation commands:
 - Required audit suite: `uv run pytest tests/unit/audit -q`.
 - Mechanism-level CLI checks against the new temp fixtures: `uv run rk audit <fixture> --format json` for AC-1 and `uv run rk audit <fixture> --policy strict --format json` for AC-2/AC-3, confirming exit 23 only for the tainted solver trace.
 - Plan-stage sanity check run: `uv run pytest tests/unit/audit -q` passed (`24 passed`).
+
+## Stage Report: implementation
+
+- DONE: `rk audit` discovers Harbor-shaped Codex trials under `steps/*/agent/` and reports nonzero trial coverage for clean `codex.txt` traces.
+  Evidence: `test_rk_audit_discovers_harbor_codex_txt_trial` plus CLI check `clean-discovery: exit=0 ... trials=1`.
+- DONE: Strict audit taints solver-side forbidden lookup attempts in Harbor Codex `codex.txt` or session JSONL traces while preserving source-path evidence.
+  Evidence: strict tests cover `harbor_codex_text` and `harbor_codex_session`; CLI check reports source `steps/main/agent/sessions/2026/05/21/session.jsonl` with exit 23.
+- DONE: Setup/install commands in `job.log` remain outside solver-trace taint, with `uv run pytest tests/unit/audit -q` passing.
+  Evidence: `test_rk_audit_strict_ignores_job_log_setup_install`; `uv run pytest tests/unit/audit -q` passed (`28 passed`), rerun as `uv run --frozen pytest tests/unit/audit -q` also passed (`28 passed`).
+
+### Summary
+
+Added `src/razorback/audit/harbor_codex.py` for Harbor Codex discovery/scanning and wired it into `src/razorback/audit/cli.py` alongside the existing DAB taint port. Harbor surfaces touched are read-only scanner inputs under `<trial>/steps/*/agent/codex.txt` and `<trial>/steps/*/agent/sessions/**/*.jsonl`; `job.log` remains intentionally outside solver-trace taint. No spec deviations; one extra codex.txt taint guard was added beyond the plan's session-focused AC-2 test.
