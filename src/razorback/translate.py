@@ -36,6 +36,9 @@ SPACEDOCK_SOLVER_IMPORT_PATH = (
 SPACEDOCK_SOLVER_V2_IMPORT_PATH = (
     "razorback.agents.spacedock_solver_v2:SpacedockSolverAgent"
 )
+SPACEDOCK_SOLVER_V2_ENVIRONMENT_IMPORT_PATH = (
+    "razorback.environments.docker:ProxySeparatedDockerEnvironment"
+)
 CLAUDE_CLI_IMPORT_PATH = "razorback.agents.claude_cli:ClaudeCliAgent"
 SPACEDOCK_SOLVER_V2_CONTAINER_FREEZE_ROOT = "/razorback-freeze"
 
@@ -433,6 +436,7 @@ def _environment_config(agent_cfg: AgentConfig, run_dir: Path) -> EnvironmentCon
     host_freeze_root = run_dir / "_razorback" / "freeze"
     host_freeze_root.mkdir(parents=True, exist_ok=True)
     return EnvironmentConfig(
+        import_path=SPACEDOCK_SOLVER_V2_ENVIRONMENT_IMPORT_PATH,
         delete=False,
         env=dict(PROXY_BLOCK_ENV),
         mounts_json=[
