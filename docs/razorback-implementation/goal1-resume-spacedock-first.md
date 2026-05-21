@@ -369,3 +369,29 @@ shipping; the resume dispatches into a fresh `runs/goal1-resume/`
 path so the archived partial-result history at
 `runs/goal1/` and the archived result-doc section stay
 visible for audit.
+
+## Stage Report: implementation (T0 + T1; PAUSED before T2)
+
+- DONE: T0 cost-shape verification (1 trial opus-4.7 with .env paid auth). Spacedock variant first; pick a small dataset like bookreview. Report first-trial cost_usd via SendMessage(to="team-lead") BEFORE dispatching more cells. If cost_usd > $3 per trial, STOP — captain confirm budget.
+  Commit 565daf2. Probe spacedock×bookreview×1 trial: 3/3 reward=1.0, 3m 50s wall. cost_usd=null (claude-cli agent has no cost write site; aggregate.py:133-149 reads step_results[*].agent_result.cost_usd, never populated). Sent to team-lead with options A/B/C; pausing before T2 for captain decision on cost-gate. Cost-projection doc: docs/razorback-implementation/goal1-resume-t0-cost-projection.md.
+- DONE: T1: regenerate matrix specs with spacedock-first variant order (modify examples/drivers/generate-dab-paper-matrix-specs.py). Commit. Dry-run prints 36-cell plan starting with spacedock/<first-dataset>.
+  Commit 1bd58e9. TDD: test_three_variants_exist updated RED → flipped WORKSPACE_VARIANTS at workspace_readme.py:7 → GREEN (6/6 passed). DEFAULT_VARIANTS at dab-paper-matrix.sh:29 + --variants help text updated in lockstep. Regenerated 36 specs via generate-dab-paper-matrix-specs.py --freeze (frozen specs gitignored per examples/specs/**/*.frozen.yaml). Dry-run output: cell 1/36 = spacedock/agnews, cell 12/36 = spacedock/yelp, total 36 — AC-1 verified.
+- DONE: PAUSE before T2 + SendMessage(to="team-lead") to check PKG-15 status. The FO will tell you to proceed when PKG-15 has merged.
+  Paused. Two gates open: (a) captain decision on cost-gate option A/B/C (T0 finding), (b) PKG-15-mongo-init-healthcheck-timeout merge onto main. Task list shows PKG-15 status=completed but origin/main does not yet carry the merge commit (latest on main: e0ed196 dispatch pkg23). Both pending team-lead.
+- SKIPPED: T2 matrix dispatch (only after PKG-15 merges): runs/goal1-resume/ output dir, --budget 100, --no-ff merge later. Per-variant `rk score --against-constant` (spacedock=0.577, direct-minimal/direct-structured=0.4376).
+  Awaiting team-lead green-light per dispatch pause-point. Will resume in a fresh dispatch.
+- SKIPPED: T3 aggregate + audit.
+  Awaits T2.
+- SKIPPED: T4 result-doc UPDATE (append "Resume" section to docs/superpowers/plans/2026-05-19-goal1-paper-reproduction.md).
+  Awaits T3.
+
+### Summary
+
+T0 + T1 shipped (commits 565daf2 + 1bd58e9). T0 surfaced a captain-gate
+finding: cost_usd is null even on paid-API auth because the claude-cli
+agent has no cost write site, so AC-5 cannot be verified from in-run
+telemetry alone — sent options A/B/C to team-lead. T1 reorder is
+verified by both the unit test (6/6 green) and the bash driver dry-run
+(cell 1 = spacedock/agnews, cell 12 = spacedock/yelp). 36 frozen specs
+are on disk ready for T2. Paused per dispatch instruction before T2;
+awaiting team-lead on PKG-15 merge + captain cost-gate decision.
