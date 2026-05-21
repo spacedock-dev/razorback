@@ -319,6 +319,23 @@ class SpacedockSolverAgent(BaseAgent):
             extra_env=self._extra_env,
         )
 
+    def _solver_workflow_readme_text(self) -> str:
+        readme = self._solver_workflow / "README.md"
+        if not readme.is_file():
+            raise SpacedockSolverAgentError(
+                f"solver workflow README.md not found: {readme}"
+            )
+        return readme.read_text()
+
+    def _compose_run_instruction(self, instruction: str) -> str:
+        workflow_text = self._solver_workflow_readme_text().strip()
+        return (
+            "# Solver workflow instructions\n\n"
+            f"{workflow_text}\n\n"
+            "# Task instruction\n\n"
+            f"{instruction}"
+        )
+
     async def setup(self, environment: BaseEnvironment) -> None:
         """Per spec §8.4: bootstrap workspace; write sealed_hash.txt; delegate to inner.
 
@@ -379,7 +396,9 @@ class SpacedockSolverAgent(BaseAgent):
     async def run(self, instruction, environment, context):
         if self._inner is None:
             raise SpacedockSolverAgentError("run() called before setup()")
-        await self._inner.run(instruction, environment, context)
+        await self._inner.run(
+            self._compose_run_instruction(instruction), environment, context
+        )
 
     async def cleanup(self, environment):
         if self._inner is not None and hasattr(self._inner, "cleanup"):

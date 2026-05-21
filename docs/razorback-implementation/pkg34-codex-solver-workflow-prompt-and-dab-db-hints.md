@@ -174,3 +174,18 @@ post-hoc strict audit is still required.
 Added an inline implementation plan because the FO sizing decision marked this
 as a tiny task. No separate plan document was created; the plan keeps validation
 portable by using repo-relative scratch paths and a caller-supplied data root.
+
+## Stage Report: implementation
+
+- DONE: `SpacedockSolverAgent.run` composes solver workflow README text before task instruction, covered by a focused unit test.
+  Evidence: `test_run_sends_solver_workflow_readme_before_task_instruction` fails before the code change and passes after README-before-task composition in `src/razorback/agents/spacedock_solver_v2.py`.
+- DONE: Codex DAB generated specs and checked-in smoke spec use `workspace_variant: direct-structured` while preserving `hints: false`, covered by generator tests.
+  Evidence: `tests/unit/test_codex_benchmark_spec_generator.py` asserts both emitted DAB specs and `examples/specs/codex-dab-smoke.yaml` use `direct-structured` with `hints: false`.
+- DONE: Codex benchmark solver README explicitly forbids Docker/socket/host-network/shell-network probing and package/public-network lookup while solving.
+  Evidence: `examples/solver_workflows/codex-benchmark-solver/README.md` now directs solvers to task-local instructions, workspace `README.md`, and `db_config.yaml`, and forbids Docker/socket/host-network/shell-network and package/public-network probing.
+- DONE: Focused unit tests pass, and the entity report names the BookReview score/audit rerun still required for validation.
+  Evidence: `uv run --frozen pytest tests/unit/test_spacedock_solver_v2_class.py tests/unit/test_codex_benchmark_spec_generator.py -q` passed with `13 passed`; the generated BookReview freeze/run/score/audit rerun remains required in validation.
+
+### Summary
+
+Implemented PKG-34 by injecting the solver workflow README into the inner runtime prompt before task text, changing Codex DAB generated/smoke specs to structured workspaces without enabling DAB hints, and tightening the Codex benchmark workflow no-probing rules. Live BookReview score/audit validation was not run in this stage; validation still needs the caller-supplied DAB data root and the generated BookReview rerun to prove 3 clean strict-audit trials.

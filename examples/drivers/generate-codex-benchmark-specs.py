@@ -56,7 +56,7 @@ def emit_dab_spec(row: DabSpecRow, *, out_dir: Path, model: str = CODEX_MODEL) -
             "kind": "harbor_dab",
             "data_root": str(row.data_root),
             "datasets": [row.dataset],
-            "workspace_variant": "direct-minimal",
+            "workspace_variant": "direct-structured",
             "hints": False,
         },
         trials=row.trials,

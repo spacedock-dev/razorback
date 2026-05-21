@@ -20,7 +20,7 @@ benchmark:
   data_root: /path/to/dataagentbench/data
   datasets:
     - bookreview
-  workspace_variant: direct-minimal
+  workspace_variant: direct-structured
   hints: false
 trials: 1
 observers:
