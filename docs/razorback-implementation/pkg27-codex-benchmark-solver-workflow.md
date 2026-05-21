@@ -1,13 +1,13 @@
 ---
 id: 0h4p8jt0bj7yejbjxbhwtjbq
 title: PKG-27 — reusable Codex benchmark solver workflow and specs
-status: validation
+status: done
 source: Captain directive 2026-05-21 — "get 1x score for full dataset of DAB and ade-bench, using codex"
 started: 2026-05-21T07:56:58Z
-completed:
-verdict:
+completed: 2026-05-21T08:10:26Z
+verdict: PASSED
 score: 0.9
-worktree: .worktrees/spacedock-ensign-pkg27-codex-benchmark-solver-workflow
+worktree: 
 issue:
 pr:
 mod-block:
