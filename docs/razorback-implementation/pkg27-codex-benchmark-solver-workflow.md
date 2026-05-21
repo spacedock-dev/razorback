@@ -1,7 +1,7 @@
 ---
 id: 0h4p8jt0bj7yejbjxbhwtjbq
 title: PKG-27 — reusable Codex benchmark solver workflow and specs
-status: implementation
+status: validation
 source: Captain directive 2026-05-21 — "get 1x score for full dataset of DAB and ade-bench, using codex"
 started: 2026-05-21T07:56:58Z
 completed:
