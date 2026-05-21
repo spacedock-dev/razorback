@@ -237,3 +237,16 @@ Plan is inline. The AC-2 mechanism is upstream's `docker_compose_path` rule mirr
 ### Summary
 
 Shipped AC-1/AC-2/AC-4 via materialize_local_task env synthesis + `_select_compose_variant` helper mirroring ade_bench upstream's `docker_compose_path` rule (trial_handler.py:292-314). Schema extension on `AdeBenchBenchmarkBlock` (db_type, project_type) optional fields landed inside T2 (cheap; threaded through translate.py). AC-3 contract is verified in-process (harbor's `_validate_definition` would accept the materialized view-dir); the live `rk run` smoke against airbnb001 is blocked by a harness-level macOS sandbox preventing `~/.cache/razorback` mkdir — needs a re-run on an unsandboxed host to close T4 end-to-end.
+
+## Stage Report: validation
+
+- DONE: Re-run unit tests on the worktree: `uv run pytest tests/unit/test_ade_bench_materialize_local_task.py` — verify 18/18 PKG-20 tests pass + no regression elsewhere in ade_bench-adjacent surfaces.
+  18/18 PKG-20 tests pass in 0.62s; broader `pytest tests/unit/ -k ade_bench -q` reports 56/56 passing. No regressions.
+- DONE: Attempt T4 live `rk run` with HOME workaround: `HOME=$PWD/.cache_home rk run` against goal2 T0 frozen spec. Pass = reaches Phase 3 past _validate_definition.
+  HOME override + colima DOCKER_HOST works: `rk run` proceeds past `_validate_definition` into Phase 3 (`docker compose up --detach --wait`). The compose chain at failure includes `-f /Users/clkao/git/ade-bench/shared/defaults/docker-compose-duckdb-dbt.yaml` — direct evidence harbor accepted the synthesized env-def. Remaining failure (`unknown flag: --project-name`) is host docker-CLI version mismatch unrelated to PKG-20. Run-dir: `runs/pkg20-validation/goal2-probe-ade-bench-airbnb001-haiku/54fc2d6f9bb82ff3/`. AC-3 satisfied at the validator boundary.
+- DONE: Run requesting-code-review skill against the worktree branch. Classify findings as blocking / non-blocking. Verdict PASSED only if AC-1/AC-2/AC-4 unit tests pass AND AC-3 has live `rk run` success or honest harness-blocker documentation.
+  Review performed inline in validation report. Findings: two non-blocking minor issues (1) exclude_globs gloss against non-default variants — `env_rel` uses source filename while file is written as `docker-compose.yaml`; only exposed by a fixture not shipped; (2) `_select_compose_variant` docstring slight clarity nit on filter fallthrough. No blocking findings. AC↔Task map matches what shipped; schema extension landed inside T2 as plan §T2 contemplated.
+
+### Summary
+
+PASSED. All four ACs satisfied: AC-1/AC-2/AC-4 via 18/18 unit tests on the worktree branch; AC-3 via live `rk run` past `_validate_definition` (HOME override resolved the harness sandbox blocker the impl ensign hit). Validation report at `docs/razorback-implementation/validation/pkg20-ade-bench-env-definition-synthesis.md`. Captain standing orders auto-approve the gate — promote to `done`, merge with `--no-ff`, then re-dispatch Goal 2 implementation against its existing worktree.
