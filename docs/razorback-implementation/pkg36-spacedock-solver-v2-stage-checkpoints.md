@@ -43,3 +43,16 @@ mechanism integration tests.
 
 Splitting one Codex invocation into multiple independent solver prompts is deferred;
 this task records checkpoints around the current v2 execution boundaries.
+
+## Stage Report: implementation
+
+- DONE: A focused v2 lifecycle test observes exact checkpoint commit messages for setup/ready, run/before-agent, and run/after-agent.
+  Evidence: `test_setup_and_run_write_named_checkpoint_commits` asserts `stage: setup/ready`, `stage: run/before-agent`, and `stage: run/after-agent`.
+- DONE: A no-freeze or uninitialized path remains executable without turning a test-only stub into a hard failure.
+  Evidence: `test_run_sends_solver_workflow_readme_before_task_instruction` asserts direct `run()` delegation does not call `environment.exec`.
+- DONE: Existing v2 lifecycle/freeze tests still pass with the new checkpoint calls.
+  Evidence: `uv run pytest tests/unit/test_spacedock_solver_v2_lifecycle.py tests/unit/test_spacedock_solver_v2_class.py` -> 18 passed; `uv run pytest tests/integration/test_spacedock_git_freeze.py tests/integration/test_v2_freeze_dir_mechanism.py` -> 10 passed.
+
+### Summary
+
+Implemented centralized checkpoint labels in `src/razorback/agents/spacedock_solver_v2.py` and added setup/run checkpoint commits around the existing freeze repo lifecycle and inner-agent delegation. Touched the Harbor-facing `setup()` and `run()` lifecycle surfaces only; no schema, translate, freeze, or generator files were edited. The only deviation from always checkpointing is the documented test/non-freeze direct `run()` path, where checkpointing remains a no-op until `setup()` has initialized or restored freeze git.

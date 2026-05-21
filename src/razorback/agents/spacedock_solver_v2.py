@@ -26,6 +26,9 @@ _REQUIRED_PHASE_STATS_KEYS = (
 
 _FREEZE_REPO_GIT_REQUIREMENT = "git is required for the sealed freeze repo"
 _CONTAINER_FREEZE_ROOT = PurePosixPath("/razorback-freeze")
+CHECKPOINT_SETUP_READY = "setup/ready"
+CHECKPOINT_RUN_BEFORE_AGENT = "run/before-agent"
+CHECKPOINT_RUN_AFTER_AGENT = "run/after-agent"
 _PROXY_ENV_KEYS = (
     "HTTP_PROXY",
     "HTTPS_PROXY",
@@ -128,6 +131,7 @@ class SpacedockSolverAgent(BaseAgent):
             self._refuse_on_resume_mismatch(self._resume_from_freeze)
 
         self._inner: BaseAgent | None = None
+        self._freeze_checkpointing_ready = False
 
     def __repr__(self) -> str:
         # FU-1: never surface secrets in repr.
@@ -389,6 +393,9 @@ class SpacedockSolverAgent(BaseAgent):
                     )
             await self._make_freeze_repo_host_writable(environment, git_freeze_dir)
 
+        self._freeze_checkpointing_ready = True
+        await self._commit_stage(environment, CHECKPOINT_SETUP_READY)
+
         if self._inner is None:
             self._inner = self._build_inner_agent()
         await self._inner.setup(environment)
@@ -396,9 +403,13 @@ class SpacedockSolverAgent(BaseAgent):
     async def run(self, instruction, environment, context):
         if self._inner is None:
             raise SpacedockSolverAgentError("run() called before setup()")
+        if self._freeze_checkpointing_ready:
+            await self._commit_stage(environment, CHECKPOINT_RUN_BEFORE_AGENT)
         await self._inner.run(
             self._compose_run_instruction(instruction), environment, context
         )
+        if self._freeze_checkpointing_ready:
+            await self._commit_stage(environment, CHECKPOINT_RUN_AFTER_AGENT)
 
     async def cleanup(self, environment):
         if self._inner is not None and hasattr(self._inner, "cleanup"):

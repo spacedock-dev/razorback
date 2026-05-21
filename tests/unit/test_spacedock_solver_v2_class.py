@@ -64,6 +64,7 @@ async def test_run_sends_solver_workflow_readme_before_task_instruction(tmp_path
 
     await agent.run("task instruction", environment, context)
 
+    environment.exec.assert_not_called()
     agent._inner.run.assert_awaited_once()
     delegated_instruction = agent._inner.run.await_args.args[0]
     assert "# Solver Workflow" in delegated_instruction
