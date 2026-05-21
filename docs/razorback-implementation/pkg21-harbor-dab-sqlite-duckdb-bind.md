@@ -1,13 +1,13 @@
 ---
 id: xq336j093p6a9w69cp49xkn4
 title: PKG-21 — harbor-DAB SQLite/DuckDB bind-mount (close PKG-14's per-cell 7GB copy gap)
-status: plan
+status: implementation
 source: PKG-14 follow-up — Goal 1 matrix ENOSPC 2026-05-20 at cell [20/36] direct-structured/PANCANCER_ATLAS (commit dae5d33 on spacedock-ensign/goal1-dab-paper-reproduction)
 started: 2026-05-21T01:52:38Z
 completed:
 verdict:
 score: 0.85
-worktree:
+worktree: .worktrees/spacedock-ensign-pkg21-harbor-dab-sqlite-duckdb-bind
 issue:
 pr:
 mod-block:

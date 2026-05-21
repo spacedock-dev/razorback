@@ -1,7 +1,7 @@
 ---
 id: n6cm8q5h37r7ws39nns0c204
 title: PKG-20 — ade-bench env-definition synthesis (materializer Dockerfile/compose gap)
-status: implementation
+status: validation
 source: PKG-19 follow-up — Goal 2 T0 probe FAILED 2026-05-20 (commit cc123ac on spacedock-ensign/goal2-ade-bench-haiku-baseline); harbor 0.6.6 contract surfaced gap
 started: 2026-05-21T01:42:40Z
 completed:
