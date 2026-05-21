@@ -1,6 +1,7 @@
 # ABOUTME: ClaudeCliAgent (§6.2) — subclasses harbor's ClaudeCode so razorback's
 # ABOUTME: claude-cli kind inherits stream-json invocation, cost parsing, and ATIF.
 
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +44,12 @@ class ClaudeCliAgent(ClaudeCode):
         self._sampling_temperature = sampling_temperature
 
         kwargs.setdefault("allowed_tools", ",".join(self._tools_allowed))
-        kwargs.setdefault("disallowed_tools", ",".join(DISALLOWED_TOOLS))
+        # Harbor's build_cli_flags emits CLI flag values UNQUOTED. The razorback
+        # block list contains shell-active parens (e.g. `Bash(curl *)`); pre-
+        # shell-quote the whole CSV so the rendered command parses correctly.
+        kwargs.setdefault(
+            "disallowed_tools", shlex.quote(",".join(DISALLOWED_TOOLS))
+        )
 
         super().__init__(
             logs_dir=logs_dir,
@@ -76,6 +82,27 @@ class ClaudeCliAgent(ClaudeCode):
     def supported_sampling() -> set[str]:
         """AC-5: Anthropic models honor temperature only. No seed, no top_p."""
         return {"temperature"}
+
+    async def run(self, instruction: str, environment, context):
+        """Stamp the razorback-resolved auth env into os.environ before delegating
+        to harbor's ClaudeCode.run(). Harbor reads ANTHROPIC_API_KEY etc. directly
+        from os.environ at line 1024 of claude_code.py; razorback's contract puts
+        the resolved auth on the agent via extra_env, so we bridge.
+        """
+        import os
+
+        saved: dict[str, str | None] = {}
+        try:
+            for k, v in self._razorback_extra_env.items():
+                saved[k] = os.environ.get(k)
+                os.environ[k] = v
+            await super().run(instruction, environment, context)
+        finally:
+            for k, old in saved.items():
+                if old is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = old
 
     async def setup(self, environment) -> None:
         """Validate the `claude` binary, then materialize razorback's exec env.
