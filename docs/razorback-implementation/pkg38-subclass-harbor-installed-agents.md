@@ -114,3 +114,16 @@ Validator logical worker id: `spacedock:ensign`; role asset read: `/home/exedev/
 
 Worker logical id: `spacedock:ensign`; role asset read: `/home/exedev/.codex/plugins/cache/spacedock/spacedock/0.12.0/skills/ensign/SKILL.md`. AC commands passed: runtime/freeze-dir `23 passed`, Claude compatibility `39 passed`, sealed lifecycle `35 passed`, generator-focused `10 passed`.
 The nop baseline was investigated with `uv run --frozen python -m razorback.cli run examples/specs/nop.yaml --runs-dir .test-tmp/pkg38-nop-inspect`: the run completed with `n_trials_completed: 1`, top-level `events.jsonl` was `0` bytes, and PKG-38 has no diff to `src/razorback/cli/run.py`, `src/razorback/runs/aggregate.py`, or `examples/specs/nop.yaml`.
+
+## Stage Report: validation (cycle 2)
+
+- DONE: Re-run the PKG-38 focused AC commands plus generator/compat tests and record exact evidence.
+  Evidence in `docs/razorback-implementation/validation/pkg38-subclass-harbor-installed-agents.md`: AC-1 `23 passed`, AC-2 `39 passed`, AC-3 `35 passed`, generator/registry/tools command `12 passed`.
+- DONE: Verify the prior rejection fixes: legacy `claude-cli` seed/top_p no-op compatibility, stale import/class assertions, and full-suite residual-failure classification.
+  Targeted metadata test `1 passed`; stale assertion command included in the `12 passed`; full suite `4 failed, 534 passed, 10 skipped` with three missing-Claude-auth failures and one unrelated NOP empty-events baseline.
+- DONE: Update the validation report and append `## Stage Report: validation` with an explicit PASS/REJECTED gate decision.
+  Updated post-feedback validation report; gate decision: PASS, approve PKG-38 to `done`.
+
+### Summary
+
+Validator logical worker id: `spacedock:ensign`; role asset read: `/home/exedev/.codex/plugins/cache/spacedock/spacedock/0.12.0/skills/ensign/SKILL.md`. The focused PKG-38 acceptance checks are clean and the previously rejected `claude-cli` seed/top_p compatibility plus stale import/class expectations are fixed. Full-suite residuals are classified as environmental missing Claude auth or unrelated NOP empty-events baseline after confirming PKG-38 does not touch the NOP runner/spec/test paths.
