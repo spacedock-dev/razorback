@@ -10,7 +10,7 @@ score: 0.93
 worktree: .worktrees/spacedock-ensign-pkg33-harbor-codex-audit-coverage
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 ---
 
 ## Problem
