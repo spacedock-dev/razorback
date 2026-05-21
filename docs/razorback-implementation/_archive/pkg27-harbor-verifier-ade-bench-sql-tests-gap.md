@@ -1,16 +1,17 @@
 ---
 id: z11r44jhnz87fapt2y7tsp6x
 title: PKG-27 — harbor.verifier vs ade-bench SQL-tests contract gap (Goal 2 layer-5)
-status: validation
+status: done
 source: PKG-23 validation 2026-05-21 (commit 7073050 on archived branch spacedock-ensign/pkg23-harbor-shaped-compose-for-ade-bench) — live `rk run` cleared compose-up and reached the agent turn, then failed in harbor.verifier vs ade-bench's SQL-tests contract. The spike-flagged unknown-unknown layer-5 gap is now known.
 started: 2026-05-21T15:42:32Z
-completed:
-verdict:
+completed: 2026-05-21T20:17:54Z
+verdict: PASSED
 score: 0.7
-worktree: .worktrees/spacedock-ensign-pkg27-harbor-verifier-ade-bench-sql-tests-gap
+worktree: 
 issue:
 pr:
 mod-block:
+archived: 2026-05-21T20:17:54Z
 ---
 
 ## Problem
