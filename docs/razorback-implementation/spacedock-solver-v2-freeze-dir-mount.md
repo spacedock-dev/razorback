@@ -1,7 +1,7 @@
 ---
 id: ykgrzjym3fkfcpnb103bwevv
 title: spacedock_solver_v2 freeze-dir host/container mount mismatch (rc=128 git init)
-status: implementation
+status: validation
 source: PKG-26 T4 live `rk run` of spacedock cell 2026-05-21 (commit 1cb3087 on .worktrees/spacedock-ensign-pkg26-use-harbor-claude-code-adapter) — 3× SpacedockSolverAgentError: `freeze repo init failed at: git -C /Users/clkao/git/razorback/.worktrees/.../runs/goal1-spacedock-bookreview/_razorback/freeze/81bd6794a0d6ecab0d2461ccaeca044f init -q (rc=128)`. Host-path executed via environment.exec INSIDE the container; the host path is not mounted.
 started: 2026-05-21T20:18:47Z
 completed:
