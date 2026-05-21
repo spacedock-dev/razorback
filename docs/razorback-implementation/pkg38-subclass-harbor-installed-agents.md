@@ -100,3 +100,17 @@ Validator logical worker id: `spacedock:ensign`; role asset read: `/home/exedev/
 ### Feedback Cycles
 
 - Cycle 1 (2026-05-21T16:17:00Z): Validation rejected PKG-38. Implementation must restore legacy `claude-cli` no-op compatibility for checked-in specs carrying `sampling.seed` or `sampling.top_p`, update stale assertions that still expect the old `ClaudeCliAgent` import path or exact `ClaudeCode` class name, and make `uv run --frozen pytest -q` green or document an accepted unrelated NOP baseline before re-validation.
+
+## Stage Report: implementation (cycle 2)
+
+- DONE: Legacy `claude-cli` no-op sampling metadata compatibility restored without reintroducing the parallel manual CLI runtime as the active path.
+  Commit `6f55ceb`; `uv run --frozen pytest tests/unit/test_claude_cli_*.py tests/unit/test_spacedock_registry.py::test_existing_kinds_still_resolve tests/unit/test_tools_denied_claude_hook.py::test_claude_runtime_installs_four_dab_denials_verbatim_in_order -q` -> `39 passed`.
+- DONE: Stale import/class tests updated to the Harbor-backed subclass expectations.
+  `tests/unit/test_spacedock_registry.py` now expects `RazorbackClaudeCode`; `tests/unit/test_tools_denied_claude_hook.py` asserts `RazorbackClaudeCode` is a Harbor `ClaudeCode`.
+- DONE: Full frozen suite is green, or any remaining unrelated baseline failure is evidenced clearly enough for validation.
+  `uv run --frozen pytest -q` -> `4 failed, 534 passed, 10 skipped`: three live Claude smoke tests fail with `AuthDiscoveryError` for missing credentials in this VM; nop fails on pre-existing empty `events.jsonl`.
+
+### Summary
+
+Worker logical id: `spacedock:ensign`; role asset read: `/home/exedev/.codex/plugins/cache/spacedock/spacedock/0.12.0/skills/ensign/SKILL.md`. AC commands passed: runtime/freeze-dir `23 passed`, Claude compatibility `39 passed`, sealed lifecycle `35 passed`, generator-focused `10 passed`.
+The nop baseline was investigated with `uv run --frozen python -m razorback.cli run examples/specs/nop.yaml --runs-dir .test-tmp/pkg38-nop-inspect`: the run completed with `n_trials_completed: 1`, top-level `events.jsonl` was `0` bytes, and PKG-38 has no diff to `src/razorback/cli/run.py`, `src/razorback/runs/aggregate.py`, or `examples/specs/nop.yaml`.
