@@ -1,6 +1,7 @@
 # ABOUTME: SpacedockSolverAgent v2 (spec §4 + §8.4), runtime adapter for claude|codex|pi.
 # ABOUTME: __init__ computes sealed_hash from six inputs; refuses on resume mismatch BEFORE harbor I/O.
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Any, Literal
@@ -180,20 +181,31 @@ class SpacedockSolverAgent(BaseAgent):
         # Fallback to b5 line 61's stated default (three .parent calls).
         return logs_dir.resolve().parent.parent.parent
 
+    async def _host_git(self, *args: str) -> None:
+        # freeze tree is host-side bookkeeping; git runs on host
+        freeze_dir = self.resolve_freeze_dir()
+        argv = ("git", "-C", str(freeze_dir), *args)
+        proc = await asyncio.create_subprocess_exec(
+            *argv,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await proc.communicate()
+        if proc.returncode != 0:
+            raise SpacedockSolverAgentError(
+                f"freeze repo git failed at: {' '.join(argv)} "
+                f"(rc={proc.returncode}); stderr={stderr.decode(errors='replace')!r}"
+            )
+
     async def _commit_stage(
         self, environment: BaseEnvironment, stage: str
     ) -> None:
         """Per-stage commit helper exposed for the workflow's freeze mod."""
-        freeze_dir = self.resolve_freeze_dir()
-        for cmd in (
-            f"git -C {freeze_dir} add -A",
-            f"git -C {freeze_dir} commit -q --allow-empty -m 'stage: {stage}'",
-        ):
-            r = await environment.exec(cmd)
-            if r.return_code != 0:
-                raise SpacedockSolverAgentError(
-                    f"freeze stage commit failed at: {cmd} (rc={r.return_code})"
-                )
+        # freeze tree is host-side bookkeeping; git runs on host
+        await self._host_git("add", "-A")
+        await self._host_git(
+            "commit", "-q", "--allow-empty", "-m", f"stage: {stage}"
+        )
 
     def _build_inner_agent(self) -> BaseAgent:
         """Dispatch to the per-runtime adapter sub-module (spec §8.4)."""
@@ -224,6 +236,7 @@ class SpacedockSolverAgent(BaseAgent):
         freeze_dir = self.resolve_freeze_dir()
         sealed_file = freeze_dir / "sealed_hash.txt"
 
+        # freeze tree is host-side bookkeeping; git runs on host
         if sealed_file.exists():
             prior = sealed_file.read_text().strip()
             if prior != self.sealed_hash:
@@ -231,28 +244,16 @@ class SpacedockSolverAgent(BaseAgent):
                     f"freeze dir {freeze_dir} sealed_hash ({prior}) does not match "
                     f"this agent's sealed_hash ({self.sealed_hash})."
                 )
-            r = await environment.exec(f"git -C {freeze_dir} checkout -- .")
-            if r.return_code != 0:
-                raise SpacedockSolverAgentError(
-                    f"resume restore via git checkout failed at {freeze_dir} "
-                    f"(rc={r.return_code})"
-                )
+            await self._host_git("checkout", "--", ".")
         else:
             freeze_dir.mkdir(parents=True, exist_ok=True)
             sealed_file.write_text(self.sealed_hash)
-            for cmd in (
-                f"git -C {freeze_dir} init -q",
-                f"git -C {freeze_dir} config user.email razorback@local",
-                f"git -C {freeze_dir} config user.name razorback",
-                f"git -C {freeze_dir} config commit.gpgsign false",
-                f"git -C {freeze_dir} add -A",
-                f"git -C {freeze_dir} commit -q --allow-empty -m seed",
-            ):
-                r = await environment.exec(cmd)
-                if r.return_code != 0:
-                    raise SpacedockSolverAgentError(
-                        f"freeze repo init failed at: {cmd} (rc={r.return_code})"
-                    )
+            await self._host_git("init", "-q")
+            await self._host_git("config", "user.email", "razorback@local")
+            await self._host_git("config", "user.name", "razorback")
+            await self._host_git("config", "commit.gpgsign", "false")
+            await self._host_git("add", "-A")
+            await self._host_git("commit", "-q", "--allow-empty", "-m", "seed")
 
         if self._inner is None:
             self._inner = self._build_inner_agent()
