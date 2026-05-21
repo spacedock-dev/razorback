@@ -76,3 +76,16 @@ tests/unit/test_spacedock_solver_v2_class.py -q` passes.
 ### Summary
 
 Implemented a narrow git bootstrap in `SpacedockSolverAgent.setup`: it probes `command -v git`, installs via `apk`, `apt-get`, or `yum` when available, verifies the binary, and raises a clear agent error on unsupported or failed install paths. Verification passed with `uv run pytest tests/unit/test_spacedock_solver_v2_lifecycle.py tests/integration/test_v2_freeze_dir_mechanism.py tests/unit/test_spacedock_solver_v2_class.py -q` (`20 passed`) plus the required `_codex-smoke-v2` freeze/run commands; the smoke now advances past missing git and exposes a later `git init rc=128` environment/filesystem failure.
+
+## Stage Report: implementation (cycle 2)
+
+- DONE: `SpacedockSolverAgent` ensures `git` is present before sealed freeze-repo commands, with tests proving install-before-git-init behavior.
+  Preserved git bootstrap and added container freeze-root mapping; `test_first_stage_installs_git_before_git_init_when_missing` and `test_first_stage_uses_container_freeze_mount_for_git_commands` cover ordering and mounted-path use.
+- DONE: Unsupported package-manager or install failure raises a clear `SpacedockSolverAgentError` naming the sealed freeze repo git requirement.
+  Unsupported and failed-install tests still assert `git is required for the sealed freeze repo`; git command failures now include `rc`, `stdout`, and `stderr`.
+- DONE: `_codex-smoke-v2` no longer fails with freeze-repo `git` rc=127; stage report records the exact next outcome and targeted tests.
+  `uv run rk run examples/specs/_codex-smoke-v2.frozen.yaml --runs-dir runs/pkg29-codex-git-smoke-cycle2 --allow-plugin-drift --allow-alias-drift` completed freeze repo init/config/add/commit and produced reward `1.0`; later failure is `NonZeroAgentExitCodeError: The 'gpt-5.1-codex' model is not supported when using Codex with a ChatGPT account.`
+
+### Summary
+
+Cycle 2 fixed the remaining freeze setup blockers by mounting `<job-dir>/_razorback/freeze` into Docker at `/razorback-freeze`, resolving Harbor's direct trial layout via `_job_config.yaml`, running freeze git commands with per-command `safe.directory`, and chmodding the mounted repo after setup so host artifacts remain writable. Verification passed with `uv run pytest tests/unit/test_spacedock_solver_v2_lifecycle.py tests/integration/test_v2_freeze_dir_mechanism.py tests/unit/test_spacedock_solver_v2_class.py -q` (`24 passed`) and the required `_codex-smoke-v2` freeze/run; the freeze repo at `runs/pkg29-codex-git-smoke-cycle2/_codex-smoke-v2/<job>/_razorback/freeze/<sealed_hash>` contains seed commit `8ec0495`.
