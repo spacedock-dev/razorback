@@ -61,20 +61,36 @@ async def test_first_stage_writes_sealed_hash_txt(tmp_path):
 
 @pytest.mark.asyncio
 async def test_resume_restores_workspace_from_freeze_git(tmp_path):
-    """b5 contract point 5: on resume, restore from <freeze_dir>/.git/."""
+    """b5 contract point 5: on resume, restore from <freeze_dir>/.git/ on host."""
+    import subprocess
     agent = SpacedockSolverAgent(**_kw(tmp_path))
     freeze = agent.resolve_freeze_dir()
     freeze.mkdir(parents=True)
     (freeze / "sealed_hash.txt").write_text(agent.sealed_hash)
-    (freeze / ".git").mkdir()
+    subprocess.run(["git", "-C", str(freeze), "init", "-q"], check=True)
+    subprocess.run(
+        ["git", "-C", str(freeze), "config", "user.email", "razorback@local"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(freeze), "config", "user.name", "razorback"], check=True,
+    )
+    subprocess.run(["git", "-C", str(freeze), "add", "-A"], check=True)
+    subprocess.run(
+        ["git", "-C", str(freeze), "commit", "-q", "-m", "seed"], check=True,
+    )
     fake_env = MagicMock()
     fake_env.exec = AsyncMock(return_value=MagicMock(return_code=0))
     agent._inner = MagicMock()
     agent._inner.setup = AsyncMock()
     await agent.setup(fake_env)
-    git_calls = [c.args[0] for c in fake_env.exec.call_args_list if "git" in c.args[0]]
-    assert any("checkout" in c for c in git_calls), (
-        f"setup did not call git checkout on resume; calls: {git_calls}"
+    # Resume path runs `git checkout -- .` on host (no environment.exec for git).
+    env_git_calls = [
+        c.args[0] for c in fake_env.exec.call_args_list
+        if c.args and "git" in str(c.args[0])
+    ]
+    assert env_git_calls == [], (
+        f"resume path executed git via environment.exec: {env_git_calls}"
     )
 
 
@@ -95,12 +111,19 @@ async def test_resume_with_mismatched_sealed_hash_in_freeze_dir_refuses(tmp_path
 
 @pytest.mark.asyncio
 async def test_first_stage_runs_git_init(tmp_path):
-    """b5 contract point 3: create freeze dir + git init on first stage."""
+    """b5 contract point 3: create freeze dir + git init on first stage (on host)."""
     agent = SpacedockSolverAgent(**_kw(tmp_path))
     fake_env = MagicMock()
     fake_env.exec = AsyncMock(return_value=MagicMock(return_code=0))
     agent._inner = MagicMock()
     agent._inner.setup = AsyncMock()
     await agent.setup(fake_env)
-    git_calls = [c.args[0] for c in fake_env.exec.call_args_list if "git" in c.args[0]]
-    assert any("init" in c for c in git_calls), f"git init missing; calls: {git_calls}"
+    # Host-side git: a real .git dir lands at the freeze path.
+    assert (agent.resolve_freeze_dir() / ".git").is_dir()
+    env_git_calls = [
+        c.args[0] for c in fake_env.exec.call_args_list
+        if c.args and "git" in str(c.args[0])
+    ]
+    assert env_git_calls == [], (
+        f"setup executed git via environment.exec: {env_git_calls}"
+    )

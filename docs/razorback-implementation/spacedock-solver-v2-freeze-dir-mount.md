@@ -285,4 +285,49 @@ boundaries and breaking runtime-agnostic spacedock_solver_v2
 portability. Single-file surface, four ordered tasks, mechanism
 validated by T0 before T3 burns paid-API tokens.
 
+## Stage Report: implementation
+
+- DONE: T0 RED unit reproducing rc=128 freeze-init failure.
+  tests/unit/test_spacedock_solver_v2_freeze_on_host.py — 4 tests; pre-fix asserted environment.exec received 6 git commands. Commit c6632ae.
+- DONE: T1 fix per plan's option (b) — host subprocess git.
+  spacedock_solver_v2.py: added `_host_git` helper using asyncio.create_subprocess_exec; setup() + _commit_stage() swapped from environment.exec to host. 9/9 v2 freeze unit tests green (4 new + 5 lifecycle updated to new contract).
+- DONE: T2 full unit + DAB plugin suites stay green (AC-2/AC-3).
+  tests/unit/ 514 passed in 20s. packages/razorback-plugin-dab/ excl. preexisting mongo-init flake = 132 passed/3 skipped. The mongo-init shim test and test_rk_run_bookreview_spacedock_halt_resume.py both fail identically on main (Docker container / v1 spec-validation issues unrelated to this entity).
+- DONE: T3 live `rk run` against goal1/spacedock/bookreview frozen spec (AC-4).
+  _runs/goal1-spacedock-bookreview/a901b991c80c8b89/result.json: n_completed_trials=1, n_errored_trials=0, reward=1.0, exception_stats={}. summary.json: dataset_pass_at_1=1.0; per-query verdict map 3/3=1.0 in reward_per_query.json. Freeze dir `_razorback/freeze/81bd6794a0d6ecab0d2461ccaeca044f/` contains real .git/ + sealed_hash.txt on host. NO SpacedockSolverAgentError(freeze repo init failed). 3m 2s runtime, claude-code.txt agent JSONL stream captured (51 lines). cost_usd=null is a pre-existing upstream harbor cost-attribution gap, out of this entity's scope (matches PKG-26 baseline).
+
+### Summary
+
+Option (b) shipped: freeze-repo git now runs on the host via
+asyncio.create_subprocess_exec, not via environment.exec. The rc=128
+host/container mount mismatch PKG-26 T4 surfaced is gone — the same
+goal1/spacedock/bookreview spec that bombed in PKG-26 now passes
+end-to-end with reward 1.0 per query (3/3). Single-file surface
+change to spacedock_solver_v2.py plus matching test updates. The
+container-side inner-agent runtime is unchanged; only razorback's
+freeze bookkeeping moved to host where the path is real.
+
+## Stage Report: validation
+
+- DONE: Re-run unit tests + halt/resume integration test (AC-2/AC-3).
+  `tests/unit/` 514 passed. `packages/razorback-plugin-dab/` 133 passed / 2 skipped / 1 failed (pre-existing mongo-init shim flake; this branch does not touch DAB code per `git diff main..HEAD --stat`). Halt/resume integration test fails on `SpecError: spacedock-solver spec must be frozen` — pre-existing v1 spec-freeze drift on main, also unrelated to this entity.
+- DONE: Confirm T3 live `rk run` evidence (AC-4).
+  `_runs/goal1-spacedock-bookreview/a901b991c80c8b89/`: reward 1.0/1.0/1.0 on q1/q2/q3 in reward_per_query.json; claude-code.txt 105 KB JSONL; host `_razorback/freeze/<hash>/sealed_hash.txt` present; no freeze-init exception in job.log. `cost_usd=null` is a known upstream harbor gap (out of scope).
+- DONE: Code review via superpowers:requesting-code-review — material vs polish.
+  Manual diff review of `c6632ae` (+30/-29 in `spacedock_solver_v2.py`). New `_host_git` helper uses argv tuple (eliminates shell-quoting risk). Tests assert both git-on-host AND no env.exec for git, across first-stage / commit-stage / resume. No material findings; two minor non-blocking polish notes documented in validation report.
+- DONE: Write validation report.
+  `docs/razorback-implementation/validation/spacedock-solver-v2-freeze-dir-mount.md` — verdict PASSED.
+
+### Summary
+
+Verdict PASSED. PKG-26 T4's rc=128 freeze-init blocker is closed
+end-to-end on the same goal1/spacedock/bookreview spec; per-query
+verdict map 3/3=1.0 with claude-code.txt JSONL captured and host
+freeze tree on disk. Single-file fix with `_host_git` argv-tuple
+helper, matched by 4 new + 5 updated unit tests. The two non-passing
+suites (mongo-init shim Docker test and halt/resume v1 spec-freeze)
+are pre-existing on main and outside this entity's surface
+(confirmed via `git diff main..HEAD --stat`). Goal 1 RESUME T2
+dispatch unblocks fully.
+
 
