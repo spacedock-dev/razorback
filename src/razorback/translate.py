@@ -432,6 +432,7 @@ def _environment_config(agent_cfg: AgentConfig, run_dir: Path) -> EnvironmentCon
     host_freeze_root.mkdir(parents=True, exist_ok=True)
     return EnvironmentConfig(
         delete=False,
+        env=dict(PROXY_BLOCK_ENV),
         mounts_json=[
             {
                 "type": "bind",

@@ -26,6 +26,14 @@ _REQUIRED_PHASE_STATS_KEYS = (
 
 _FREEZE_REPO_GIT_REQUIREMENT = "git is required for the sealed freeze repo"
 _CONTAINER_FREEZE_ROOT = PurePosixPath("/razorback-freeze")
+_PROXY_ENV_KEYS = (
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "NO_PROXY",
+    "no_proxy",
+)
 
 
 class SpacedockSolverAgentError(RazorbackError):
@@ -258,7 +266,9 @@ class SpacedockSolverAgent(BaseAgent):
             probe = await environment.exec(probe_cmd)
             if probe.return_code != 0:
                 continue
-            install = await environment.exec(install_cmd)
+            install = await environment.exec(
+                install_cmd, env={key: "" for key in _PROXY_ENV_KEYS}
+            )
             if install.return_code != 0:
                 raise SpacedockSolverAgentError(
                     f"{_FREEZE_REPO_GIT_REQUIREMENT}; installing via {name} "

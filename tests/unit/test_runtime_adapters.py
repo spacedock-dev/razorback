@@ -16,12 +16,13 @@ def test_codex_constructs_inner_agent_with_supported_kwargs(tmp_path):
         harbor_agent_kwargs={"reasoning_effort": "high", "reasoning_summary": "auto"},
         extra_env={"OPENAI_API_KEY": "sk-fake"},
     )
-    assert inner.__class__.__name__ == "Codex"
+    assert inner.__class__.__name__ == "RazorbackCodex"
     assert inner.model_name == "gpt-5.1-codex"
     assert getattr(inner, "_extra_env", {}) == {"OPENAI_API_KEY": "sk-fake"}
     flag_kwargs = getattr(inner, "_flag_kwargs", {})
     assert flag_kwargs["reasoning_effort"] == "high"
     assert flag_kwargs["reasoning_summary"] == "auto"
+    assert '-c \'web_search="disabled"\'' in inner.build_cli_flags()
 
 
 @pytest.mark.parametrize(

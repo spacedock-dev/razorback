@@ -8,6 +8,7 @@ import pytest
 import yaml
 
 from razorback.agents.auth import AuthDiscoveryError
+from razorback.agents.proxy import PROXY_BLOCK_ENV
 from razorback.agents.spacedock_solver_v2 import SpacedockSolverAgent
 from razorback.spec.schema import Spec
 from razorback.translate import spec_to_job_config
@@ -61,7 +62,7 @@ def test_codex_runtime_dispatch_constructs_inner_agent(tmp_path):
 
     inner = agent._build_inner_agent()
 
-    assert inner.__class__.__name__ == "Codex"
+    assert inner.__class__.__name__ == "RazorbackCodex"
     assert inner.model_name == "gpt-5.1-codex"
     assert getattr(inner, "_flag_kwargs", {})["reasoning_effort"] == "high"
 
@@ -215,6 +216,8 @@ trials: 1
             "target": "/razorback-freeze",
         }
     ]
+    assert cfg.environment.env["HTTP_PROXY"] == PROXY_BLOCK_ENV["HTTP_PROXY"]
+    assert cfg.environment.env["HF_DATASETS_OFFLINE"] == "1"
     assert host_freeze_root.is_dir()
 
 

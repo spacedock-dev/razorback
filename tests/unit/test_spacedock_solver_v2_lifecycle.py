@@ -158,7 +158,7 @@ async def test_freeze_repo_init_error_includes_stdout_and_stderr(tmp_path):
     agent = SpacedockSolverAgent(**_kw(tmp_path))
     fake_env = MagicMock()
 
-    async def fake_exec(cmd):
+    async def fake_exec(cmd, **_kwargs):
         if " -C " in cmd and " init " in cmd:
             result = _exec_result(128)
             result.stdout = "out text"
@@ -186,7 +186,7 @@ async def test_first_stage_installs_git_before_git_init_when_missing(tmp_path):
     agent = SpacedockSolverAgent(**_kw(tmp_path))
     fake_env = MagicMock()
 
-    async def fake_exec(cmd):
+    async def fake_exec(cmd, **_kwargs):
         if cmd == "command -v git >/dev/null 2>&1":
             prior_calls = [c.args[0] for c in fake_env.exec.call_args_list[:-1]]
             installed = any("apt-get install" in c for c in prior_calls)
@@ -206,6 +206,9 @@ async def test_first_stage_installs_git_before_git_init_when_missing(tmp_path):
         "DEBIAN_FRONTEND=noninteractive apt-get update -qq && "
         "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git"
     )
+    install_call = fake_env.exec.call_args_list[install_index]
+    assert install_call.kwargs["env"]["HTTP_PROXY"] == ""
+    assert install_call.kwargs["env"]["https_proxy"] == ""
     init_index = next(
         i for i, cmd in enumerate(calls) if " -C " in cmd and "init" in cmd
     )
@@ -218,7 +221,7 @@ async def test_setup_reports_clear_error_when_git_has_no_package_manager(tmp_pat
     agent = SpacedockSolverAgent(**_kw(tmp_path))
     fake_env = MagicMock()
 
-    async def fake_exec(cmd):
+    async def fake_exec(cmd, **_kwargs):
         if cmd.startswith("command -v "):
             return _exec_result(1)
         return _exec_result(0)
@@ -240,7 +243,7 @@ async def test_setup_reports_clear_error_when_git_install_fails(tmp_path):
     agent = SpacedockSolverAgent(**_kw(tmp_path))
     fake_env = MagicMock()
 
-    async def fake_exec(cmd):
+    async def fake_exec(cmd, **_kwargs):
         if cmd == "command -v git >/dev/null 2>&1":
             return _exec_result(1)
         if cmd == "command -v apk >/dev/null 2>&1":
