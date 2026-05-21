@@ -159,6 +159,50 @@ follow-up), Goal 2's implementation resumes against its existing
 worktree. The T0 probe + 48-cell matrix dispatch then become
 runnable.
 
+## AC-1 correction (plan §Mechanism-precise architectural finding)
+
+`T_BENCH_REPO_ROOT` resolves to `ade_bench_root` (the `~/git/ade-bench`
+checkout), NOT the materialized view-dir. The view-dir lacks the
+`docker/` subtree that ade-bench's compose template references via
+`dockerfile: docker/base/Dockerfile.duckdb-dbt`. Upstream ade-bench's
+own `DockerComposeManager` sets `repo_root=str(REPO_ROOT)` to the same
+value (`ade_bench/terminal/docker_compose_manager.py:86`). The
+entity's original AC-1 wording ("the materialized view-dir") is
+preserved above for provenance; the implementation honors the
+correction.
+
+## Build paths (AC-4 documentation)
+
+PKG-23 wires
+`T_BENCH_TASK_DOCKER_CLIENT_IMAGE_NAME=ade-bench-client-{task_slug}:latest`
+but does NOT build the image. The build path lives in ade-bench
+upstream:
+
+- **Build context:** `~/git/ade-bench/` (i.e., `T_BENCH_REPO_ROOT`).
+- **Dockerfile (duckdb-dbt variant):** `docker/base/Dockerfile.duckdb-dbt`.
+- **Sibling variants:** `docker/base/Dockerfile.snowflake-dbt`,
+  `docker/base/Dockerfile.snowflake-dbtf`.
+- **Build command (manual, pre-`rk run`):**
+
+  ```bash
+  cd ~/git/ade-bench
+  docker build -f docker/base/Dockerfile.duckdb-dbt \
+    -t ade-bench-client-airbnb001:latest .
+  ```
+
+  Note: the upstream Dockerfile is variant-keyed (one per
+  db_type/project_type), NOT task-keyed. A single built image with the
+  variant-prefixed tag covers every task in that variant; razorback's
+  per-task `ade-bench-client-{task_slug}:latest` is a per-task ALIAS
+  pointing at the variant image (or the user can build per-task with
+  `--build-arg`s — out of PKG-23 scope to choose).
+
+- **Follow-up entity:** PKG-XX `ade-bench-client image build path` —
+  wire a `razorback ade-bench setup` command analogous to
+  dataagentbench's `benchmark/setup.sh` that pre-builds all four
+  variant images and tags them with the razorback-side naming
+  convention.
+
 ## Stage Report: plan
 
 - DONE: Plan resolves the translator hook location: most likely src/razorback/translate.py (where AdeBenchLocalTaskEntry gets translated to harbor spec). Plan names the exact insertion point and the env-dict propagation path into harbor's docker compose invocation.
@@ -171,3 +215,45 @@ runnable.
 ### Summary
 
 Plan corrects two phrasings in the entity (load-bearing for implementation): (1) the "translator hook" lands task.toml-side (via `[environment.env]`), not as a translator-subprocess `env=` arg — harbor's `DockerEnvironment._run_docker_compose_command` reads `task_env_config.env` from task.toml; (2) `T_BENCH_REPO_ROOT` must resolve to `ade_bench_root` (the `~/git/ade-bench` checkout), NOT the materialized view-dir, because the upstream compose's `dockerfile: docker/base/Dockerfile.duckdb-dbt` resolves relative to it and the view-dir lacks the `docker/` subtree. Both corrections are flagged in the plan and Task 9 documents the AC-1 correction back into the entity body. The live `rk run` (AC-3) is explicitly deferred to the validation stage per captain standing orders (`.env` / `ANTHROPIC_API_KEY` paid API tier).
+
+## Stage Report: implementation
+
+- DONE: AC-1 — Translator populates six T_BENCH_* env vars for ade-bench tasks.
+  `_compute_t_bench_env` + extended `_build_task_toml_from_yaml` emit `[environment.env]` carrying the six keys (commit on `feat(pkg23): GREEN`); unit suite `tests/unit/test_ade_bench_t_bench_env.py` 5/5 PASS; integration `tests/integration/test_ade_bench_compose_config_resolves.py` PASS — `docker compose config` against airbnb001's materialized compose resolves with zero `${T_BENCH_*}` placeholders.
+- DONE: AC-2 — Env-var population is gated on AdeBenchLocalTaskEntry.
+  Translator-level + structural gating asserted in `tests/unit/test_ade_bench_translator_t_bench_env.py` (2/2 PASS); harbor-DAB code path never imports `materialize_local_task` / `_compute_t_bench_env` / mentions `T_BENCH_*`. Structural gating confirmed by source-inspection assertion.
+- SKIPPED: AC-3 — Goal 2's T0 cycle 4 failure mode is gone (live `rk run` against airbnb001 reaches Phase 3).
+  Live `rk run` is validation-stage scope per plan Task 8 and captain standing orders (paid API tier). Implementation stage shipped the prerequisite: the airbnb001 probe spec now pins `db_type: duckdb`/`project_type: dbt` so PKG-20's `_select_compose_variant` lands on `docker-compose-duckdb-dbt.yaml`. Probe spec freezes offline (`uv run rk freeze --allow-missing` clean).
+- DONE: AC-4 — ade-bench-client-{task_slug} image build path documented (but not implemented).
+  §Build paths section appended to entity body documenting Dockerfile location (`~/git/ade-bench/docker/base/Dockerfile.duckdb-dbt`), build context (`T_BENCH_REPO_ROOT`), manual build command, and follow-up entity placeholder for the eventual `razorback ade-bench setup` command.
+
+### Plan deviations
+
+- **Entity AC-1 vs implementation:** entity wording said `T_BENCH_REPO_ROOT` resolves to the "materialized view-dir"; implementation honors the plan's correction (`ade_bench_root` absolute path) because the upstream compose's `dockerfile: docker/base/Dockerfile.duckdb-dbt` resolves relative to it and the view-dir lacks `docker/`. Documented in the new §AC-1 correction section of the entity body.
+- **T_BENCH_TASK_DOCKER_CLIENT_CONTAINER_NAME:** chose deterministic `{task_slug}-client` (no trial-id suffix) — harbor's `--project-name` per-trial prefix already isolates concurrent trials at the compose-project layer, and container_name within a project is unique by definition. Plan Task 5's counter-option (interpolate harbor session-id) deferred unless validation surfaces an actual collision.
+- **T10 full pytest sweep:** unit suite (472 tests) PASS in 4s; PKG-23-adjacent integration (`test_ade_bench_compose_config_resolves`, `test_ade_bench_local_task_readonly_contract_live`, `test_freeze_idempotency_pkg8`) all PASS. `tests/integration/test_budget_gate_two_invocations.py` times out at 60s — confirmed PRE-EXISTING (reproduces after `git stash` of any worktree-local changes); the two timing-failing tests shell out via subprocess and appear environment/auth-shaped, NOT PKG-23-shaped. PKG-23's surfaces (translator + ade_bench tasks module) have no overlap with the budget-gate test.
+
+### Summary
+
+PKG-23 closes AC-1, AC-2, and AC-4 in the implementation stage. The six `T_BENCH_*` env vars now flow from the razorback translator into harbor's `docker compose up` via the synthesized `task.toml`'s `[environment.env]` table — the load-bearing wire confirmed against `harbor.environments.docker.docker.DockerEnvironment._run_docker_compose_command`. `docker compose config` resolves the airbnb001 compose with zero unresolved placeholders. AC-3 (live `rk run`) is deferred to validation stage per plan Task 8; the probe spec is now variant-pinned and freezes cleanly. Stage-report deviations documented above: one entity AC-1 wording correction, one deterministic-container_name choice with rationale, one pre-existing test-suite timeout flagged as out-of-scope.
+
+## Stage Report: validation
+
+- DONE: Re-run unit tests on ade_bench surface; confirm PKG-23 tests GREEN + no regression in PKG-19/PKG-20.
+  `uv run pytest tests/unit/` — 472/472 PASS in 4.12s. PKG-23 surfaces (`test_ade_bench_t_bench_env.py` 5/5, `test_ade_bench_translator_t_bench_env.py` 2/2) all PASS; PKG-19 (`test_ade_bench_materialize_local_task.py` 18/18) + PKG-20 (`test_ade_bench_translator_local_root.py` 2/2) unchanged.
+- DONE: AC-1 integration — `docker compose config` resolves T_BENCH_* placeholders.
+  `tests/integration/test_ade_bench_compose_config_resolves.py` PASS — `docker compose config` against the materialized airbnb001 compose produces a fully-resolved compose with no `${T_BENCH_*}` placeholders.
+- DONE: AC-3 live `rk run` against airbnb001 frozen spec — Goal 2 T0 cycle 4 failure mode is gone.
+  Live `rk run examples/specs/probe-ade-bench-airbnb001-claude-harbor-local.yaml` with `HOME=$PWD/.cache_home` + `DOCKER_HOST=unix:///Users/clkao/.colima/default/docker.sock` + worktree-local `.env`-auth + `~/git/ade-bench` symlinked into `cache_home/git/`. Trial `airbnb001__RUEoJHU` cleanly past `docker compose up --detach --wait` (10+ compose-subcommand invocations succeeded via the harbor-home `.docker/cli-plugins` symlink that razorback's `_stage_harbor_home` provides). The PKG-20/cycle-4 `unknown flag: --project-name` / `please specify build context` failure mode is GONE. The trial NOW fails on a NEW layer — `harbor.verifier.verifier._resolve_tests`: `FileNotFoundError: No test script found in: .../tests (target OS: linux)` — ade-bench's `tests/` is SQL-test scaffolding (`AUTO_*.sql`), not harbor's expected `test.sh`. This matches the entity's AC-3 success criterion verbatim ("OR fails with a NEW, documented failure mode (not the T_BENCH_REPO_ROOT one)") and the §Out of scope "layer-5 contract gap (UNKNOWN-UNKNOWN per spike)" carve-out. Trial log: `_runs/probe-ade-bench-airbnb001-claude-harbor-local/6732c85b26b21a2e/airbnb001__RUEoJHU/{trial.log,exception.txt}`.
+- DONE: Code review via superpowers:requesting-code-review.
+  Reviewed the 6-commit diff (4b1ed8d..6f30193). Verdict CLEAN. Findings: (1) `_compute_t_bench_env` mirrors upstream `DockerComposeManager` env construction; docstring documents each var. (2) `_build_task_toml_from_yaml` extends with backward-compat default `t_bench_env=None`; TOML escaping handles `\` + `"` (sufficient for absolute paths on darwin/linux). (3) AC-2 gating is structural: `_compute_t_bench_env` reachable only via `materialize_local_task` ← `_build_ade_bench` (ade-bench-only translator dispatch). (4) Tests cover all six keys, the load-bearing `T_BENCH_REPO_ROOT == ade_bench_root` correction, container-side `/logs` value, per-slug image-name determinism, and the harbor-DAB structural-gate. (5) Integration test gracefully skips when ade-bench checkout is absent (clean CI behavior). No defects, no security concerns, no missing test coverage.
+
+### Validation deviations
+
+- **`HOME=$PWD/.cache_home` requires two-level docker shim.** The captain's dispatch said "HOME=$PWD/.cache_home + DOCKER_HOST". Bare HOME shim breaks two contracts simultaneously: (a) `~/git/ade-bench` expansion (the probe spec uses `ade_bench_root: ~/git/ade-bench`); (b) `~/.docker/cli-plugins/docker-compose` plugin discovery (with HOME pointing at the worktree, docker can't find the compose plugin and rejects `--project-name`). Validation added two symlinks under `.cache_home/`: `git/ade-bench → /Users/clkao/git/ade-bench` and `.docker/cli-plugins → /Users/clkao/.docker/cli-plugins` (+ `.docker/modules`). Razorback's own `_stage_harbor_home` (src/razorback/cli/run.py:69-85) does the equivalent for harbor's deeper `_runs/.harbor-home` HOME redirect, so the per-trial harbor subprocess gets docker plugins via `.harbor-home/.docker → real ~/.docker` (which now resolves through `.cache_home/.docker → ~/.docker`).
+- **AC-4 client image absent — not a validation blocker.** `ade-bench-client-airbnb001:latest` was NOT pre-built. Live `rk run` still succeeded at `docker compose up` because ade-bench's compose has `build:` context next to `image:` — docker compose builds the image on the fly from `${T_BENCH_REPO_ROOT}/docker/base/Dockerfile.duckdb-dbt`. AC-4 stays documentation-only per entity §Out of scope; the follow-up `razorback ade-bench setup` entity remains the right home for the pre-build wiring.
+- **Verifier-layer gap files a follow-up.** AC-3's "new failure mode" is real and goal-2-relevant: harbor's verifier expects a shell test script in `tests/`, but ade-bench tasks ship SQL test files for their dbt/duckdb runner. This is the §Out of scope "layer-5 contract gap (UNKNOWN-UNKNOWN per spike)" surfacing post-compose-up. Validation does NOT re-open PKG-23 for this; per entity §Out of scope it is a new pkg2X-* entity's scope (ade-bench verifier shim → harbor verifier surface). The captain/FO can file it from session debrief if Goal 2's matrix needs it.
+
+### Summary
+
+PKG-23 verdict: **PASSED** (conditional on the verifier-layer follow-up entity being filed). All four ACs are closed: AC-1 (translator populates six T_BENCH_* env vars) + AC-2 (gated on `AdeBenchLocalTaskEntry`) via 472 unit + 1 integration test all green; AC-3 (Goal 2 T0 cycle 4 failure mode gone) via live `rk run` reaching the verifier layer with the PKG-20 build-context failure absent; AC-4 (client-image build path) via §Build paths documentation. The live trial surfaces a NEW layer-5 failure (harbor verifier vs. ade-bench SQL tests) which is the entity's documented out-of-scope unknown-unknown — a follow-up entity is the right home, not a PKG-23 re-open.
