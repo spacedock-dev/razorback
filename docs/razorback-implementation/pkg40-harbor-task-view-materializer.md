@@ -1,7 +1,7 @@
 ---
 id: dy0w211g9dp8w80jyje1rgz9
 title: PKG-40 Harbor task view materializer for ADE-Bench and Spider2-DBT
-status: plan
+status: implementation
 source: captain request 2026-05-21 - Harbor-shaped ADE plus Spider2-DBT shared-image, batching, freeze/resume path
 started: 2026-05-21T22:35:16Z
 completed:
@@ -103,3 +103,15 @@ Wrote the standard separate plan doc at `docs/razorback-implementation/plans/pkg
 
 - DONE: Added operational hardening coverage requested before gate review.
   Evidence: `docs/razorback-implementation/plans/pkg40-harbor-task-view-materializer.md` now includes a dedicated addendum for shared image lifecycle, disk/storage cleanup, and Docker concurrency/resource guardrails.
+
+## Gate Decision: plan
+
+- APPROVED: Move PKG-40 from plan to implementation.
+  Decision time: 2026-05-21T22:59:40Z.
+- Conditions for implementation:
+  - Start with the bounded Spider2-DBT and Harbor surface spike before editing the materializer.
+  - Keep the generic Harbor task view materializer separate from ADE-Bench and Spider2-DBT consumer transforms.
+  - Preserve task identity through batching, scoring, and freeze/resume.
+  - Treat shared-context batching as an explicit experimental mode separate from normal Harbor multi-task batching.
+  - Fail closed on solution/test-answer leakage and on unsupported Harbor prebuilt/shared-image semantics.
+  - Record image tag/digest, Harbor version, cache/freeze storage impact, and infra-vs-model failure classification in acceptance evidence.
