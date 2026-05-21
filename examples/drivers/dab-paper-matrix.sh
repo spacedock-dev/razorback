@@ -11,7 +11,7 @@ Usage: dab-paper-matrix.sh [--output-dir <path>] [--dry-run] [--continue-on-fail
 
   --output-dir          Base runs-dir for the 36 cells (default: runs/goal1)
   --spec-root           Root of variant/dataset specs (default: examples/specs/goal1)
-  --variants            Comma-separated subset (default: direct-minimal,direct-structured,spacedock)
+  --variants            Comma-separated subset (default: spacedock,direct-structured,direct-minimal)
   --datasets            Comma-separated subset (default: all 12 DAB datasets)
   --dry-run             Print the 36-cell plan, do not dispatch.
   --continue-on-fail    Do not exit on first cell failure; record and continue.
@@ -26,7 +26,7 @@ OUTPUT_DIR="${REPO_ROOT}/runs/goal1"
 DRY_RUN=0
 CONTINUE_ON_FAIL=0
 MAX_CELL_BUDGET_USD="20.0"
-DEFAULT_VARIANTS="direct-minimal,direct-structured,spacedock"
+DEFAULT_VARIANTS="spacedock,direct-structured,direct-minimal"
 DEFAULT_DATASETS="agnews,bookreview,crmarenapro,DEPS_DEV_V1,GITHUB_REPOS,googlelocal,music_brainz_20k,PANCANCER_ATLAS,PATENTS,stockindex,stockmarket,yelp"
 VARIANTS="${DEFAULT_VARIANTS}"
 DATASETS="${DEFAULT_DATASETS}"

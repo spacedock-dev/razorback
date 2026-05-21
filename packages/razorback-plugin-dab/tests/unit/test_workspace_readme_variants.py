@@ -10,7 +10,7 @@ from razorback_plugin_dab.generate.workspace_readme import (
 
 
 def test_three_variants_exist():
-    assert WORKSPACE_VARIANTS == ("direct-minimal", "direct-structured", "spacedock")
+    assert WORKSPACE_VARIANTS == ("spacedock", "direct-structured", "direct-minimal")
 
 
 def test_direct_minimal_is_terse():
