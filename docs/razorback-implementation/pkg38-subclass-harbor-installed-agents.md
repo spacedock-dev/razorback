@@ -69,3 +69,17 @@ alter benchmark datasets.
 ### Summary
 
 Wrote the standard plan document at `docs/razorback-implementation/plans/pkg38-subclass-harbor-installed-agents.md` using the `spacedock:ensign` logical worker role and cached `superpowers:writing-plans` guidance. Role asset read: `/home/exedev/.codex/plugins/cache/spacedock/spacedock/0.12.0/skills/ensign/SKILL.md`; no production code was implemented in this plan stage.
+
+## Stage Report: implementation
+
+- DONE: Implement subclass-first runtime adapters: Codex delegates to Harbor `Codex` where practical, Claude uses a Harbor `ClaudeCode` subclass, and retained overrides document upstream method plus benchmark reason.
+  Commits `3e40d90` and tests: `uv run --frozen pytest tests/unit/test_runtime_adapters.py tests/integration/test_v2_freeze_dir_mechanism.py -q` -> `23 passed`.
+- DONE: Convert live legacy `agent.kind: claude-cli` translation/registry behavior into a Harbor-backed compatibility path while keeping old specs parseable and new benchmark specs on `spacedock_solver_v2`.
+  Commits `fc7b7fb`, `ad7c618`; `uv run --frozen pytest tests/unit/test_claude_cli_*.py tests/unit/test_translate_spacedock_solver_import_path.py -q` -> `38 passed`.
+- DONE: Focused tests pass for runtime adapters, claude-cli compatibility, generated specs, and sealed/freeze/checkpoint regressions named in the PKG-38 acceptance criteria.
+  Commits `418d012`; AC-3 command -> `35 passed`; combined touched-test sweep -> `97 passed`.
+
+### Summary
+
+Worker logical id: `spacedock:ensign`; role asset read: `/home/exedev/.codex/plugins/cache/spacedock/spacedock/0.12.0/skills/ensign/SKILL.md`. Changed `src/razorback/agents/_runtime/codex.py`, `src/razorback/agents/_runtime/claude.py`, `src/razorback/translate.py`, `src/razorback/agents/registry.py`, the Goal 1 Claude generator, and focused regression tests; added `examples/solver_workflows/claude-benchmark-solver/README.md`.
+Harbor surfaces touched are `harbor.agents.installed.codex.Codex` and `harbor.agents.installed.claude_code.ClaudeCode`; no spec deviations were implemented.
