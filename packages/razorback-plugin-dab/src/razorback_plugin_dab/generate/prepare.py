@@ -159,12 +159,14 @@ def _materialize_task_dir(
     mongo_probes = _mongo_probe_targets(
         db_config, dataset_dir=dataset_dir, dataset_name=dataset_meta.name,
     )
+    mongo_healthcheck_retries = _mongo_healthcheck_retries(db_config)
     task_toml_text = _task_toml(
         task_name=task_name,
         docker_image=docker_image,
         container_workdir=container_workdir,
         postgres_db=postgres_db,
         mongo_probes=mongo_probes,
+        mongo_healthcheck_retries=mongo_healthcheck_retries,
     )
     _check_task_toml_environment_keys(task_toml_text, task_name=task_name)
     (task_dir / "task.toml").write_text(task_toml_text)
@@ -291,6 +293,9 @@ def _materialize_task_dir(
         _check_compose_volumes(compose_path)
 
 
+_MONGO_HEALTHCHECK_DEFAULT_RETRIES = 60
+
+
 def _task_toml(
     *,
     task_name: str,
@@ -298,6 +303,7 @@ def _task_toml(
     container_workdir: str,
     postgres_db: str | None = None,
     mongo_probes: list[tuple[str, str]] | None = None,
+    mongo_healthcheck_retries: int | None = None,
 ) -> str:
     # PKG-13 T1: harbor's EnvironmentConfig has no docker_compose field;
     # any [environment].docker_compose value is silently dropped by pydantic.
@@ -341,9 +347,9 @@ def _task_toml(
         # missed Bug 1 from the dab-mongo-probe (mongo ignored .bson and
         # started healthy with an empty DB). countDocuments() > 0 fails fast
         # if mongorestore did not run or produced no documents.
-        # start_period_sec=60 + retries=12 gives 2m post-init budget on top
-        # of mongo's container start; mongorestore of agnews/yelp (~120-150k
-        # docs) empirically completes in ~30s but the headroom is cheap.
+        # retries default = 60 × interval 5s = 5min budget covers
+        # mongorestore wall time for agnews/yelp (~120-150k docs). Per-dataset
+        # override via db_config[<client>].healthcheck_retries handles outliers.
         db_name, collection = mongo_probes[0]
         eval_js = (
             f"db.getSiblingDB('{db_name}').getCollection('{collection}').countDocuments() > 0"
@@ -351,13 +357,18 @@ def _task_toml(
         probe = (
             f"mongosh --quiet --host dab-mongo --eval \\\"{eval_js}\\\" | grep -q true"
         )
+        retries = (
+            mongo_healthcheck_retries
+            if mongo_healthcheck_retries is not None
+            else _MONGO_HEALTHCHECK_DEFAULT_RETRIES
+        )
         body += (
             "\n[steps.healthcheck]\n"
             f'command = "{probe}"\n'
             "interval_sec = 5\n"
             "timeout_sec = 10\n"
             "start_period_sec = 60\n"
-            "retries = 12\n"
+            f"retries = {retries}\n"
         )
     return body
 
@@ -484,6 +495,25 @@ def _mongo_probe_targets(
             )
         pairs.append((db_name, collection))
     return pairs
+
+
+def _mongo_healthcheck_retries(db_config: dict | None) -> int | None:
+    """Return the first mongo client's healthcheck_retries override, or None.
+
+    The override widens or narrows the mongo content-presence healthcheck's
+    retries budget on a per-dataset basis. Datasets whose mongorestore wall
+    time exceeds the default 5-minute budget set the override higher; tiny
+    datasets that restore in seconds can set it lower. Returning None leaves
+    `_task_toml` on its built-in default.
+    """
+    clients = (db_config or {}).get("db_clients") or {}
+    for cfg in clients.values():
+        if not isinstance(cfg, dict) or cfg.get("db_type") != "mongo":
+            continue
+        override = cfg.get("healthcheck_retries")
+        if isinstance(override, int) and not isinstance(override, bool):
+            return override
+    return None
 
 
 def _derive_mongo_collection(
