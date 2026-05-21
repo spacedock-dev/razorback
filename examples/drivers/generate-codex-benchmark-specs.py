@@ -130,6 +130,14 @@ def _freeze(spec_path: Path) -> None:
     )
 
 
+def _display_path(path: Path) -> str:
+    resolved = path.resolve()
+    try:
+        return str(resolved.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(resolved)
+
+
 def _print_dab_dry_run(rows: list[DabSpecRow]) -> None:
     print(f"DAB Codex dry-run: N=1, datasets={len(rows)}, data_root={rows[0].data_root if rows else ''}")
     for row in rows:
@@ -187,7 +195,7 @@ def main() -> int:
                 )
 
     for spec_path in emitted:
-        print(f"wrote {spec_path.relative_to(REPO_ROOT)}")
+        print(f"wrote {_display_path(spec_path)}")
         if args.freeze:
             _freeze(spec_path)
     return 0

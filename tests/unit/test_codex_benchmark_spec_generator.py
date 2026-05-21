@@ -90,6 +90,23 @@ def test_emit_dab_codex_spec_allows_model_override(tmp_path: Path) -> None:
     assert payload["agent"]["model"] == "gpt-future-codex"
 
 
+def test_display_path_handles_relative_and_external_out_roots(tmp_path: Path) -> None:
+    generator = _load_generator()
+
+    assert (
+        generator._display_path(Path("runs/goal3/specs/dab/bookreview.yaml"))
+        == "runs/goal3/specs/dab/bookreview.yaml"
+    )
+    assert (
+        generator._display_path(
+            generator.REPO_ROOT / "runs" / "goal3" / "specs" / "dab" / "agnews.yaml"
+        )
+        == "runs/goal3/specs/dab/agnews.yaml"
+    )
+    external = tmp_path / "specs" / "dab" / "agnews.yaml"
+    assert generator._display_path(external) == str(external.resolve())
+
+
 def test_emit_ade_bench_codex_spec_uses_local_task_entry(tmp_path: Path) -> None:
     generator = _load_generator()
     tasks_root = tmp_path / "ade-bench" / "tasks"
