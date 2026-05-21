@@ -1,7 +1,7 @@
 ---
 id: vv7aqkfvj543fdeze6t4pjw5
 title: PKG-38 subclass Harbor installed agents for solver runtimes
-status: validation
+status: implementation
 source: operator directive 2026-05-21; Harbor installed agent integration
 started: 2026-05-21T15:44:22Z
 completed:
@@ -96,3 +96,7 @@ Harbor surfaces touched are `harbor.agents.installed.codex.Codex` and `harbor.ag
 ### Summary
 
 Validator logical worker id: `spacedock:ensign`; role asset read: `/home/exedev/.codex/plugins/cache/spacedock/spacedock/0.12.0/skills/ensign/SKILL.md`. AC-1, AC-3, and AC-4 passed their focused evidence, but AC-2 is rejected because the Harbor-backed compatibility shim breaks checked-in legacy `claude-cli` smoke specs carrying seed metadata. The branch should return to implementation to restore compatibility or migrate affected specs/tests, update stale assertions, and make the full frozen pytest suite green or explicitly baseline unrelated failures.
+
+### Feedback Cycles
+
+- Cycle 1 (2026-05-21T16:17:00Z): Validation rejected PKG-38. Implementation must restore legacy `claude-cli` no-op compatibility for checked-in specs carrying `sampling.seed` or `sampling.top_p`, update stale assertions that still expect the old `ClaudeCliAgent` import path or exact `ClaudeCode` class name, and make `uv run --frozen pytest -q` green or document an accepted unrelated NOP baseline before re-validation.
