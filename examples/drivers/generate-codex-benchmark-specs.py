@@ -47,7 +47,13 @@ def plan_ade_bench_specs(*, ade_bench_root: Path) -> list[AdeBenchSpecRow]:
     ]
 
 
-def emit_dab_spec(row: DabSpecRow, *, out_dir: Path, model: str = CODEX_MODEL) -> Path:
+def emit_dab_spec(
+    row: DabSpecRow,
+    *,
+    out_dir: Path,
+    model: str = CODEX_MODEL,
+    reasoning_effort: str | None = None,
+) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     spec_path = out_dir / f"{row.dataset}.yaml"
     payload = _base_spec(
@@ -61,13 +67,18 @@ def emit_dab_spec(row: DabSpecRow, *, out_dir: Path, model: str = CODEX_MODEL) -
         },
         trials=row.trials,
         model=model,
+        reasoning_effort=reasoning_effort,
     )
     _write_yaml(spec_path, payload, about=f"Codex DAB N=1 cell for dataset={row.dataset}.")
     return spec_path
 
 
 def emit_ade_bench_spec(
-    row: AdeBenchSpecRow, *, out_dir: Path, model: str = CODEX_MODEL
+    row: AdeBenchSpecRow,
+    *,
+    out_dir: Path,
+    model: str = CODEX_MODEL,
+    reasoning_effort: str | None = None,
 ) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     spec_path = out_dir / f"{_slug_for_filename(row.task_slug)}.yaml"
@@ -81,26 +92,37 @@ def emit_ade_bench_spec(
         },
         trials=row.trials,
         model=model,
+        reasoning_effort=reasoning_effort,
     )
     _write_yaml(spec_path, payload, about=f"Codex ade-bench N=1 cell for task={row.task_slug}.")
     return spec_path
 
 
-def _base_spec(*, experiment: str, benchmark: dict, trials: int, model: str) -> dict:
+def _base_spec(
+    *,
+    experiment: str,
+    benchmark: dict,
+    trials: int,
+    model: str,
+    reasoning_effort: str | None = None,
+) -> dict:
+    agent = {
+        "kind": "spacedock_solver_v2",
+        "runtime": "codex",
+        "model": model,
+        "sampling": {"temperature": 0.0, "top_p": None, "seed": 1},
+        "solver_workflow": SOLVER_WORKFLOW,
+        "spacedock_skill_version": "1.0.0",
+        "max_turns": 200,
+        "tools_allowed": [],
+        "tools_denied": [],
+    }
+    if reasoning_effort is not None:
+        agent["reasoning_effort"] = reasoning_effort
     return {
         "version": 1,
         "experiment": experiment,
-        "agent": {
-            "kind": "spacedock_solver_v2",
-            "runtime": "codex",
-            "model": model,
-            "sampling": {"temperature": 0.0, "top_p": None, "seed": 1},
-            "solver_workflow": SOLVER_WORKFLOW,
-            "spacedock_skill_version": "1.0.0",
-            "max_turns": 200,
-            "tools_allowed": [],
-            "tools_denied": [],
-        },
+        "agent": agent,
         "benchmark": benchmark,
         "trials": trials,
         "observers": [
@@ -168,6 +190,10 @@ def main() -> int:
         default=CODEX_MODEL,
         help=f"Codex model for emitted specs. Default: {CODEX_MODEL}.",
     )
+    parser.add_argument(
+        "--reasoning-effort",
+        help="Optional Codex reasoning effort to emit under the agent block.",
+    )
     args = parser.parse_args()
 
     emitted: list[Path] = []
@@ -179,7 +205,12 @@ def main() -> int:
         if args.write:
             for row in rows:
                 emitted.append(
-                    emit_dab_spec(row, out_dir=args.out_root / "dab", model=args.model)
+                    emit_dab_spec(
+                        row,
+                        out_dir=args.out_root / "dab",
+                        model=args.model,
+                        reasoning_effort=args.reasoning_effort,
+                    )
                 )
     else:
         if args.ade_bench_root is None:
@@ -190,7 +221,10 @@ def main() -> int:
             for row in rows:
                 emitted.append(
                     emit_ade_bench_spec(
-                        row, out_dir=args.out_root / "ade-bench", model=args.model
+                        row,
+                        out_dir=args.out_root / "ade-bench",
+                        model=args.model,
+                        reasoning_effort=args.reasoning_effort,
                     )
                 )
 

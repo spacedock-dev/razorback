@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 
 import yaml
@@ -78,6 +79,7 @@ def test_emit_dab_codex_spec_uses_solver_v2_codex_and_harbor_dab(tmp_path: Path)
     assert payload["benchmark"]["workspace_variant"] == "direct-structured"
     assert payload["benchmark"]["hints"] is False
     assert payload["trials"] == 1
+    assert "reasoning_effort" not in payload["agent"]
 
 
 def test_checked_in_dab_smoke_spec_uses_structured_workspace_without_hints() -> None:
@@ -100,6 +102,52 @@ def test_emit_dab_codex_spec_allows_model_override(tmp_path: Path) -> None:
     payload = yaml.safe_load(spec_path.read_text())
 
     assert payload["agent"]["model"] == "gpt-future-codex"
+
+
+def test_emit_dab_codex_spec_allows_reasoning_effort(tmp_path: Path) -> None:
+    generator = _load_generator()
+    row = generator.plan_dab_specs(data_root=tmp_path / "dab-data")[0]
+
+    spec_path = generator.emit_dab_spec(
+        row, out_dir=tmp_path / "out", reasoning_effort="xhigh"
+    )
+    payload = yaml.safe_load(spec_path.read_text())
+
+    assert payload["agent"]["reasoning_effort"] == "xhigh"
+
+
+def test_cli_can_emit_reasoning_effort_when_requested(
+    tmp_path: Path, monkeypatch
+) -> None:
+    generator = _load_generator()
+    monkeypatch.setattr(
+        generator,
+        "plan_dab_specs",
+        lambda *, data_root: [
+            generator.DabSpecRow(dataset="bookreview", data_root=data_root, trials=1)
+        ],
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            str(GENERATOR),
+            "--benchmark",
+            "dab",
+            "--dab-data-root",
+            str(tmp_path / "dab-data"),
+            "--out-root",
+            str(tmp_path / "specs"),
+            "--reasoning-effort",
+            "xhigh",
+            "--write",
+        ],
+    )
+
+    assert generator.main() == 0
+
+    payload = yaml.safe_load((tmp_path / "specs" / "dab" / "bookreview.yaml").read_text())
+    assert payload["agent"]["reasoning_effort"] == "xhigh"
 
 
 def test_display_path_handles_relative_and_external_out_roots(tmp_path: Path) -> None:

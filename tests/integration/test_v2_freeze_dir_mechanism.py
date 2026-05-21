@@ -260,6 +260,49 @@ trials: 1
     assert "ANTHROPIC_API_KEY" not in agent_cfg.env
 
 
+def test_translator_includes_codex_reasoning_kwargs_for_v2_agent(tmp_path):
+    workflow = tmp_path / "solver"
+    workflow.mkdir()
+    (workflow / "README.md").write_text("## Stages\n- model\n")
+
+    spec_yaml = f"""
+version: 1
+experiment: pkg35-translate-codex-reasoning-test
+agent:
+  kind: spacedock_solver_v2
+  runtime: codex
+  model: gpt-5.5
+  reasoning_effort: xhigh
+  reasoning_summary: auto
+  solver_workflow: {workflow}
+  solver_workflow_content_hash: "sha256:{'a' * 64}"
+  spacedock_skill_version: "1.0.0"
+  sealed_hash: "0123456789abcdef0123456789abcdef"
+  max_turns: 200
+benchmark:
+  kind: local
+  task_paths: []
+trials: 1
+"""
+    spec = Spec.model_validate(yaml.safe_load(spec_yaml))
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    (project_root / ".env").write_text("OPENAI_API_KEY=sk-openai\n")
+
+    cfg, _ = spec_to_job_config(
+        spec=spec,
+        job_name="pkg35-codex-reasoning-test",
+        jobs_dir=tmp_path / "_runs",
+        project_root=project_root,
+    )
+
+    harbor_agent_kwargs = cfg.agents[0].kwargs["harbor_agent_kwargs"]
+    assert cfg.agents[0].kwargs["runtime"] == "codex"
+    assert cfg.agents[0].model_name == "gpt-5.5"
+    assert harbor_agent_kwargs["reasoning_effort"] == "xhigh"
+    assert harbor_agent_kwargs["reasoning_summary"] == "auto"
+
+
 def test_translator_uses_codex_auth_json_for_codex_runtime(tmp_path):
     workflow = tmp_path / "solver"
     workflow.mkdir()

@@ -28,6 +28,7 @@ from razorback.provenance.resolvers import (
     resolve_prompt_hashes,
     resolve_solver_workflow_hash,
 )
+from razorback.spec.agent_kwargs import build_v2_harbor_agent_kwargs
 from razorback.spec.parse import parse_spec_file
 
 
@@ -158,13 +159,14 @@ def _stamp_v2_sealed_fields(
         return
     if solver_workflow_hash is not None:
         agent["solver_workflow_content_hash"] = solver_workflow_hash
-    harbor_agent_kwargs: dict[str, Any] = {
-        "max_turns": agent.get("max_turns"),
-        "tools_allowed": list(agent.get("tools_allowed") or []),
-        "tools_denied": list(agent.get("tools_denied") or []),
-    }
-    if agent.get("append_system_prompt") is not None:
-        harbor_agent_kwargs["append_system_prompt"] = agent["append_system_prompt"]
+    harbor_agent_kwargs = build_v2_harbor_agent_kwargs(
+        max_turns=agent.get("max_turns"),
+        tools_allowed=agent.get("tools_allowed"),
+        tools_denied=agent.get("tools_denied"),
+        append_system_prompt=agent.get("append_system_prompt"),
+        reasoning_effort=agent.get("reasoning_effort"),
+        reasoning_summary=agent.get("reasoning_summary"),
+    )
     agent["sealed_hash"] = compute_sealed_hash(
         model=agent["model"],
         sampling=agent["sampling"],

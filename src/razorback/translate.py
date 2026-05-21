@@ -16,6 +16,7 @@ from harbor.models.trial.config import (
 from razorback.agents.auth import resolve_claude_auth, resolve_codex_auth
 from razorback.agents.proxy import PROXY_BLOCK_ENV
 from razorback.errors import SpecError
+from razorback.spec.agent_kwargs import build_v2_harbor_agent_kwargs
 from razorback.spec.schema import (
     AdeBenchBenchmarkBlock,
     ClaudeCliAgentBlock,
@@ -163,13 +164,14 @@ def _build_agent_config(
             resolution = resolve_codex_auth(project_root=project_root, home=home)
         else:
             resolution = resolve_claude_auth(project_root=project_root, home=home)
-        harbor_agent_kwargs: dict[str, Any] = {
-            "max_turns": spec.agent.max_turns,
-            "tools_allowed": list(spec.agent.tools_allowed),
-            "tools_denied": list(spec.agent.tools_denied),
-        }
-        if spec.agent.append_system_prompt is not None:
-            harbor_agent_kwargs["append_system_prompt"] = spec.agent.append_system_prompt
+        harbor_agent_kwargs = build_v2_harbor_agent_kwargs(
+            max_turns=spec.agent.max_turns,
+            tools_allowed=spec.agent.tools_allowed,
+            tools_denied=spec.agent.tools_denied,
+            append_system_prompt=spec.agent.append_system_prompt,
+            reasoning_effort=spec.agent.reasoning_effort,
+            reasoning_summary=spec.agent.reasoning_summary,
+        )
         kwargs: dict[str, Any] = {
             "runtime": spec.agent.runtime,
             "model": spec.agent.model,

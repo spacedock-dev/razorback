@@ -84,6 +84,8 @@ class SpacedockSolverV2AgentBlock(BaseModel):
     tools_allowed: list[str] = Field(default_factory=list)
     tools_denied: list[str] = Field(default_factory=list)
     append_system_prompt: str | None = None
+    reasoning_effort: str | None = None
+    reasoning_summary: str | None = None
     resume_from_freeze: Path | None = None
     sealed_hash: str | None = None
     spacedock_skill_version: str | None = None
