@@ -1,13 +1,13 @@
 ---
 id: vv7aqkfvj543fdeze6t4pjw5
 title: PKG-38 subclass Harbor installed agents for solver runtimes
-status: validation
+status: done
 source: operator directive 2026-05-21; Harbor installed agent integration
 started: 2026-05-21T15:44:22Z
-completed:
-verdict:
+completed: 2026-05-21T16:33:55Z
+verdict: PASSED
 score: 0.9
-worktree: .worktrees/spacedock-ensign-pkg38-subclass-harbor-installed-agents
+worktree: 
 issue:
 pr:
 mod-block:
