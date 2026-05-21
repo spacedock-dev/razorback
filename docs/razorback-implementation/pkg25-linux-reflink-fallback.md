@@ -249,3 +249,48 @@ T3 (darwin 9/9 regression green) → T4 (AC-4 cross-device contract
 delegated to `cp`). Live Linux integration smoke explicitly deferred
 to a future entity since this session has no Linux infra; the unit
 contract test is the load-bearing check.
+
+## Stage Report: implementation
+
+- DONE: T0 RED unit test in packages/razorback-plugin-dab/tests/unit/test_prepare_bind_materialize.py asserts cp --reflink=auto invocation when sys.platform=='linux' (mock sys.platform). Confirm RED before impl.
+  test_bind_mode_linux_uses_reflink_cp written against unit (_clone_or_copy_tree) directly; confirmed 3 failing tests pre-impl, all passing post-impl (commit 5a22388).
+- DONE: T1 impl: swap os.link(child, dst_child) for subprocess.run(['cp', '--reflink=auto', str(child), str(dst_child)], check=True) on linux branch. T2 docstring: drop the wrong hardlink-CoW claim; replace with the honest 3-line summary (darwin/linux/other). Confirm GREEN.
+  prepare.py:399-403 swap; docstring lines 365-393 rewritten — no hardlink-CoW claim, --reflink=auto documented, busybox caveat noted; 3 new PKG-25 tests pass.
+- DONE: T3 darwin regression: full PKG-21 test suite passes (9/9). No new tests for live Linux reflink (no Linux infra; defer to integration follow-up).
+  uv run pytest packages/razorback-plugin-dab/tests/unit/test_prepare_bind_materialize.py → 11/11 passed (8 pre-existing PKG-21 darwin + 3 new PKG-25 contract tests); the renamed test_bind_mode_linux_hardlink_fallback → test_bind_mode_linux_uses_reflink_cp accounts for the count.
+
+### Summary
+
+Single-file surgical fix landed (commit 5a22388 on
+spacedock-ensign/pkg25-linux-reflink-fallback). Linux branch of
+_clone_or_copy_tree now invokes `cp --reflink=auto` instead of the
+unsafe `os.link` hardlink; docstring corrected; AC-4 cross-device
+handling delegated to `cp`'s documented full-copy fallback. Unit test
+rewritten against the unit directly (not via prepare_dataset_tasks) to
+avoid leaking sys.platform="linux" into pydantic's lazy sysconfig
+lookup on darwin — the prior PKG-21 hardlink test had this same latent
+darwin-incompatibility. Live Linux reflink integration smoke deferred:
+no Linux runner this session; the unit contract test (cp --reflink=auto
+argv assertion) is the load-bearing check, with a guard test against
+future st_dev/EXDEV regressions that would reintroduce os.link.
+
+## Stage Report: validation
+
+- DONE: Re-run unit tests — both PKG-21 darwin tests and PKG-25 new linux-mock test pass.
+  `uv run pytest packages/razorback-plugin-dab/tests/unit/test_prepare_bind_materialize.py` → 11/11 passed in 0.26s on darwin (8 PKG-21 + 3 new PKG-25 contract tests).
+- DONE: Docstring inspection (AC-2) — no hardlink-CoW claim; honest 3-line per-platform summary present.
+  prepare.py:365-393 reviewed; wrong-claim string absent; `cp --reflink=auto` documented with fallback semantics and busybox caveat; `test_clone_or_copy_tree_docstring_is_honest` enforces the inspection programmatically.
+- DONE: Code review on worktree branch — material vs polish.
+  Scope: 1 source file + 1 test file. Diff is minimal and surgical; linux branch mirrors darwin branch's `subprocess.run(["cp", <flag>, src, dst], check=True)` shape; AC-4 source-inspection guard test is an appropriate technique for the "delegate to cp" contract. No defects found. Full report at docs/razorback-implementation/validation/pkg25-linux-reflink-fallback.md.
+
+### Summary
+
+PKG-25 validation passes cleanly. All four ACs verified: linux branch
+now uses `cp --reflink=auto` (AC-1), docstring is honest (AC-2), darwin
+9/9 stay green (AC-3), cross-device handling delegated to `cp` with a
+guard test against st_dev/EXDEV/os.link reintroduction (AC-4). The
+unsafe `os.link` hardlink path is gone; the PKG-21 silent-dataset-
+corruption defect on Linux is closed. Live Linux reflink CoW smoke is
+filed as a follow-up for the first production Linux harbor-DAB
+deployment — out of scope this session (no Linux infra). Verdict:
+**PASSED**.

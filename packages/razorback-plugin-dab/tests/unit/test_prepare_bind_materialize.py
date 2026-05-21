@@ -196,24 +196,112 @@ def test_bind_mode_sqlite_uses_cow_materialization(tmp_path: Path):
     assert sqlite_in_workdir.read_bytes()[:16] == b"SQLite format 3\x00"
 
 
-def test_bind_mode_linux_hardlink_fallback(tmp_path: Path, monkeypatch):
-    """PKG-21 AC-2: on linux, SQLite live DB is hardlinked, not copied."""
+def test_bind_mode_linux_uses_reflink_cp(tmp_path: Path, monkeypatch):
+    """PKG-25 AC-1: on linux, _clone_or_copy_tree uses cp --reflink=auto.
+
+    Hardlink (os.link) is unsafe — writes through the dst path mutate the
+    shared inode and silently corrupt the source dataset. The correct
+    primitive is cp --reflink=auto: reflink CoW on btrfs/xfs/ext4-reflink,
+    full physical copy fallback otherwise. This test asserts the
+    invocation contract on the unit (_clone_or_copy_tree) directly so the
+    sys.platform monkeypatch does not leak into the broader orchestrator
+    (which imports pydantic lazily and tries to resolve sysconfig data for
+    the mocked platform).
+    """
     from razorback_plugin_dab.generate import prepare as prepare_mod
 
     monkeypatch.setattr(prepare_mod.sys, "platform", "linux")
-    data_root = _build_bookreview_data_root(tmp_path, dump_size_mb=1)
-    manifest = prepare_dataset_tasks(
-        data_root=data_root,
-        dataset="bookreview",
-        tasks_root=tmp_path / "tasks",
-        materialize_mode="bind",
+
+    recorded_calls: list[list[str]] = []
+
+    def recording_run(argv, *args, **kwargs):
+        recorded_calls.append(list(argv))
+        # Honor the cp call by physically copying so the test fixture
+        # tree still gets materialized for subsequent assertions.
+        if isinstance(argv, list) and argv and argv[0] == "cp":
+            import shutil
+            shutil.copyfile(argv[-2], argv[-1])
+            class _R:
+                returncode = 0
+            return _R()
+        raise AssertionError(f"unexpected subprocess.run argv: {argv!r}")
+
+    monkeypatch.setattr(prepare_mod.subprocess, "run", recording_run)
+
+    def _no_link(*a, **k):
+        raise AssertionError(
+            "PKG-25: os.link must not be invoked on linux — use cp --reflink=auto"
+        )
+    monkeypatch.setattr(prepare_mod.os, "link", _no_link)
+
+    src_root = tmp_path / "src"
+    src_root.mkdir()
+    (src_root / "a.db").write_bytes(b"SQLite format 3\x00" + b"\x00" * 100)
+    sub = src_root / "sub"
+    sub.mkdir()
+    (sub / "b.duckdb").write_bytes(b"DUCK")
+    (src_root / "ignored.sql").write_bytes(b"dump payload")
+
+    dst_root = tmp_path / "dst"
+    prepare_mod._clone_or_copy_tree(
+        src_root, dst_root, ignore_names={"ignored.sql"},
     )
-    src = data_root / "query_bookreview" / "query_dataset" / "review_query.db"
-    workdir = manifest[0]["task_dir"] / "steps" / "main" / "workdir"
-    dst = workdir / "query_dataset" / "review_query.db"
-    assert dst.exists(), "sqlite live DB must materialize in workdir"
-    assert os.stat(src).st_ino == os.stat(dst).st_ino, (
-        "AC-2: linux fallback must hardlink (share inode) with the source"
+
+    assert (dst_root / "a.db").exists()
+    assert (dst_root / "sub" / "b.duckdb").exists()
+    assert not (dst_root / "ignored.sql").exists()
+
+    cp_calls = [c for c in recorded_calls if c and c[0] == "cp"]
+    assert cp_calls, "PKG-25: expected cp invocations on linux materialization"
+    for argv in cp_calls:
+        assert argv[:2] == ["cp", "--reflink=auto"], (
+            f"PKG-25 AC-1: linux materialization must use cp --reflink=auto; got {argv!r}"
+        )
+
+
+def test_clone_or_copy_tree_docstring_is_honest():
+    """PKG-25 AC-2: docstring no longer claims hardlink CoW.
+
+    The previous docstring asserted "copy-on-write happens at the filesystem
+    level when one inode is opened for write" — false for hardlinks. The
+    new docstring must mention --reflink=auto and must not contain the
+    wrong claim.
+    """
+    from razorback_plugin_dab.generate.prepare import _clone_or_copy_tree
+
+    doc = _clone_or_copy_tree.__doc__ or ""
+    assert "copy-on-write happens at the filesystem level when one inode is opened for write" not in doc, (
+        "PKG-25 AC-2: docstring still asserts the wrong hardlink-CoW claim"
+    )
+    assert "--reflink=auto" in doc, (
+        "PKG-25 AC-2: docstring must document the cp --reflink=auto primitive"
+    )
+
+
+def test_bind_mode_linux_cross_device_falls_back(monkeypatch):
+    """PKG-25 AC-4: cross-device handling is delegated to cp --reflink=auto.
+
+    Our code must NOT pre-check device identity (os.stat(...).st_dev) or
+    branch on EXDEV — those would reintroduce the os.link hazard. The
+    contract is: invoke cp --reflink=auto and let it fall back to a full
+    physical copy when reflink is unavailable for any reason (including
+    cross-device).
+    """
+    import inspect
+
+    from razorback_plugin_dab.generate import prepare as prepare_mod
+
+    src = inspect.getsource(prepare_mod._clone_or_copy_tree)
+    assert "st_dev" not in src, (
+        "PKG-25 AC-4: _clone_or_copy_tree must not pre-check device identity; "
+        "delegate cross-device handling to cp --reflink=auto"
+    )
+    assert "EXDEV" not in src, (
+        "PKG-25 AC-4: _clone_or_copy_tree must not branch on EXDEV; "
+        "delegate cross-device handling to cp --reflink=auto"
+    )
+    assert "os.link" not in src, (
+        "PKG-25: _clone_or_copy_tree must not call os.link (unsafe hardlink)"
     )
 
 
