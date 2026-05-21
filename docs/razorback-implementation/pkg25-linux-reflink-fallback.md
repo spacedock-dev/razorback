@@ -1,7 +1,7 @@
 ---
 id: d1gb0y93se6wkmq88jkttxj5
 title: PKG-25 — Linux reflink fallback (replace unsafe os.link with cp --reflink=auto)
-status: implementation
+status: validation
 source: PKG-21 follow-up — captain probe 2026-05-20 ("PKG-21 bind-mount - is this portable? when we run this on linux?"); the docstring at packages/razorback-plugin-dab/src/razorback_plugin_dab/generate/prepare.py:371-373 misrepresents hardlink CoW semantics
 started: 2026-05-21T05:51:57Z
 completed:
