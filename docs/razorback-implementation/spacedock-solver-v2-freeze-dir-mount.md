@@ -307,4 +307,27 @@ change to spacedock_solver_v2.py plus matching test updates. The
 container-side inner-agent runtime is unchanged; only razorback's
 freeze bookkeeping moved to host where the path is real.
 
+## Stage Report: validation
+
+- DONE: Re-run unit tests + halt/resume integration test (AC-2/AC-3).
+  `tests/unit/` 514 passed. `packages/razorback-plugin-dab/` 133 passed / 2 skipped / 1 failed (pre-existing mongo-init shim flake; this branch does not touch DAB code per `git diff main..HEAD --stat`). Halt/resume integration test fails on `SpecError: spacedock-solver spec must be frozen` — pre-existing v1 spec-freeze drift on main, also unrelated to this entity.
+- DONE: Confirm T3 live `rk run` evidence (AC-4).
+  `_runs/goal1-spacedock-bookreview/a901b991c80c8b89/`: reward 1.0/1.0/1.0 on q1/q2/q3 in reward_per_query.json; claude-code.txt 105 KB JSONL; host `_razorback/freeze/<hash>/sealed_hash.txt` present; no freeze-init exception in job.log. `cost_usd=null` is a known upstream harbor gap (out of scope).
+- DONE: Code review via superpowers:requesting-code-review — material vs polish.
+  Manual diff review of `c6632ae` (+30/-29 in `spacedock_solver_v2.py`). New `_host_git` helper uses argv tuple (eliminates shell-quoting risk). Tests assert both git-on-host AND no env.exec for git, across first-stage / commit-stage / resume. No material findings; two minor non-blocking polish notes documented in validation report.
+- DONE: Write validation report.
+  `docs/razorback-implementation/validation/spacedock-solver-v2-freeze-dir-mount.md` — verdict PASSED.
+
+### Summary
+
+Verdict PASSED. PKG-26 T4's rc=128 freeze-init blocker is closed
+end-to-end on the same goal1/spacedock/bookreview spec; per-query
+verdict map 3/3=1.0 with claude-code.txt JSONL captured and host
+freeze tree on disk. Single-file fix with `_host_git` argv-tuple
+helper, matched by 4 new + 5 updated unit tests. The two non-passing
+suites (mongo-init shim Docker test and halt/resume v1 spec-freeze)
+are pre-existing on main and outside this entity's surface
+(confirmed via `git diff main..HEAD --stat`). Goal 1 RESUME T2
+dispatch unblocks fully.
+
 
