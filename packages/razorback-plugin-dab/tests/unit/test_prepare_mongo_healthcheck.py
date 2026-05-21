@@ -1,5 +1,5 @@
 # ABOUTME: PKG-15 follow-up — mongo content-presence healthcheck retries budget.
-# ABOUTME: AC-1 default 60 retries (5min), AC-2 per-dataset healthcheck_retries override.
+# ABOUTME: AC-1 default 240 retries (20min), AC-2 per-dataset healthcheck_retries override.
 
 import tomllib
 from pathlib import Path
@@ -49,12 +49,12 @@ def _healthcheck(manifest_entry) -> dict:
     return tomllib.loads(text)["steps"][0]["healthcheck"]
 
 
-def test_mongo_healthcheck_default_retries_is_60(tmp_path: Path):
+def test_mongo_healthcheck_default_retries_is_240(tmp_path: Path):
     data_root = _scaffold(tmp_path, db_config=_AGNEWS_LIKE)
     out = tmp_path / "tasks"
     manifest = prepare_dataset_tasks(data_root=data_root, dataset="agnews", tasks_root=out)
     hc = _healthcheck(manifest[0])
-    assert hc["retries"] == 60, hc
+    assert hc["retries"] == 240, hc
     assert hc["interval_sec"] == 5
     assert hc["start_period_sec"] == 60
 
@@ -86,4 +86,4 @@ def test_mongo_healthcheck_retries_override_absent_falls_back_to_default(tmp_pat
     out = tmp_path / "tasks"
     manifest = prepare_dataset_tasks(data_root=data_root, dataset="agnews", tasks_root=out)
     hc = _healthcheck(manifest[0])
-    assert hc["retries"] == 60
+    assert hc["retries"] == 240

@@ -603,7 +603,7 @@ def _batch_test_sh(*, container_workdir: str) -> str:
     )
 
 
-_MONGO_HEALTHCHECK_DEFAULT_RETRIES = 60
+_MONGO_HEALTHCHECK_DEFAULT_RETRIES = 240
 
 
 def _task_toml(
@@ -657,9 +657,11 @@ def _task_toml(
         # missed Bug 1 from the dab-mongo-probe (mongo ignored .bson and
         # started healthy with an empty DB). countDocuments() > 0 fails fast
         # if mongorestore did not run or produced no documents.
-        # retries default = 60 × interval 5s = 5min budget covers
-        # mongorestore wall time for agnews/yelp (~120-150k docs). Per-dataset
-        # override via db_config[<client>].healthcheck_retries handles outliers.
+        # retries default = 240 × interval 5s = 20min budget covers
+        # mongorestore wall time for agnews/yelp (~120-150k docs); empirically
+        # the 60×5s=5min default surfaced as healthcheck-pre-empt for agnews
+        # on first-run cold caches. Per-dataset override via
+        # db_config[<client>].healthcheck_retries handles further outliers.
         db_name, collection = mongo_probes[0]
         eval_js = (
             f"db.getSiblingDB('{db_name}').getCollection('{collection}').countDocuments() > 0"
