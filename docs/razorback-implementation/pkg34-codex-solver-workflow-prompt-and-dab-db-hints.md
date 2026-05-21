@@ -89,10 +89,10 @@ post-hoc strict audit is still required.
   DAB specs and the checked-in smoke spec use the structured DAB workspace
   default.
 - `examples/drivers/generate-codex-benchmark-specs.py` — change Codex DAB
-  generated benchmark blocks to `workspace_variant: direct-structured` and keep
-  the generated DAB task instructions on the hint-aware path.
+  generated benchmark blocks to `workspace_variant: direct-structured` while
+  keeping the benchmark condition unchanged with `hints: false`.
 - `examples/specs/codex-dab-smoke.yaml` — update the checked-in Codex DAB smoke
-  spec to match the generator default.
+  spec to match the generator default while keeping `hints: false`.
 - `examples/solver_workflows/codex-benchmark-solver/README.md` — make the
   solver-side no-probing rules explicit.
 
@@ -117,7 +117,7 @@ post-hoc strict audit is still required.
    `tests/unit/test_codex_benchmark_spec_generator.py`, extend
    `test_emit_dab_codex_spec_uses_solver_v2_codex_and_harbor_dab` to assert
    `payload["benchmark"]["workspace_variant"] == "direct-structured"` and
-   `payload["benchmark"]["hints"] is True`. Add a small test that loads
+   `payload["benchmark"]["hints"] is False`. Add a small test that loads
    `examples/specs/codex-dab-smoke.yaml` and asserts the same benchmark fields.
    Run:
    `uv run --frozen pytest tests/unit/test_codex_benchmark_spec_generator.py -q`.
@@ -165,7 +165,7 @@ post-hoc strict audit is still required.
 - DONE: The inline plan maps AC-1 to a concrete `SpacedockSolverAgent.run` prompt-composition test and implementation.
   Evidence: The inline plan names the exact unit test, failing behavior, implementation file, and spec cites for the README-before-task composed instruction.
 - DONE: The inline plan maps AC-2/AC-3 to concrete generator/spec and solver README edits.
-  Evidence: The inline plan names the generator, checked-in smoke spec, generator test, and solver README edits required for structured DAB workspace hints and no-probing rules.
+  Evidence: The inline plan names the generator, checked-in smoke spec, generator test, and solver README edits required for structured workspace service details, `hints: false`, and no-probing rules.
 - DONE: The inline plan names validation commands, including the BookReview score/audit rerun for AC-4.
   Evidence: The inline plan includes focused unit pytest commands plus the generated BookReview freeze/run/score/audit command sequence.
 
