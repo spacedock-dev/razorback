@@ -272,6 +272,38 @@ def test_cli_can_emit_dab_workspace_and_hints_variants(
     assert payload["benchmark"]["hints"] is True
 
 
+def test_cli_can_explicitly_disable_dab_hints(tmp_path: Path, monkeypatch) -> None:
+    generator = _load_generator()
+    monkeypatch.setattr(
+        generator,
+        "plan_dab_specs",
+        lambda *, data_root: [
+            generator.DabSpecRow(dataset="bookreview", data_root=data_root, trials=1)
+        ],
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            str(GENERATOR),
+            "--benchmark",
+            "dab",
+            "--dab-data-root",
+            str(tmp_path / "dab-data"),
+            "--out-root",
+            str(tmp_path / "specs"),
+            "--no-hints",
+            "--write",
+        ],
+    )
+
+    assert generator.main() == 0
+
+    payload = yaml.safe_load((tmp_path / "specs" / "dab" / "bookreview.yaml").read_text())
+    assert payload["benchmark"]["workspace_variant"] == "direct-structured"
+    assert payload["benchmark"]["hints"] is False
+
+
 def test_display_path_handles_relative_and_external_out_roots(tmp_path: Path) -> None:
     generator = _load_generator()
 
@@ -331,6 +363,22 @@ def test_emit_ade_bench_codex_spec_uses_harbor_shaped_task_root(tmp_path: Path) 
     assert payload["benchmark"]["tasks_root"] == str(ade_bench_root)
     assert payload["benchmark"]["tasks"] == ["task_a"]
     assert "ade_bench_root" not in payload["benchmark"]
+
+
+def test_plan_ade_bench_specs_rejects_unknown_root_shape(tmp_path: Path) -> None:
+    generator = _load_generator()
+    missing_root = tmp_path / "missing"
+
+    try:
+        generator.plan_ade_bench_specs(ade_bench_root=missing_root)
+    except FileNotFoundError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("expected FileNotFoundError")
+
+    assert "upstream tasks/*/task.yaml" in message
+    assert "Harbor-shaped */task.toml" in message
+    assert str(missing_root) in message
 
 
 def test_emit_dab_codex_spec_allows_workspace_and_hints_variants(tmp_path: Path) -> None:

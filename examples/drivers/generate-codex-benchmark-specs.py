@@ -52,7 +52,11 @@ def plan_ade_bench_specs(*, ade_bench_root: Path) -> list[AdeBenchSpecRow]:
             for slug in slugs
         ]
 
-    slugs = sorted(p.name for p in ade_bench_root.iterdir() if (p / "task.toml").is_file())
+    slugs = (
+        sorted(p.name for p in ade_bench_root.iterdir() if (p / "task.toml").is_file())
+        if ade_bench_root.is_dir()
+        else []
+    )
     if slugs:
         return [
             AdeBenchSpecRow(
