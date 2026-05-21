@@ -67,3 +67,15 @@ does not fail with `AuthDiscoveryError` when Codex auth.json exists.
 
 - `pkg26-codex-spacedock-solver-runtime` — shipped.
 
+## Stage Report: implementation
+
+- DONE: `resolve_codex_auth` supports API-key precedence, explicit `CODEX_AUTH_JSON_PATH`, and default home auth.json fallback without embedding machine-specific paths in tracked fixtures.
+  Evidence: `tests/unit/test_claude_cli_auth_dotenv_only.py` covers `.env` API-key precedence over home auth.json, explicit temp `CODEX_AUTH_JSON_PATH`, default temp `<home>/.codex/auth.json`, and portable missing-credentials text.
+- DONE: `spacedock_solver_v2` translation passes Codex auth-file env through to Harbor `AgentConfig.env` and tests the missing-credentials failure path.
+  Evidence: `tests/integration/test_v2_freeze_dir_mechanism.py` asserts Codex v2 `AgentConfig.env["CODEX_AUTH_JSON_PATH"]` from temp `<home>/.codex/auth.json` and raises `AuthDiscoveryError` when all credential sources are absent.
+- DONE: Stage report records exact test commands and whether `_codex-smoke-v2` reaches past Razorback `AuthDiscoveryError` in this environment.
+  Evidence: commands recorded below; `_codex-smoke-v2` reached Harbor and failed later with `SpacedockSolverAgentError` (`git init` rc=127), not `AuthDiscoveryError`.
+
+### Summary
+
+Implemented Codex auth-file discovery in `src/razorback/agents/auth.py` and wired `home` through the Codex branch in `src/razorback/translate.py`; Harbor-facing auth remains on `AgentConfig.env` only. Verification commands: `uv run pytest tests/unit/test_claude_cli_auth_dotenv_only.py tests/integration/test_v2_freeze_dir_mechanism.py -q` (`19 passed`), `uv run ruff check src/razorback/agents/auth.py src/razorback/translate.py tests/unit/test_claude_cli_auth_dotenv_only.py tests/integration/test_v2_freeze_dir_mechanism.py` (`All checks passed`), `uv run pytest tests/unit -q` (`481 passed`), `uv run rk freeze examples/specs/_codex-smoke-v2.yaml --allow-missing` (exit 0), and `uv run rk run examples/specs/_codex-smoke-v2.frozen.yaml --runs-dir runs/pkg28-codex-auth-smoke --allow-plugin-drift --allow-alias-drift` (exit 0; Harbor reported one `SpacedockSolverAgentError` after auth preflight).

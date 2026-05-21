@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 import yaml
 
+from razorback.agents.auth import AuthDiscoveryError
 from razorback.agents.spacedock_solver_v2 import SpacedockSolverAgent
 from razorback.spec.schema import Spec
 from razorback.translate import spec_to_job_config
@@ -207,3 +208,88 @@ trials: 1
     assert agent_cfg.kwargs["runtime"] == "codex"
     assert agent_cfg.env == {"OPENAI_API_KEY": "sk-openai"}
     assert "ANTHROPIC_API_KEY" not in agent_cfg.env
+
+
+def test_translator_uses_codex_auth_json_for_codex_runtime(tmp_path):
+    workflow = tmp_path / "solver"
+    workflow.mkdir()
+    (workflow / "README.md").write_text("## Stages\n- model\n")
+
+    spec_yaml = f"""
+version: 1
+experiment: phase3-translate-codex-auth-json-test
+agent:
+  kind: spacedock_solver_v2
+  runtime: codex
+  model: gpt-5.1-codex
+  solver_workflow: {workflow}
+  solver_workflow_content_hash: "sha256:{'a' * 64}"
+  spacedock_skill_version: "1.0.0"
+  sealed_hash: "0123456789abcdef0123456789abcdef"
+  max_turns: 200
+benchmark:
+  kind: local
+  task_paths: []
+trials: 1
+"""
+    spec = Spec.model_validate(yaml.safe_load(spec_yaml))
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    home = tmp_path / "home"
+    auth_path = home / ".codex" / "auth.json"
+    auth_path.parent.mkdir(parents=True)
+    auth_path.write_text('{"tokens": "fake"}\n')
+
+    cfg, _ = spec_to_job_config(
+        spec=spec,
+        job_name="phase3-codex-auth-json-test",
+        jobs_dir=tmp_path / "_runs",
+        project_root=project_root,
+        home=home,
+    )
+
+    agent_cfg = cfg.agents[0]
+    assert agent_cfg.kwargs["runtime"] == "codex"
+    assert agent_cfg.env == {"CODEX_AUTH_JSON_PATH": str(auth_path)}
+    assert "OPENAI_API_KEY" not in agent_cfg.env
+
+
+def test_translator_codex_runtime_fails_without_credentials(tmp_path):
+    workflow = tmp_path / "solver"
+    workflow.mkdir()
+    (workflow / "README.md").write_text("## Stages\n- model\n")
+
+    spec_yaml = f"""
+version: 1
+experiment: phase3-translate-codex-missing-auth-test
+agent:
+  kind: spacedock_solver_v2
+  runtime: codex
+  model: gpt-5.1-codex
+  solver_workflow: {workflow}
+  solver_workflow_content_hash: "sha256:{'a' * 64}"
+  spacedock_skill_version: "1.0.0"
+  sealed_hash: "0123456789abcdef0123456789abcdef"
+  max_turns: 200
+benchmark:
+  kind: local
+  task_paths: []
+trials: 1
+"""
+    spec = Spec.model_validate(yaml.safe_load(spec_yaml))
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+
+    with pytest.raises(AuthDiscoveryError) as exc_info:
+        spec_to_job_config(
+            spec=spec,
+            job_name="phase3-codex-missing-auth-test",
+            jobs_dir=tmp_path / "_runs",
+            project_root=project_root,
+            home=tmp_path / "home",
+        )
+
+    message = str(exc_info.value)
+    assert "OPENAI_API_KEY" in message
+    assert "CODEX_AUTH_JSON_PATH" in message
+    assert ".codex/auth.json" in message
