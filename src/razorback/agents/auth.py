@@ -35,6 +35,17 @@ def _load_env_api_key(project_root: Path) -> str | None:
     return value
 
 
+def _load_dotenv_value(project_root: Path, name: str) -> str | None:
+    env_path = Path(project_root) / ".env"
+    if not env_path.exists():
+        return None
+    values = dotenv_values(env_path)
+    value = values.get(name)
+    if value is None or value == "":
+        return None
+    return value
+
+
 def _read_claude_token(home: Path) -> str | None:
     """Mirror run_experiment.py:1897-1902 — ~/.claude/benchmark-token, stripped."""
     token_path = Path(home) / ".claude" / "benchmark-token"
@@ -65,3 +76,22 @@ def resolve_claude_auth(*, project_root: Path, home: Path | None = None) -> Auth
         f"{Path(project_root) / '.env'} or write a token to "
         f"{home_path / '.claude' / 'benchmark-token'}."
     )
+
+
+def resolve_codex_auth(*, project_root: Path) -> AuthResolution:
+    """Resolve Codex credentials from <project_root>/.env only.
+
+    Harbor's Codex agent consumes OPENAI_API_KEY through AgentConfig.env and
+    optionally honors OPENAI_BASE_URL for proxy-compatible endpoints.
+    """
+    api_key = _load_dotenv_value(project_root, "OPENAI_API_KEY")
+    if api_key is None:
+        raise AuthDiscoveryError(
+            "no codex credentials found. Add OPENAI_API_KEY to "
+            f"{Path(project_root) / '.env'}."
+        )
+    env = {"OPENAI_API_KEY": api_key}
+    base_url = _load_dotenv_value(project_root, "OPENAI_BASE_URL")
+    if base_url is not None:
+        env["OPENAI_BASE_URL"] = base_url
+    return AuthResolution(mode="api-key", env=env)
