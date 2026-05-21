@@ -19,17 +19,38 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DATA_ROOT = "/Users/clkao/git/dataagentbench/data"
 
 
+SOLVER_WORKFLOW_PATH = "./examples/solver_workflows/dab_paper_matrix"
+
+
+def _build_agent_block(variant: str) -> dict:
+    """PKG-26: spacedock variant → spacedock_solver_v2 (halt/resume + skill injection);
+    direct-minimal + direct-structured → claude-cli (now a ClaudeCode subclass).
+    """
+    if variant == "spacedock":
+        return {
+            "kind": "spacedock_solver_v2",
+            "runtime": "claude",
+            "model": "claude-opus-4-7",
+            "sampling": {"temperature": 0.0, "top_p": None, "seed": None},
+            "solver_workflow": SOLVER_WORKFLOW_PATH,
+            "max_turns": 200,
+            "tools_allowed": ["Bash", "Read", "Write", "Edit", "Glob", "Grep"],
+            "tools_denied": [],
+        }
+    return {
+        "kind": "claude-cli",
+        "model": "claude-opus-4-7",
+        "sampling": {"temperature": 0.0},
+        "tools_allowed": ["Bash", "Read", "Write", "Edit", "Glob", "Grep"],
+    }
+
+
 def build_spec(variant: str, dataset: str) -> dict:
     experiment = f"goal1-{variant}-{dataset.lower()}"
     return {
         "version": 1,
         "experiment": experiment,
-        "agent": {
-            "kind": "claude-cli",
-            "model": "claude-opus-4-7",
-            "sampling": {"temperature": 0.0},
-            "tools_allowed": ["Bash", "Read", "Write", "Edit", "Glob", "Grep"],
-        },
+        "agent": _build_agent_block(variant),
         "benchmark": {
             "kind": "harbor_dab",
             "data_root": DATA_ROOT,

@@ -3,10 +3,15 @@
 version: 1
 experiment: goal1-spacedock-music_brainz_20k
 agent:
-  kind: claude-cli
+  kind: spacedock_solver_v2
+  runtime: claude
   model: claude-opus-4-7
   sampling:
     temperature: 0.0
+    top_p: null
+    seed: null
+  solver_workflow: ./examples/solver_workflows/dab_paper_matrix
+  max_turns: 200
   tools_allowed:
   - Bash
   - Read
@@ -14,6 +19,7 @@ agent:
   - Edit
   - Glob
   - Grep
+  tools_denied: []
 benchmark:
   kind: harbor_dab
   data_root: /Users/clkao/git/dataagentbench/data
