@@ -9,7 +9,7 @@ Branch: `spacedock-ensign/pkg33-harbor-codex-audit-coverage`
 
 APPROVE to `done`.
 
-Cycle 2 independently verifies the rejected Harbor `codex.txt` shape: an `item.completed` event with `item.type == "command_execution"` and a `curl` command now exits 23 under strict audit and names `steps/main/agent/codex.txt`. All original PKG-33 ACs pass on fresh direct fixtures and the audit suite. The guarded BookReview run directory was not present in this assigned worktree, so the live guarded audit was skipped rather than inferred.
+Cycle 2 independently verifies the rejected Harbor `codex.txt` shape: an `item.completed` event with `item.type == "command_execution"` and a `curl` command now exits 23 under strict audit and names `steps/main/agent/codex.txt`. All original PKG-33 ACs pass on fresh direct fixtures and the audit suite. The guarded BookReview audit rerun exits 23 with one clean trial and two tainted trials, including q2 taint from `harbor_codex_text` `steps/main/agent/codex.txt`.
 
 ## Gate Decision (Cycle 1)
 
@@ -371,21 +371,23 @@ tests/unit/audit/test_rk_audit_cli.py::test_rk_audit_strict_ignores_job_log_setu
 
 ### Guarded BookReview Audit
 
-SKIPPED because the run directory is not present in the assigned worktree.
+DONE. The guarded BookReview audit was rerun from the PKG-33 worktree with the cycle-2 code against the parent repo run directory.
 
-Presence check command:
+Command:
 
 ```bash
-test -d runs/goal3-dab-codex/runs/bookreview-guarded/codex-dab-bookreview/e3a437f3cc875bb5 && printf 'present\n' || printf 'missing\n'
+uv run --frozen rk audit <repo>/runs/goal3-dab-codex/runs/bookreview-guarded/codex-dab-bookreview/e3a437f3cc875bb5 --policy strict --format json
 ```
 
-Output:
+Output evidence:
 
 ```text
-missing
+Exit code: 23
+summary: clean=1, tainted=2, coverage_missing=0
+bookreview-q1: clean
+bookreview-q2: tainted via harbor_codex_text steps/main/agent/codex.txt, event_type=item.completed, tool_type=command_execution, event_id=item_42; also session JSONL curl finding
+bookreview-q3: tainted via session JSONL docker findings
 ```
-
-The implementation cycle-2 report says the guarded audit was run and exited 23 with two tainted trials, but this validator did not count that as independent evidence because the run directory was absent locally.
 
 ### Run-Dir Contract Check
 

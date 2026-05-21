@@ -138,11 +138,11 @@ Cycle 2 teaches the Harbor Codex scanner to handle observed `item.completed` eve
   `uv run --frozen rk audit .pkg33-validation-fixtures-cycle2/ac2-tainted-txt --policy strict --format json` exited 23 with `source_kind=harbor_codex_text`, `source_path=steps/main/agent/codex.txt`, `event_type=item.completed`, `tool_type=command_execution`.
 - DONE: Validation verifies all original PKG-33 ACs still pass, including session JSONL taint and setup-only clean behavior.
   AC-1 clean discovery exited 0 with one clean trial; AC-2 session JSONL exited 23; AC-3 setup-only exited 0; `uv run --frozen pytest tests/unit/audit -q` and `uv run pytest tests/unit/audit -q` both passed (`28 passed`).
-- SKIPPED: Validation checks the actual guarded BookReview audit and gives a clear gate decision.
-  The guarded BookReview run directory was absent in the assigned worktree (`missing` from the presence check), so no independent live audit was run; gate decision is APPROVE based on direct AC fixtures, focused tests, and review.
+- DONE: Validation checks the actual guarded BookReview audit and gives a clear gate decision.
+  `uv run --frozen rk audit <repo>/runs/goal3-dab-codex/runs/bookreview-guarded/codex-dab-bookreview/e3a437f3cc875bb5 --policy strict --format json` exited 23 with summary clean=1 tainted=2 coverage_missing=0; q2 includes `harbor_codex_text` `steps/main/agent/codex.txt` `item.completed` / `command_execution` taint.
 - DONE: Run `superpowers:requesting-code-review` against the worktree branch.
   The skill is not registered as a callable Codex tool; cached instructions were read and an inline review of `db846bc..aeb25c8` found zero blocking and zero non-blocking findings.
 
 ### Summary
 
-Cycle 2 validation approves PKG-33 to `done`. The rejected `codex.txt` event shape is now covered by direct CLI evidence, all original ACs still pass, and the only validation limitation is the absent guarded BookReview run directory in this worktree.
+Cycle 2 validation approves PKG-33 to `done`. The rejected `codex.txt` event shape is now covered by direct CLI evidence, all original ACs still pass, and the guarded BookReview audit confirms q1 clean with q2/q3 tainted under strict audit.
