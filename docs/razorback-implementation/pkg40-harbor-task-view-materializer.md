@@ -1,7 +1,7 @@
 ---
 id: dy0w211g9dp8w80jyje1rgz9
 title: PKG-40 Harbor task view materializer for ADE-Bench and Spider2-DBT
-status: validation
+status: implementation
 source: captain request 2026-05-21 - Harbor-shaped ADE plus Spider2-DBT shared-image, batching, freeze/resume path
 started: 2026-05-21T22:35:16Z
 completed:
@@ -146,3 +146,20 @@ Harbor/image/cache evidence: Harbor version `0.6.6`; manifests record authored `
 ### Summary
 
 Validation reran the focused PKG-40 pytest suites, freeze commands, fixture materialization probes, multi-task batching probe, leakage scan, and Spider2 live export probe. The generic materializer, Spider2 fixture fallback, batching identity, freeze identity, shared-context fail-closed behavior, and leakage checks passed, but the gate is rejected because new ADE score-spec generation can still emit the retired local `ade_bench_root`/`slug` path and the required ADE `rk run` summary evidence is missing.
+
+### Feedback Cycles
+
+#### Cycle 1 - validation to implementation
+
+Validation rejected PKG-40 back to implementation. Concrete fixes requested:
+
+- AC-1: stop new Codex ADE score-spec generation from emitting `ade_bench_root`
+  plus `tasks: [{slug: ...}]`; update or quarantine examples advertising that
+  retired path.
+- AC-1: make `AdeBenchLocalTaskEntry` / `ade_bench_root` unreachable for new
+  score specs, or guard it as legacy-only so PKG-40 cannot silently use the
+  local upstream adapter path.
+- AC-3: produce the required ADE smoke evidence through the new generic Harbor
+  task-view abstraction: a smallest `rk run` with `agent.kind:
+  spacedock_solver_v2`, `runtime: codex`, and a valid `summary.json`, or a
+  concrete accepted blocker for the missing Harbor-shaped ADE source.
