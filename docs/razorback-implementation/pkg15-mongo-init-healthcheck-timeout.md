@@ -234,3 +234,16 @@ two helpers, two-to-three new unit tests, no new deps).
 
 Single-file change in `prepare.py` plus one new test module. AC-1 + AC-2 + AC-4 closed under TDD with RED→GREEN evidence; AC-3 explicitly deferred to goal1-resume per plan. No darwin live run executed (plan + stage discipline forbid it inside implementation). The new `healthcheck_retries` override is an opt-in dict key on mongo `db_config` entries; absent fields keep the default 60 retries × 5s = 5-minute budget, covering agnews/yelp worst-case mongorestore wall time.
 
+## Stage Report: validation
+
+- DONE: Re-run unit tests `uv run pytest packages/razorback-plugin-dab/tests/unit/` — confirm PKG-15 followup healthcheck-retries test GREEN + no regression in PKG-15/16/21/25 darwin tests.
+  Full suite: 123 passed, 1 skipped (1.92s). New module test_prepare_mongo_healthcheck.py: 3/3 PASS (default=60, override=120 honored, absent→60 fallback).
+- DONE: Docstring/comment honesty spot-check on prepare.py `_task_toml` per-dataset override mechanism.
+  Comment block at L347-352 honestly states the 5-min budget AND the `db_config[<client>].healthcheck_retries` override path; `_mongo_healthcheck_retries` docstring (L501-507) describes widen/narrow semantics and None-fallback contract. No temporal/refactoring markers.
+- DONE: Code review via superpowers:requesting-code-review.
+  In-session review (no subagent dispatch — small focused diff, contained worktree). Verdict PASSED: tests green, naming honest, bool guard correct (`not isinstance(override, bool)` after isinstance(int)), kwarg default None preserves backwards compat, no drive-by refactors. Callers grep-verified: only `_materialize_task_dir` constructs `_task_toml`; all sites pass the new threading consistently.
+
+### Summary
+
+PKG-15 follow-up validation PASSED. All 4 ACs accounted for: AC-1 (defaults retries=60) + AC-2 (per-dataset override) + AC-4 (regression) verified GREEN; AC-3 (live agnews rk run) intentionally deferred to goal1-resume per plan step 5. The implementation diff is tight (38 lines in prepare.py, 89 lines of new tests), test coverage exercises real prepare_dataset_tasks end-to-end (no internal mocks), and the override mechanism is opt-in and backwards-compatible.
+
