@@ -1,0 +1,39 @@
+# PKG-27 T8 — AC-1 live smoke spec.
+#
+# Exercises the bridge end-to-end: harbor docker env up → claude-cli agent in
+# main (Haiku for cost) → harbor verifier execs the synthesized tests/test.sh
+# in main → test.sh docker-execs into client → upstream run-tests.sh → reward.txt.
+#
+# AC-1 expects mean_reward ∈ {0.0, 1.0} (non-null, non-verifier-short-circuit).
+# R4 risk noted in plan: even a perfect bridge will likely produce 0.0 because
+# the agent runs in `main` and cannot reach client's duckdb workspace.
+version: 1
+experiment: pkg27-airbnb001-haiku-local-smoke
+agent:
+  kind: claude-cli
+  model: claude-haiku-4-5
+  sampling:
+    temperature: 0.0
+  tools_allowed:
+    - Bash
+    - Read
+    - Write
+    - Edit
+    - Glob
+    - Grep
+benchmark:
+  kind: ade-bench
+  tasks_root: .
+  ade_bench_root: ~/git/ade-bench
+  db_type: duckdb
+  project_type: dbt
+  tasks:
+    - slug: airbnb001
+trials: 1
+experiment_meta:
+  max_budget_usd: 1.0
+  estimated_cost_usd: 0.20
+observers:
+  - kind: jsonl
+    path: events.jsonl
+  - kind: stdout

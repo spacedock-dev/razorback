@@ -242,6 +242,51 @@ def test_materialize_local_task_keeps_sql_tests_alongside_test_sh(tmp_path: Path
     )
 
 
+def test_materialize_local_task_emits_verifier_env_for_t_bench_keys(tmp_path: Path) -> None:
+    """PKG-27 T8 follow-up: [verifier.env] in task.toml must carry the
+    T_BENCH_* keys so harbor's verifier exec sees them (the verifier exec
+    path does NOT inherit [environment.env] — harbor only passes those to
+    `docker compose up`)."""
+    import tomllib
+    from razorback.benchmarks.ade_bench.tasks import materialize_local_task
+
+    ade_bench_root = (FIXTURES / "fixture_local_task_minimal").resolve()
+    materialized = materialize_local_task(
+        ade_bench_root=ade_bench_root,
+        task_slug="example001",
+        docker_image="ade-bench-agent:latest",
+        cache_root=tmp_path / "pkg27-cache",
+        db_type="duckdb",
+        project_type="dbt",
+    )
+    task_toml = tomllib.loads((materialized / "task.toml").read_text())
+    verifier_env = task_toml.get("verifier", {}).get("env", {})
+    assert "T_BENCH_TASK_DOCKER_CLIENT_CONTAINER_NAME" in verifier_env, (
+        f"PKG-27: [verifier.env] must forward T_BENCH_TASK_DOCKER_CLIENT_CONTAINER_NAME; "
+        f"got verifier.env={verifier_env}"
+    )
+
+
+def test_materialize_local_task_emits_verifier_user_root(tmp_path: Path) -> None:
+    """PKG-27 T1/OD-3: [verifier].user = 'root' so the bridge has docker
+    socket access (dab-agent's default user `exedev` has a docker GID that
+    does not match the colima socket's GID)."""
+    import tomllib
+    from razorback.benchmarks.ade_bench.tasks import materialize_local_task
+
+    ade_bench_root = (FIXTURES / "fixture_local_task_minimal").resolve()
+    materialized = materialize_local_task(
+        ade_bench_root=ade_bench_root,
+        task_slug="example001",
+        docker_image="ade-bench-agent:latest",
+        cache_root=tmp_path / "pkg27-cache",
+    )
+    task_toml = tomllib.loads((materialized / "task.toml").read_text())
+    assert task_toml.get("verifier", {}).get("user") == "root", (
+        f"PKG-27 OD-3: [verifier].user must be 'root'; got {task_toml.get('verifier')}"
+    )
+
+
 def test_materialize_local_task_test_sh_is_executable(tmp_path: Path) -> None:
     """AC-1: tests/test.sh is chmod +x so harbor's verifier can exec it."""
     import stat

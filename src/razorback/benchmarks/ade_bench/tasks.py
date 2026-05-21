@@ -488,6 +488,16 @@ def _build_task_toml_from_yaml(
         lines.append('')
         lines.append('[verifier]')
         lines.append(f'user = "{verifier_user}"')
+    if t_bench_env:
+        # PKG-27: forward the T_BENCH_* keys to the verifier exec env so the
+        # synthesized tests/test.sh can resolve $T_BENCH_TASK_DOCKER_CLIENT_*.
+        # Harbor's verifier exec uses task.config.verifier.env (per
+        # verifier.py:145), separate from compose's [environment.env].
+        lines.append('')
+        lines.append('[verifier.env]')
+        for k, v in t_bench_env.items():
+            v_escaped = v.replace('\\', '\\\\').replace('"', '\\"')
+            lines.append(f'{k} = "{v_escaped}"')
     return '\n'.join(lines) + '\n'
 
 
