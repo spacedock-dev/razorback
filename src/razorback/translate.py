@@ -213,15 +213,11 @@ def _build_agent_config(
             raise SpecError(
                 "claude-cli agent requires project_root for .env auth discovery."
             )
-        if (
-            spec.agent.sampling.temperature not in (None, 0.0)
-            or spec.agent.sampling.top_p is not None
-            or spec.agent.sampling.seed is not None
-        ):
+        if spec.agent.sampling.temperature not in (None, 0.0):
             raise SpecError(
                 "legacy agent.kind: claude-cli now routes to Harbor ClaudeCode, "
-                "which has no temperature/top_p/seed sampling kwarg; keep "
-                "sampling at its default no-op values."
+                "which has no temperature kwarg; keep sampling.temperature at "
+                "its default no-op value."
             )
         resolution = resolve_claude_auth(project_root=project_root, home=home)
         kwargs: dict[str, Any] = {}
