@@ -1,9 +1,9 @@
 ---
 id: vv7aqkfvj543fdeze6t4pjw5
 title: PKG-38 subclass Harbor installed agents for solver runtimes
-status: backlog
+status: plan
 source: operator directive 2026-05-21; Harbor installed agent integration
-started:
+started: 2026-05-21T15:44:22Z
 completed:
 verdict:
 score: 0.9
