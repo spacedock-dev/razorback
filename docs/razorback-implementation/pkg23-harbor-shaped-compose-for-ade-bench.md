@@ -215,3 +215,24 @@ upstream:
 ### Summary
 
 Plan corrects two phrasings in the entity (load-bearing for implementation): (1) the "translator hook" lands task.toml-side (via `[environment.env]`), not as a translator-subprocess `env=` arg — harbor's `DockerEnvironment._run_docker_compose_command` reads `task_env_config.env` from task.toml; (2) `T_BENCH_REPO_ROOT` must resolve to `ade_bench_root` (the `~/git/ade-bench` checkout), NOT the materialized view-dir, because the upstream compose's `dockerfile: docker/base/Dockerfile.duckdb-dbt` resolves relative to it and the view-dir lacks the `docker/` subtree. Both corrections are flagged in the plan and Task 9 documents the AC-1 correction back into the entity body. The live `rk run` (AC-3) is explicitly deferred to the validation stage per captain standing orders (`.env` / `ANTHROPIC_API_KEY` paid API tier).
+
+## Stage Report: implementation
+
+- DONE: AC-1 — Translator populates six T_BENCH_* env vars for ade-bench tasks.
+  `_compute_t_bench_env` + extended `_build_task_toml_from_yaml` emit `[environment.env]` carrying the six keys (commit on `feat(pkg23): GREEN`); unit suite `tests/unit/test_ade_bench_t_bench_env.py` 5/5 PASS; integration `tests/integration/test_ade_bench_compose_config_resolves.py` PASS — `docker compose config` against airbnb001's materialized compose resolves with zero `${T_BENCH_*}` placeholders.
+- DONE: AC-2 — Env-var population is gated on AdeBenchLocalTaskEntry.
+  Translator-level + structural gating asserted in `tests/unit/test_ade_bench_translator_t_bench_env.py` (2/2 PASS); harbor-DAB code path never imports `materialize_local_task` / `_compute_t_bench_env` / mentions `T_BENCH_*`. Structural gating confirmed by source-inspection assertion.
+- SKIPPED: AC-3 — Goal 2's T0 cycle 4 failure mode is gone (live `rk run` against airbnb001 reaches Phase 3).
+  Live `rk run` is validation-stage scope per plan Task 8 and captain standing orders (paid API tier). Implementation stage shipped the prerequisite: the airbnb001 probe spec now pins `db_type: duckdb`/`project_type: dbt` so PKG-20's `_select_compose_variant` lands on `docker-compose-duckdb-dbt.yaml`. Probe spec freezes offline (`uv run rk freeze --allow-missing` clean).
+- DONE: AC-4 — ade-bench-client-{task_slug} image build path documented (but not implemented).
+  §Build paths section appended to entity body documenting Dockerfile location (`~/git/ade-bench/docker/base/Dockerfile.duckdb-dbt`), build context (`T_BENCH_REPO_ROOT`), manual build command, and follow-up entity placeholder for the eventual `razorback ade-bench setup` command.
+
+### Plan deviations
+
+- **Entity AC-1 vs implementation:** entity wording said `T_BENCH_REPO_ROOT` resolves to the "materialized view-dir"; implementation honors the plan's correction (`ade_bench_root` absolute path) because the upstream compose's `dockerfile: docker/base/Dockerfile.duckdb-dbt` resolves relative to it and the view-dir lacks `docker/`. Documented in the new §AC-1 correction section of the entity body.
+- **T_BENCH_TASK_DOCKER_CLIENT_CONTAINER_NAME:** chose deterministic `{task_slug}-client` (no trial-id suffix) — harbor's `--project-name` per-trial prefix already isolates concurrent trials at the compose-project layer, and container_name within a project is unique by definition. Plan Task 5's counter-option (interpolate harbor session-id) deferred unless validation surfaces an actual collision.
+- **T10 full pytest sweep:** unit suite (472 tests) PASS in 4s; PKG-23-adjacent integration (`test_ade_bench_compose_config_resolves`, `test_ade_bench_local_task_readonly_contract_live`, `test_freeze_idempotency_pkg8`) all PASS. `tests/integration/test_budget_gate_two_invocations.py` times out at 60s — confirmed PRE-EXISTING (reproduces after `git stash` of any worktree-local changes); the two timing-failing tests shell out via subprocess and appear environment/auth-shaped, NOT PKG-23-shaped. PKG-23's surfaces (translator + ade_bench tasks module) have no overlap with the budget-gate test.
+
+### Summary
+
+PKG-23 closes AC-1, AC-2, and AC-4 in the implementation stage. The six `T_BENCH_*` env vars now flow from the razorback translator into harbor's `docker compose up` via the synthesized `task.toml`'s `[environment.env]` table — the load-bearing wire confirmed against `harbor.environments.docker.docker.DockerEnvironment._run_docker_compose_command`. `docker compose config` resolves the airbnb001 compose with zero unresolved placeholders. AC-3 (live `rk run`) is deferred to validation stage per plan Task 8; the probe spec is now variant-pinned and freezes cleanly. Stage-report deviations documented above: one entity AC-1 wording correction, one deterministic-container_name choice with rationale, one pre-existing test-suite timeout flagged as out-of-scope.
