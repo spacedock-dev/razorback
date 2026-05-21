@@ -82,7 +82,7 @@ def _build_summary(per_query: dict[tuple[str, int], list[float]]) -> dict:
 
 def aggregate_job_result(
     trial_results: Iterable,
-    trial_name_map: dict[str, tuple[str, int]],
+    trial_name_map: dict[str, tuple[str, int] | tuple[str, list[int]]],
     out_path: Path,
 ) -> None:
     """Aggregate a real harbor JobResult.trial_results sequence.
@@ -91,7 +91,14 @@ def aggregate_job_result(
     must expose `.trial_name: str` and `.verifier_result.rewards: dict | None`.
 
     Per §6.5 the aggregator never reads `JobResult.stats` (AC-5). The mapping pairs
-    each trial back to its (dataset, query_id) by exact `trial_name → key` lookup.
+    each trial back to its (dataset, query_ids) by exact `trial_name → key` lookup.
+
+    Two key shapes are supported:
+      - per-query — value is ``(dataset, query_id: int)``. One outcome per trial.
+      - batch    — value is ``(dataset, query_ids: list[int])``. One outcome per
+        query_id, drawn from the trial's ``reward_per_query.json`` sidecar at
+        ``<trial_dir>/steps/main/verifier/reward_per_query.json`` (or
+        ``<trial_dir>/verifier/reward_per_query.json`` for single-step trials).
     """
     per_query: dict[tuple[str, int], list[float]] = {}
     outcomes: list[dict] = []
@@ -100,17 +107,38 @@ def aggregate_job_result(
         key = _resolve_key(tr.trial_name, trial_name_map)
         if key is None:
             continue
+        dataset, qid_or_list = key
+        if isinstance(qid_or_list, list):
+            per_query_rewards = _load_per_query_rewards(
+                tr, query_ids=qid_or_list,
+            )
+            for qid in qid_or_list:
+                reward = per_query_rewards.get(qid, 0.0)
+                sub_key = (dataset, qid)
+                per_query.setdefault(sub_key, []).append(reward)
+                ti = counter.get(sub_key, 0)
+                counter[sub_key] = ti + 1
+                outcomes.append(
+                    {
+                        "dataset": dataset,
+                        "query_id": qid,
+                        "trial_index": ti,
+                        "trial_name": tr.trial_name,
+                        "reward": reward,
+                    }
+                )
+            continue
         reward = 0.0
         if tr.verifier_result is not None and tr.verifier_result.rewards:
             reward = float(tr.verifier_result.rewards.get("reward", 0.0))
-        per_query.setdefault(key, []).append(reward)
-        ds, qid = key
-        ti = counter.get(key, 0)
-        counter[key] = ti + 1
+        sub_key = (dataset, qid_or_list)
+        per_query.setdefault(sub_key, []).append(reward)
+        ti = counter.get(sub_key, 0)
+        counter[sub_key] = ti + 1
         outcomes.append(
             {
-                "dataset": ds,
-                "query_id": qid,
+                "dataset": dataset,
+                "query_id": qid_or_list,
                 "trial_index": ti,
                 "trial_name": tr.trial_name,
                 "reward": reward,
@@ -127,7 +155,45 @@ def aggregate_job_result(
 
 def _resolve_key(
     trial_name: str,
-    trial_name_map: dict[str, tuple[str, int]],
-) -> tuple[str, int] | None:
+    trial_name_map: dict[str, tuple[str, int] | tuple[str, list[int]]],
+) -> tuple[str, int] | tuple[str, list[int]] | None:
     prefix = trial_name.split("__", 1)[0]
     return trial_name_map.get(prefix)
+
+
+def _load_per_query_rewards(trial, *, query_ids: list[int]) -> dict[int, float]:
+    """Read a batch trial's `reward_per_query.json` sidecar.
+
+    Returns a {query_id: reward} dict. Missing file / unparseable file yields
+    an empty dict so the caller defaults to 0.0 per declared query_id. The
+    sidecar is written by verify_batch.py under the verifier dir; multi-step
+    trials emit it under steps/main/verifier/, single-step trials under
+    verifier/.
+    """
+    trial_uri = getattr(trial, "trial_uri", None) or ""
+    if not trial_uri.startswith("file://"):
+        return {}
+    trial_dir = Path(trial_uri[len("file://"):])
+    candidates = [
+        trial_dir / "steps" / "main" / "verifier" / "reward_per_query.json",
+        trial_dir / "verifier" / "reward_per_query.json",
+    ]
+    payload: dict | None = None
+    for candidate in candidates:
+        if candidate.exists():
+            try:
+                payload = json.loads(candidate.read_text())
+            except json.JSONDecodeError:
+                payload = None
+            break
+    if not isinstance(payload, dict):
+        return {}
+    out: dict[int, float] = {}
+    for qid in query_ids:
+        entry = payload.get(f"q{qid}")
+        if isinstance(entry, dict) and "reward" in entry:
+            try:
+                out[qid] = float(entry["reward"])
+            except (TypeError, ValueError):
+                continue
+    return out

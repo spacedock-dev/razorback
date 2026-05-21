@@ -36,6 +36,7 @@ def build_spec(variant: str, dataset: str) -> dict:
             "datasets": [dataset],
             "workspace_variant": variant,
             "hints": True,
+            "query_mode": "batch",
         },
         "trials": 1,
         "experiment_meta": {

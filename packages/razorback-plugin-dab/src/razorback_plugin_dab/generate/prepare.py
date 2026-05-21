@@ -23,7 +23,10 @@ from razorback_plugin_dab.generate.compose import (
     ComposeError,
     generate_compose,
 )
-from razorback_plugin_dab.generate.stratum import write_stratum_file
+from razorback_plugin_dab.generate.stratum import (
+    write_batch_stratum_file,
+    write_stratum_file,
+)
 from razorback_plugin_dab.generate.tools_denied import write_settings_json
 from razorback_plugin_dab.generate.workspace_readme import render_workspace_readme
 
@@ -32,9 +35,10 @@ class TaskTomlError(RuntimeError):
     """Generated task.toml has keys harbor will silently drop (schema drift)."""
 
 
-class TaskManifestEntry(TypedDict):
+class TaskManifestEntry(TypedDict, total=False):
     dataset: str
-    query_id: int
+    query_id: int | None
+    query_ids: list[int]
     task_name: str
     task_dir: Path
 
@@ -61,6 +65,7 @@ def prepare_dataset_tasks(
     container_workdir: str = DEFAULT_CONTAINER_WORKDIR,
     materialize_mode: str = "bind",
     postgres_volume_mode: str = "reuse",
+    query_mode: str = "per-query",
 ) -> list[TaskManifestEntry]:
     """Materialize one harbor task dir per query under tasks_root/<dataset>-q<n>/.
 
@@ -87,6 +92,10 @@ def prepare_dataset_tasks(
         raise ValueError(
             f"postgres_volume_mode must be 'reuse' or 'fresh'; got {postgres_volume_mode!r}"
         )
+    if query_mode not in ("batch", "per-query"):
+        raise ValueError(
+            f"query_mode must be 'batch' or 'per-query'; got {query_mode!r}"
+        )
     data_root = Path(data_root)
     dataset_dir = data_root / f"query_{dataset}"
     if not dataset_dir.exists():
@@ -104,6 +113,42 @@ def prepare_dataset_tasks(
         p for p in dataset_dir.iterdir()
         if p.is_dir() and p.name.startswith("query") and p.name != "query_dataset"
     )
+    if query_mode == "batch":
+        ordered: list[tuple[int, Path]] = []
+        for query_dir in query_dirs:
+            try:
+                qid = int(query_dir.name.removeprefix("query"))
+            except ValueError:
+                continue
+            ordered.append((qid, query_dir))
+        ordered.sort(key=lambda pair: pair[0])
+        task_name = dataset
+        task_dir = tasks_root / task_name
+        if task_dir.exists():
+            shutil.rmtree(task_dir)
+        _materialize_batch_task_dir(
+            task_name=task_name,
+            dataset_dir=dataset_dir,
+            ordered_queries=ordered,
+            task_dir=task_dir,
+            workspace_variant=workspace_variant,
+            hints=hints,
+            docker_image=docker_image,
+            container_workdir=container_workdir,
+            db_config=db_config,
+            dataset_meta=dataset_meta,
+            materialize_mode=materialize_mode,
+            postgres_volume_mode=postgres_volume_mode,
+        )
+        manifest.append({
+            "dataset": dataset,
+            "query_id": None,
+            "query_ids": [qid for qid, _ in ordered],
+            "task_name": task_name,
+            "task_dir": task_dir,
+        })
+        return manifest
+
     for query_dir in query_dirs:
         try:
             query_id = int(query_dir.name.removeprefix("query"))
@@ -291,6 +336,271 @@ def _materialize_task_dir(
     compose_path = env_dir / "docker-compose.yaml"
     if compose_path.exists():
         _check_compose_volumes(compose_path)
+
+
+def _materialize_batch_task_dir(
+    *,
+    task_name: str,
+    dataset_dir: Path,
+    ordered_queries: list[tuple[int, Path]],
+    task_dir: Path,
+    workspace_variant: str,
+    hints: bool,
+    docker_image: str,
+    container_workdir: str,
+    db_config: dict,
+    dataset_meta: catalog.DabDataset,
+    materialize_mode: str = "bind",
+    postgres_volume_mode: str = "reuse",
+) -> None:
+    task_dir.mkdir(parents=True)
+
+    postgres_db = _postgres_db_name(db_config, dataset_name=dataset_meta.name)
+    mongo_probes = _mongo_probe_targets(
+        db_config, dataset_dir=dataset_dir, dataset_name=dataset_meta.name,
+    )
+    mongo_healthcheck_retries = _mongo_healthcheck_retries(db_config)
+    task_toml_text = _task_toml(
+        task_name=task_name,
+        docker_image=docker_image,
+        container_workdir=container_workdir,
+        postgres_db=postgres_db,
+        mongo_probes=mongo_probes,
+        mongo_healthcheck_retries=mongo_healthcheck_retries,
+    )
+    _check_task_toml_environment_keys(task_toml_text, task_name=task_name)
+    (task_dir / "task.toml").write_text(task_toml_text)
+
+    query_ids = [qid for qid, _ in ordered_queries]
+    instruction = _batch_instruction(
+        ordered_queries=ordered_queries,
+        dataset_dir=dataset_dir,
+        container_workdir=container_workdir,
+        hints=hints,
+    )
+    (task_dir / "instruction.md").write_text(instruction)
+
+    env_dir = task_dir / "environment"
+    env_dir.mkdir()
+    (env_dir / "Dockerfile").write_text(
+        "# Unused — [environment].docker_image selects the prebuilt image.\n"
+    )
+    write_settings_json(env_dir / "settings.json", task_name=task_name)
+
+    if db_config:
+        compose_text = generate_compose(
+            db_config=db_config,
+            dataset_name=dataset_meta.name,
+            data_root=dataset_dir.parent,
+            docker_image=docker_image,
+            container_workdir=container_workdir,
+            schema_version=getattr(dataset_meta, "schema_version", "v1"),
+            postgres_volume_mode=postgres_volume_mode,
+            task_id=task_name,
+        )
+        (env_dir / "docker-compose.yaml").write_text(compose_text)
+        _write_compose_services_sidecar(env_dir / "docker-compose.yaml")
+        _write_mongo_restore_shims(env_dir=env_dir, db_config=db_config, dataset_name=dataset_meta.name)
+
+    tests_dir = task_dir / "tests"
+    tests_dir.mkdir()
+    from razorback_plugin_dab.verify import verify_batch as verify_batch_module
+    shutil.copy2(Path(verify_batch_module.__file__), tests_dir / "verify_batch.py")
+    for query_id, query_dir in ordered_queries:
+        upstream_validate = query_dir / "validate.py"
+        if upstream_validate.exists():
+            _install_batch_validator(
+                tests_dir=tests_dir,
+                upstream=upstream_validate,
+                dataset=dataset_meta.name,
+                query_id=query_id,
+            )
+
+    write_batch_stratum_file(
+        tests_dir=tests_dir,
+        dataset=dataset_meta.name,
+        query_ids=query_ids,
+        backends=dataset_meta.backends,
+    )
+
+    test_sh = tests_dir / "test.sh"
+    test_sh.write_text(_batch_test_sh(container_workdir=container_workdir))
+    test_sh.chmod(test_sh.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+    step_dir = task_dir / "steps" / _STEP_NAME
+    step_dir.mkdir(parents=True)
+    (step_dir / "instruction.md").write_text(instruction)
+    workdir = step_dir / "workdir"
+    workdir.mkdir()
+
+    workdir_readme = workdir / "README.md"
+    workdir_readme.write_text(
+        render_workspace_readme(variant=workspace_variant, container_workdir=container_workdir)
+    )
+
+    if materialize_mode == "bind":
+        excluded_workdir_names = _dump_basenames(db_config)
+    else:
+        excluded_workdir_names = set()
+
+    for name in _DATASET_SAFE:
+        src = dataset_dir / name
+        if not src.exists():
+            continue
+        dst = workdir / name
+        if src.is_dir():
+            if materialize_mode == "bind":
+                _clone_or_copy_tree(src, dst, ignore_names=excluded_workdir_names)
+            else:
+                shutil.copytree(
+                    src,
+                    dst,
+                    ignore=lambda _dir, names: [
+                        n for n in names if n in excluded_workdir_names
+                    ],
+                )
+        else:
+            if src.name in excluded_workdir_names:
+                continue
+            shutil.copy2(src, dst)
+
+    for query_id, query_dir in ordered_queries:
+        q_workspace = workdir / f"query{query_id}"
+        q_workspace.mkdir()
+        for name in _QUERY_SAFE:
+            src = query_dir / name
+            if src.exists():
+                shutil.copy2(src, q_workspace / name)
+
+    for forbidden in _QUERY_FORBIDDEN:
+        for stray in workdir.rglob(forbidden):
+            if stray.is_dir():
+                shutil.rmtree(stray)
+            else:
+                stray.unlink()
+
+    compose_path = env_dir / "docker-compose.yaml"
+    if compose_path.exists():
+        _check_compose_volumes(compose_path)
+
+
+def _batch_instruction(
+    *,
+    ordered_queries: list[tuple[int, Path]],
+    dataset_dir: Path,
+    container_workdir: str,
+    hints: bool,
+) -> str:
+    desc_file = "db_description_withhint.txt" if hints else "db_description.txt"
+    desc_path = dataset_dir / desc_file
+    if not desc_path.exists():
+        desc_path = dataset_dir / "db_description.txt"
+    db_description = desc_path.read_text() if desc_path.exists() else ""
+    lines = [
+        "# Task",
+        "",
+        "Answer ALL of the following queries using the databases described below.",
+        "Solve every query in this single agent turn.",
+        "",
+        "## Queries",
+        "",
+    ]
+    answer_keys: list[str] = []
+    for query_id, query_dir in ordered_queries:
+        query_text = (
+            (query_dir / "query.json").read_text()
+            if (query_dir / "query.json").exists()
+            else "{}"
+        )
+        lines.append(f"### query{query_id}")
+        lines.append("")
+        lines.append(
+            f"Located under `{container_workdir}/query{query_id}/query.json`:"
+        )
+        lines.append("")
+        lines.append(query_text)
+        lines.append("")
+        answer_keys.append(f'"q{query_id}"')
+    lines.extend([
+        "## Databases",
+        "",
+        db_description,
+        "",
+        "## Output contract",
+        "",
+        (
+            f"Write your final answers to `{container_workdir}/answers.json` as a "
+            "JSON object where each key is the query directory name (e.g. "
+            f"{', '.join(answer_keys)}) and each value is the answer string. For "
+            "example:"
+        ),
+        "",
+        "```json",
+        "{",
+    ])
+    for query_id, _ in ordered_queries:
+        lines.append(f'  "q{query_id}": "<your answer for query{query_id}>",')
+    if ordered_queries:
+        lines[-1] = lines[-1].rstrip(",")
+    lines.extend([
+        "}",
+        "```",
+        "",
+        "The verifier reads this file and scores each query independently.",
+        "",
+    ])
+    return "\n".join(lines)
+
+
+def _install_batch_validator(
+    *,
+    tests_dir: Path,
+    upstream: Path,
+    dataset: str,
+    query_id: int,
+) -> None:
+    """Install a per-query validator under tests/validate_q{N}.py.
+
+    Bookreview's hardened templates (PKG-13 T14) are applied per-query; the
+    hardened body loads the upstream alongside it under
+    `_upstream_validate_q{N}.py` to avoid colliding with sibling queries'
+    upstream copies.
+    """
+    from razorback_plugin_dab.verify import validators as hardened
+
+    template_name = _hardened_template(dataset=dataset, query_id=query_id)
+    if template_name is None:
+        shutil.copy2(upstream, tests_dir / f"validate_q{query_id}.py")
+        return
+
+    upstream_dst = tests_dir / f"_upstream_validate_q{query_id}.py"
+    shutil.copy2(upstream, upstream_dst)
+    template_path = Path(hardened.__file__).parent / template_name
+    body = template_path.read_text()
+    # Hardened templates load their sibling as `_upstream_validate.py`; under
+    # batch we keep per-query siblings to avoid name collisions. Rewrite the
+    # loader to point at the per-query upstream copy we just wrote.
+    body = body.replace(
+        '"_upstream_validate.py"', f'"_upstream_validate_q{query_id}.py"'
+    )
+    body = body.replace(
+        '"_upstream_validate"', f'"_upstream_validate_q{query_id}"'
+    )
+    (tests_dir / f"validate_q{query_id}.py").write_text(body)
+
+
+def _batch_test_sh(*, container_workdir: str) -> str:
+    return (
+        '#!/bin/sh\n'
+        'set -eu\n'
+        'mkdir -p /logs/verifier\n'
+        'cp /tests/stratum.json /logs/verifier/stratum.json 2>/dev/null || true\n'
+        'python /tests/verify_batch.py \\\n'
+        '  --tests-dir /tests \\\n'
+        f'  --answers {container_workdir}/answers.json \\\n'
+        '  --reward-out /logs/verifier/reward.json \\\n'
+        '  --per-query-out /logs/verifier/reward_per_query.json\n'
+    )
 
 
 _MONGO_HEALTHCHECK_DEFAULT_RETRIES = 60
