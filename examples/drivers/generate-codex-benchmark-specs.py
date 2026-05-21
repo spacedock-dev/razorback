@@ -8,7 +8,7 @@ import argparse
 import subprocess
 import sys
 from pathlib import Path
-from typing import NamedTuple
+from typing import Literal, NamedTuple
 
 import yaml
 
@@ -16,8 +16,9 @@ from razorback_plugin_dab.datasets import DAB_DATASETS
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SOLVER_WORKFLOW = "./examples/solver_workflows/codex-benchmark-solver"
+DEFAULT_SOLVER_WORKFLOW = "./examples/solver_workflows/codex-benchmark-solver"
 CODEX_MODEL = "gpt-5.5"
+WORKSPACE_VARIANTS = ("direct-minimal", "direct-structured", "spacedock")
 
 
 class DabSpecRow(NamedTuple):
@@ -29,6 +30,7 @@ class DabSpecRow(NamedTuple):
 class AdeBenchSpecRow(NamedTuple):
     task_slug: str
     ade_bench_root: Path
+    input_shape: Literal["upstream", "harbor_task_root"] = "upstream"
     trials: int = 1
 
 
@@ -38,13 +40,37 @@ def plan_dab_specs(*, data_root: Path) -> list[DabSpecRow]:
 
 def plan_ade_bench_specs(*, ade_bench_root: Path) -> list[AdeBenchSpecRow]:
     tasks_root = ade_bench_root / "tasks"
-    if not tasks_root.is_dir():
-        raise FileNotFoundError(f"ade-bench tasks root not found: {tasks_root}")
-    slugs = sorted(p.name for p in tasks_root.iterdir() if (p / "task.yaml").is_file())
-    return [
-        AdeBenchSpecRow(task_slug=slug, ade_bench_root=ade_bench_root, trials=1)
-        for slug in slugs
-    ]
+    if tasks_root.is_dir():
+        slugs = sorted(p.name for p in tasks_root.iterdir() if (p / "task.yaml").is_file())
+        return [
+            AdeBenchSpecRow(
+                task_slug=slug,
+                ade_bench_root=ade_bench_root,
+                input_shape="upstream",
+                trials=1,
+            )
+            for slug in slugs
+        ]
+
+    slugs = (
+        sorted(p.name for p in ade_bench_root.iterdir() if (p / "task.toml").is_file())
+        if ade_bench_root.is_dir()
+        else []
+    )
+    if slugs:
+        return [
+            AdeBenchSpecRow(
+                task_slug=slug,
+                ade_bench_root=ade_bench_root,
+                input_shape="harbor_task_root",
+                trials=1,
+            )
+            for slug in slugs
+        ]
+    raise FileNotFoundError(
+        "ade-bench root must contain either upstream tasks/*/task.yaml or "
+        f"Harbor-shaped */task.toml entries: {ade_bench_root}"
+    )
 
 
 def emit_dab_spec(
@@ -53,7 +79,12 @@ def emit_dab_spec(
     out_dir: Path,
     model: str = CODEX_MODEL,
     reasoning_effort: str | None = None,
+    solver_workflow: str = DEFAULT_SOLVER_WORKFLOW,
+    workspace_variant: str = "direct-structured",
+    hints: bool = False,
 ) -> Path:
+    if workspace_variant not in WORKSPACE_VARIANTS:
+        raise ValueError(f"workspace_variant must be one of {', '.join(WORKSPACE_VARIANTS)}")
     out_dir.mkdir(parents=True, exist_ok=True)
     spec_path = out_dir / f"{row.dataset}.yaml"
     payload = _base_spec(
@@ -62,12 +93,13 @@ def emit_dab_spec(
             "kind": "harbor_dab",
             "data_root": str(row.data_root),
             "datasets": [row.dataset],
-            "workspace_variant": "direct-structured",
-            "hints": False,
+            "workspace_variant": workspace_variant,
+            "hints": hints,
         },
         trials=row.trials,
         model=model,
         reasoning_effort=reasoning_effort,
+        solver_workflow=solver_workflow,
     )
     _write_yaml(spec_path, payload, about=f"Codex DAB N=1 cell for dataset={row.dataset}.")
     return spec_path
@@ -79,20 +111,30 @@ def emit_ade_bench_spec(
     out_dir: Path,
     model: str = CODEX_MODEL,
     reasoning_effort: str | None = None,
+    solver_workflow: str = DEFAULT_SOLVER_WORKFLOW,
 ) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     spec_path = out_dir / f"{_slug_for_filename(row.task_slug)}.yaml"
-    payload = _base_spec(
-        experiment=f"codex-ade-bench-{_slug_for_filename(row.task_slug)}",
-        benchmark={
+    if row.input_shape == "harbor_task_root":
+        benchmark = {
+            "kind": "ade-bench",
+            "tasks_root": str(row.ade_bench_root),
+            "tasks": [row.task_slug],
+        }
+    else:
+        benchmark = {
             "kind": "ade-bench",
             "tasks_root": ".",
             "ade_bench_root": str(row.ade_bench_root),
             "tasks": [{"slug": row.task_slug}],
-        },
+        }
+    payload = _base_spec(
+        experiment=f"codex-ade-bench-{_slug_for_filename(row.task_slug)}",
+        benchmark=benchmark,
         trials=row.trials,
         model=model,
         reasoning_effort=reasoning_effort,
+        solver_workflow=solver_workflow,
     )
     _write_yaml(spec_path, payload, about=f"Codex ade-bench N=1 cell for task={row.task_slug}.")
     return spec_path
@@ -105,13 +147,14 @@ def _base_spec(
     trials: int,
     model: str,
     reasoning_effort: str | None = None,
+    solver_workflow: str = DEFAULT_SOLVER_WORKFLOW,
 ) -> dict:
     agent = {
         "kind": "spacedock_solver_v2",
         "runtime": "codex",
         "model": model,
         "sampling": {"temperature": 0.0, "top_p": None, "seed": 1},
-        "solver_workflow": SOLVER_WORKFLOW,
+        "solver_workflow": solver_workflow,
         "spacedock_skill_version": "1.0.0",
         "max_turns": 200,
         "tools_allowed": [],
@@ -194,6 +237,23 @@ def main() -> int:
         "--reasoning-effort",
         help="Optional Codex reasoning effort to emit under the agent block.",
     )
+    parser.add_argument(
+        "--solver-workflow",
+        default=DEFAULT_SOLVER_WORKFLOW,
+        help=f"Solver workflow directory for emitted specs. Default: {DEFAULT_SOLVER_WORKFLOW}.",
+    )
+    parser.add_argument(
+        "--workspace-variant",
+        choices=WORKSPACE_VARIANTS,
+        default="direct-structured",
+        help="DAB workspace variant for emitted harbor_dab specs.",
+    )
+    parser.add_argument(
+        "--hints",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Emit DAB specs with benchmark.hints enabled.",
+    )
     args = parser.parse_args()
 
     emitted: list[Path] = []
@@ -210,6 +270,9 @@ def main() -> int:
                         out_dir=args.out_root / "dab",
                         model=args.model,
                         reasoning_effort=args.reasoning_effort,
+                        solver_workflow=args.solver_workflow,
+                        workspace_variant=args.workspace_variant,
+                        hints=args.hints,
                     )
                 )
     else:
@@ -225,6 +288,7 @@ def main() -> int:
                         out_dir=args.out_root / "ade-bench",
                         model=args.model,
                         reasoning_effort=args.reasoning_effort,
+                        solver_workflow=args.solver_workflow,
                     )
                 )
 

@@ -82,6 +82,51 @@ def test_emit_dab_codex_spec_uses_solver_v2_codex_and_harbor_dab(tmp_path: Path)
     assert "reasoning_effort" not in payload["agent"]
 
 
+def test_codex_ade_dbt_repair_workflow_is_checked_in() -> None:
+    workflow_readme = (
+        REPO_ROOT / "examples" / "solver_workflows" / "codex-ade-dbt-repair" / "README.md"
+    )
+
+    assert workflow_readme.is_file()
+    text = workflow_readme.read_text().lower()
+    assert "dbt" in text
+    assert "repair" in text
+    assert "repaired project state" in text
+    assert "answers.json" not in text
+
+
+def test_emit_specs_allow_solver_workflow_selection(tmp_path: Path) -> None:
+    generator = _load_generator()
+    dab_row = generator.plan_dab_specs(data_root=tmp_path / "dab-data")[0]
+    ade_tasks_root = tmp_path / "ade-bench" / "tasks"
+    ade_task_dir = ade_tasks_root / "example001"
+    ade_task_dir.mkdir(parents=True)
+    (ade_task_dir / "task.yaml").write_text("task_id: example001\n")
+    ade_row = generator.plan_ade_bench_specs(ade_bench_root=tmp_path / "ade-bench")[0]
+
+    dab_spec_path = generator.emit_dab_spec(
+        dab_row,
+        out_dir=tmp_path / "out" / "dab",
+        solver_workflow="./examples/solver_workflows/codex-benchmark-solver",
+    )
+    ade_spec_path = generator.emit_ade_bench_spec(
+        ade_row,
+        out_dir=tmp_path / "out" / "ade",
+        solver_workflow="./examples/solver_workflows/codex-ade-dbt-repair",
+    )
+
+    dab_payload = yaml.safe_load(dab_spec_path.read_text())
+    ade_payload = yaml.safe_load(ade_spec_path.read_text())
+    assert (
+        dab_payload["agent"]["solver_workflow"]
+        == "./examples/solver_workflows/codex-benchmark-solver"
+    )
+    assert (
+        ade_payload["agent"]["solver_workflow"]
+        == "./examples/solver_workflows/codex-ade-dbt-repair"
+    )
+
+
 def test_checked_in_dab_smoke_spec_uses_structured_workspace_without_hints() -> None:
     spec_path = REPO_ROOT / "examples" / "specs" / "codex-dab-smoke.yaml"
     payload = yaml.safe_load(spec_path.read_text())
@@ -150,6 +195,115 @@ def test_cli_can_emit_reasoning_effort_when_requested(
     assert payload["agent"]["reasoning_effort"] == "xhigh"
 
 
+def test_cli_can_emit_custom_ade_solver_workflow(tmp_path: Path, monkeypatch) -> None:
+    generator = _load_generator()
+    monkeypatch.setattr(
+        generator,
+        "plan_ade_bench_specs",
+        lambda *, ade_bench_root: [
+            generator.AdeBenchSpecRow(
+                task_slug="example001",
+                ade_bench_root=ade_bench_root,
+                trials=1,
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            str(GENERATOR),
+            "--benchmark",
+            "ade-bench",
+            "--ade-bench-root",
+            str(tmp_path / "ade-bench"),
+            "--out-root",
+            str(tmp_path / "specs"),
+            "--solver-workflow",
+            "./examples/solver_workflows/codex-ade-dbt-repair",
+            "--write",
+        ],
+    )
+
+    assert generator.main() == 0
+
+    payload = yaml.safe_load(
+        (tmp_path / "specs" / "ade-bench" / "example001.yaml").read_text()
+    )
+    assert (
+        payload["agent"]["solver_workflow"]
+        == "./examples/solver_workflows/codex-ade-dbt-repair"
+    )
+
+
+def test_cli_can_emit_dab_workspace_and_hints_variants(
+    tmp_path: Path, monkeypatch
+) -> None:
+    generator = _load_generator()
+    monkeypatch.setattr(
+        generator,
+        "plan_dab_specs",
+        lambda *, data_root: [
+            generator.DabSpecRow(dataset="bookreview", data_root=data_root, trials=1)
+        ],
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            str(GENERATOR),
+            "--benchmark",
+            "dab",
+            "--dab-data-root",
+            str(tmp_path / "dab-data"),
+            "--out-root",
+            str(tmp_path / "specs"),
+            "--workspace-variant",
+            "spacedock",
+            "--hints",
+            "--write",
+        ],
+    )
+
+    assert generator.main() == 0
+
+    payload = yaml.safe_load((tmp_path / "specs" / "dab" / "bookreview.yaml").read_text())
+    assert payload["benchmark"]["workspace_variant"] == "spacedock"
+    assert payload["benchmark"]["hints"] is True
+
+
+def test_cli_can_explicitly_disable_dab_hints(tmp_path: Path, monkeypatch) -> None:
+    generator = _load_generator()
+    monkeypatch.setattr(
+        generator,
+        "plan_dab_specs",
+        lambda *, data_root: [
+            generator.DabSpecRow(dataset="bookreview", data_root=data_root, trials=1)
+        ],
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            str(GENERATOR),
+            "--benchmark",
+            "dab",
+            "--dab-data-root",
+            str(tmp_path / "dab-data"),
+            "--out-root",
+            str(tmp_path / "specs"),
+            "--no-hints",
+            "--write",
+        ],
+    )
+
+    assert generator.main() == 0
+
+    payload = yaml.safe_load((tmp_path / "specs" / "dab" / "bookreview.yaml").read_text())
+    assert payload["benchmark"]["workspace_variant"] == "direct-structured"
+    assert payload["benchmark"]["hints"] is False
+
+
 def test_display_path_handles_relative_and_external_out_roots(tmp_path: Path) -> None:
     generator = _load_generator()
 
@@ -185,3 +339,59 @@ def test_emit_ade_bench_codex_spec_uses_local_task_entry(tmp_path: Path) -> None
     assert payload["benchmark"]["ade_bench_root"] == str(tmp_path / "ade-bench")
     assert payload["benchmark"]["tasks"] == [{"slug": "example001"}]
     assert payload["trials"] == 1
+
+
+def test_emit_ade_bench_codex_spec_uses_harbor_shaped_task_root(tmp_path: Path) -> None:
+    generator = _load_generator()
+    ade_bench_root = tmp_path / "harbor-data" / "ade-bench"
+    for slug in ("task_b", "task_a"):
+        task_dir = ade_bench_root / slug
+        task_dir.mkdir(parents=True)
+        (task_dir / "task.toml").write_text(f'name = "{slug}"\n')
+
+    rows = generator.plan_ade_bench_specs(ade_bench_root=ade_bench_root)
+    spec_path = generator.emit_ade_bench_spec(
+        rows[0],
+        out_dir=tmp_path / "out",
+        solver_workflow="./examples/solver_workflows/codex-ade-dbt-repair",
+    )
+    payload = yaml.safe_load(spec_path.read_text())
+
+    assert [row.task_slug for row in rows] == ["task_a", "task_b"]
+    assert payload["agent"]["solver_workflow"] == "./examples/solver_workflows/codex-ade-dbt-repair"
+    assert payload["benchmark"]["kind"] == "ade-bench"
+    assert payload["benchmark"]["tasks_root"] == str(ade_bench_root)
+    assert payload["benchmark"]["tasks"] == ["task_a"]
+    assert "ade_bench_root" not in payload["benchmark"]
+
+
+def test_plan_ade_bench_specs_rejects_unknown_root_shape(tmp_path: Path) -> None:
+    generator = _load_generator()
+    missing_root = tmp_path / "missing"
+
+    try:
+        generator.plan_ade_bench_specs(ade_bench_root=missing_root)
+    except FileNotFoundError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("expected FileNotFoundError")
+
+    assert "upstream tasks/*/task.yaml" in message
+    assert "Harbor-shaped */task.toml" in message
+    assert str(missing_root) in message
+
+
+def test_emit_dab_codex_spec_allows_workspace_and_hints_variants(tmp_path: Path) -> None:
+    generator = _load_generator()
+    row = generator.plan_dab_specs(data_root=tmp_path / "dab-data")[0]
+
+    spec_path = generator.emit_dab_spec(
+        row,
+        out_dir=tmp_path / "out",
+        workspace_variant="spacedock",
+        hints=True,
+    )
+    payload = yaml.safe_load(spec_path.read_text())
+
+    assert payload["benchmark"]["workspace_variant"] == "spacedock"
+    assert payload["benchmark"]["hints"] is True
