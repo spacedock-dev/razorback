@@ -1,9 +1,9 @@
 ---
 id: 0yvb96r26n54nkavg7myr0va
 title: PKG-33 Harbor-shaped Codex audit coverage
-status: backlog
+status: plan
 source: goal3 DAB Codex run validation
-started:
+started: 2026-05-21T09:44:29Z
 completed:
 verdict:
 score: 0.93
