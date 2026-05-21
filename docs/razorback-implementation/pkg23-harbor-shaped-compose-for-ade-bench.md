@@ -159,6 +159,50 @@ follow-up), Goal 2's implementation resumes against its existing
 worktree. The T0 probe + 48-cell matrix dispatch then become
 runnable.
 
+## AC-1 correction (plan §Mechanism-precise architectural finding)
+
+`T_BENCH_REPO_ROOT` resolves to `ade_bench_root` (the `~/git/ade-bench`
+checkout), NOT the materialized view-dir. The view-dir lacks the
+`docker/` subtree that ade-bench's compose template references via
+`dockerfile: docker/base/Dockerfile.duckdb-dbt`. Upstream ade-bench's
+own `DockerComposeManager` sets `repo_root=str(REPO_ROOT)` to the same
+value (`ade_bench/terminal/docker_compose_manager.py:86`). The
+entity's original AC-1 wording ("the materialized view-dir") is
+preserved above for provenance; the implementation honors the
+correction.
+
+## Build paths (AC-4 documentation)
+
+PKG-23 wires
+`T_BENCH_TASK_DOCKER_CLIENT_IMAGE_NAME=ade-bench-client-{task_slug}:latest`
+but does NOT build the image. The build path lives in ade-bench
+upstream:
+
+- **Build context:** `~/git/ade-bench/` (i.e., `T_BENCH_REPO_ROOT`).
+- **Dockerfile (duckdb-dbt variant):** `docker/base/Dockerfile.duckdb-dbt`.
+- **Sibling variants:** `docker/base/Dockerfile.snowflake-dbt`,
+  `docker/base/Dockerfile.snowflake-dbtf`.
+- **Build command (manual, pre-`rk run`):**
+
+  ```bash
+  cd ~/git/ade-bench
+  docker build -f docker/base/Dockerfile.duckdb-dbt \
+    -t ade-bench-client-airbnb001:latest .
+  ```
+
+  Note: the upstream Dockerfile is variant-keyed (one per
+  db_type/project_type), NOT task-keyed. A single built image with the
+  variant-prefixed tag covers every task in that variant; razorback's
+  per-task `ade-bench-client-{task_slug}:latest` is a per-task ALIAS
+  pointing at the variant image (or the user can build per-task with
+  `--build-arg`s — out of PKG-23 scope to choose).
+
+- **Follow-up entity:** PKG-XX `ade-bench-client image build path` —
+  wire a `razorback ade-bench setup` command analogous to
+  dataagentbench's `benchmark/setup.sh` that pre-builds all four
+  variant images and tags them with the razorback-side naming
+  convention.
+
 ## Stage Report: plan
 
 - DONE: Plan resolves the translator hook location: most likely src/razorback/translate.py (where AdeBenchLocalTaskEntry gets translated to harbor spec). Plan names the exact insertion point and the env-dict propagation path into harbor's docker compose invocation.
