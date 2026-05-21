@@ -1,13 +1,13 @@
 ---
 id: rp427jekvxca47zj5k4zssy2
 title: PKG-28 — Codex auth.json passthrough for spacedock_solver_v2
-status: validation
+status: done
 source: Goal 3/4 unblocker 2026-05-21 — local Codex CLI is authenticated via auth.json while Razorback currently requires OPENAI_API_KEY
 started: 2026-05-21T08:12:39Z
-completed:
-verdict:
+completed: 2026-05-21T08:26:09Z
+verdict: PASSED
 score: 0.95
-worktree: .worktrees/spacedock-ensign-pkg28-codex-auth-json-passthrough
+worktree: 
 issue:
 pr:
 mod-block:
