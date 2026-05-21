@@ -36,6 +36,7 @@ SPACEDOCK_SOLVER_V2_IMPORT_PATH = (
     "razorback.agents.spacedock_solver_v2:SpacedockSolverAgent"
 )
 CLAUDE_CLI_IMPORT_PATH = "razorback.agents.claude_cli:ClaudeCliAgent"
+SPACEDOCK_SOLVER_V2_CONTAINER_FREEZE_ROOT = "/razorback-freeze"
 
 
 def spec_to_job_config(
@@ -226,6 +227,7 @@ def _build_local(
     *, spec: Spec, job_name: str, jobs_dir: Path, agent_cfg: AgentConfig
 ) -> JobConfig:
     assert isinstance(spec.benchmark, LocalBenchmarkBlock)
+    run_dir = jobs_dir / job_name
     return JobConfig(
         job_name=job_name,
         jobs_dir=jobs_dir,
@@ -235,7 +237,7 @@ def _build_local(
         tasks=[TaskConfig(path=Path(p).resolve()) for p in spec.benchmark.task_paths],
         verifier=VerifierConfig(disable=False),
         retry=RetryConfig(max_retries=0),
-        environment=EnvironmentConfig(delete=False),
+        environment=_environment_config(agent_cfg, run_dir),
     )
 
 
@@ -296,6 +298,7 @@ def _build_ade_bench(
             tasks.append(TaskConfig(path=materialized))
         else:
             tasks.append(TaskConfig(path=r.path))
+    run_dir = jobs_dir / job_name
     return JobConfig(
         job_name=job_name,
         jobs_dir=jobs_dir,
@@ -305,7 +308,7 @@ def _build_ade_bench(
         tasks=tasks,
         verifier=VerifierConfig(disable=False),
         retry=RetryConfig(max_retries=0),
-        environment=EnvironmentConfig(delete=False),
+        environment=_environment_config(agent_cfg, run_dir),
     )
 
 
@@ -331,11 +334,13 @@ def _build_dab(
                 tasks_root=tasks_root / dataset,
                 task_env=task_env,
             )
-        )
+    )
     tasks = [TaskConfig(path=entry["task_dir"]) for entry in manifest_all]
     trial_name_map = {
-        entry["task_name"]: (entry["dataset"], entry["query_id"]) for entry in manifest_all
+        entry["task_name"]: (entry["dataset"], entry["query_id"])
+        for entry in manifest_all
     }
+    run_dir = jobs_dir / job_name
     cfg = JobConfig(
         job_name=job_name,
         jobs_dir=jobs_dir,
@@ -345,7 +350,7 @@ def _build_dab(
         tasks=tasks,
         verifier=VerifierConfig(disable=False),
         retry=RetryConfig(max_retries=0),
-        environment=EnvironmentConfig(delete=False),
+        environment=_environment_config(agent_cfg, run_dir),
     )
     return cfg, trial_name_map
 
@@ -404,6 +409,7 @@ def _build_harbor_dab(
                     pass
 
     tasks = [TaskConfig(path=p) for p in task_dirs]
+    run_dir = jobs_dir / job_name
     cfg = JobConfig(
         job_name=job_name,
         jobs_dir=jobs_dir,
@@ -413,6 +419,24 @@ def _build_harbor_dab(
         tasks=tasks,
         verifier=VerifierConfig(disable=False),
         retry=RetryConfig(max_retries=0),
-        environment=EnvironmentConfig(delete=False),
+        environment=_environment_config(agent_cfg, run_dir),
     )
     return cfg, trial_name_map
+
+
+def _environment_config(agent_cfg: AgentConfig, run_dir: Path) -> EnvironmentConfig:
+    if agent_cfg.import_path != SPACEDOCK_SOLVER_V2_IMPORT_PATH:
+        return EnvironmentConfig(delete=False)
+
+    host_freeze_root = run_dir / "_razorback" / "freeze"
+    host_freeze_root.mkdir(parents=True, exist_ok=True)
+    return EnvironmentConfig(
+        delete=False,
+        mounts_json=[
+            {
+                "type": "bind",
+                "source": str(host_freeze_root.resolve()),
+                "target": SPACEDOCK_SOLVER_V2_CONTAINER_FREEZE_ROOT,
+            }
+        ],
+    )

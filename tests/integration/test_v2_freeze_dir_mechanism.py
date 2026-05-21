@@ -171,6 +171,53 @@ trials: 1
     assert "ANTHROPIC_API_KEY" in (agent_cfg.env or {})
 
 
+def test_translator_mounts_v2_freeze_root_into_container(tmp_path):
+    """PKG-29: v2 external freeze root is mounted for in-container git commands."""
+    workflow = tmp_path / "solver"
+    workflow.mkdir()
+    (workflow / "README.md").write_text("## Stages\n- model\n")
+
+    spec_yaml = f"""
+version: 1
+experiment: phase3-translate-test
+agent:
+  kind: spacedock_solver_v2
+  runtime: claude
+  model: claude-opus-4-5
+  solver_workflow: {workflow}
+  solver_workflow_content_hash: "sha256:{'a' * 64}"
+  spacedock_skill_version: "1.0.0"
+  sealed_hash: "0123456789abcdef0123456789abcdef"
+  max_turns: 200
+benchmark:
+  kind: local
+  task_paths: []
+trials: 1
+"""
+    spec = Spec.model_validate(yaml.safe_load(spec_yaml))
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    (project_root / ".env").write_text("ANTHROPIC_API_KEY=sk-fake\n")
+    jobs_dir = tmp_path / "_runs"
+
+    cfg, _ = spec_to_job_config(
+        spec=spec,
+        job_name="phase3-test",
+        jobs_dir=jobs_dir,
+        project_root=project_root,
+    )
+
+    host_freeze_root = jobs_dir / "phase3-test" / "_razorback" / "freeze"
+    assert cfg.environment.mounts_json == [
+        {
+            "type": "bind",
+            "source": str(host_freeze_root.resolve()),
+            "target": "/razorback-freeze",
+        }
+    ]
+    assert host_freeze_root.is_dir()
+
+
 def test_translator_uses_codex_auth_for_codex_runtime(tmp_path):
     workflow = tmp_path / "solver"
     workflow.mkdir()
