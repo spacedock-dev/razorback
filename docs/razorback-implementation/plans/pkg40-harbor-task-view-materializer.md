@@ -521,6 +521,31 @@ External/current evidence checked on 2026-05-21:
   git commit -m "docs(pkg40): document harbor task view batching acceptance"
   ```
 
+## Operational Hardening Addendum
+
+This addendum is part of acceptance for PKG-40 implementation, not a follow-up project.
+
+### Shared Image Lifecycle
+
+- The implementation must treat shared ADE/Spider2 images as pinned run inputs. If a spec names a mutable tag such as `dab-agent:latest` or a shared dbt/DuckDB tag, freeze must record both the authored tag and the resolved image digest in `provenance.yaml` or the materialized `view_manifest.json`.
+- Materialized `task.toml` rewrites must set `[environment].docker_image` and leave `EnvironmentConfig.force_build=False` unless the spec explicitly requests a rebuild. This avoids accidental Dockerfile rebuild drift when Harbor's prebuilt-image path is active.
+- The T1/T10 spike/acceptance notes must record the Harbor version and any observed upstream WIP around prebuilt/shared-image behavior. If Harbor changes the prebuilt contract, PKG-40 should fail closed with a clear `SpecError` rather than silently rebuilding task images.
+- Tests should assert the materializer records `docker_image_tag`, `docker_image_digest` when resolvable, `force_build=false`, and the Harbor version used for the smoke.
+
+### Disk, Storage, and Cleanup
+
+- All materialized views must live under a bounded Razorback-owned root inside the run directory or staged Harbor home, not an untracked global temp path. `view_manifest.json` should record view byte size, source byte size or checksum set, and whether the view uses copy or link mode.
+- Spider2/ADE downloaded task data must be either under the run-scoped task cache or a documented Harbor cache path. The spike note should name the path and include cleanup commands such as `rm -rf runs/pkg40-*` plus Harbor cache/image cleanup commands that are safe for the operator to choose.
+- Freeze dirs are intentionally durable under `<run-dir>/_razorback/freeze/`; acceptance docs must report their count and total size after the resume smoke so reviewers can tell whether shared-context and parallel tests create bounded state.
+- Docker image/cache growth is not automatically pruned by implementation tests. Acceptance must document the images pulled/built, their tags/digests when available, and any manual `docker image ls` / `docker system df` evidence used to estimate local storage impact.
+
+### Concurrency and Resource Guardrails
+
+- `concurrency.trials` must default conservatively for Docker runs and reject obviously unsafe local values unless an explicit override is provided. The first implementation should cap local Docker `n_concurrent_trials` at a small tested value such as 4, with the cap named in schema validation errors and docs.
+- Per-task resource overrides from `task.toml` (`cpus`, `memory_mb`, `storage_mb`, `gpus`) and any spec-level overrides must be surfaced in the view manifest. Shared-context mode must account for aggregate resource pressure rather than multiplying tasks silently.
+- Infrastructure failures from Docker capacity, image pull/build errors, disk exhaustion, Harbor task download failures, or runs-dir mount visibility must be classified separately from model/verifier reward. `summary.json` / `per_trial_outcomes.json` should preserve a machine-readable infra error reason and avoid scoring those failures as model correctness unless the existing scoring contract explicitly requires it.
+- Acceptance smokes should include one intentionally over-cap concurrency or resource fixture that fails before Harbor dispatch with a `SpecError`/config error, proving the guardrail is pre-run and not a late model-score artifact.
+
 ## Execution Order Rationale
 
 T1 is first because Spider2's live source shape is the only materially uncertain surface. T2-T3 then prove the generic Harbor task view mechanism in isolation before any benchmark-specific code uses it. T4 and T5 are intentionally thin consumer transforms, so reviewer attention can stay on whether both benchmarks call the same generic materializer.

@@ -98,3 +98,8 @@ this substrate lands.
 ### Summary
 
 Wrote the standard separate plan doc at `docs/razorback-implementation/plans/pkg40-harbor-task-view-materializer.md`. The plan starts with Spider2/Harbor discovery, then proves the generic materializer before routing ADE and Spider2 through thin consumer transforms; batching, task identity, freeze/resume, and leakage controls are tested before live smokes.
+
+### Follow-up Addendum
+
+- DONE: Added operational hardening coverage requested before gate review.
+  Evidence: `docs/razorback-implementation/plans/pkg40-harbor-task-view-materializer.md` now includes a dedicated addendum for shared image lifecycle, disk/storage cleanup, and Docker concurrency/resource guardrails.
