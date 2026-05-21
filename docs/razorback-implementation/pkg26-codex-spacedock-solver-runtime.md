@@ -91,3 +91,16 @@ Implemented the Codex runtime adapter, Codex `.env` auth resolution, v2 Codex tr
 ### Additional verification
 
 After completion, `uv run pytest` was run across the full suite. Result: `492 passed, 10 skipped, 4 failed`; three failures were live Claude smoke/budget paths blocked by missing `ANTHROPIC_API_KEY`/`CLAUDE_CODE_OAUTH_TOKEN` in this worktree, and one pre-existing nop integration assertion observed an empty `events.jsonl`. The Codex-focused tests still passed in that run.
+
+## Stage Report: validation
+
+- DONE: Validation report independently verifies AC-1, AC-2, and AC-4 with exact test commands and reviews the code for silent Codex kwarg drops.
+  Report: `docs/razorback-implementation/validation/pkg26-codex-spacedock-solver-runtime.md`; AC-1 `14 passed`, AC-4 `14 passed`, broader verifier `29 passed`; no silent active kwarg drops found.
+- DONE: Validation report independently attempts AC-3 Codex smoke or records the exact auth/environment blocker after confirming freeze succeeds.
+  `uv run rk freeze examples/specs/_codex-smoke-v2.yaml --allow-missing` wrote frozen/provenance files; `uv run rk run ...` failed with `AuthDiscoveryError: no codex credentials found. Add OPENAI_API_KEY to .../.env.`
+- DONE: Validation report gives a clear PASS/REJECT gate decision with blocking findings separated from non-blocking findings.
+  Gate decision: APPROVE to `done`; blocking findings: none; non-blocking findings: dirty pre-existing `uv.lock`, normal freeze requires `--allow-missing` due unresolved model version.
+
+### Summary
+
+Fresh validation reran `uv run pytest`, the task's targeted AC commands, and the Codex smoke freeze/run path from the assigned worktree. AC-1, AC-2, and AC-4 pass; AC-3 is blocked only by missing local Codex credentials after `--allow-missing` freeze succeeds, so the recommended gate is APPROVE to `done`.
