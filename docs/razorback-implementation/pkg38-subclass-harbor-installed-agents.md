@@ -56,3 +56,16 @@ the v2 lifecycle and freeze integration tests listed in the ACs.
 
 This task does not rerun DAB or ade-bench score jobs, change model selection, or
 alter benchmark datasets.
+
+## Stage Report: plan
+
+- DONE: Upstream class surface analysis covers Harbor `Codex`, Harbor `ClaudeCode`, existing `RazorbackCodex`, `spacedock_solver_v2`, and legacy `claude_cli`, with a concrete subclass-first direction.
+  Plan section "Upstream Class Surface Analysis" covers all five surfaces and directs live runtimes to `RazorbackCodex(Codex)` plus `RazorbackClaudeCode(ClaudeCode)`.
+- DONE: Plan maps AC-1 through AC-4 to exact files and focused tests, preserving sealed hash, freeze-dir, and checkpoint behavior.
+  Plan AC map and Tasks 1-7 name exact source/test files; Task 6 explicitly guards sealed hash, `_razorback/freeze/<sealed_hash>/`, and checkpoint commit labels.
+- DONE: Plan identifies the minimal compatibility strategy for `agent.kind: claude-cli` and new benchmark specs.
+  Plan Tasks 4-5 and "Compatibility Strategy Summary" keep `claude-cli` parseable as a Harbor-backed shim while new generated benchmark specs use `spacedock_solver_v2` with `runtime: claude`.
+
+### Summary
+
+Wrote the standard plan document at `docs/razorback-implementation/plans/pkg38-subclass-harbor-installed-agents.md` using the `spacedock:ensign` logical worker role and cached `superpowers:writing-plans` guidance. Role asset read: `/home/exedev/.codex/plugins/cache/spacedock/spacedock/0.12.0/skills/ensign/SKILL.md`; no production code was implemented in this plan stage.
