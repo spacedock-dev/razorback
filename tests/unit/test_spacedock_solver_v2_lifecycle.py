@@ -8,6 +8,9 @@ import pytest
 from harbor.environments.base import EnvironmentPaths
 
 from razorback.agents.spacedock_solver_v2 import (
+    CHECKPOINT_RUN_AFTER_AGENT,
+    CHECKPOINT_RUN_BEFORE_AGENT,
+    CHECKPOINT_SETUP_READY,
     SpacedockSolverAgent,
     SpacedockSolverAgentError,
 )
@@ -39,6 +42,16 @@ def _kw(tmp_path, **overrides):
 
 def _exec_result(return_code=0):
     return MagicMock(return_code=return_code)
+
+
+def _stage_commit_messages(fake_env):
+    calls = [c.args[0] for c in fake_env.exec.call_args_list]
+    prefix = " commit -q --allow-empty -m "
+    return [
+        call.rsplit(prefix, 1)[1].strip("'")
+        for call in calls
+        if prefix in call and "stage: " in call
+    ]
 
 
 def test_freeze_dir_resolves_to_sealed_hash_keyed_external_path(tmp_path):
@@ -129,6 +142,27 @@ async def test_first_stage_runs_git_init(tmp_path):
     await agent.setup(fake_env)
     git_calls = [c.args[0] for c in fake_env.exec.call_args_list if "git" in c.args[0]]
     assert any("init" in c for c in git_calls), f"git init missing; calls: {git_calls}"
+
+
+@pytest.mark.asyncio
+async def test_setup_and_run_write_named_checkpoint_commits(tmp_path):
+    """PKG-36: exact v2 checkpoint labels are stable git commit messages."""
+    agent = SpacedockSolverAgent(**_kw(tmp_path))
+    fake_env = MagicMock()
+    fake_env.exec = AsyncMock(return_value=MagicMock(return_code=0))
+    context = MagicMock()
+    agent._inner = MagicMock()
+    agent._inner.setup = AsyncMock()
+    agent._inner.run = AsyncMock()
+
+    await agent.setup(fake_env)
+    await agent.run("solve this", fake_env, context)
+
+    assert _stage_commit_messages(fake_env) == [
+        f"stage: {CHECKPOINT_SETUP_READY}",
+        f"stage: {CHECKPOINT_RUN_BEFORE_AGENT}",
+        f"stage: {CHECKPOINT_RUN_AFTER_AGENT}",
+    ]
 
 
 @pytest.mark.asyncio
