@@ -87,3 +87,7 @@ follow-up instead of pretending the restriction landed.
 ### Summary
 
 Implemented the Codex runtime adapter, Codex `.env` auth resolution, v2 Codex translation, and v2 freeze stamping needed for the checked-in `examples/specs/_codex-smoke-v2.yaml` smoke path. Harbor surfaces touched were the installed `Codex` constructor/descriptor kwargs, `AgentConfig.env` credential wiring, and freeze-time provenance/sealed-hash materialization. Verification also passed `uv run pytest tests/unit/test_runtime_adapters.py tests/unit/test_claude_cli_auth_dotenv_only.py tests/unit/test_spec_freeze_cli_pkg8.py tests/integration/test_v2_freeze_dir_mechanism.py -q` (`29 passed`) and `uv run --frozen ruff check ...` (`All checks passed`); the only live-smoke deviation is the environment blocker above.
+
+### Additional verification
+
+After completion, `uv run pytest` was run across the full suite. Result: `492 passed, 10 skipped, 4 failed`; three failures were live Claude smoke/budget paths blocked by missing `ANTHROPIC_API_KEY`/`CLAUDE_CODE_OAUTH_TOKEN` in this worktree, and one pre-existing nop integration assertion observed an empty `events.jsonl`. The Codex-focused tests still passed in that run.
