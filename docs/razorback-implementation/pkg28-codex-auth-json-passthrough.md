@@ -1,7 +1,7 @@
 ---
 id: rp427jekvxca47zj5k4zssy2
 title: PKG-28 — Codex auth.json passthrough for spacedock_solver_v2
-status: implementation
+status: validation
 source: Goal 3/4 unblocker 2026-05-21 — local Codex CLI is authenticated via auth.json while Razorback currently requires OPENAI_API_KEY
 started: 2026-05-21T08:12:39Z
 completed:
@@ -67,3 +67,28 @@ does not fail with `AuthDiscoveryError` when Codex auth.json exists.
 
 - `pkg26-codex-spacedock-solver-runtime` — shipped.
 
+## Stage Report: implementation
+
+- DONE: `resolve_codex_auth` supports API-key precedence, explicit `CODEX_AUTH_JSON_PATH`, and default home auth.json fallback without embedding machine-specific paths in tracked fixtures.
+  Evidence: `tests/unit/test_claude_cli_auth_dotenv_only.py` covers `.env` API-key precedence over home auth.json, explicit temp `CODEX_AUTH_JSON_PATH`, default temp `<home>/.codex/auth.json`, and portable missing-credentials text.
+- DONE: `spacedock_solver_v2` translation passes Codex auth-file env through to Harbor `AgentConfig.env` and tests the missing-credentials failure path.
+  Evidence: `tests/integration/test_v2_freeze_dir_mechanism.py` asserts Codex v2 `AgentConfig.env["CODEX_AUTH_JSON_PATH"]` from temp `<home>/.codex/auth.json` and raises `AuthDiscoveryError` when all credential sources are absent.
+- DONE: Stage report records exact test commands and whether `_codex-smoke-v2` reaches past Razorback `AuthDiscoveryError` in this environment.
+  Evidence: commands recorded below; `_codex-smoke-v2` reached Harbor and failed later with `SpacedockSolverAgentError` (`git init` rc=127), not `AuthDiscoveryError`.
+
+### Summary
+
+Implemented Codex auth-file discovery in `src/razorback/agents/auth.py` and wired `home` through the Codex branch in `src/razorback/translate.py`; Harbor-facing auth remains on `AgentConfig.env` only. Verification commands: `uv run pytest tests/unit/test_claude_cli_auth_dotenv_only.py tests/integration/test_v2_freeze_dir_mechanism.py -q` (`19 passed`), `uv run ruff check src/razorback/agents/auth.py src/razorback/translate.py tests/unit/test_claude_cli_auth_dotenv_only.py tests/integration/test_v2_freeze_dir_mechanism.py` (`All checks passed`), `uv run pytest tests/unit -q` (`481 passed`), `uv run rk freeze examples/specs/_codex-smoke-v2.yaml --allow-missing` (exit 0), and `uv run rk run examples/specs/_codex-smoke-v2.frozen.yaml --runs-dir runs/pkg28-codex-auth-smoke --allow-plugin-drift --allow-alias-drift` (exit 0; Harbor reported one `SpacedockSolverAgentError` after auth preflight).
+
+## Stage Report: validation
+
+- DONE: Validation independently verifies AC-1 through AC-3 with exact unit/integration commands and reviews that auth file contents are never written to tracked files.
+  Evidence: `uv run pytest tests/unit/test_claude_cli_auth_dotenv_only.py tests/integration/test_v2_freeze_dir_mechanism.py -q` returned `19 passed`; `uv run pytest tests/unit -q` returned `481 passed`; tracked-file token scan found only an existing sentinel fixture.
+- DONE: Validation independently attempts AC-4 smoke run and confirms any failure is past `AuthDiscoveryError`, recording the exact later-stage failure.
+  Evidence: freeze exited 0; run exited 0 and reported `SpacedockSolverAgentError: resume restore via git checkout failed at <worktree>/runs/pkg28-codex-auth-smoke/_codex-smoke-v2/_razorback/freeze/cdfe61ef1efa1d4f4504af3aaa3061b1 (rc=127)`.
+- DONE: Validation report gives a clear PASS/REJECT gate decision with blocking findings separated from non-blocking findings.
+  Evidence: `docs/razorback-implementation/validation/pkg28-codex-auth-json-passthrough.md` recommends APPROVE with zero blocking findings and one non-blocking UX note.
+
+### Summary
+
+AC-1 through AC-4 PASS. The smoke run reached Harbor/Codex execution and failed after auth discovery with `SpacedockSolverAgentError`, not `AuthDiscoveryError`; run-dir artifacts include the expected manifest, summary, result, provenance, job config, event log, and per-trial files. Gate decision: APPROVE to `done`.

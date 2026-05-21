@@ -159,7 +159,7 @@ def _build_agent_config(
                 "spacedock_solver_v2 spec must be frozen (agent.sealed_hash missing)."
             )
         if spec.agent.runtime == "codex":
-            resolution = resolve_codex_auth(project_root=project_root)
+            resolution = resolve_codex_auth(project_root=project_root, home=home)
         else:
             resolution = resolve_claude_auth(project_root=project_root, home=home)
         harbor_agent_kwargs: dict[str, Any] = {
