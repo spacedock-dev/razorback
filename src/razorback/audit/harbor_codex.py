@@ -126,9 +126,12 @@ def _scan_tool_name(tool_name: str, base: dict[str, Any]) -> list[dict[str, Any]
     )
 
 
-def _scan_codex_event(event: Any, base: dict[str, Any]) -> list[dict[str, Any]]:
-    if not isinstance(event, dict) or event.get("type") != "response_item":
-        return []
+def _shell_tool_name(tool_name: str) -> bool:
+    name = Path(tool_name).name
+    return name in _SHELL_TOOL_NAMES or name.lower() in {"bash", "shell", "sh"}
+
+
+def _scan_response_item_event(event: dict[str, Any], base: dict[str, Any]) -> list[dict[str, Any]]:
     payload = event.get("payload")
     if not isinstance(payload, dict):
         return []
@@ -169,6 +172,55 @@ def _scan_codex_event(event: Any, base: dict[str, Any]) -> list[dict[str, Any]]:
         findings.extend(_scan_command(raw_arguments, event_base))
 
     return findings
+
+
+def _scan_item_completed_event(event: dict[str, Any], base: dict[str, Any]) -> list[dict[str, Any]]:
+    item = event.get("item")
+    if not isinstance(item, dict):
+        return []
+
+    item_type = item.get("type")
+    event_base = {
+        **base,
+        "event_id": item.get("id"),
+        "event_type": event.get("type"),
+        "tool_type": item_type,
+    }
+
+    findings = taint._scan_event(event, event_base)
+    if item_type != "tool_execution":
+        return findings
+
+    tool_name = item.get("tool_name") or item.get("tool") or item.get("name")
+    raw_input = item.get("tool_input")
+    if raw_input is None:
+        raw_input = item.get("input")
+    if raw_input is None:
+        raw_input = item.get("arguments")
+    parsed_input = _loads_json(raw_input)
+
+    for command in _walk_command_values(parsed_input):
+        findings.extend(_scan_command(command, event_base))
+
+    if (
+        not findings
+        and isinstance(raw_input, str)
+        and isinstance(tool_name, str)
+        and _shell_tool_name(tool_name)
+    ):
+        findings.extend(_scan_command(raw_input, event_base))
+
+    return findings
+
+
+def _scan_codex_event(event: Any, base: dict[str, Any]) -> list[dict[str, Any]]:
+    if not isinstance(event, dict):
+        return []
+    if event.get("type") == "response_item":
+        return _scan_response_item_event(event, base)
+    if event.get("type") == "item.completed":
+        return _scan_item_completed_event(event, base)
+    return []
 
 
 def _scan_jsonl(path: Path, trial_root: Path, source_kind: str) -> list[dict[str, Any]]:

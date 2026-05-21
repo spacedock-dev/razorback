@@ -90,6 +90,19 @@ def _codex_custom_tool_call(command, call_id="call-1"):
     })
 
 
+def _codex_item_completed_command(command):
+    return json.dumps({
+        "type": "item.completed",
+        "thread_id": "parent-thread",
+        "item": {
+            "id": "cmd-1",
+            "type": "command_execution",
+            "command": command,
+            "status": "completed",
+        },
+    }) + "\n"
+
+
 def _write_harbor_codex_trial(
     trial_dir,
     *,
@@ -167,7 +180,7 @@ def harbor_codex_tainted_txt_run_dir(tmp_path):
     run_dir = tmp_path / "run"
     _write_harbor_codex_trial(
         run_dir / "task-a" / "query-1" / "trial-0",
-        codex_txt=_codex_custom_tool_call("git clone https://example.com/repo.git"),
+        codex_txt=_codex_item_completed_command("curl https://example.com/data.csv"),
     )
     return run_dir
 

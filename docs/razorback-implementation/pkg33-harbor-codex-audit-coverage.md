@@ -118,3 +118,16 @@ Ran the required audit suite (`uv run --frozen pytest tests/unit/audit -q`, 28 p
 ### Feedback Cycles
 
 - Cycle 1 (2026-05-21T10:15:00Z): Validation rejected PKG-33 because `src/razorback/audit/harbor_codex.py` scans session-style `response_item` events but misses observed Harbor `codex.txt` events shaped as `item.completed` / `command_execution` with `item.command`. Requested fix: scan that event shape, add a matching `codex.txt` fixture, and rerun `uv run --frozen pytest tests/unit/audit -q` plus the guarded BookReview audit.
+
+## Stage Report: implementation (cycle 2)
+
+- DONE: Observed Harbor `codex.txt` `item.completed` / `command_execution` events with forbidden commands are tainted under strict audit.
+  Evidence: replaced the `codex.txt` fixture with `item.completed` / `command_execution`; target test first failed with exit 0, then passed after scanner support was added.
+- DONE: Existing session JSONL taint, clean discovery, and setup-only clean behavior remain covered.
+  Evidence: `uv run --frozen pytest tests/unit/audit -q` passed (`28 passed`) including session JSONL, clean discovery, and setup-only tests.
+- DONE: `uv run --frozen pytest tests/unit/audit -q` passes, and the actual guarded BookReview audit still exits 23 with q2/q3 tainted.
+  Evidence: audit suite passed (`28 passed`); guarded BookReview audit exited 23 with summary `clean=1, tainted=2, coverage_missing=0` and tainted `bookreview-q2__eH6YcV6`, `bookreview-q3__u6wKUdd`.
+
+### Summary
+
+Cycle 2 teaches the Harbor Codex scanner to handle observed `item.completed` events by reusing the existing DAB command/tool event scanner and adding command-bearing `tool_execution` input handling. The `codex.txt` unit fixture now matches the live Harbor shape that validation found; `job.log` remains outside the scanner globs.
