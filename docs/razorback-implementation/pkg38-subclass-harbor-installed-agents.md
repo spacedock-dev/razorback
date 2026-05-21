@@ -83,3 +83,16 @@ Wrote the standard plan document at `docs/razorback-implementation/plans/pkg38-s
 
 Worker logical id: `spacedock:ensign`; role asset read: `/home/exedev/.codex/plugins/cache/spacedock/spacedock/0.12.0/skills/ensign/SKILL.md`. Changed `src/razorback/agents/_runtime/codex.py`, `src/razorback/agents/_runtime/claude.py`, `src/razorback/translate.py`, `src/razorback/agents/registry.py`, the Goal 1 Claude generator, and focused regression tests; added `examples/solver_workflows/claude-benchmark-solver/README.md`.
 Harbor surfaces touched are `harbor.agents.installed.codex.Codex` and `harbor.agents.installed.claude_code.ClaudeCode`; no spec deviations were implemented.
+
+## Stage Report: validation
+
+- DONE: Re-run every PKG-38 acceptance command and record exact pass/fail evidence for AC-1 through AC-4.
+  Validation report records AC-1 `23 passed`, AC-2 focused `38 passed` plus generator `10 passed` but AC-2 FAIL by compatibility inspection, AC-3 `35 passed`, and AC-4 inspection PASS.
+- DONE: Independently review the diff for subclass-first correctness, legacy `claude-cli` compatibility, and sealed/freeze/checkpoint preservation; classify findings as blocking or non-blocking.
+  Blocking findings: legacy `claude-cli` specs with `sampling.seed` now fail, stale tests still assert the old import/class, and full `uv run --frozen pytest -q` ended `6 failed, 531 passed, 10 skipped`.
+- DONE: Produce `docs/razorback-implementation/validation/pkg38-subclass-harbor-installed-agents.md` plus a stage report with an explicit PASS/REJECTED gate decision.
+  Wrote `docs/razorback-implementation/validation/pkg38-subclass-harbor-installed-agents.md` with gate decision REJECTED back to implementation.
+
+### Summary
+
+Validator logical worker id: `spacedock:ensign`; role asset read: `/home/exedev/.codex/plugins/cache/spacedock/spacedock/0.12.0/skills/ensign/SKILL.md`. AC-1, AC-3, and AC-4 passed their focused evidence, but AC-2 is rejected because the Harbor-backed compatibility shim breaks checked-in legacy `claude-cli` smoke specs carrying seed metadata. The branch should return to implementation to restore compatibility or migrate affected specs/tests, update stale assertions, and make the full frozen pytest suite green or explicitly baseline unrelated failures.
