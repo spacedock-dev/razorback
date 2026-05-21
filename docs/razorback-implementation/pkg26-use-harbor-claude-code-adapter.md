@@ -1,13 +1,13 @@
 ---
 id: kzd3zabn0magv2ezxrdvtd8a
 title: PKG-26 — reshape ClaudeCliAgent to subclass harbor's ClaudeCode (close wrapper drift)
-status: plan
+status: implementation
 source: Goal 1 RESUME T0 probe 2026-05-21 (commit 565daf2 on .worktrees/spacedock-ensign-goal1-resume-spacedock-first) — cost_usd=null on paid API; captain directive 2026-05-21 ("use upstream as much as possible, we don't want to drift too much from it" + "we also need to be able to do halt/resume, and our skill injection for spacedock")
 started: 2026-05-21T15:38:07Z
 completed:
 verdict:
 score: 0.9
-worktree:
+worktree: .worktrees/spacedock-ensign-pkg26-use-harbor-claude-code-adapter
 issue:
 pr:
 mod-block:
