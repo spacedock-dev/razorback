@@ -116,3 +116,20 @@ Wrote the standard separate plan doc at `docs/razorback-implementation/plans/pkg
   - Treat shared-context batching as an explicit experimental mode separate from normal Harbor multi-task batching.
   - Fail closed on solution/test-answer leakage and on unsupported Harbor prebuilt/shared-image semantics.
   - Record image tag/digest, Harbor version, cache/freeze storage impact, and infra-vs-model failure classification in acceptance evidence.
+
+## Stage Report: implementation
+
+- DONE: Generic Harbor task view materializer and ADE/Spider2 consumer transforms are implemented from the approved plan, after the required bounded spike.
+  Evidence: commits `dbb58d7`, `fc0a8aa`, and `e5bb089`; generic code is under `src/razorback/harbor_tasks/`, with thin consumers in `src/razorback/benchmarks/ade_bench/harbor_view.py` and `src/razorback/benchmarks/spider2_dbt/harbor_view.py`.
+- DONE: Tests and smokes cover batching/concurrency, task identity, leakage controls, and freeze/resume collision safety without relying on the retired local ADE adapter path.
+  Evidence: `uv run --frozen pytest ...` reported `21 passed`, identity/freeze smokes reported `15 passed`, and generator tests reported `17 passed`; Harbor-shaped ADE/Spider2 fixtures use `TaskConfig(path=...)` task views.
+- DONE: The implementation stage report records exact commands, commits, blockers, Harbor/image/cache evidence, and the ADE smoke/result artifact path or the concrete blocker preventing it.
+  Evidence: this report names commands/commits; Spider2 live export is blocked by git checkout of `82d1fb0c144d28b1fd9852006cee0a39e74bd4a8`; fixture smoke specs are `examples/specs/pkg40-ade-harbor-task-view-codex.yaml` and `examples/specs/pkg40-spider2-dbt-harbor-task-view-codex.yaml`.
+
+### Summary
+
+Implemented a benchmark-neutral Harbor task view materializer that copies/link-ready task directories, patches Harbor TOML through Harbor's parser, records `view_manifest.json`, and fails closed on solution/answer paths. ADE-Bench and Spider2-DBT now route Harbor-shaped per-task specs through this generic layer; `concurrency.trials` maps to `JobConfig.n_concurrent_trials`, shared-context mode is explicit and currently fails closed before Harbor dispatch, scoring reads benchmark task identity from view manifests, and `spacedock_solver_v2` can key freeze dirs by task identity.
+
+Commands run: `uv run python` Harbor model probe; `rg` installed Spider2 probe; `uv run harbor download spider2-dbt@1.0 --output-dir runs/pkg40-spider2-download --export --overwrite` (failed at git checkout); two Hugging Face `curl` probes; `uv run --frozen pytest tests/unit/test_harbor_task_view_materializer.py tests/unit/test_harbor_task_view_leakage.py -q`; `uv run --frozen pytest tests/unit/test_ade_bench_harbor_view.py tests/unit/test_spider2_dbt_harbor_view.py tests/unit/test_ade_bench_schema.py tests/unit/test_ade_bench_translator.py tests/unit/test_translate_harbor_task_batches.py -q`; `uv run --frozen pytest tests/unit/test_task_identity_scoring.py tests/integration/test_v2_freeze_dir_mechanism.py tests/unit/test_seal_v2_six_inputs.py tests/unit/test_spacedock_solver_v2_class.py -q`; `uv run --frozen pytest tests/integration/test_pkg40_harbor_task_views_smoke.py -q`; `uv run rk freeze examples/specs/pkg40-ade-harbor-task-view-codex.yaml --allow-missing`; `uv run rk freeze examples/specs/pkg40-spider2-dbt-harbor-task-view-codex.yaml --allow-missing`; final sweeps `21 passed`, `15 passed`, and `17 passed`.
+
+Harbor/image/cache evidence: Harbor version `0.6.6`; manifests record authored `docker_image_tag` and `docker_image_digest: null` when no Docker digest is resolved; no Docker image was pulled or built by fixture smokes; task views are bounded under `<run-dir>/_razorback/task_views`; freeze roots are under `<run-dir>/_razorback/freeze/<sealed_hash>`. Infrastructure blockers are classified separately from model correctness: live Spider2 access failed before model execution due Harbor package git checkout; shared-context dispatch is an explicit pre-Harbor `SpecError` until a safe shared workspace layout is implemented.

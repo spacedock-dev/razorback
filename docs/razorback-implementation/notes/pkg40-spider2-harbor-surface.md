@@ -103,3 +103,9 @@ tests/fixtures/spider2_dbt/tasks/spider2-fixture-001/
 ```
 
 The consumer should materialize only the agent-visible Harbor task view, patch the shared Docker image when requested, add `RAZORBACK_BENCHMARK_TASK_ID`, and omit the denied solution/expected-answer paths before Harbor sees `TaskConfig(path=view_dir)`.
+
+## Final Implementation Status
+
+Implementation proceeded with the fixture-backed path because live `spider2-dbt@1.0` export remained blocked by the Harbor package git checkout failure recorded above. The synthetic fixture lives under `tests/fixtures/spider2_dbt/harbor_task_minimal/spider2-fixture-001` and is transformed through the same generic materializer as ADE-Bench.
+
+No Docker image was pulled or built during PKG-40 implementation smokes. Materialized manifests record the authored image tag (`shared-dbt-duckdb:latest`) and leave `docker_image_digest` null when no local digest is resolved.
