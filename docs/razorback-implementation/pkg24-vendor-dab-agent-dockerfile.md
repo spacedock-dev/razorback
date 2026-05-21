@@ -1,6 +1,6 @@
 ---
 id: 258p4x6h49czym2mafm7s5dg
-title: PKG-24 — vendor dab-agent Dockerfile into razorback (close external repo dependency)
+title: PKG-24 — vendor agent Dockerfile + rename dab-agent → razorback-solver
 status: backlog
 source: Captain directive 2026-05-20 ("dab-agent:latest is built from ~/git/dataagentbench, but we should consider have a copy here")
 started:
@@ -42,49 +42,80 @@ Two failure modes this causes:
    present and healthy. Onboarding requires "clone dataagentbench
    too; run setup.sh". This makes razorback non-portable.
 
-The fix is to vendor the dab-agent build context into razorback:
-copy `Dockerfile.agent` (renamed appropriately) into razorback,
-expose a build command (e.g., `razorback dab build-agent` or
-`packages/razorback-plugin-dab/scripts/build-agent.sh`), and update
-documentation so razorback is self-sufficient for its own agent
-images.
+The fix is two-pronged (captain directive 2026-05-20):
+1. **Vendor** the agent Dockerfile into razorback — copy
+   `Dockerfile.agent` into the razorback tree, expose a build
+   command, update documentation.
+2. **Rename** the image from `dab-agent` to `razorback-solver`.
+   The image is razorback's general-purpose agent container; it
+   isn't DAB-specific anymore (ade-bench's PKG-23 work will need
+   the same agent). `dab-agent` is the wrong name for a
+   non-DAB-coupled artifact.
+
+Both changes ship together to avoid touching the same files
+twice. After PKG-24:
+- razorback-solver:latest is the canonical image name everywhere
+  (compose.py DEFAULT_AGENT_IMAGE, frozen-spec fields, test
+  fixtures, docs)
+- The build context lives in-tree
+- `~/git/dataagentbench` is needed only for the dataset bind-mount
+  (PKG-14's data_root), not for the agent image
 
 ## Acceptance criteria
 
-**AC-1 — Dockerfile committed under razorback.** The
-dab-agent Dockerfile (currently
-`~/git/dataagentbench/benchmark/Dockerfile.agent`) lives at a
-razorback-internal path, e.g.,
+**AC-1 — Dockerfile vendored at a razorback-internal path.**
+The agent Dockerfile (currently
+`~/git/dataagentbench/benchmark/Dockerfile.agent`) lives at e.g.,
 `packages/razorback-plugin-dab/agent-image/Dockerfile`. The
-content is byte-identical to upstream OR cite-explicit if any
-adjustment was made.
+content is byte-identical to upstream EXCEPT for any name changes
+needed for the rename (AC-3).
 Verified by: file exists at the expected path; `diff` against
-upstream Dockerfile.agent shows zero or documented-only changes.
+upstream Dockerfile.agent shows only rename-related differences.
 
-**AC-2 — Build command exposed.**
+**AC-2 — Build command produces `razorback-solver:latest`.**
 A scripted build command in the razorback tree (e.g.,
 `packages/razorback-plugin-dab/agent-image/build.sh` or a CLI
-subcommand `razorback dab build-agent`) builds `dab-agent:latest`
-without requiring `~/git/dataagentbench` to be present.
+subcommand `razorback build-solver`) builds
+`razorback-solver:latest` without requiring `~/git/dataagentbench`
+to be present.
 Verified by: running the build command from a clean checkout
-produces `dab-agent:latest` in the local docker daemon.
+produces `razorback-solver:latest` in the local docker daemon.
 
-**AC-3 — Documentation updates.**
-The repo README + harbor-DAB plugin README reference the build
-step. Onboarding instructions no longer say "clone dataagentbench"
-for the purpose of the agent image.
+**AC-3 — Rename completed across all call sites.**
+The image name changes from `dab-agent` to `razorback-solver`
+everywhere it appears in razorback's source tree:
+- `packages/razorback-plugin-dab/src/razorback_plugin_dab/generate/compose.py:14`
+  `DEFAULT_AGENT_IMAGE = "razorback-solver:latest"`
+- `packages/razorback-plugin-dab/src/razorback_plugin_dab/generate/prepare.py`
+  (any references)
+- frozen-spec fields where the image name is recorded
+- test fixtures + golden specs
+- documentation + READMEs
+Backward compat: existing frozen specs / archived run-dirs with
+`dab-agent:latest` references stay readable but new freezes
+emit `razorback-solver:latest`.
+Verified by: `grep -r "dab-agent"
+src/ packages/ docs/ tests/` returns zero hits in source code (a
+few hits may remain in archived `_archive/` entity files where
+historical commits are referenced — those are not load-bearing).
+
+**AC-4 — Documentation updates.**
+README + harbor-DAB plugin README reference the build step
+(`razorback build-solver` or sibling). Onboarding instructions no
+longer say "clone dataagentbench" for the purpose of the agent
+image.
 Verified by: README updates committed; grep for
 `~/git/dataagentbench` in razorback's docs returns only references
-to DATA bind-mount paths, not agent-image paths.
+to DATA bind-mount paths.
 
-**AC-4 — Dataagentbench dependency narrowed.**
+**AC-5 — Dataagentbench dependency narrowed.**
 Razorback's hard dependency on `~/git/dataagentbench` is reduced
 to: dataset bind-mount (PKG-14's `data_root` parameter — already
 isolated). The agent-image build is no longer a coupling point.
 Verified by: a clean razorback checkout can build the agent image
-and run any harbor-DAB task that doesn't require live dataset data
-(unit tests against fixtures); live runs still need the data bind-
-mount but that's the only remaining external dependency.
+and run harbor-DAB unit tests against fixtures without
+`~/git/dataagentbench` present; live runs still need the data
+bind-mount.
 
 ## Test plan
 
