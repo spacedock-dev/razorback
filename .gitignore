@@ -28,3 +28,4 @@ examples/specs/**/provenance.yaml
 
 # Goal 1 matrix dispatch run-dirs.
 runs/
+.cache_home/

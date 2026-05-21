@@ -27,7 +27,9 @@ from razorback.provenance.resolvers import (
     resolve_prompt_hashes,
     resolve_solver_workflow_hash,
 )
+from razorback.agents.seal import compute_sealed_hash
 from razorback.spec.parse import parse_spec_file
+from razorback.spec.schema import SpacedockSolverV2AgentBlock
 
 
 def freeze_command(
@@ -108,11 +110,40 @@ def freeze_command(
     if solver_workflow_hash is not None:
         frozen_provenance_block["solver_workflow_hash"] = solver_workflow_hash
     frozen_body["provenance"] = frozen_provenance_block
+
+    if isinstance(spec.agent, SpacedockSolverV2AgentBlock):
+        _seal_v2_agent_block(frozen_body["agent"], solver_workflow_hash)
+
     frozen_path.write_text(yaml.safe_dump(frozen_body, sort_keys=False))
 
     write_provenance_yaml(spec_path.parent / "provenance.yaml", resolved)
     typer.echo(f"wrote {frozen_path}")
     typer.echo(f"wrote {spec_path.parent / 'provenance.yaml'}")
+
+
+def _seal_v2_agent_block(agent_block: dict, solver_workflow_hash: str | None) -> None:
+    """Populate solver_workflow_content_hash + spacedock_skill_version + sealed_hash
+    on a spacedock_solver_v2 frozen-spec agent block (spec §4.3.5 + §8.4).
+    """
+    if agent_block.get("solver_workflow_content_hash") is None:
+        agent_block["solver_workflow_content_hash"] = solver_workflow_hash
+    if agent_block.get("spacedock_skill_version") is None:
+        agent_block["spacedock_skill_version"] = "1.0.0"
+    harbor_agent_kwargs: dict[str, Any] = {
+        "max_turns": agent_block.get("max_turns"),
+        "tools_allowed": list(agent_block.get("tools_allowed") or []),
+        "tools_denied": list(agent_block.get("tools_denied") or []),
+    }
+    if agent_block.get("append_system_prompt") is not None:
+        harbor_agent_kwargs["append_system_prompt"] = agent_block["append_system_prompt"]
+    agent_block["sealed_hash"] = compute_sealed_hash(
+        model=agent_block["model"],
+        sampling=agent_block["sampling"],
+        solver_workflow_content_hash=agent_block["solver_workflow_content_hash"],
+        prompt_content_hashes=dict(agent_block.get("prompt_content_hashes") or {}),
+        spacedock_skill_version=agent_block["spacedock_skill_version"],
+        harbor_agent_kwargs=harbor_agent_kwargs,
+    )
 
 
 def _collect_prompt_paths(spec) -> list[Path]:

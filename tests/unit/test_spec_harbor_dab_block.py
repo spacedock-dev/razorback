@@ -59,6 +59,38 @@ def test_harbor_dab_rejects_unknown_workspace_variant(tmp_path: Path) -> None:
         ))
 
 
+def test_harbor_dab_default_query_mode_is_per_query(tmp_path: Path) -> None:
+    spec = parse_spec_text(_spec(
+        "  kind: harbor_dab\n"
+        f"  data_root: {tmp_path}\n"
+        "  datasets: [bookreview]\n"
+    ))
+    assert isinstance(spec.benchmark, HarborDabBenchmarkBlock)
+    assert spec.benchmark.query_mode == "per-query"
+
+
+def test_harbor_dab_accepts_query_mode_batch_and_per_query(tmp_path: Path) -> None:
+    for mode in ("batch", "per-query"):
+        spec = parse_spec_text(_spec(
+            "  kind: harbor_dab\n"
+            f"  data_root: {tmp_path}\n"
+            "  datasets: [bookreview]\n"
+            f"  query_mode: {mode}\n"
+        ))
+        assert isinstance(spec.benchmark, HarborDabBenchmarkBlock)
+        assert spec.benchmark.query_mode == mode
+
+
+def test_harbor_dab_rejects_unknown_query_mode(tmp_path: Path) -> None:
+    with pytest.raises(SpecError):
+        parse_spec_text(_spec(
+            "  kind: harbor_dab\n"
+            f"  data_root: {tmp_path}\n"
+            "  datasets: [bookreview]\n"
+            "  query_mode: fresh\n"
+        ))
+
+
 def test_in_tree_dab_alias_resolves_to_dab(tmp_path: Path) -> None:
     spec = parse_spec_text(_spec(
         "  kind: in_tree_dab\n"

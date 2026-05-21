@@ -21,6 +21,7 @@ benchmark:
   - music_brainz_20k
   workspace_variant: direct-minimal
   hints: true
+  query_mode: batch
 trials: 1
 experiment_meta:
   max_budget_usd: 20.0

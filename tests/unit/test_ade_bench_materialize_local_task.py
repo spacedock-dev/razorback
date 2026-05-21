@@ -225,12 +225,29 @@ def test_select_compose_variant_filter_unmatched_raises() -> None:
         )
 
 
+def _load_materialized_compose(materialized: Path) -> dict:
+    import yaml
+
+    return yaml.safe_load(
+        (materialized / "environment" / "docker-compose.yaml").read_text()
+    )
+
+
+def _load_source_compose(ade_bench_root: Path, filename: str) -> dict:
+    import yaml
+
+    return yaml.safe_load(
+        (ade_bench_root / "shared" / "defaults" / filename).read_text()
+    )
+
+
 def test_view_dir_has_environment_compose(tmp_path: Path) -> None:
-    """PKG-20 AC-1: materialize_local_task synthesizes environment/docker-compose.yaml.
+    """PKG-20 AC-1 + PKG-27: materialize_local_task synthesizes
+    environment/docker-compose.yaml.
 
     No `variants:` in the minimal fixture's task.yaml — falls through to the
-    default `docker-compose.yaml` in shared/defaults/. Content must byte-match
-    the source.
+    default compose. PKG-27 merges upstream's `services.client.*` verbatim and
+    adds a docker-socket bind to `services.main`.
     """
     from razorback.benchmarks.ade_bench.tasks import materialize_local_task
 
@@ -242,18 +259,22 @@ def test_view_dir_has_environment_compose(tmp_path: Path) -> None:
         docker_image="ade-bench-agent:latest",
         cache_root=cache_root,
     )
-    env_compose = materialized / "environment" / "docker-compose.yaml"
-    assert env_compose.exists(), (
+    env_compose_path = materialized / "environment" / "docker-compose.yaml"
+    assert env_compose_path.exists(), (
         "PKG-20 AC-1: environment/docker-compose.yaml must be synthesized"
     )
-    source_compose = ade_bench_root / "shared" / "defaults" / "docker-compose.yaml"
-    assert env_compose.read_bytes() == source_compose.read_bytes(), (
-        "PKG-20 AC-1: env compose must byte-match shared/defaults/ source"
-    )
+    merged = _load_materialized_compose(materialized)
+    source = _load_source_compose(ade_bench_root, "docker-compose.yaml")
+    src_client = (source.get("services") or {}).get("client")
+    if src_client is not None:
+        assert merged["services"]["client"] == src_client, (
+            "PKG-20 AC-1: upstream services.client must merge verbatim"
+        )
 
 
 def test_view_dir_picks_duckdb_compose_for_duckdb_variant(tmp_path: Path) -> None:
-    """PKG-20 AC-2: variants[0]=duckdb-dbt → duckdb-dbt compose, byte-matched."""
+    """PKG-20 AC-2 + PKG-27: variants[0]=duckdb-dbt → duckdb-dbt compose with
+    socket-bind merge."""
     from razorback.benchmarks.ade_bench.tasks import materialize_local_task
 
     ade_bench_root = (FIXTURES / "fixture_local_task_minimal").resolve()
@@ -264,15 +285,18 @@ def test_view_dir_picks_duckdb_compose_for_duckdb_variant(tmp_path: Path) -> Non
         docker_image="ade-bench-agent:latest",
         cache_root=cache_root,
     )
-    env_compose = materialized / "environment" / "docker-compose.yaml"
-    source = ade_bench_root / "shared" / "defaults" / "docker-compose-duckdb-dbt.yaml"
-    assert env_compose.read_bytes() == source.read_bytes()
+    merged = _load_materialized_compose(materialized)
+    source = _load_source_compose(ade_bench_root, "docker-compose-duckdb-dbt.yaml")
+    src_client = (source.get("services") or {}).get("client")
+    if src_client is not None:
+        assert merged["services"]["client"] == src_client
 
 
 def test_view_dir_picks_snowflake_dbtf_compose_for_snowflake_dbtf_variant(
     tmp_path: Path,
 ) -> None:
-    """PKG-20 AC-2: variants[0]=snowflake/dbt-fusion → snowflake-dbtf compose."""
+    """PKG-20 AC-2 + PKG-27: variants[0]=snowflake/dbt-fusion → snowflake-dbtf
+    compose with socket-bind merge."""
     from razorback.benchmarks.ade_bench.tasks import materialize_local_task
 
     ade_bench_root = (FIXTURES / "fixture_local_task_minimal").resolve()
@@ -283,17 +307,18 @@ def test_view_dir_picks_snowflake_dbtf_compose_for_snowflake_dbtf_variant(
         docker_image="ade-bench-agent:latest",
         cache_root=cache_root,
     )
-    env_compose = materialized / "environment" / "docker-compose.yaml"
-    source = (
-        ade_bench_root / "shared" / "defaults" / "docker-compose-snowflake-dbtf.yaml"
+    merged = _load_materialized_compose(materialized)
+    source = _load_source_compose(
+        ade_bench_root, "docker-compose-snowflake-dbtf.yaml"
     )
-    assert env_compose.read_bytes() == source.read_bytes()
+    src_client = (source.get("services") or {}).get("client")
+    if src_client is not None:
+        assert merged["services"]["client"] == src_client
 
 
 def test_view_dir_filter_overrides_variants_zero(tmp_path: Path) -> None:
-    """PKG-20 AC-2: (db_type, project_type) pin selects the matching entry,
-    overriding variants[0]. example_duckdb has both duckdb-dbt and
-    snowflake-dbt variants; pinning to snowflake/dbt must pick snowflake-dbt.
+    """PKG-20 AC-2 + PKG-27: (db_type, project_type) pin selects the matching
+    entry, overriding variants[0]; merge preserves upstream's services.client.
     """
     from razorback.benchmarks.ade_bench.tasks import materialize_local_task
 
@@ -307,11 +332,13 @@ def test_view_dir_filter_overrides_variants_zero(tmp_path: Path) -> None:
         db_type="snowflake",
         project_type="dbt",
     )
-    env_compose = materialized / "environment" / "docker-compose.yaml"
-    source = (
-        ade_bench_root / "shared" / "defaults" / "docker-compose-snowflake-dbt.yaml"
+    merged = _load_materialized_compose(materialized)
+    source = _load_source_compose(
+        ade_bench_root, "docker-compose-snowflake-dbt.yaml"
     )
-    assert env_compose.read_bytes() == source.read_bytes()
+    src_client = (source.get("services") or {}).get("client")
+    if src_client is not None:
+        assert merged["services"]["client"] == src_client
 
 
 def test_view_dir_env_compose_excludable_via_exclude_globs(tmp_path: Path) -> None:

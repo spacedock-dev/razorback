@@ -26,6 +26,10 @@ benchmark:
   kind: ade-bench
   tasks_root: .  # ignored when every entry is a local-task; required by current schema
   ade_bench_root: ~/git/ade-bench
+  # PKG-23: pin the variant so _select_compose_variant resolves to the
+  # docker-compose-duckdb-dbt.yaml template (matches airbnb001's variant[0]).
+  db_type: duckdb
+  project_type: dbt
   tasks:
     - slug: airbnb001
 trials: 1

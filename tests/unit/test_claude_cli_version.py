@@ -1,41 +1,31 @@
-# ABOUTME: AC-4 — version() returns the string parsed from `claude --version`.
+# ABOUTME: AC-4 — version() returns the string captured by setup()'s container-side
+# ABOUTME: `claude --version` exec. Harbor's BaseInstalledAgent.version() returns self._version.
 
-import subprocess
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock
 
 from razorback.agents.claude_cli import ClaudeCliAgent
 
 
-def _agent(tmp_path):
-    return ClaudeCliAgent(logs_dir=tmp_path, model_name="claude-opus-4-5")
-
-
-def test_version_parses_claude_cli_output(tmp_path):
-    fake = subprocess.CompletedProcess(
-        args=["claude", "--version"], returncode=0,
-        stdout="0.6.3 (Claude Code)\n", stderr="",
+def _make_environment(version_rc=0, stdout="0.6.3 (Claude Code)\n"):
+    env = MagicMock()
+    env.exec = AsyncMock(
+        return_value=MagicMock(return_code=version_rc, stdout=stdout, stderr="")
     )
-    with patch("razorback.agents.claude_cli.subprocess.run", return_value=fake) as run:
-        agent = _agent(tmp_path)
-        assert agent.version() == "0.6.3 (Claude Code)"
-        run.assert_called_once()
-        called_argv = run.call_args.args[0]
-        assert called_argv == ["claude", "--version"]
+    return env
 
 
-def test_version_returns_none_on_cli_missing(tmp_path):
-    with patch(
-        "razorback.agents.claude_cli.subprocess.run",
-        side_effect=FileNotFoundError("claude"),
-    ):
-        agent = _agent(tmp_path)
-        assert agent.version() is None
-
-
-def test_version_returns_none_on_nonzero_exit(tmp_path):
-    fake = subprocess.CompletedProcess(
-        args=["claude", "--version"], returncode=1, stdout="", stderr="boom",
+async def test_version_is_captured_from_container_setup(tmp_path):
+    """setup() captures `claude --version` stdout into self._version."""
+    agent = ClaudeCliAgent(
+        logs_dir=tmp_path,
+        model_name="claude-opus-4-5",
+        extra_env={"ANTHROPIC_API_KEY": "sk-1"},
     )
-    with patch("razorback.agents.claude_cli.subprocess.run", return_value=fake):
-        agent = _agent(tmp_path)
-        assert agent.version() is None
+    await agent.setup(_make_environment(stdout="0.6.3 (Claude Code)\n"))
+    assert agent.version() == "0.6.3 (Claude Code)"
+
+
+async def test_version_is_none_before_setup(tmp_path):
+    """Before setup() runs, _version is unset (harbor default None)."""
+    agent = ClaudeCliAgent(logs_dir=tmp_path, model_name="claude-opus-4-5")
+    assert agent.version() is None
