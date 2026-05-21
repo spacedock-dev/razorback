@@ -1,13 +1,13 @@
 ---
 id: axtvw69xx1a3x41cw7npv4wa
 title: PKG-35 — Codex reasoning effort config for benchmark specs
-status: backlog
+status: implementation
 source: Captain directive 2026-05-21 — run gpt-5.5/xhigh/batch/spacedock
-started:
+started: 2026-05-21T15:10:33Z
 completed:
 verdict:
 score: 0.86
-worktree:
+worktree: .worktrees/spacedock-ensign-pkg35-codex-reasoning-effort-config
 issue:
 pr:
 mod-block:
