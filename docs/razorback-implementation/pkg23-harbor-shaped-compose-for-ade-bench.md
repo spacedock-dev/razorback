@@ -158,3 +158,16 @@ After PKG-23 merges + `ade-bench-agent:latest` is built (separate
 follow-up), Goal 2's implementation resumes against its existing
 worktree. The T0 probe + 48-cell matrix dispatch then become
 runnable.
+
+## Stage Report: plan
+
+- DONE: Plan resolves the translator hook location: most likely src/razorback/translate.py (where AdeBenchLocalTaskEntry gets translated to harbor spec). Plan names the exact insertion point and the env-dict propagation path into harbor's docker compose invocation.
+  Plan §Mechanism-precise architectural finding establishes the real wire is task.toml-side (`harbor.environments.docker.docker._compose_task_env = resolve_env_vars(task_env_config.env)`); plan lands env-dict-producing logic in `src/razorback/benchmarks/ade_bench/tasks.py:_compute_t_bench_env` + `_build_task_toml_from_yaml`, with `src/razorback/translate.py:_build_ade_bench` as the dispatcher; cross-cited harbor source paths in §Spec §-cites.
+- DONE: Plan size: 4 ACs, primary surface is translate.py + tests. Separate plan doc since translator hook + integration test + 6-var env mapping + per-task ID derivation is non-trivial. Write a separate plan doc at docs/razorback-implementation/plans/pkg23-harbor-shaped-compose-for-ade-bench.md.
+  Plan doc lives at `docs/razorback-implementation/plans/pkg23-harbor-shaped-compose-for-ade-bench.md` (11 tasks, AC↔task map, file structure, risk-first ordering rationale).
+- DONE: Plan TDD-orders: failing unit test for AC-1 (env-dict population) FIRST; implementation; AC-2 ade-bench-gated test; AC-3 live `rk run` integration test against airbnb001 frozen spec.
+  Task 1 = paper-only mechanism review; Task 2 = AC-1 RED unit (5 failing tests on `[environment.env]`); Task 3 = AC-1 GREEN implementation; Task 4 = AC-1 docker-config integration RED→PASS; Task 5 = value-shape iteration; Tasks 6/7 = AC-2 gating; Task 8 = AC-3 LIVE handoff to validation stage; Task 9 = AC-4 docs; Task 10 = full pytest regression gate; Task 11 = validation handoff.
+
+### Summary
+
+Plan corrects two phrasings in the entity (load-bearing for implementation): (1) the "translator hook" lands task.toml-side (via `[environment.env]`), not as a translator-subprocess `env=` arg — harbor's `DockerEnvironment._run_docker_compose_command` reads `task_env_config.env` from task.toml; (2) `T_BENCH_REPO_ROOT` must resolve to `ade_bench_root` (the `~/git/ade-bench` checkout), NOT the materialized view-dir, because the upstream compose's `dockerfile: docker/base/Dockerfile.duckdb-dbt` resolves relative to it and the view-dir lacks the `docker/` subtree. Both corrections are flagged in the plan and Task 9 documents the AC-1 correction back into the entity body. The live `rk run` (AC-3) is explicitly deferred to the validation stage per captain standing orders (`.env` / `ANTHROPIC_API_KEY` paid API tier).
