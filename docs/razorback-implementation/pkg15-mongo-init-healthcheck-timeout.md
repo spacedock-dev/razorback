@@ -105,3 +105,117 @@ After PKG-15-followup merges, goal1-resume-spacedock-first
 implementation re-runs the matrix; agnews and yelp cells in the
 direct-minimal and spacedock variants should produce real verifier
 outcomes.
+
+## Plan
+
+**Surface correction:** the dispatch named
+`packages/razorback-plugin-dab/.../generate/compose.py` as the
+single-file change. The 12-retries × 5s healthcheck cited in the
+failure log is in fact emitted by
+`packages/razorback-plugin-dab/src/razorback_plugin_dab/generate/prepare.py`
+`_task_toml()` lines 339–361 (the `[steps.healthcheck]` block in
+the per-task `task.toml`). `compose.py`'s container-level mongo
+healthcheck already has `retries: 20`, not 12, and lives at a
+different layer (docker-compose `services.dab-mongo.healthcheck`).
+The plan targets `prepare.py` because that's where the failing
+healthcheck is generated; `compose.py` is unchanged.
+
+**TDD-ordered changes (single file:
+`packages/razorback-plugin-dab/src/razorback_plugin_dab/generate/prepare.py`):**
+
+1. **RED for AC-1 (new defaults).** Extend
+   `packages/razorback-plugin-dab/tests/unit/test_compose_mongo.py`
+   (or a sibling `test_prepare_mongo_healthcheck.py` if isolation
+   reads cleaner — implementer's call at TDD time) with a unit
+   test that drives `_task_toml(mongo_probes=[("articles_db",
+   "articles")])` and asserts the emitted toml contains
+   `retries = 60` and `start_period_sec = 60`, `interval_sec = 5`
+   (so retries × interval = 5 minutes, well above the worst-case
+   mongorestore wall time for agnews / yelp). Run, confirm RED.
+
+2. **GREEN AC-1.** Bump the literals in `prepare.py` `_task_toml`
+   `elif mongo_probes:` branch: `retries = 12` → `retries = 60`.
+   Leave `interval_sec = 5`, `timeout_sec = 10`, and
+   `start_period_sec = 60` as-is (start_period is mongo-container
+   startup budget, separate from the mongorestore-wait budget).
+   Re-run, confirm GREEN.
+
+3. **RED for AC-2 (per-dataset override).** Add a unit test that
+   passes a `db_config` whose mongo client carries an optional
+   `healthcheck_retries` field (e.g. `{"db_type": "mongo",
+   "db_name": "articles_db", "dump_folder": "...",
+   "healthcheck_retries": 120}`) and asserts the emitted task.toml
+   contains `retries = 120`. Add a second test asserting that
+   omitting the field falls back to the AC-1 default (60). Run,
+   confirm RED.
+
+4. **GREEN AC-2.** Thread an override through the existing call
+   chain. Two minimal edits:
+   - `_mongo_probe_targets` (or a sibling helper) is the natural
+     place to extract `healthcheck_retries` from the mongo client
+     `db_config` entry alongside `(db_name, collection)`. Extend
+     its return shape to carry the optional override (or add a
+     parallel `mongo_healthcheck_retries: int | None` argument
+     thread).
+   - `_task_toml` accepts `mongo_healthcheck_retries: int | None
+     = None` and uses the override when present, defaulting to
+     `60`.
+   - `_materialize_task_dir` (`prepare.py` lines 159–168) passes
+     the override from `db_config` through to `_task_toml`.
+   No schema-validation framework lives in this package for
+   `db_config`; the field is just a dict-key read with a
+   `.get("healthcheck_retries")` and an `isinstance(int)` guard.
+   Run, confirm GREEN.
+
+5. **AC-3 (live smoke) — deferred to resume hook, NOT this
+   plan's implementation stage.** AC-3 requires a live `rk run`
+   against agnews × claude-opus-4-7, which costs API budget and
+   wall time and must happen on the goal1-resume re-run rather
+   than inside the implement stage. The resume hook at the end
+   of this entity file already captures the dependency; the
+   implementation stage MUST NOT block on AC-3.
+
+6. **AC-4 (regression).** Run `uv run pytest
+   packages/razorback-plugin-dab/tests/unit/ -q` after each
+   green step; the whole suite must stay green at implement-
+   stage completion.
+
+**Effort estimate:** small. One file change in `prepare.py`
+(roughly 8–15 lines: 1 default bump + ~10 lines of override
+plumbing), plus 2–3 new unit tests. No compose.py change. No
+new dependencies.
+
+**Risks / unknowns:**
+- The override field name `healthcheck_retries` is invented in
+  this plan; if `db_config` schemas live in an upstream catalog
+  module the implementer should grep for an existing convention
+  first (`grep -rn "db_clients" packages/razorback-plugin-dab/
+  --include=*.py`) and prefer the existing naming style. The
+  exact name is not load-bearing — what matters is that exactly
+  one well-named override key exists.
+- AC-1's `retries = 60` (5-minute budget) is a guess sized for
+  agnews / yelp; if implement-stage discovers a DAB mongo dataset
+  with an even longer mongorestore wall time, the per-dataset
+  override (AC-2) handles it without re-shipping defaults.
+
+## Stage Report: plan
+
+- DONE: Plan is INLINE (4 ACs, single-file change in packages/razorback-plugin-dab/.../generate/compose.py mongo healthcheck section). Stage report on entity body, no separate plan doc.
+  Plan written inline under `## Plan` above; no separate plan doc created.
+- DONE: Plan names the exact change: bump healthcheck `retries` from 12 to 60 (or sensible larger value); make it configurable per-dataset via db_config schema extension. Reference existing PKG-15 fixture test_compose_mongo.py as test surface.
+  Step 2 bumps `retries = 12` → `retries = 60` at `prepare.py` `_task_toml` line 360; step 4 adds `healthcheck_retries` override via `db_config["db_clients"][...]`; test surface is `test_compose_mongo.py` (or sibling `test_prepare_mongo_healthcheck.py`).
+- DONE: Plan TDD-orders: RED unit test for AC-1 (new defaults) first, then impl, then AC-2 per-dataset override test, then AC-3 deferred live-run smoke (captured in resume hook).
+  Steps 1→2→3→4 are RED-GREEN pairs; AC-3 explicitly deferred to resume hook in step 5; AC-4 regression run in step 6.
+
+### Summary
+
+Plan corrects the dispatch's file-location (the failing
+healthcheck lives in `prepare.py` `_task_toml`, not `compose.py`)
+and lays out a TDD-ordered, single-file change: bump default
+mongo content-presence healthcheck retries from 12 to 60 (AC-1),
+thread a `healthcheck_retries` override through `db_config →
+_materialize_task_dir → _task_toml` (AC-2), defer the live agnews
+smoke to the goal1-resume hook (AC-3), and gate completion on the
+existing dab unit-test suite (AC-4). Effort is small (~one file,
+two helpers, two-to-three new unit tests, no new deps).
+
