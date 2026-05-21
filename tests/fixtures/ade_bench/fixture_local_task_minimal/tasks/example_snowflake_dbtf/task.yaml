@@ -1,0 +1,12 @@
+task_id: example_snowflake_dbtf
+status: ready
+description: PKG-20 fixture — snowflake dbt-fusion variant first
+prompts:
+  - key: base
+    prompt: |
+      Do the snowflake dbtf task.
+variants:
+- db_type: snowflake
+  db_name: example
+  project_type: dbt-fusion
+  project_name: example

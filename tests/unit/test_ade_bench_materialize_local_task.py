@@ -153,3 +153,188 @@ def test_ade_bench_root_seeds_remain_unfiltered(tmp_path: Path) -> None:
     )
     upstream_seeds = ade_bench_root / "tasks" / "example001" / "seeds"
     assert (upstream_seeds / "solution__x.csv").exists()
+
+
+def test_select_compose_variant_no_variants_yields_default() -> None:
+    """PKG-20 AC-2: task.yaml without variants → default compose."""
+    from razorback.benchmarks.ade_bench.tasks import _select_compose_variant
+
+    assert _select_compose_variant({}, db_type=None, project_type=None) == (
+        "docker-compose.yaml"
+    )
+
+
+def test_select_compose_variant_duckdb_dbt() -> None:
+    """PKG-20 AC-2: duckdb+dbt → docker-compose-duckdb-dbt.yaml."""
+    from razorback.benchmarks.ade_bench.tasks import _select_compose_variant
+
+    task_yaml = {"variants": [{"db_type": "duckdb", "project_type": "dbt"}]}
+    assert _select_compose_variant(
+        task_yaml, db_type=None, project_type=None
+    ) == "docker-compose-duckdb-dbt.yaml"
+
+
+def test_select_compose_variant_snowflake_dbt() -> None:
+    """PKG-20 AC-2: snowflake+dbt → docker-compose-snowflake-dbt.yaml."""
+    from razorback.benchmarks.ade_bench.tasks import _select_compose_variant
+
+    task_yaml = {
+        "variants": [{"db_type": "snowflake", "project_type": "dbt"}]
+    }
+    assert _select_compose_variant(
+        task_yaml, db_type=None, project_type=None
+    ) == "docker-compose-snowflake-dbt.yaml"
+
+
+def test_select_compose_variant_snowflake_dbtf() -> None:
+    """PKG-20 AC-2: snowflake+dbt-fusion → docker-compose-snowflake-dbtf.yaml."""
+    from razorback.benchmarks.ade_bench.tasks import _select_compose_variant
+
+    task_yaml = {
+        "variants": [{"db_type": "snowflake", "project_type": "dbt-fusion"}]
+    }
+    assert _select_compose_variant(
+        task_yaml, db_type=None, project_type=None
+    ) == "docker-compose-snowflake-dbtf.yaml"
+
+
+def test_select_compose_variant_filter_picks_matching_entry() -> None:
+    """PKG-20 AC-2: when (db_type, project_type) supplied, filter picks the matching variant."""
+    from razorback.benchmarks.ade_bench.tasks import _select_compose_variant
+
+    task_yaml = {
+        "variants": [
+            {"db_type": "duckdb", "project_type": "dbt"},
+            {"db_type": "snowflake", "project_type": "dbt"},
+            {"db_type": "snowflake", "project_type": "dbt-fusion"},
+        ]
+    }
+    assert _select_compose_variant(
+        task_yaml, db_type="snowflake", project_type="dbt-fusion"
+    ) == "docker-compose-snowflake-dbtf.yaml"
+
+
+def test_select_compose_variant_filter_unmatched_raises() -> None:
+    """PKG-20 AC-2: filter that matches nothing raises ValueError."""
+    from razorback.benchmarks.ade_bench.tasks import _select_compose_variant
+
+    task_yaml = {"variants": [{"db_type": "duckdb", "project_type": "dbt"}]}
+    with pytest.raises(ValueError, match="no variant matching"):
+        _select_compose_variant(
+            task_yaml, db_type="snowflake", project_type="dbt"
+        )
+
+
+def test_view_dir_has_environment_compose(tmp_path: Path) -> None:
+    """PKG-20 AC-1: materialize_local_task synthesizes environment/docker-compose.yaml.
+
+    No `variants:` in the minimal fixture's task.yaml — falls through to the
+    default `docker-compose.yaml` in shared/defaults/. Content must byte-match
+    the source.
+    """
+    from razorback.benchmarks.ade_bench.tasks import materialize_local_task
+
+    ade_bench_root = (FIXTURES / "fixture_local_task_minimal").resolve()
+    cache_root = tmp_path / "pkg20-cache"
+    materialized = materialize_local_task(
+        ade_bench_root=ade_bench_root,
+        task_slug="example001",
+        docker_image="ade-bench-agent:latest",
+        cache_root=cache_root,
+    )
+    env_compose = materialized / "environment" / "docker-compose.yaml"
+    assert env_compose.exists(), (
+        "PKG-20 AC-1: environment/docker-compose.yaml must be synthesized"
+    )
+    source_compose = ade_bench_root / "shared" / "defaults" / "docker-compose.yaml"
+    assert env_compose.read_bytes() == source_compose.read_bytes(), (
+        "PKG-20 AC-1: env compose must byte-match shared/defaults/ source"
+    )
+
+
+def test_view_dir_picks_duckdb_compose_for_duckdb_variant(tmp_path: Path) -> None:
+    """PKG-20 AC-2: variants[0]=duckdb-dbt → duckdb-dbt compose, byte-matched."""
+    from razorback.benchmarks.ade_bench.tasks import materialize_local_task
+
+    ade_bench_root = (FIXTURES / "fixture_local_task_minimal").resolve()
+    cache_root = tmp_path / "pkg20-cache"
+    materialized = materialize_local_task(
+        ade_bench_root=ade_bench_root,
+        task_slug="example_duckdb",
+        docker_image="ade-bench-agent:latest",
+        cache_root=cache_root,
+    )
+    env_compose = materialized / "environment" / "docker-compose.yaml"
+    source = ade_bench_root / "shared" / "defaults" / "docker-compose-duckdb-dbt.yaml"
+    assert env_compose.read_bytes() == source.read_bytes()
+
+
+def test_view_dir_picks_snowflake_dbtf_compose_for_snowflake_dbtf_variant(
+    tmp_path: Path,
+) -> None:
+    """PKG-20 AC-2: variants[0]=snowflake/dbt-fusion → snowflake-dbtf compose."""
+    from razorback.benchmarks.ade_bench.tasks import materialize_local_task
+
+    ade_bench_root = (FIXTURES / "fixture_local_task_minimal").resolve()
+    cache_root = tmp_path / "pkg20-cache"
+    materialized = materialize_local_task(
+        ade_bench_root=ade_bench_root,
+        task_slug="example_snowflake_dbtf",
+        docker_image="ade-bench-agent:latest",
+        cache_root=cache_root,
+    )
+    env_compose = materialized / "environment" / "docker-compose.yaml"
+    source = (
+        ade_bench_root / "shared" / "defaults" / "docker-compose-snowflake-dbtf.yaml"
+    )
+    assert env_compose.read_bytes() == source.read_bytes()
+
+
+def test_view_dir_filter_overrides_variants_zero(tmp_path: Path) -> None:
+    """PKG-20 AC-2: (db_type, project_type) pin selects the matching entry,
+    overriding variants[0]. example_duckdb has both duckdb-dbt and
+    snowflake-dbt variants; pinning to snowflake/dbt must pick snowflake-dbt.
+    """
+    from razorback.benchmarks.ade_bench.tasks import materialize_local_task
+
+    ade_bench_root = (FIXTURES / "fixture_local_task_minimal").resolve()
+    cache_root = tmp_path / "pkg20-cache"
+    materialized = materialize_local_task(
+        ade_bench_root=ade_bench_root,
+        task_slug="example_duckdb",
+        docker_image="ade-bench-agent:latest",
+        cache_root=cache_root,
+        db_type="snowflake",
+        project_type="dbt",
+    )
+    env_compose = materialized / "environment" / "docker-compose.yaml"
+    source = (
+        ade_bench_root / "shared" / "defaults" / "docker-compose-snowflake-dbt.yaml"
+    )
+    assert env_compose.read_bytes() == source.read_bytes()
+
+
+def test_view_dir_env_compose_excludable_via_exclude_globs(tmp_path: Path) -> None:
+    """PKG-20 AC-4: exclude_globs threading covers environment/ entries too.
+
+    When the variant rule would pick `docker-compose.yaml` but exclude_globs
+    matches `environment/docker-compose.yaml`, no env file is reflected.
+    """
+    from razorback.benchmarks.ade_bench.tasks import materialize_local_task
+
+    ade_bench_root = (FIXTURES / "fixture_local_task_minimal").resolve()
+    cache_root = tmp_path / "pkg20-cache"
+    materialized = materialize_local_task(
+        ade_bench_root=ade_bench_root,
+        task_slug="example001",
+        docker_image="ade-bench-agent:latest",
+        cache_root=cache_root,
+        exclude_globs=(
+            "seeds/solution__*.csv",
+            "environment/docker-compose.yaml",
+        ),
+    )
+    env_dir = materialized / "environment"
+    assert not env_dir.exists(), (
+        "PKG-20 AC-4: exclude_globs match must suppress env reflection"
+    )
