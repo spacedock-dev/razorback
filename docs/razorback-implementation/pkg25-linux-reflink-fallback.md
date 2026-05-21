@@ -249,3 +249,27 @@ T3 (darwin 9/9 regression green) → T4 (AC-4 cross-device contract
 delegated to `cp`). Live Linux integration smoke explicitly deferred
 to a future entity since this session has no Linux infra; the unit
 contract test is the load-bearing check.
+
+## Stage Report: implementation
+
+- DONE: T0 RED unit test in packages/razorback-plugin-dab/tests/unit/test_prepare_bind_materialize.py asserts cp --reflink=auto invocation when sys.platform=='linux' (mock sys.platform). Confirm RED before impl.
+  test_bind_mode_linux_uses_reflink_cp written against unit (_clone_or_copy_tree) directly; confirmed 3 failing tests pre-impl, all passing post-impl (commit 5a22388).
+- DONE: T1 impl: swap os.link(child, dst_child) for subprocess.run(['cp', '--reflink=auto', str(child), str(dst_child)], check=True) on linux branch. T2 docstring: drop the wrong hardlink-CoW claim; replace with the honest 3-line summary (darwin/linux/other). Confirm GREEN.
+  prepare.py:399-403 swap; docstring lines 365-393 rewritten — no hardlink-CoW claim, --reflink=auto documented, busybox caveat noted; 3 new PKG-25 tests pass.
+- DONE: T3 darwin regression: full PKG-21 test suite passes (9/9). No new tests for live Linux reflink (no Linux infra; defer to integration follow-up).
+  uv run pytest packages/razorback-plugin-dab/tests/unit/test_prepare_bind_materialize.py → 11/11 passed (8 pre-existing PKG-21 darwin + 3 new PKG-25 contract tests); the renamed test_bind_mode_linux_hardlink_fallback → test_bind_mode_linux_uses_reflink_cp accounts for the count.
+
+### Summary
+
+Single-file surgical fix landed (commit 5a22388 on
+spacedock-ensign/pkg25-linux-reflink-fallback). Linux branch of
+_clone_or_copy_tree now invokes `cp --reflink=auto` instead of the
+unsafe `os.link` hardlink; docstring corrected; AC-4 cross-device
+handling delegated to `cp`'s documented full-copy fallback. Unit test
+rewritten against the unit directly (not via prepare_dataset_tasks) to
+avoid leaking sys.platform="linux" into pydantic's lazy sysconfig
+lookup on darwin — the prior PKG-21 hardlink test had this same latent
+darwin-incompatibility. Live Linux reflink integration smoke deferred:
+no Linux runner this session; the unit contract test (cp --reflink=auto
+argv assertion) is the load-bearing check, with a guard test against
+future st_dev/EXDEV regressions that would reintroduce os.link.
