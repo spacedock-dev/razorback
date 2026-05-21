@@ -1,13 +1,13 @@
 ---
 id: 65edwgd257aem15f4fheazjv
 title: harbor-DAB batch query_mode (per-dataset task with all queries; mirror DAB upstream)
-status: plan
+status: implementation
 source: Captain probe 2026-05-21 ("do we have a way to test halt/resume and batch mode with spacedock on dab yet?") + Goal 1 RESUME T0 review — razorback's harbor-DAB adapter is per-query-shaped (one task per `<dataset>-q<id>`) but the workspace-readme variants tell the agent it's in batch query mode. The variants currently differ by prose only.
 started: 2026-05-21T15:47:02Z
 completed:
 verdict:
 score: 0.9
-worktree:
+worktree: .worktrees/spacedock-ensign-harbor-dab-batch-query-mode
 issue:
 pr:
 mod-block:
