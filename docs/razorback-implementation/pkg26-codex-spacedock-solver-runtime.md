@@ -1,13 +1,13 @@
 ---
 id: 0ammh1a5fgj9wncpe79w7syw
 title: PKG-26 — Codex runtime adapter for spacedock_solver_v2
-status: validation
+status: done
 source: Captain directive 2026-05-21 — "get 1x score for full dataset of DAB and ade-bench, using codex"
 started: 2026-05-21T07:35:11Z
-completed:
-verdict:
+completed: 2026-05-21T07:55:50Z
+verdict: PASSED
 score: 0.95
-worktree: .worktrees/spacedock-ensign-pkg26-codex-spacedock-solver-runtime
+worktree: 
 issue:
 pr:
 mod-block:
