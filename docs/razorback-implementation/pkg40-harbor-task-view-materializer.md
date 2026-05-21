@@ -178,3 +178,16 @@ Validation rejected PKG-40 back to implementation. Concrete fixes requested:
 Cycle 2 fixed only the validation blockers. New Codex ADE score generation now accepts only Harbor-shaped task roots with `*/task.toml`, emits `batch_mode: per-task`, and no longer emits `ade_bench_root` or `{slug: ...}` task entries; the schema rejects that retired shape for new score specs, while a translator guard prevents direct constructed legacy entries from silently routing through `materialize_local_task`.
 
 The ADE smoke was rerun through the generic Harbor task-view abstraction with `spacedock_solver_v2`, `runtime: codex`, and a runnable `python:3.12` smoke image after the first attempt exposed a missing fixture `environment/Dockerfile` and placeholder-image pull failure. Commands run: AC-1 focused tests and validator-style generator probe; `uv run rk freeze examples/specs/pkg40-ade-harbor-task-view-codex.yaml --out runs/pkg40-cycle2/pkg40-ade-harbor-task-view-codex-python.frozen.yaml --allow-missing`; `uv run rk run runs/pkg40-cycle2/pkg40-ade-harbor-task-view-codex-python.frozen.yaml --runs-dir runs/pkg40-cycle2/runs-python`; regression sweeps `97 passed`, `15 passed`, and ADE glob `71 passed`; `git diff --check`.
+
+## Stage Report: validation (cycle 2)
+
+- DONE: Validation cycle 2 report re-checks AC-1 and AC-3 fixes with exact commands/output and confirms all AC-1..AC-8 statuses.
+  Evidence: `docs/razorback-implementation/validation/pkg40-harbor-task-view-materializer.md` records AC-1 PASS, AC-2 PASS, AC-3 PASS, AC-4 PASS, AC-5 FAIL, AC-6 PASS, AC-7 PASS, and AC-8 PASS.
+- DONE: Independent code review finds no blocking issue, or rejects with concrete implementation fixes.
+  Evidence: validation rejects on `rk score` failing the completed ADE task-view run because `src/razorback/score/load.py` does not resolve strata from `_razorback/task_views/*/view_manifest.json`; the report names the concrete loader/sidecar fixes.
+- DONE: Stage report gives a gate recommendation and names the ADE summary artifact and Spider2 blocker status.
+  Evidence: gate recommendation is REJECT; ADE summary artifact is `runs/pkg40-cycle2/runs-python/pkg40-ade-harbor-task-view-codex/72b3dd571f3c865f/summary.json`; Spider2 live export remains blocked at Harbor `git checkout 82d1fb0c144d28b1fd9852006cee0a39e74bd4a8`.
+
+### Summary
+
+Cycle 2 validation confirms the prior AC-1 and AC-3 blockers are fixed: new ADE score specs reject the retired local upstream shape, and the ADE Codex smoke summary reports one completed trial with dataset `ade-bench`, query `adebench-fixture-001`, and reward `1.0` through the generic task-view manifest. The gate remains rejected because `uv run --frozen rk score runs/pkg40-cycle2/runs-python/pkg40-ade-harbor-task-view-codex/72b3dd571f3c865f --format json` exits with `score input error: trial ade-bench-adebench-fixture-001__NyS5nr6 has no stratum tag`, leaving PKG-40 task identity unavailable to the public scoring path.
