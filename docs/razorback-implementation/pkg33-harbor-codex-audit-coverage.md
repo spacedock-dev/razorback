@@ -1,16 +1,16 @@
 ---
 id: 0yvb96r26n54nkavg7myr0va
 title: PKG-33 Harbor-shaped Codex audit coverage
-status: validation
+status: done
 source: goal3 DAB Codex run validation
 started: 2026-05-21T09:44:29Z
-completed:
-verdict:
+completed: 2026-05-21T10:29:01Z
+verdict: PASSED
 score: 0.93
-worktree: .worktrees/spacedock-ensign-pkg33-harbor-codex-audit-coverage
+worktree: 
 issue:
 pr:
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 ## Problem
