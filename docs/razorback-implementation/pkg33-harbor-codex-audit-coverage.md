@@ -1,7 +1,7 @@
 ---
 id: 0yvb96r26n54nkavg7myr0va
 title: PKG-33 Harbor-shaped Codex audit coverage
-status: validation
+status: implementation
 source: goal3 DAB Codex run validation
 started: 2026-05-21T09:44:29Z
 completed:
@@ -114,3 +114,7 @@ Added `src/razorback/audit/harbor_codex.py` for Harbor Codex discovery/scanning 
 ### Summary
 
 Ran the required audit suite (`uv run --frozen pytest tests/unit/audit -q`, 28 passed) plus the task acceptance command (`uv run pytest tests/unit/audit -q`, 28 passed), focused PKG-33 tests, direct `rk audit` fixtures, and the guarded BookReview audit. Validation report written at `docs/razorback-implementation/validation/pkg33-harbor-codex-audit-coverage.md`; rejection is for missing support for the actual `item.completed` / `command_execution` shape in Harbor `codex.txt`.
+
+### Feedback Cycles
+
+- Cycle 1 (2026-05-21T10:15:00Z): Validation rejected PKG-33 because `src/razorback/audit/harbor_codex.py` scans session-style `response_item` events but misses observed Harbor `codex.txt` events shaped as `item.completed` / `command_execution` with `item.command`. Requested fix: scan that event shape, add a matching `codex.txt` fixture, and rerun `uv run --frozen pytest tests/unit/audit -q` plus the guarded BookReview audit.
