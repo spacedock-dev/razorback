@@ -129,3 +129,196 @@ stage to resume the matrix:
    re-dispatched.
 3. With PKG-21's CoW materialization, the resumed matrix's total
    on-disk footprint stays under 5 GB for the remaining ~18 cells.
+
+## Implementation plan (inline — 4 ACs, single-file primary change)
+
+### AC ↔ task map
+
+| AC | Task | TDD checkpoint | Code surface |
+|----|------|----------------|--------------|
+| AC-1 | T1: CoW materializer (clonefile) | T1a failing unit test FIRST | prepare.py `_materialize_task_dir` lines 246-262 |
+| AC-2 | T2: Hardlink fallback + unsupported-fs error | T2a failing unit test | new helper in prepare.py |
+| AC-3 | T3: `materialize_mode="copy"` regression guard | existing PKG-14 tests stay green + 1 new | prepare.py (no change expected — verify path) |
+| AC-4 | T4: Live PANCANCER_ATLAS smoke | n/a — acceptance run | `rk run` on host, validation doc |
+
+### Spec § cites
+
+- AC-1 ↔ entity §"Acceptance criteria" AC-1 (lines 45-55): clonefile under bind mode, per-cell delta <1 MB
+- AC-2 ↔ entity §"Acceptance criteria" AC-2 (lines 57-68): hardlink fallback ordering, error on neither
+- AC-3 ↔ entity §"Acceptance criteria" AC-3 (lines 70-75): copy mode preserved
+- AC-4 ↔ entity §"Acceptance criteria" AC-4 (lines 77-84): live smoke + disk-delta doc
+
+### Riskiest-contract-first ordering
+
+The riskiest contract is **whether `cp -c` actually delivers 0-byte CoW on
+the host and whether writes inside the CoW'd file diverge correctly**. That
+is AC-1 — done first, with the smallest end-to-end exercise (one SQLite
+file, ≥100 MB synthetic, fixture inside `tmp_path`). Fallback (AC-2),
+opt-out regression (AC-3), and live smoke (AC-4) cannot invalidate AC-1's
+mechanism — AC-1 can invalidate them. Per CL's "validating new mechanisms"
+rule, AC-1 is the smallest integration-level exercise of the riskiest path
+and goes first.
+
+### T1 — AC-1: clonefile (APFS) materializer
+
+**T1a (failing test, written FIRST):**
+Add to `packages/razorback-plugin-dab/tests/unit/test_prepare_bind_materialize.py`:
+
+- New helper `_build_bookreview_data_root` parameterizes the sqlite size:
+  bump `review_query.db` to a ≥100 MiB synthetic payload (header +
+  zero-fill) so the disk-delta assertion has signal above filesystem
+  overhead.
+- New test `test_bind_mode_sqlite_uses_cow_materialization(tmp_path)`:
+  - skip with `pytest.skip` if `df -T tmp_path` is not APFS (darwin host
+    detection: `platform.system() == "Darwin"` + `statvfs` is not enough;
+    use `subprocess.run(["df", "-l", str(tmp_path)])` and parse, OR
+    simpler: skip on `sys.platform != "darwin"` since APFS is the only
+    supported macOS FS on modern hardware).
+  - Build data_root with ≥100 MiB sqlite live DB.
+  - Run `prepare_dataset_tasks(..., materialize_mode="bind")`.
+  - Assert `du -sh task_dir` reports <1 MiB physical (via
+    `subprocess.run(["du", "-sh", str(task_dir)])` parsing — `du` on macOS
+    reports CoW-deduplicated bytes by default).
+  - Assert the sqlite file at `workdir/query_dataset/review_query.db`
+    EXISTS and is readable (open + read first 16 bytes "SQLite format 3\x00").
+  - Run test, confirm it FAILS (current shutil.copytree produces ≥100 MiB).
+
+**T1b (implementation):**
+Add a helper function in prepare.py (above `_materialize_task_dir`):
+
+```python
+def _clone_or_copy_tree(src: Path, dst: Path, *, ignore_names: set[str]) -> None:
+    """Materialize src into dst using APFS clonefile / hardlink / copy.
+
+    Selection:
+        - darwin → subprocess(["cp", "-Rc", ...]) per-entry (APFS clonefile)
+        - linux (same device) → os.link per-file, mkdir per-dir
+        - else → raise NotImplementedError naming sys.platform
+    Files whose basename is in ignore_names are skipped (matches the
+    existing shutil.copytree(ignore=...) contract).
+    """
+```
+
+Replace the `shutil.copytree(src, dst, ignore=...)` block in
+`_materialize_task_dir` (lines 251-258) with a call to `_clone_or_copy_tree`.
+Keep the single-file `shutil.copy2` branch (line 262) unchanged — files
+copied are tiny (db_config.yaml, db_description.txt) and not worth the
+clonefile/hardlink branching cost.
+
+Implementation notes:
+- On darwin, recurse manually rather than `cp -Rc` of the parent: we need
+  to honor `ignore_names` per-entry. Walk src with `Path.iterdir()`;
+  for each child, if name in ignore_names skip; if dir, `mkdir` dst then
+  recurse; if file, `subprocess.run(["cp", "-c", str(src), str(dst)],
+  check=True)`. `cp -c` errors with exit 1 if the source/dst FS doesn't
+  support clonefile — caller surfaces this.
+- On linux, `os.link(src, dst)`. If `OSError(EXDEV)` (cross-device),
+  raise NotImplementedError("cross-device hardlink") — the caller's
+  fallback is the user's job (set materialize_mode=copy).
+- On other platforms, raise NotImplementedError with sys.platform.
+
+**T1c (run test):** Confirm T1a passes.
+
+### T2 — AC-2: hardlink fallback + unsupported-fs error
+
+**T2a (failing test):**
+- `test_bind_mode_linux_hardlink_fallback(monkeypatch, tmp_path)`:
+  monkeypatch `sys.platform` to `"linux"`, run prepare, assert that
+  `workdir/query_dataset/review_query.db` exists and that its inode
+  number equals the source file's inode (`os.stat().st_ino` matches —
+  hardlink semantics).
+- `test_bind_mode_unsupported_platform_raises(monkeypatch, tmp_path)`:
+  monkeypatch `sys.platform` to `"win32"`, assert prepare raises
+  `NotImplementedError` mentioning "win32".
+
+**T2b (implementation):** Already covered in T1b's helper. Verify the
+hardlink branch handles the directory case (mkdir dst dir, recurse into
+children with os.link per file).
+
+**T2c (run tests):** Confirm both pass.
+
+### T3 — AC-3: copy mode regression guard
+
+**T3a (failing-or-passing test):**
+`test_copy_mode_keeps_sqlite_via_full_copy(tmp_path)`:
+- Build data_root with a 5 MiB sqlite live DB.
+- Run prepare with `materialize_mode="copy"`.
+- Assert `workdir/query_dataset/review_query.db` exists AND its inode
+  != the source's inode (full physical copy, not hardlink). Use
+  `os.stat().st_ino` comparison.
+
+This test should already pass (copy mode hits the `shutil.copytree`
+default branch); it serves as a regression guard against accidentally
+routing copy-mode through `_clone_or_copy_tree`.
+
+**T3b (verify):** existing PKG-14 tests
+(`test_bind_mode_task_dir_under_10mb`,
+`test_bind_mode_no_sql_dump_in_workdir`,
+`test_copy_mode_keeps_sql_dump_in_workdir`,
+`test_bind_mode_keeps_sqlite_live_db_in_workdir`,
+`test_invalid_materialize_mode_rejected`) MUST stay green. Run full
+suite: `uv run --package razorback-plugin-dab pytest packages/razorback-plugin-dab/tests/unit/test_prepare_bind_materialize.py -v`.
+
+### T4 — AC-4: live PANCANCER_ATLAS smoke
+
+After T1-T3 land and unit tests are green:
+
+- Pick one PANCANCER_ATLAS query (smallest by query.json size as a
+  pragmatic pick).
+- `rk gen` (or equivalent matrix-cell command) emits the task dir.
+- Measure: `du -sh tasks_root/PANCANCER_ATLAS-q<n>` — assert <100 MB.
+- `rk run` the cell — confirm materialize → harbor up → agent turn →
+  verify chain completes.
+- Capture `du -sh tasks_root/PANCANCER_ATLAS-q<n>` before/after the
+  agent turn (write may diverge the CoW'd db locally).
+- Write the validation doc at
+  `docs/razorback-implementation/validation/pkg21-harbor-dab-sqlite-duckdb-bind/pancancer-smoke.md`
+  with: command transcript, `du` deltas, `result.json` excerpt, host
+  disk free before/after.
+
+### Modules to touch
+
+1. `packages/razorback-plugin-dab/src/razorback_plugin_dab/generate/prepare.py`
+   — add `_clone_or_copy_tree` helper, replace the `shutil.copytree`
+   call site at line 252.
+2. `packages/razorback-plugin-dab/tests/unit/test_prepare_bind_materialize.py`
+   — extend with T1a, T2a×2, T3a tests; bump fixture sqlite size param.
+3. `docs/razorback-implementation/validation/pkg21-harbor-dab-sqlite-duckdb-bind/pancancer-smoke.md`
+   — new validation doc (live smoke evidence for AC-4).
+
+No changes to:
+- compose.py (bind-mount of dump files is PKG-14's surface, untouched)
+- datasets catalog (no schema change)
+- harbor itself (mechanism lives entirely in the materializer)
+
+### Risks / open questions
+
+- **macOS `du` reports CoW-deduplicated sizes by default.** GNU `du` on
+  Linux reports apparent sizes; on Linux the hardlink case `du` reports
+  the file size only once per inode (correct for AC-1's <1 MB assertion).
+  Sanity-check the AC-1 test fixture on darwin with `du -sh` directly
+  during T1a before committing the test.
+- **APFS clonefile and SQLite WAL.** If harbor or the agent opens the
+  SQLite DB in WAL mode (default for many SQLite consumers), the
+  `-wal` and `-shm` sidecar files are created in the workdir. They are
+  small (KB) and not the disk-burn concern; no special handling needed.
+- **`cp -c` on a non-APFS volume on darwin.** Exits 1 with EOPNOTSUPP.
+  Implementation surfaces this as the `subprocess.CalledProcessError`
+  bubbling up; user response is `materialize_mode=copy`. Documented in
+  the helper docstring.
+- **Linux EXDEV across volumes.** A user with `data_root` on one
+  volume and `tasks_root` on another hits cross-device hardlink failure.
+  Raised as NotImplementedError; doc in helper.
+
+## Stage Report: plan
+
+- DONE: Plan identifies the mechanism: cp -c (APFS clonefile) primary, os.link (hardlink) fallback, raise NotImplementedError on neither-available.
+  See §"T1 — AC-1" and §"T2 — AC-2" above; helper `_clone_or_copy_tree` selection logic darwin→cp -c, linux→os.link, else→NotImplementedError.
+- DONE: Plan size: 4 ACs, single-file primary change + tests. INLINE plan (stage report on entity body, no separate plans/pkg21-*.md doc).
+  Plan written inline above; no doc created under `docs/razorback-implementation/plans/`.
+- DONE: Plan TDD-orders: failing unit test for AC-1 (clonefile/CoW with disk-delta assertion) FIRST; implementation; then AC-2 fallback test; AC-3 copy-mode regression; AC-4 live PANCANCER_ATLAS smoke last.
+  Task order T1a→T1b→T1c→T2a→T2b→T2c→T3a→T3b→T4 per §"AC ↔ task map" and §"Riskiest-contract-first ordering".
+
+### Summary
+
+PKG-21 inline plan written directly to entity body — 4 ACs map to 4 tasks (T1 clonefile, T2 hardlink+error, T3 copy-mode guard, T4 live smoke), TDD-ordered with the riskiest contract (APFS clonefile actually delivering 0-byte CoW) first via a ≥100 MiB synthetic sqlite fixture. Single-file primary change at prepare.py:252 replacing `shutil.copytree(ignore=...)` with a new `_clone_or_copy_tree(src, dst, ignore_names=...)` helper; existing PKG-14 tests stay green. AC-4 live smoke against PANCANCER_ATLAS produces the validation doc at `docs/razorback-implementation/validation/pkg21-harbor-dab-sqlite-duckdb-bind/pancancer-smoke.md`.
