@@ -132,3 +132,18 @@ After this entity merges:
    AND by task SHAPE (batch agent turn per dataset).
 4. Cost projection improves correspondingly (one agent setup
    teardown per dataset; intra-task tool use shares context).
+
+## Stage Report: plan
+
+- DONE: Plan reads DAB upstream's batch-mode shape from /Users/clkao/git/dataagentbench/benchmark/ (run.sh:33, lib/benchctl.py:4322, tests/test_run_experiment.py around line 2713+ — query_mode validation + batch fixture references). Plan cites the upstream contract verbatim.
+  Plan §"Upstream contract (DAB verbatim)" inlines run.sh:33, benchctl.py:4321-4327, run_experiment.py:651-657, tests/test_run_experiment.py:2713-2720, and the workspace-readme-direct-entity-output.md:41-45+84-85 workdir/answers.json shape.
+- DONE: Plan decides the materialize_local_task signature change: per-dataset path that emits ONE task_dir with query1/query2/query3 sibling subdirs + an instruction that enumerates them. Schema extension lands on the harbor-DAB benchmark block (not the generic ade_bench one). Names the exact code change points.
+  Plan §"Code change points" names schema.py:117-130, prepare.py:53/107 (gain query_mode kwarg + new _materialize_batch_task_dir), cli.py:23 (new --query-mode flag), translate.py:350 (subprocess forwarding + list-keyed trial_name_map), aggregate.py:83 (branched outcome fan-out), generate-dab-paper-matrix-specs.py:22 (build_spec).
+- DONE: Plan size: 5 ACs, multi-file (schema + prepare.py + verifier aggregation + matrix-gen + tests). Separate plan doc.
+  Plan written to docs/razorback-implementation/plans/harbor-dab-batch-query-mode.md (~290 lines, multi-file, all 5 ACs mapped to tasks).
+- DONE: Plan TDD-orders: T0 RED schema test (AC-1); T1 schema; T2 RED batch-mode materialize (AC-2); T3 materialize impl; T4 RED verifier aggregation (AC-4); T5 verifier impl; T6 regen matrix specs (AC-5); T7 live `rk run` against bookreview batch-mode (acceptance).
+  Plan §"Test plan (TDD-ordered)" follows exact ordering. AC-3 (per-query unchanged) is the implicit gate inside T6 ("uv run pytest packages/razorback-plugin-dab/" must stay green before T7); AC-3 is also enforced by construction (prepare.py per-query branch is unchanged).
+
+### Summary
+
+The plan extends HarborDabBenchmarkBlock with `query_mode: Literal["batch", "per-query"] = "per-query"` (back-compat default) and threads it through razorback-plugin-dab generate → translator → aggregator. Batch mode emits one harbor task per dataset with `query1/query2/query3` sibling workdir layout matching DAB upstream's `workspace-readme-direct-entity-output.md` shape verbatim; a new `tests/verify_batch.py` writes a per-query `reward_per_query.json` sidecar that the razorback aggregator fans out into per-(dataset, query_id) outcomes. Key non-obvious decision: `trial_name_map` becomes `dict[str, tuple[str, int] | tuple[str, list[int]]]` to keep the per-query path's existing scalar-key contract while letting batch trials expand to N outcomes — alternative single-value-with-N-entries was rejected because `_resolve_key` is a dict lookup that would collide on duplicate task_names.
