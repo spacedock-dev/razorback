@@ -1,7 +1,7 @@
 ---
 id: 0pkj0eznqq1he64hmc73y7v5
 title: PKG-34 Codex solver workflow prompt and DAB DB hints
-status: implementation
+status: validation
 source: goal3 DAB Codex clean-score blocker
 started: 2026-05-21T10:32:17Z
 completed:
