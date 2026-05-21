@@ -204,3 +204,20 @@ requested:
   task-view runs. Prove the fix by scoring
   `runs/pkg40-cycle2/runs-python/pkg40-ade-harbor-task-view-codex/72b3dd571f3c865f`
   successfully with `uv run --frozen rk score ... --format json`.
+
+## Stage Report: implementation (cycle 3)
+
+- DONE: Public `rk score` resolves task-view identity from existing PKG-40 ADE run artifacts, with focused tests.
+  Evidence: commit `3fc4ccb` teaches `src/razorback/score/load.py` to fall back from missing stratum sidecars to `_razorback/task_views/*/view_manifest.json`; `tests/unit/test_score_load.py` covers task-view manifest stratum resolution and `tests/unit/test_score_render.py` covers identity metadata in public score JSON.
+- DONE: Exact `uv run --frozen rk score runs/pkg40-cycle2/runs-python/pkg40-ade-harbor-task-view-codex/72b3dd571f3c865f --format json` succeeds and reports ADE task identity.
+  Evidence: command returned `score_version: 1`, stratum `ade-bench`, `dataset: ade-bench`, `query_id: adebench-fixture-001`, `benchmark_task_id: adebench-fixture-001`, `n_total: 1`, `n_completed: 1`, `n_errored: 0`, `n_pass: 1`, `pass_at_1: 1.0`, and `stratified_pass_at_1: 1.0`.
+- DONE: Entity implementation cycle 3 report records commits, commands, score output summary, and regression status.
+  Evidence: this report records code commit `3fc4ccb`, the exact score command and output summary above, and the regression commands below.
+
+### Summary
+
+Cycle 3 fixed only the AC-5 validation blocker. The public score loader now preserves task identity for existing Harbor task-view runs by matching trial directory prefixes to task view manifests and projecting `benchmark_kind`/`benchmark_task_id` into the score stratum payload as `dataset`/`query_id`. The reducer carries common task identity metadata into stratum stats, and JSON rendering includes that metadata without changing existing pass/fail aggregation.
+
+Commands run: `uv run --frozen pytest tests/unit/test_score_load.py tests/unit/test_score_reduce.py tests/unit/test_score_render.py tests/unit/test_score_json_schema_snapshot.py -q` (`28 passed`); `uv run --frozen rk score runs/pkg40-cycle2/runs-python/pkg40-ade-harbor-task-view-codex/72b3dd571f3c865f --format json` (succeeded with ADE identity and pass@1/reward signal); `uv run --frozen pytest tests/unit/test_task_identity_scoring.py tests/integration/test_v2_freeze_dir_mechanism.py tests/unit/test_harbor_task_view_materializer.py tests/unit/test_harbor_task_view_leakage.py tests/unit/test_ade_bench_harbor_view.py tests/unit/test_spider2_dbt_harbor_view.py tests/unit/test_translate_harbor_task_batches.py tests/unit/test_codex_benchmark_spec_generator.py tests/unit/test_ade_bench_schema.py tests/unit/test_ade_bench_translator.py tests/unit/test_ade_bench_translator_local_root.py -q` (`53 passed`); `git diff --check`.
+
+No new blockers. Prior accepted fixes remain intact: the retired local ADE score-spec path is still blocked, the ADE `rk run` summary artifact remains `runs/pkg40-cycle2/runs-python/pkg40-ade-harbor-task-view-codex/72b3dd571f3c865f/summary.json`, and the Spider2 live-data blocker remains non-blocking fixture-backed evidence from earlier cycles.
