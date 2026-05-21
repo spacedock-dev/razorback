@@ -215,3 +215,16 @@ PKG-26's two primary surfaces shipped: (1) `ClaudeCliAgent` is now a `harbor.age
 AC-4 direct-minimal evidence is conclusive (cost_usd non-null + claude-output.jsonl present in all 3 trials, no exceptions, mean reward 1.0 on 2/3). AC-4 spacedock evidence surfaces a pre-existing `spacedock_solver_v2` + harbor_dab + docker bug (host-path freeze dir not visible inside container) that is orthogonal to the PKG-26 surface map. Filed as the follow-up entity.
 
 Goal 1 RESUME's T1 unblock is met for the direct-* variants right now; the spacedock variant unblock requires the host/container freeze-dir followup before its T2 dispatch.
+
+## Stage Report: validation
+
+- DONE: Re-run unit tests on worktree; confirm PKG-26 tests pass + no regression in existing test suites.
+  `.venv/bin/pytest tests/unit/ -x --ignore=tests/unit/test_claude_cli_translator_proxy.py` → 486/486 PASS. New PKG-26 suites 14/14 PASS (subclass + kwarg-mapping + per-variant generator). Pre-existing `test_claude_cli_translator_proxy.py` import error traces to commit `5eb26c7` (sideline `razorback.compat`), confirmed not a PKG-26 regression.
+- DONE: Confirm AC-4 direct-minimal evidence: 3 trial run-dirs at `runs/goal1-direct-minimal-bookreview/5f21efb6d72031cd/`.
+  q1 cost=$0.7011515 reward=1.0; q2 cost=$1.3083198 reward=1.0; q3 cost=null reward=null (NonZeroAgentExitCodeError exit 137 / OOM, not a PKG-26 defect). Job-level `summary.json.cost_usd = 2.00947125` non-null. `claude-output.jsonl` symlink present on all 3 trials (109K/144K/77K bytes). Material evidence-doc inaccuracy found in `pkg26-validation.md` (q3 attributed `2.00947125 / 0.0` — actually run-total, not per-trial); flagged for impl agent correction.
+- DONE: Code review via superpowers:requesting-code-review — material vs polish.
+  3 findings: (1) `run()` mutates `os.environ` (sequential-trial-safe, polish); (2) duplicated v2 sealing helper across `provenance/freeze_cmd.py` + `spec/freeze.py` (polish); (3) q3 evidence inaccuracy in `pkg26-validation.md` (correction needed, not verdict-blocking). No code defects. AC-4 spacedock failure honestly captured as orthogonal `spacedock_solver_v2` + freeze-dir-mount bug per captain's accepted carve-out.
+
+### Summary
+
+Validation PASSED. Load-bearing PKG-26 surfaces ship correctly: `ClaudeCliAgent(ClaudeCode)` subclass inherits stream-json + cost-parsing + ATIF; razorback's `claude-output.jsonl` audit sentinel published via symlink override; matrix generator branches on variant (spacedock → spacedock_solver_v2; direct-* → claude-cli); freeze CLI extended to seal v2 specs. Direct-minimal AC-4 evidence is conclusive (2/3 cleanly meet cost + audit contract; q3 OOM is host-resource, not PKG-26). Spacedock AC-4 is FAILED-orthogonal (filed as `spacedock-solver-v2-freeze-dir-mount` follow-up per standing orders). Goal 1 RESUME's direct-* unblock is met. Report at `docs/razorback-implementation/validation/pkg26-use-harbor-claude-code-adapter.md`.
