@@ -163,13 +163,29 @@ class AdeBenchBenchmarkBlock(BaseModel):
     tasks_root: Path
     tasks: list[str | AdeBenchTaskEntry | AdeBenchLocalTaskEntry] = Field(min_length=1)
     docker_image_override: str | None = None
+    batch_mode: Literal["per-task", "shared-context"] = "per-task"
     ade_bench_root: Path | None = None
     db_type: Literal["duckdb", "snowflake"] | None = None
     project_type: Literal["dbt", "dbt-fusion"] | None = None
 
 
+class Spider2DbtBenchmarkBlock(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["spider2-dbt"]
+    tasks_root: Path
+    tasks: list[str] = Field(min_length=1)
+    docker_image_override: str | None = None
+    batch_mode: Literal["per-task", "shared-context"] = "per-task"
+
+
 BenchmarkBlock = Annotated[
-    Union[LocalBenchmarkBlock, DabBenchmarkBlock, HarborDabBenchmarkBlock, AdeBenchBenchmarkBlock],
+    Union[
+        LocalBenchmarkBlock,
+        DabBenchmarkBlock,
+        HarborDabBenchmarkBlock,
+        AdeBenchBenchmarkBlock,
+        Spider2DbtBenchmarkBlock,
+    ],
     Field(discriminator="kind"),
 ]
 
@@ -211,6 +227,11 @@ class ExperimentMetaBlock(BaseModel):
     estimated_cost_usd: float | None = None
 
 
+class ConcurrencyBlock(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    trials: int = Field(default=1, ge=1, le=4)
+
+
 class Spec(BaseModel):
     model_config = ConfigDict(extra="forbid")
     version: int
@@ -218,6 +239,7 @@ class Spec(BaseModel):
     agent: AgentBlock
     benchmark: BenchmarkBlock
     trials: int = 1
+    concurrency: ConcurrencyBlock = Field(default_factory=ConcurrencyBlock)
     observers: list[ObserverBlock] = Field(default_factory=list)
     provenance: ProvenanceBlock = Field(default_factory=ProvenanceBlock)
     experiment_meta: ExperimentMetaBlock | None = None

@@ -9,6 +9,7 @@ from razorback.spec.schema import (
     ClaudeCliAgentBlock,
     NopAgentBlock,
     Spec,
+    Spider2DbtBenchmarkBlock,
 )
 
 
@@ -54,6 +55,31 @@ def test_spec_dispatches_to_ade_bench_via_discriminator():
         },
     )
     assert isinstance(spec.benchmark, AdeBenchBenchmarkBlock)
+
+
+def test_spec_accepts_concurrency_block():
+    spec = Spec(
+        version=1,
+        experiment="x",
+        agent=NopAgentBlock(kind="nop"),
+        benchmark={
+            "kind": "ade-bench",
+            "tasks_root": "/tmp",
+            "tasks": ["foo"],
+        },
+        concurrency={"trials": 3},
+    )
+    assert spec.concurrency.trials == 3
+
+
+def test_spider2_dbt_schema_defaults():
+    block = Spider2DbtBenchmarkBlock(
+        kind="spider2-dbt",
+        tasks_root="/tmp/spider2",
+        tasks=["airport001"],
+    )
+    assert block.kind == "spider2-dbt"
+    assert block.batch_mode == "per-task"
 
 
 def test_claude_agent_tools_allowed_defaults_empty():
