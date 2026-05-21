@@ -1,13 +1,13 @@
 ---
 id: 68b1z4ct15jfcxmvdkxezf73
 title: PKG-39 benchmark variant spec generation for Codex ADE/DAB
-status: validation
+status: done
 source: captain request 2026-05-21
 started: 2026-05-21T19:57:39Z
-completed:
-verdict:
+completed: 2026-05-21T20:14:04Z
+verdict: PASSED
 score:
-worktree: .worktrees/spacedock-ensign-pkg39-benchmark-variant-spec-generation
+worktree: 
 issue:
 pr:
 mod-block: 
