@@ -260,13 +260,72 @@ def materialize_git_task(
     return target_dir
 
 
-def _build_task_toml_from_yaml(*, task_yaml: dict, docker_image: str) -> str:
+def _compute_t_bench_env(
+    *,
+    ade_bench_root: Path,
+    view_dir: Path,
+    task_slug: str,
+) -> dict[str, str]:
+    """Compute the six T_BENCH_* env vars ade-bench's upstream compose template
+    references.
+
+    Called only from materialize_local_task → invoked only on
+    AdeBenchLocalTaskEntry by translate._build_ade_bench. Harbor-DAB and other
+    benchmark kinds never reach this function (AC-2 gating is structural).
+
+    Mirrors upstream ``ade_bench/terminal/docker_compose_manager.py:74-87``'s
+    ``DockerComposeEnvVars`` construction with razorback-side substitutions:
+
+    - ``T_BENCH_REPO_ROOT`` — ``ade_bench_root`` absolute path. Upstream sets
+      this to the ade-bench checkout root because the compose template's
+      ``dockerfile: docker/base/Dockerfile.duckdb-dbt`` (and sibling variants)
+      resolves relative to it. The materialized view-dir does NOT contain
+      ``docker/`` (PKG-19 only reflects per-task contents), so this MUST stay
+      at ``ade_bench_root`` not ``view_dir``.
+    - ``T_BENCH_TASK_DOCKER_CLIENT_IMAGE_NAME`` — deterministic per-slug
+      ``ade-bench-client-{task_slug}:latest``. The image is NOT built by
+      PKG-23 (see entity §Out of scope).
+    - ``T_BENCH_TASK_DOCKER_CLIENT_CONTAINER_NAME`` — deterministic per-slug
+      ``{task_slug}-client``. Harbor's compose project-name (the session id)
+      enforces per-trial uniqueness on the container layer.
+    - ``T_BENCH_TEST_DIR`` — absolute path to the materialized ``tests/`` under
+      the view-dir.
+    - ``T_BENCH_TASK_LOGS_PATH`` — host-side per-task logs directory under
+      ``view_dir / "logs"`` (created so docker compose up does not fail on a
+      missing bind-mount source).
+    - ``T_BENCH_CONTAINER_LOGS_PATH`` — container-side mount target ``/logs``
+      per upstream convention (``DockerComposeManager.CONTAINER_LOGS_PATH``).
+    """
+    logs_path = view_dir / "logs"
+    logs_path.mkdir(exist_ok=True)
+    return {
+        "T_BENCH_REPO_ROOT": str(ade_bench_root),
+        "T_BENCH_TASK_DOCKER_CLIENT_IMAGE_NAME": (
+            f"ade-bench-client-{task_slug}:latest"
+        ),
+        "T_BENCH_TASK_DOCKER_CLIENT_CONTAINER_NAME": f"{task_slug}-client",
+        "T_BENCH_TEST_DIR": str(view_dir / "tests"),
+        "T_BENCH_TASK_LOGS_PATH": str(logs_path),
+        "T_BENCH_CONTAINER_LOGS_PATH": "/logs",
+    }
+
+
+def _build_task_toml_from_yaml(
+    *,
+    task_yaml: dict,
+    docker_image: str,
+    t_bench_env: dict[str, str] | None = None,
+) -> str:
     """Synthesize a harbor-shaped task.toml from an upstream ade-bench task.yaml.
 
     The shim consumes prompts[0].prompt (or the `key=base` entry if present) as
     the harbor `instruction` field (written to `instruction.md` alongside the
     task.toml). The rest of the upstream task.yaml (tags, solution_seeds,
     test_setup, etc.) is dropped — harbor's TaskConfig does not consume those.
+
+    When ``t_bench_env`` is provided, an ``[environment.env]`` sub-table is
+    emitted so harbor's ``DockerEnvironment._compose_task_env`` forwards the
+    six ``T_BENCH_*`` vars into ``docker compose up``'s environment.
     """
     prompts = task_yaml.get("prompts") or []
     base_prompt = next(
@@ -276,12 +335,19 @@ def _build_task_toml_from_yaml(*, task_yaml: dict, docker_image: str) -> str:
         raise ValueError(
             "ade-bench task.yaml has no 'prompts' entries; cannot synthesize task.toml"
         )
-    return (
-        'instruction = "instruction.md"\n'
-        '\n'
-        '[environment]\n'
-        f'docker_image = "{docker_image}"\n'
-    )
+    lines = [
+        'instruction = "instruction.md"',
+        '',
+        '[environment]',
+        f'docker_image = "{docker_image}"',
+    ]
+    if t_bench_env:
+        lines.append('')
+        lines.append('[environment.env]')
+        for k, v in t_bench_env.items():
+            v_escaped = v.replace('\\', '\\\\').replace('"', '\\"')
+            lines.append(f'{k} = "{v_escaped}"')
+    return '\n'.join(lines) + '\n'
 
 
 def materialize_local_task(
@@ -334,8 +400,17 @@ def materialize_local_task(
     target_dir.mkdir(parents=True)
 
     task_yaml = yaml.safe_load(source_task_yaml.read_text())
+    t_bench_env = _compute_t_bench_env(
+        ade_bench_root=ade_bench_root,
+        view_dir=target_dir,
+        task_slug=task_slug,
+    )
     (target_dir / "task.toml").write_text(
-        _build_task_toml_from_yaml(task_yaml=task_yaml, docker_image=docker_image)
+        _build_task_toml_from_yaml(
+            task_yaml=task_yaml,
+            docker_image=docker_image,
+            t_bench_env=t_bench_env,
+        )
     )
     prompts = task_yaml.get("prompts") or []
     base_prompt = next(
