@@ -1,13 +1,13 @@
 ---
 id: q9d227mm32r3k6mjhmx6rh9r
 title: PKG-36 — Spacedock solver v2 intermediate checkpoints
-status: implementation
+status: done
 source: Captain directive 2026-05-21 — checkpoint all intermediate stages
 started: 2026-05-21T15:10:33Z
-completed:
-verdict:
+completed: 2026-05-21T15:18:05Z
+verdict: PASSED
 score: 0.84
-worktree: .worktrees/spacedock-ensign-pkg36-spacedock-solver-v2-stage-checkpoints
+worktree: 
 issue:
 pr:
 mod-block:
