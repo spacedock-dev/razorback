@@ -72,6 +72,24 @@ def test_spec_accepts_concurrency_block():
     assert spec.concurrency.trials == 3
 
 
+def test_ade_bench_rejects_retired_local_upstream_shape():
+    with pytest.raises(ValidationError) as exc:
+        Spec(
+            version=1,
+            experiment="x",
+            agent=NopAgentBlock(kind="nop"),
+            benchmark={
+                "kind": "ade-bench",
+                "tasks_root": ".",
+                "ade_bench_root": "/tmp/ade-bench",
+                "tasks": [{"slug": "example001"}],
+            },
+        )
+    message = str(exc.value)
+    assert "ade_bench_root" in message
+    assert "slug" in message
+
+
 def test_spider2_dbt_schema_defaults():
     block = Spider2DbtBenchmarkBlock(
         kind="spider2-dbt",

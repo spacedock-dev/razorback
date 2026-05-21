@@ -8,7 +8,7 @@ import argparse
 import subprocess
 import sys
 from pathlib import Path
-from typing import Literal, NamedTuple
+from typing import NamedTuple
 
 import yaml
 
@@ -29,8 +29,8 @@ class DabSpecRow(NamedTuple):
 
 class AdeBenchSpecRow(NamedTuple):
     task_slug: str
-    ade_bench_root: Path
-    input_shape: Literal["upstream", "harbor_task_root"] = "upstream"
+    tasks_root: Path
+    input_shape: str = "harbor_task_root"
     trials: int = 1
 
 
@@ -39,19 +39,6 @@ def plan_dab_specs(*, data_root: Path) -> list[DabSpecRow]:
 
 
 def plan_ade_bench_specs(*, ade_bench_root: Path) -> list[AdeBenchSpecRow]:
-    tasks_root = ade_bench_root / "tasks"
-    if tasks_root.is_dir():
-        slugs = sorted(p.name for p in tasks_root.iterdir() if (p / "task.yaml").is_file())
-        return [
-            AdeBenchSpecRow(
-                task_slug=slug,
-                ade_bench_root=ade_bench_root,
-                input_shape="upstream",
-                trials=1,
-            )
-            for slug in slugs
-        ]
-
     slugs = (
         sorted(p.name for p in ade_bench_root.iterdir() if (p / "task.toml").is_file())
         if ade_bench_root.is_dir()
@@ -61,15 +48,14 @@ def plan_ade_bench_specs(*, ade_bench_root: Path) -> list[AdeBenchSpecRow]:
         return [
             AdeBenchSpecRow(
                 task_slug=slug,
-                ade_bench_root=ade_bench_root,
-                input_shape="harbor_task_root",
+                tasks_root=ade_bench_root,
                 trials=1,
             )
             for slug in slugs
         ]
     raise FileNotFoundError(
-        "ade-bench root must contain either upstream tasks/*/task.yaml or "
-        f"Harbor-shaped */task.toml entries: {ade_bench_root}"
+        "ade-bench score specs require a Harbor-shaped task root containing "
+        f"*/task.toml entries; upstream tasks/*/task.yaml roots are retired: {ade_bench_root}"
     )
 
 
@@ -115,19 +101,12 @@ def emit_ade_bench_spec(
 ) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     spec_path = out_dir / f"{_slug_for_filename(row.task_slug)}.yaml"
-    if row.input_shape == "harbor_task_root":
-        benchmark = {
-            "kind": "ade-bench",
-            "tasks_root": str(row.ade_bench_root),
-            "tasks": [row.task_slug],
-        }
-    else:
-        benchmark = {
-            "kind": "ade-bench",
-            "tasks_root": ".",
-            "ade_bench_root": str(row.ade_bench_root),
-            "tasks": [{"slug": row.task_slug}],
-        }
+    benchmark = {
+        "kind": "ade-bench",
+        "tasks_root": str(row.tasks_root),
+        "tasks": [row.task_slug],
+        "batch_mode": "per-task",
+    }
     payload = _base_spec(
         experiment=f"codex-ade-bench-{_slug_for_filename(row.task_slug)}",
         benchmark=benchmark,
@@ -210,9 +189,9 @@ def _print_dab_dry_run(rows: list[DabSpecRow]) -> None:
 
 
 def _print_ade_bench_dry_run(rows: list[AdeBenchSpecRow], *, ade_bench_root: Path) -> None:
-    print(f"ade-bench Codex dry-run: N=1, tasks={len(rows)}, ade_bench_root={ade_bench_root}")
+    print(f"ade-bench Codex dry-run: N=1, tasks={len(rows)}, tasks_root={ade_bench_root}")
     for row in rows:
-        print(f"- task={row.task_slug} trials={row.trials} ade_bench_root={row.ade_bench_root}")
+        print(f"- task={row.task_slug} trials={row.trials} tasks_root={row.tasks_root}")
 
 
 def main() -> int:

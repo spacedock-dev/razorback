@@ -146,12 +146,10 @@ class AdeBenchTaskEntry(BaseModel):
 
 
 class AdeBenchLocalTaskEntry(BaseModel):
-    """PKG-19 — local upstream-checkout task entry.
+    """Legacy local upstream-checkout entry.
 
-    Opts the entry into the `ade_bench_root` materialization path: the
-    translator dispatches to `materialize_local_task`, which builds a view-
-    dir from the captain's `~/git/ade-bench` checkout instead of cloning
-    `harbor-datasets` per task.
+    Defined only so older direct unit tests can name the type. PKG-40 score
+    specs no longer include this entry in AdeBenchBenchmarkBlock.tasks.
     """
     model_config = ConfigDict(extra="forbid")
     slug: str
@@ -161,10 +159,9 @@ class AdeBenchBenchmarkBlock(BaseModel):
     model_config = ConfigDict(extra="forbid")
     kind: Literal["ade-bench"]
     tasks_root: Path
-    tasks: list[str | AdeBenchTaskEntry | AdeBenchLocalTaskEntry] = Field(min_length=1)
+    tasks: list[str | AdeBenchTaskEntry] = Field(min_length=1)
     docker_image_override: str | None = None
     batch_mode: Literal["per-task", "shared-context"] = "per-task"
-    ade_bench_root: Path | None = None
     db_type: Literal["duckdb", "snowflake"] | None = None
     project_type: Literal["dbt", "dbt-fusion"] | None = None
 

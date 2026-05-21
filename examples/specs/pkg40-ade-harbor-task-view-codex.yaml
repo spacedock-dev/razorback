@@ -20,7 +20,7 @@ benchmark:
   tasks_root: ./tests/fixtures/ade_bench/tasks
   tasks:
     - adebench-fixture-001
-  docker_image_override: shared-dbt-duckdb:latest
+  docker_image_override: python:3.12
   batch_mode: per-task
 trials: 1
 concurrency:

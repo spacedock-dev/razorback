@@ -276,7 +276,6 @@ def _build_ade_bench(
     )
     from razorback.benchmarks.ade_bench.tasks import (
         materialize_git_task,
-        materialize_local_task,
         resolve_task_dirs,
     )
     from razorback.benchmarks.dab.prepare import _DEFAULT_DOCKER_IMAGE
@@ -301,21 +300,11 @@ def _build_ade_bench(
     view_root = jobs_dir / job_name / "_razorback" / "task_views"
     for r in resolved:
         if r.local_slug is not None:
-            if spec.benchmark.ade_bench_root is None:
-                raise SpecError(
-                    "ade-bench local task entry requires ade_bench_root on the "
-                    "benchmark block (PKG-19)"
-                )
-            materialized = materialize_local_task(
-                ade_bench_root=Path(spec.benchmark.ade_bench_root).expanduser(),
-                task_slug=r.local_slug,
-                docker_image=docker_image,
-                cache_root=cache_root,
-                materialize_mode=materialize_mode,
-                db_type=spec.benchmark.db_type,
-                project_type=spec.benchmark.project_type,
+            raise SpecError(
+                "ade-bench local upstream task entries are retired for score "
+                "specs; provide Harbor-shaped task directories under tasks_root "
+                "with tasks: ['<task-id>']."
             )
-            tasks.append(TaskConfig(path=materialized))
         elif r.git_url is not None and r.git_commit_id is not None:
             materialized = materialize_git_task(
                 git_url=r.git_url,

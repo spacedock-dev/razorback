@@ -1,5 +1,5 @@
-# ABOUTME: PKG-27 ade-bench Codex smoke spec; override ade_bench_root before live execution.
-# ABOUTME: Freezes without a local ade-bench checkout to prove Codex spec construction.
+# ABOUTME: PKG-40 ade-bench Codex smoke spec using Harbor-shaped task directories.
+# ABOUTME: Does not use the retired local upstream adapter path.
 version: 1
 experiment: codex-ade-bench-example001-smoke
 agent:
@@ -17,11 +17,14 @@ agent:
   tools_denied: []
 benchmark:
   kind: ade-bench
-  tasks_root: .
-  ade_bench_root: /path/to/ade-bench
+  tasks_root: ./tests/fixtures/ade_bench/tasks
   tasks:
-    - slug: example001
+    - adebench-fixture-001
+  docker_image_override: python:3.12
+  batch_mode: per-task
 trials: 1
+concurrency:
+  trials: 1
 observers:
   - kind: jsonl
     path: events.jsonl
