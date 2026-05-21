@@ -285,4 +285,26 @@ boundaries and breaking runtime-agnostic spacedock_solver_v2
 portability. Single-file surface, four ordered tasks, mechanism
 validated by T0 before T3 burns paid-API tokens.
 
+## Stage Report: implementation
+
+- DONE: T0 RED unit reproducing rc=128 freeze-init failure.
+  tests/unit/test_spacedock_solver_v2_freeze_on_host.py — 4 tests; pre-fix asserted environment.exec received 6 git commands. Commit c6632ae.
+- DONE: T1 fix per plan's option (b) — host subprocess git.
+  spacedock_solver_v2.py: added `_host_git` helper using asyncio.create_subprocess_exec; setup() + _commit_stage() swapped from environment.exec to host. 9/9 v2 freeze unit tests green (4 new + 5 lifecycle updated to new contract).
+- DONE: T2 full unit + DAB plugin suites stay green (AC-2/AC-3).
+  tests/unit/ 514 passed in 20s. packages/razorback-plugin-dab/ excl. preexisting mongo-init flake = 132 passed/3 skipped. The mongo-init shim test and test_rk_run_bookreview_spacedock_halt_resume.py both fail identically on main (Docker container / v1 spec-validation issues unrelated to this entity).
+- DONE: T3 live `rk run` against goal1/spacedock/bookreview frozen spec (AC-4).
+  _runs/goal1-spacedock-bookreview/a901b991c80c8b89/result.json: n_completed_trials=1, n_errored_trials=0, reward=1.0, exception_stats={}. summary.json: dataset_pass_at_1=1.0; per-query verdict map 3/3=1.0 in reward_per_query.json. Freeze dir `_razorback/freeze/81bd6794a0d6ecab0d2461ccaeca044f/` contains real .git/ + sealed_hash.txt on host. NO SpacedockSolverAgentError(freeze repo init failed). 3m 2s runtime, claude-code.txt agent JSONL stream captured (51 lines). cost_usd=null is a pre-existing upstream harbor cost-attribution gap, out of this entity's scope (matches PKG-26 baseline).
+
+### Summary
+
+Option (b) shipped: freeze-repo git now runs on the host via
+asyncio.create_subprocess_exec, not via environment.exec. The rc=128
+host/container mount mismatch PKG-26 T4 surfaced is gone — the same
+goal1/spacedock/bookreview spec that bombed in PKG-26 now passes
+end-to-end with reward 1.0 per query (3/3). Single-file surface
+change to spacedock_solver_v2.py plus matching test updates. The
+container-side inner-agent runtime is unchanged; only razorback's
+freeze bookkeeping moved to host where the path is real.
+
 
