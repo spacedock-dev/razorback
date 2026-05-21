@@ -1,13 +1,13 @@
 ---
 id: jjv58hxgfknqwbsehkashqj8
 title: Goal 2 — Full ade-bench Haiku baseline (48 tasks × N≥3)
-status: plan
+status: implementation
 source: handoff "Two named research goals" + reconciliation plan Phase 4a end note
 started: 2026-05-21T00:09:44Z
 completed:
 verdict:
 score: 0.6
-worktree:
+worktree: .worktrees/spacedock-ensign-goal2-ade-bench-haiku-baseline
 issue:
 pr:
 mod-block:
