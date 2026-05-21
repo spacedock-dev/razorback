@@ -163,3 +163,18 @@ Validation rejected PKG-40 back to implementation. Concrete fixes requested:
   task-view abstraction: a smallest `rk run` with `agent.kind:
   spacedock_solver_v2`, `runtime: codex`, and a valid `summary.json`, or a
   concrete accepted blocker for the missing Harbor-shaped ADE source.
+
+## Stage Report: implementation (cycle 2)
+
+- DONE: AC-1 generator/schema/translator/examples no longer expose the retired local ADE score-spec path for new score specs, with tests.
+  Evidence: commit `13294c1` rejects upstream `tasks/*/task.yaml` roots in `examples/drivers/generate-codex-benchmark-specs.py`, removes `ade_bench_root` from `AdeBenchBenchmarkBlock`, guards direct legacy local entries in `src/razorback/translate.py`, and updates ADE examples to Harbor-shaped `tasks_root` plus string task ids.
+- DONE: AC-3 has a real ADE `rk run` summary artifact through the generic task-view abstraction, or a precise blocker and fixture-backed evidence accepted by the entity AC.
+  Evidence: `uv run rk run runs/pkg40-cycle2/pkg40-ade-harbor-task-view-codex-python.frozen.yaml --runs-dir runs/pkg40-cycle2/runs-python` completed with `1/1` trial, `0` exceptions, reward `1.0`; summary path: `runs/pkg40-cycle2/runs-python/pkg40-ade-harbor-task-view-codex/72b3dd571f3c865f/summary.json`.
+- DONE: Entity implementation follow-up report records commits, commands, summary path/blocker, and regression status.
+  Evidence: this cycle 2 report records fix commit `13294c1`, the ADE run command and summary path, and regression commands below; no new Spider2 blocker beyond the previously recorded Harbor checkout failure.
+
+### Summary
+
+Cycle 2 fixed only the validation blockers. New Codex ADE score generation now accepts only Harbor-shaped task roots with `*/task.toml`, emits `batch_mode: per-task`, and no longer emits `ade_bench_root` or `{slug: ...}` task entries; the schema rejects that retired shape for new score specs, while a translator guard prevents direct constructed legacy entries from silently routing through `materialize_local_task`.
+
+The ADE smoke was rerun through the generic Harbor task-view abstraction with `spacedock_solver_v2`, `runtime: codex`, and a runnable `python:3.12` smoke image after the first attempt exposed a missing fixture `environment/Dockerfile` and placeholder-image pull failure. Commands run: AC-1 focused tests and validator-style generator probe; `uv run rk freeze examples/specs/pkg40-ade-harbor-task-view-codex.yaml --out runs/pkg40-cycle2/pkg40-ade-harbor-task-view-codex-python.frozen.yaml --allow-missing`; `uv run rk run runs/pkg40-cycle2/pkg40-ade-harbor-task-view-codex-python.frozen.yaml --runs-dir runs/pkg40-cycle2/runs-python`; regression sweeps `97 passed`, `15 passed`, and ADE glob `71 passed`; `git diff --check`.
