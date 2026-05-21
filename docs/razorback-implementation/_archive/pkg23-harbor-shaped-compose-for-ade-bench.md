@@ -1,16 +1,17 @@
 ---
 id: 0zzncavtj3yk4c0f90m0jhx7
 title: PKG-23 — thread T_BENCH_* env vars from razorback translator (ade-bench client)
-status: validation
+status: done
 source: PKG-20 follow-up — Goal 2 T0 cycle 3 2026-05-20 (worktree commit 4114020 on spacedock-ensign/goal2-ade-bench-haiku-baseline) — _validate_definition passes but docker compose up fails because PKG-20 symlinks ade-bench's upstream compose verbatim instead of generating a harbor-shaped one
 started: 2026-05-21T06:11:54Z
-completed:
-verdict:
+completed: 2026-05-21T15:40:53Z
+verdict: PASSED
 score: 0.85
-worktree: .worktrees/spacedock-ensign-pkg23-harbor-shaped-compose-for-ade-bench
+worktree: 
 issue:
 pr:
 mod-block:
+archived: 2026-05-21T15:40:53Z
 ---
 
 ## Problem
