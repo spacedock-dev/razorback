@@ -1,6 +1,6 @@
 ---
 id: kzd3zabn0magv2ezxrdvtd8a
-title: PKG-26 — route claude-code through harbor's adapter; per-variant agent kinds for goal1
+title: PKG-26 — reshape ClaudeCliAgent to subclass harbor's ClaudeCode (close wrapper drift)
 status: plan
 source: Goal 1 RESUME T0 probe 2026-05-21 (commit 565daf2 on .worktrees/spacedock-ensign-goal1-resume-spacedock-first) — cost_usd=null on paid API; captain directive 2026-05-21 ("use upstream as much as possible, we don't want to drift too much from it" + "we also need to be able to do halt/resume, and our skill injection for spacedock")
 started: 2026-05-21T15:38:07Z
@@ -48,13 +48,36 @@ variants through claude-cli**, which means:
 2. Direct-minimal + direct-structured variants lose cost +
    audit-trail telemetry
 
-PKG-26 corrects both:
-- Spacedock variant → `agent.kind: spacedock_solver_v2`
-- Direct-minimal + direct-structured → `agent.kind: claude-code`
-  (routes to harbor's adapter)
-- razorback's claude-cli kind stays available for users who
-  explicitly want the minimal wrapper, but it's NOT what the
-  matrix uses
+PKG-26's revised scope (per captain 2026-05-21: "i thought the
+intiial design was to subclass it"):
+
+**Reshape `ClaudeCliAgent` to subclass harbor's `ClaudeCode`**
+rather than independently implement. The current 118-line wrapper
+extends `harbor.agents.base.BaseAgent` directly, paralleling
+harbor's 1155-line `ClaudeCode` instead of inheriting from it.
+That was a missed design — the initial intent was a subclass.
+
+The subclass gets, for free, all of harbor's:
+- `--output-format=stream-json --print` invocation
+- `total_cost_usd` parsing (claude_code.py:491)
+- Session JSONL harvesting (`<project_root>/projects/<task>/*.jsonl`,
+  lines 167-196) — exactly what `rk audit`'s taint scanner
+  (`src/razorback/audit/taint.py:46`) needs
+- Token usage, cache reads, multi-message accumulation
+
+Razorback overrides ONLY what needs razorback-specific behavior:
+- Co-mingled auth check (the `ANTHROPIC_API_KEY` +
+  `CLAUDE_CODE_OAUTH_TOKEN` mutual exclusion at lines 52-55)
+- `tools_allowed` → harbor's `allowed_tools` kwarg mapping
+- `sampling_temperature` → harbor's sampling config
+
+Matrix correction (separate but coupled):
+- Spacedock variant → `agent.kind: spacedock_solver_v2` (halt/
+  resume + skill injection + cost — razorback's native, no
+  upstream equivalent for these features)
+- Direct-minimal + direct-structured → `agent.kind: claude-cli`
+  (still razorback's kind name; the implementation is now a
+  proper ClaudeCode subclass)
 
 This corrects ML reviewer F8 (the partial-ship caveat that
 "variants differ by ~4 lines of prose framing") — variants now
@@ -63,56 +86,59 @@ the paper's design intent.
 
 ## Acceptance criteria
 
-**AC-1 — `ClaudeCodeAgentBlock` spec block exists.**
-A new agent block in `src/razorback/spec/schema.py` mirrors
-`ClaudeCliAgentBlock` but routes through harbor's
-`ClaudeCode` adapter. Accepts model, sampling, tools_allowed,
-mcp_servers, skills_dir (per harbor's adapter signature).
-Verified by: a unit test asserts the block schema + a frozen
-spec round-trips correctly.
+**AC-1 — `ClaudeCliAgent` subclasses `harbor.agents.installed.claude_code.ClaudeCode`.**
+`src/razorback/agents/claude_cli.py` changes from
+`class ClaudeCliAgent(BaseAgent)` to
+`class ClaudeCliAgent(ClaudeCode)`. The class keeps its razorback-
+specific surface (the co-mingled-auth check, tools_allowed
+mapping, sampling_temperature handling) but inherits ALL of
+harbor's behavior (stream-json invocation, cost parsing, session
+JSONL harvesting).
+Verified by: existing `claude_cli.py` tests stay green; a new
+unit test asserts `isinstance(ClaudeCliAgent(...), ClaudeCode)`.
 
-**AC-2 — Translator routes `claude-code` kind.**
-`src/razorback/translate.py:_build_agent` adds a branch for
-`ClaudeCodeAgentBlock` that constructs an `AgentConfig` pointing
-at `harbor.agents.installed.claude_code:ClaudeCode`. The kwargs
-shape matches harbor's `ClaudeCode.__init__` signature (not
-razorback's ClaudeCliAgent signature — they differ).
-Verified by: a unit test asserts the translator emits the
-correct `AgentConfig` for a `ClaudeCodeAgentBlock` spec; an
-integration test runs a live trial against airbnb001 or
-bookreview-q1 and asserts that the trial's run-dir contains a
-non-empty `claude-output.jsonl` AND `summary.json` includes a
-non-null `cost_usd`.
+**AC-2 — Translator unchanged; AgentConfig kwargs map cleanly.**
+`src/razorback/translate.py:_build_agent`'s `ClaudeCliAgentBlock`
+branch continues to point at `CLAUDE_CLI_IMPORT_PATH`. The
+kwargs emitted (tools_allowed, sampling_temperature) are mapped
+INSIDE `ClaudeCliAgent.__init__` to harbor's expected names
+(allowed_tools, etc.) before delegating to `super().__init__(...)`.
+Verified by: existing translator tests stay green; a new
+integration test runs a live trial against bookreview-q1 and
+asserts that the trial's run-dir contains a non-empty
+`claude-output.jsonl` AND `summary.json` includes a non-null
+`cost_usd`.
 
-**AC-3 — Goal 1 matrix specs are regenerated per-variant.**
+**AC-3 — Goal 1 matrix specs split per-variant agent kind.**
 `examples/drivers/generate-dab-paper-matrix-specs.py` emits:
 - spacedock variant cells → `agent.kind: spacedock_solver_v2`
-- direct-minimal + direct-structured cells →
-  `agent.kind: claude-code`
+  (halt/resume + skill injection — razorback's native)
+- direct-minimal + direct-structured cells → `agent.kind:
+  claude-cli` (the now-subclassed ClaudeCode adapter)
 The generator preserves the spacedock-first variant ordering
 established by goal1-resume's T1.
 Verified by: regenerated frozen spec for spacedock/bookreview
 has `agent.kind: spacedock_solver_v2`; spec for
-direct-minimal/bookreview has `agent.kind: claude-code`.
+direct-minimal/bookreview has `agent.kind: claude-cli`.
 
 **AC-4 — Goal 1 matrix dispatch produces cost + audit artifacts.**
-A live `rk run` against ONE re-frozen goal1 cell (spacedock or
-direct-minimal — either kind) produces a run-dir whose
+A live `rk run` against ONE re-frozen goal1 cell of each kind
+(spacedock and direct-minimal) produces a run-dir whose
 `summary.json` has non-null `cost_usd` AND whose `claude-output.jsonl`
 is present and non-empty.
 Verified by: live `rk run` against
-examples/specs/goal1/spacedock/bookreview.frozen.yaml (after
-PKG-26 regen). Documented in the validation report.
+examples/specs/goal1/spacedock/bookreview.frozen.yaml AND
+examples/specs/goal1/direct-minimal/bookreview.frozen.yaml.
+Documented in the validation report.
 
-**AC-5 — Razorback's `claude_cli` adapter stays available but
-deprecated for matrix use.** Existing
-`ClaudeCliAgentBlock`-typed specs still work; the matrix
-generator simply stops emitting `ClaudeCliAgentBlock`. The
-adapter's tests remain green; no breaking changes to existing
-callers.
-Verified by: existing test suite for `claude_cli.py` stays green;
-matrix generator's output uses claude-code or
-spacedock_solver_v2 only.
+**AC-5 — No drift in razorback-specific behavior.**
+The co-mingled-auth check (lines 52-55 of the pre-PKG-26
+claude_cli.py) is preserved by the subclass override; existing
+tests for that check stay green. Any razorback-specific kwargs
+not accepted by ClaudeCode (e.g., the temperature-only
+supported_sampling assertion) are still enforced.
+Verified by: PKG-9 v2 tools_denied tests stay green; the
+co-mingled-auth ClaudeCliAgentError test stays green.
 
 ## Test plan
 
