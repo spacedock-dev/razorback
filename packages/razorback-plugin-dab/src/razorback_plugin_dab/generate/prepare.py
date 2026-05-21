@@ -4,8 +4,11 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import stat
+import subprocess
+import sys
 import tomllib
 from pathlib import Path
 from typing import TypedDict
@@ -238,6 +241,9 @@ def _materialize_task_dir(
     # NOT copied into the agent workdir — they are bind-mounted into the
     # dab-postgres / dab-mongo container directly from data_root. Sqlite /
     # duckdb live DB files stay in the workdir (the agent reads them).
+    # PKG-21 AC-1 + AC-2: under bind mode, the workdir is materialized via
+    # CoW (darwin clonefile) or hardlink (linux) so multi-GB sqlite/duckdb
+    # live DB files do not consume a per-cell physical copy.
     if materialize_mode == "bind":
         excluded_workdir_names = _dump_basenames(db_config)
     else:
@@ -249,13 +255,16 @@ def _materialize_task_dir(
             continue
         dst = workdir / name
         if src.is_dir():
-            shutil.copytree(
-                src,
-                dst,
-                ignore=lambda _dir, names: [
-                    n for n in names if n in excluded_workdir_names
-                ],
-            )
+            if materialize_mode == "bind":
+                _clone_or_copy_tree(src, dst, ignore_names=excluded_workdir_names)
+            else:
+                shutil.copytree(
+                    src,
+                    dst,
+                    ignore=lambda _dir, names: [
+                        n for n in names if n in excluded_workdir_names
+                    ],
+                )
         else:
             if src.name in excluded_workdir_names:
                 continue
@@ -351,6 +360,49 @@ def _task_toml(
             "retries = 12\n"
         )
     return body
+
+
+def _clone_or_copy_tree(src: Path, dst: Path, *, ignore_names: set[str]) -> None:
+    """Materialize src into dst via APFS clonefile (darwin) or hardlink (linux).
+
+    PKG-21: bind-mode workdir materializer that avoids per-cell physical copies
+    of multi-GB sqlite/duckdb live DB files. On darwin uses `cp -c` (APFS
+    clonefile, CoW). On linux uses `os.link` (hardlink — the file shares an
+    inode with the source; copy-on-write happens at the filesystem level when
+    one inode is opened for write on a CoW filesystem, or via the agent
+    writing through a fresh fd on traditional filesystems). On any other
+    platform raises NotImplementedError naming sys.platform — callers can opt
+    into materialize_mode="copy" to fall back to shutil.copytree.
+
+    Files whose basename is in ignore_names are skipped (matches the
+    shutil.copytree(ignore=...) contract used for bind-mode dump exclusion).
+
+    Caveats:
+        - `cp -c` exits non-zero (EOPNOTSUPP) on a darwin volume that is not
+          APFS; the CalledProcessError surfaces to the caller.
+        - `os.link` raises OSError(EXDEV) for cross-device sources; callers
+          must keep data_root and tasks_root on the same device or use
+          materialize_mode="copy".
+    """
+    dst.mkdir(parents=True, exist_ok=True)
+    for child in src.iterdir():
+        if child.name in ignore_names:
+            continue
+        dst_child = dst / child.name
+        if child.is_dir():
+            _clone_or_copy_tree(child, dst_child, ignore_names=ignore_names)
+            continue
+        if sys.platform == "darwin":
+            subprocess.run(
+                ["cp", "-c", str(child), str(dst_child)], check=True,
+            )
+        elif sys.platform == "linux":
+            os.link(child, dst_child)
+        else:
+            raise NotImplementedError(
+                f"bind-mode workdir materialization not supported on {sys.platform!r}; "
+                "use materialize_mode='copy' for full-copy semantics"
+            )
 
 
 def _dump_basenames(db_config: dict | None) -> set[str]:
