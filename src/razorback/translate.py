@@ -39,7 +39,9 @@ SPACEDOCK_SOLVER_V2_IMPORT_PATH = (
 SPACEDOCK_SOLVER_V2_ENVIRONMENT_IMPORT_PATH = (
     "razorback.environments.docker:ProxySeparatedDockerEnvironment"
 )
-CLAUDE_CLI_IMPORT_PATH = "razorback.agents.claude_cli:ClaudeCliAgent"
+RAZORBACK_CLAUDE_CODE_IMPORT_PATH = (
+    "razorback.agents._runtime.claude:RazorbackClaudeCode"
+)
 SPACEDOCK_SOLVER_V2_CONTAINER_FREEZE_ROOT = "/razorback-freeze"
 
 
@@ -211,13 +213,22 @@ def _build_agent_config(
             raise SpecError(
                 "claude-cli agent requires project_root for .env auth discovery."
             )
+        if (
+            spec.agent.sampling.temperature not in (None, 0.0)
+            or spec.agent.sampling.top_p is not None
+            or spec.agent.sampling.seed is not None
+        ):
+            raise SpecError(
+                "legacy agent.kind: claude-cli now routes to Harbor ClaudeCode, "
+                "which has no temperature/top_p/seed sampling kwarg; keep "
+                "sampling at its default no-op values."
+            )
         resolution = resolve_claude_auth(project_root=project_root, home=home)
-        kwargs = {
-            "tools_allowed": list(spec.agent.tools_allowed),
-            "sampling_temperature": spec.agent.sampling.temperature,
-        }
+        kwargs: dict[str, Any] = {}
+        if spec.agent.tools_allowed:
+            kwargs["allowed_tools"] = ",".join(spec.agent.tools_allowed)
         agent_cfg = AgentConfig(
-            import_path=CLAUDE_CLI_IMPORT_PATH,
+            import_path=RAZORBACK_CLAUDE_CODE_IMPORT_PATH,
             model_name=spec.agent.model,
             kwargs=kwargs,
             env=dict(resolution.env),
