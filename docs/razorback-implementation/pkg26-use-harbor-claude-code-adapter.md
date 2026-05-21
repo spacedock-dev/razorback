@@ -183,3 +183,16 @@ After PKG-26 merges:
    non-null; audit traces present.
 3. Goal 1's variant comparison is now meaningful: spacedock's
    architecture differs from direct's by more than prose.
+
+## Stage Report: plan
+
+- DONE: Plan resolves the subclass shape: `ClaudeCliAgent(ClaudeCode)` constructor delegates to super().__init__() after the razorback-specific auth check; tools_allowed/sampling kwargs translate to harbor's names.
+  Plan §"Task list" T1 specifies the `__init__` body; harbor's `ClaudeCode.__init__` (claude_code.py:104) + `BaseInstalledAgent.__init__` (installed/base.py:147) confirmed as the delegation target; `allowed_tools` is harbor's CLI_FLAG (claude_code.py:80-84) so razorback's `tools_allowed` (list) maps to a CSV string via `super().__init__(allowed_tools="Bash,Read,...")`.
+- DONE: Plan size: 5 ACs, primary surface is src/razorback/agents/claude_cli.py + generate-dab-paper-matrix-specs.py + tests. Separate plan doc (multi-file change, non-trivial). AC↔task map.
+  Plan written to `docs/razorback-implementation/plans/pkg26-reshape-claude-cli-subclass.md`; AC↔task table embedded in the "Task list" section (T0/T1 → AC-1/AC-5; T2 → AC-2; T3 → AC-3; T4 → AC-2/AC-3/AC-4).
+- DONE: Plan TDD-orders: T0 RED unit asserting isinstance; T1 subclass refactor; T2 test cost_usd populated from a live trial; T3 update spec generator for per-variant kinds; T4 live `rk run` of spacedock-variant cell + direct-minimal-variant cell asserts cost + claude-output.jsonl present.
+  Plan §"Task list" sequences T0 (RED isinstance + name + supported_sampling) → T1 (GREEN refactor) → T2 (kwarg mapping RED+GREEN) → T3 (spec generator per-variant kind RED+GREEN) → T4 (live `rk run` of one bookreview cell per kind; validates AC-2 + AC-4).
+
+### Summary
+
+Plan ships under `docs/razorback-implementation/plans/pkg26-reshape-claude-cli-subclass.md`. The load-bearing change is one file refactor (`src/razorback/agents/claude_cli.py`: 118 lines → ~50 line subclass) plus a per-variant branch in the goal1 spec generator. Two plan-review questions are flagged: (1) whether to symlink `claude-code.txt` → `claude-output.jsonl` inside `populate_context_post_run` to preserve the `rk audit` taint-scanner contract (preferred), and (2) which `solver_workflow` directory the goal1 spacedock variant should pin (default: create `examples/solver_workflows/dab_paper_matrix/`; alternative: reuse `_smoke`). T0 is riskiest-contract-first (subclass shape) — minutes-to-validate before the 36-cell matrix re-dispatch is unblocked.
