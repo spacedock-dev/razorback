@@ -1,9 +1,9 @@
 ---
 id: jjv58hxgfknqwbsehkashqj8
 title: Goal 2 — Full ade-bench Haiku baseline (48 tasks × N≥3)
-status: backlog
+status: plan
 source: handoff "Two named research goals" + reconciliation plan Phase 4a end note
-started:
+started: 2026-05-21T00:09:44Z
 completed:
 verdict:
 score: 0.6
