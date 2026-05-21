@@ -363,26 +363,33 @@ def _task_toml(
 
 
 def _clone_or_copy_tree(src: Path, dst: Path, *, ignore_names: set[str]) -> None:
-    """Materialize src into dst via APFS clonefile (darwin) or hardlink (linux).
+    """Materialize src into dst via a reflink-capable copy primitive.
 
-    PKG-21: bind-mode workdir materializer that avoids per-cell physical copies
-    of multi-GB sqlite/duckdb live DB files. On darwin uses `cp -c` (APFS
-    clonefile, CoW). On linux uses `os.link` (hardlink — the file shares an
-    inode with the source; copy-on-write happens at the filesystem level when
-    one inode is opened for write on a CoW filesystem, or via the agent
-    writing through a fresh fd on traditional filesystems). On any other
-    platform raises NotImplementedError naming sys.platform — callers can opt
-    into materialize_mode="copy" to fall back to shutil.copytree.
+    Bind-mode workdir materializer that avoids per-cell physical copies of
+    multi-GB sqlite/duckdb live DB files where the filesystem supports it.
+
+    Per-platform primitive:
+        - darwin: ``cp -c`` → APFS clonefile (true copy-on-write).
+        - linux:  ``cp --reflink=auto`` → reflink (true copy-on-write) on
+          filesystems that support it (btrfs, xfs with reflinks, ext4 with
+          reflinks); falls back to a full physical copy on filesystems that
+          do not (tmpfs, ext4-without-reflinks, cross-device, etc.). The
+          fallback is safe — distinct inodes — so writes through the dst
+          never mutate the src. Disk-savings are lost on the fallback path
+          but data integrity is preserved.
+        - other:  raises NotImplementedError naming sys.platform — callers
+          can opt into ``materialize_mode="copy"`` for ``shutil.copytree``.
 
     Files whose basename is in ignore_names are skipped (matches the
-    shutil.copytree(ignore=...) contract used for bind-mode dump exclusion).
+    ``shutil.copytree(ignore=...)`` contract used for bind-mode dump
+    exclusion).
 
     Caveats:
-        - `cp -c` exits non-zero (EOPNOTSUPP) on a darwin volume that is not
-          APFS; the CalledProcessError surfaces to the caller.
-        - `os.link` raises OSError(EXDEV) for cross-device sources; callers
-          must keep data_root and tasks_root on the same device or use
-          materialize_mode="copy".
+        - ``cp -c`` exits non-zero (EOPNOTSUPP) on a darwin volume that is
+          not APFS; the CalledProcessError surfaces to the caller.
+        - ``cp --reflink=auto`` is a GNU coreutils flag. Busybox ``cp`` does
+          not implement it. Target environments (harbor-DAB containers,
+          Debian/Ubuntu hosts) ship GNU coreutils.
     """
     dst.mkdir(parents=True, exist_ok=True)
     for child in src.iterdir():
@@ -397,7 +404,10 @@ def _clone_or_copy_tree(src: Path, dst: Path, *, ignore_names: set[str]) -> None
                 ["cp", "-c", str(child), str(dst_child)], check=True,
             )
         elif sys.platform == "linux":
-            os.link(child, dst_child)
+            subprocess.run(
+                ["cp", "--reflink=auto", str(child), str(dst_child)],
+                check=True,
+            )
         else:
             raise NotImplementedError(
                 f"bind-mode workdir materialization not supported on {sys.platform!r}; "
