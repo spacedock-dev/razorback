@@ -101,3 +101,16 @@ Validation commands:
 ### Summary
 
 Added `src/razorback/audit/harbor_codex.py` for Harbor Codex discovery/scanning and wired it into `src/razorback/audit/cli.py` alongside the existing DAB taint port. Harbor surfaces touched are read-only scanner inputs under `<trial>/steps/*/agent/codex.txt` and `<trial>/steps/*/agent/sessions/**/*.jsonl`; `job.log` remains intentionally outside solver-trace taint. No spec deviations; one extra codex.txt taint guard was added beyond the plan's session-focused AC-2 test.
+
+## Stage Report: validation
+
+- DONE: Validation independently verifies all three PKG-33 ACs with exact commands and PASS/FAIL evidence.
+  Validation report records AC-1 PASS, AC-2 FAIL for observed `codex.txt` event shape / PASS for session JSONL, and AC-3 PASS with `uv run --frozen rk audit ...` evidence.
+- DONE: Validation checks the real guarded BookReview run with the new audit code and reports whether it is clean or tainted.
+  `uv run rk audit <repo>/runs/goal3-dab-codex/runs/bookreview-guarded/codex-dab-bookreview/e3a437f3cc875bb5 --policy strict --format json` exited 23; summary clean=1 tainted=2 coverage_missing=0.
+- DONE: Validation classifies any findings as blocking or non-blocking and gives a clear gate decision.
+  Inline review found one blocking `codex.txt` scanner gap, no non-blocking findings; gate decision is REJECT back to implementation.
+
+### Summary
+
+Ran the required audit suite (`uv run --frozen pytest tests/unit/audit -q`, 28 passed) plus the task acceptance command (`uv run pytest tests/unit/audit -q`, 28 passed), focused PKG-33 tests, direct `rk audit` fixtures, and the guarded BookReview audit. Validation report written at `docs/razorback-implementation/validation/pkg33-harbor-codex-audit-coverage.md`; rejection is for missing support for the actual `item.completed` / `command_execution` shape in Harbor `codex.txt`.
