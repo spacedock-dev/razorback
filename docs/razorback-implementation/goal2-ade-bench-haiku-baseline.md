@@ -139,3 +139,16 @@ run-dir set.
 - `phase1-rk-run-v2-wrapper` (`rk run` base)
 - AC-4a.13 mechanism-validation smoke clean
 - AC-4a.14 N decision recorded (captain selects N≥3)
+
+## Stage Report: plan
+
+- DONE: Plan ships as separate plan doc at docs/razorback-implementation/plans/goal2-ade-bench-haiku-baseline.md (8 ACs, multi-subsystem — standard, not inline). AC↔task map at top; spec §-cites per task.
+  Plan written at `docs/razorback-implementation/plans/goal2-ade-bench-haiku-baseline.md`; AC↔task map table at line ~73; "Source of truth" section cites v2 spec §3.2, §6.2, §6.4, §8.1, §9.4 + PKG-19 validation report + PKG-17 archive + Goal 1 plan as architectural template.
+- DONE: Plan folds the ade-bench probe (Phase 2-5 — task-shape end-to-end through v2 surface stack with PKG-19's bind-mount) as the FIRST task, gating subsequent matrix-dispatch tasks. Probe is single-task smoke at N=1 with Haiku; passes → matrix dispatch greenlit; fails → captain decision before $0-burn.
+  T0 (probe phase 2-5) is the first task in §Tasks. "Riskiest contract first" section names T0 as the gate ("T1-T6 dispatch only after T0 is green"); T0 step 6 specifies the verdict protocol ("If any step fails, STOP and surface to captain ... DO NOT dispatch T1+").
+- DONE: Plan explicitly overrides AC-4a.14/AC-5: N=1 per captain directive, NOT N≥3. Result-doc honesty caveat: per-task Wilson CIs at N=1 are degenerate ([0, 1] for any single observation); the baseline is reported as a point estimate with the N=1 caveat named in the result doc. Aggregate stratified pass@1 is still computable. The exact ack-language: 'Captain directive 2026-05-20: scope to N=1 to ship the number fast; raising N is a separate follow-up entity.'
+  "Captain directive (2026-05-20)" section at the top of the plan carries the verbatim ack-language. AC-5 revision is named explicitly ("per-task Wilson CIs degenerate by construction"). T5 step 2's score aggregator bakes the N=1 honesty caveat into the JSON body. T6 step 1 + step 7 carry the caveat into the result doc; T6 step 3 names aggregate stratified pass@1 as the headline. The no-`--against-constant` framing (establishing measurement, not reproduction) is explicit in the Captain Directive section and in T6 step 3.
+
+### Summary
+
+Plan covers all 7 ACs with the captain's N=1 directive folded into the structure: T0 = probe phase 2-5 (single-task Haiku smoke gating the matrix); T1-T3 = generator + driver + idempotence/dispatch; T4-T5 = budget/audit/score/provenance aggregation; T6 = result summary with the N=1 honesty caveat + ML-reviewer F1 stratum-collapse note + registered-baseline value. The probe is the first live exercise of PKG-19's bind-mount path through `rk run` against a real ade-bench task (PKG-19's AC-7 was SKIPPED in validation due to sandbox env blockers), so it's the genuine riskiest contract for this matrix. No code changes in plan stage; plan doc committed to main alongside this entity stage report.
