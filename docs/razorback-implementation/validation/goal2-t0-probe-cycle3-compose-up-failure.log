@@ -1,0 +1,47 @@
+Traceback (most recent call last):
+  File "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal2-ade-bench-haiku-baseline/.venv/lib/python3.12/site-packages/harbor/trial/trial.py", line 951, in run
+    await self._setup_environment()
+  File "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal2-ade-bench-haiku-baseline/.venv/lib/python3.12/site-packages/harbor/trial/trial.py", line 313, in _setup_environment
+    await self._start_environment_with_retry()
+  File "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal2-ade-bench-haiku-baseline/.venv/lib/python3.12/site-packages/tenacity/asyncio/__init__.py", line 193, in async_wrapped
+    return await copy(fn, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal2-ade-bench-haiku-baseline/.venv/lib/python3.12/site-packages/tenacity/asyncio/__init__.py", line 112, in __call__
+    do = await self.iter(retry_state=retry_state)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal2-ade-bench-haiku-baseline/.venv/lib/python3.12/site-packages/tenacity/asyncio/__init__.py", line 157, in iter
+    result = await action(retry_state)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal2-ade-bench-haiku-baseline/.venv/lib/python3.12/site-packages/tenacity/_utils.py", line 111, in inner
+    return call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal2-ade-bench-haiku-baseline/.venv/lib/python3.12/site-packages/tenacity/__init__.py", line 393, in <lambda>
+    self._add_action_func(lambda rs: rs.outcome.result())
+                                     ^^^^^^^^^^^^^^^^^^^
+  File "/Users/clkao/.local/share/uv/python/cpython-3.12-macos-aarch64-none/lib/python3.12/concurrent/futures/_base.py", line 449, in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+  File "/Users/clkao/.local/share/uv/python/cpython-3.12-macos-aarch64-none/lib/python3.12/concurrent/futures/_base.py", line 401, in __get_result
+    raise self._exception
+  File "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal2-ade-bench-haiku-baseline/.venv/lib/python3.12/site-packages/tenacity/asyncio/__init__.py", line 116, in __call__
+    result = await fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal2-ade-bench-haiku-baseline/.venv/lib/python3.12/site-packages/harbor/trial/trial.py", line 325, in _start_environment_with_retry
+    await asyncio.wait_for(
+  File "/Users/clkao/.local/share/uv/python/cpython-3.12-macos-aarch64-none/lib/python3.12/asyncio/tasks.py", line 520, in wait_for
+    return await fut
+           ^^^^^^^^^
+  File "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal2-ade-bench-haiku-baseline/.venv/lib/python3.12/site-packages/harbor/environments/docker/docker.py", line 495, in start
+    await self._run_docker_compose_command(["up", "--detach", "--wait"])
+  File "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal2-ade-bench-haiku-baseline/.venv/lib/python3.12/site-packages/harbor/environments/docker/docker.py", line 382, in _run_docker_compose_command
+    raise RuntimeError(
+RuntimeError: Docker compose command failed for environment airbnb001. Command: docker compose --project-name airbnb001__vmrlxhw --project-directory /Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal2-ade-bench-haiku-baseline/.cache_home/.cache/razorback/ade-bench/airbnb001/environment -f /Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal2-ade-bench-haiku-baseline/.venv/lib/python3.12/site-packages/harbor/environments/docker/docker-compose-base.yaml -f /Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal2-ade-bench-haiku-baseline/.venv/lib/python3.12/site-packages/harbor/environments/docker/docker-compose-prebuilt.yaml -f /Users/clkao/git/ade-bench/shared/defaults/docker-compose-duckdb-dbt.yaml up --detach --wait. Return code: 1. Stdout: time="2026-05-20T22:31:18-07:00" level=warning msg="The \"T_BENCH_TASK_DOCKER_CLIENT_IMAGE_NAME\" variable is not set. Defaulting to a blank string."
+time="2026-05-20T22:31:18-07:00" level=warning msg="The \"T_BENCH_TASK_DOCKER_CLIENT_CONTAINER_NAME\" variable is not set. Defaulting to a blank string."
+time="2026-05-20T22:31:18-07:00" level=warning msg="The \"T_BENCH_TEST_DIR\" variable is not set. Defaulting to a blank string."
+time="2026-05-20T22:31:18-07:00" level=warning msg="The \"T_BENCH_TASK_LOGS_PATH\" variable is not set. Defaulting to a blank string."
+time="2026-05-20T22:31:18-07:00" level=warning msg="The \"T_BENCH_CONTAINER_LOGS_PATH\" variable is not set. Defaulting to a blank string."
+time="2026-05-20T22:31:18-07:00" level=warning msg="The \"T_BENCH_REPO_ROOT\" variable is not set. Defaulting to a blank string."
+ main Pulling 
+ main Error pull access denied for dab-agent, repository does not exist or may require 'docker login'
+Error response from daemon: pull access denied for dab-agent, repository does not exist or may require 'docker login'
+. Stderr: None. 
