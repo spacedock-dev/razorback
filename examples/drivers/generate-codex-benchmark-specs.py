@@ -17,7 +17,7 @@ from razorback_plugin_dab.datasets import DAB_DATASETS
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SOLVER_WORKFLOW = "./examples/solver_workflows/codex-benchmark-solver"
-CODEX_MODEL = "gpt-5.1-codex"
+CODEX_MODEL = "gpt-5.5"
 
 
 class DabSpecRow(NamedTuple):
@@ -47,7 +47,7 @@ def plan_ade_bench_specs(*, ade_bench_root: Path) -> list[AdeBenchSpecRow]:
     ]
 
 
-def emit_dab_spec(row: DabSpecRow, *, out_dir: Path) -> Path:
+def emit_dab_spec(row: DabSpecRow, *, out_dir: Path, model: str = CODEX_MODEL) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     spec_path = out_dir / f"{row.dataset}.yaml"
     payload = _base_spec(
@@ -60,12 +60,15 @@ def emit_dab_spec(row: DabSpecRow, *, out_dir: Path) -> Path:
             "hints": False,
         },
         trials=row.trials,
+        model=model,
     )
     _write_yaml(spec_path, payload, about=f"Codex DAB N=1 cell for dataset={row.dataset}.")
     return spec_path
 
 
-def emit_ade_bench_spec(row: AdeBenchSpecRow, *, out_dir: Path) -> Path:
+def emit_ade_bench_spec(
+    row: AdeBenchSpecRow, *, out_dir: Path, model: str = CODEX_MODEL
+) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     spec_path = out_dir / f"{_slug_for_filename(row.task_slug)}.yaml"
     payload = _base_spec(
@@ -77,19 +80,20 @@ def emit_ade_bench_spec(row: AdeBenchSpecRow, *, out_dir: Path) -> Path:
             "tasks": [{"slug": row.task_slug}],
         },
         trials=row.trials,
+        model=model,
     )
     _write_yaml(spec_path, payload, about=f"Codex ade-bench N=1 cell for task={row.task_slug}.")
     return spec_path
 
 
-def _base_spec(*, experiment: str, benchmark: dict, trials: int) -> dict:
+def _base_spec(*, experiment: str, benchmark: dict, trials: int, model: str) -> dict:
     return {
         "version": 1,
         "experiment": experiment,
         "agent": {
             "kind": "spacedock_solver_v2",
             "runtime": "codex",
-            "model": CODEX_MODEL,
+            "model": model,
             "sampling": {"temperature": 0.0, "top_p": None, "seed": 1},
             "solver_workflow": SOLVER_WORKFLOW,
             "spacedock_skill_version": "1.0.0",
@@ -151,6 +155,11 @@ def main() -> int:
     )
     parser.add_argument("--write", action="store_true", help="Write specs instead of dry-run only.")
     parser.add_argument("--freeze", action="store_true", help="Freeze emitted specs with --allow-missing.")
+    parser.add_argument(
+        "--model",
+        default=CODEX_MODEL,
+        help=f"Codex model for emitted specs. Default: {CODEX_MODEL}.",
+    )
     args = parser.parse_args()
 
     emitted: list[Path] = []
@@ -161,7 +170,9 @@ def main() -> int:
         _print_dab_dry_run(rows)
         if args.write:
             for row in rows:
-                emitted.append(emit_dab_spec(row, out_dir=args.out_root / "dab"))
+                emitted.append(
+                    emit_dab_spec(row, out_dir=args.out_root / "dab", model=args.model)
+                )
     else:
         if args.ade_bench_root is None:
             parser.error("--ade-bench-root is required for --benchmark ade-bench")
@@ -169,7 +180,11 @@ def main() -> int:
         _print_ade_bench_dry_run(rows, ade_bench_root=args.ade_bench_root)
         if args.write:
             for row in rows:
-                emitted.append(emit_ade_bench_spec(row, out_dir=args.out_root / "ade-bench"))
+                emitted.append(
+                    emit_ade_bench_spec(
+                        row, out_dir=args.out_root / "ade-bench", model=args.model
+                    )
+                )
 
     for spec_path in emitted:
         print(f"wrote {spec_path.relative_to(REPO_ROOT)}")

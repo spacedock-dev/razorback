@@ -70,11 +70,24 @@ def test_emit_dab_codex_spec_uses_solver_v2_codex_and_harbor_dab(tmp_path: Path)
 
     assert payload["agent"]["kind"] == "spacedock_solver_v2"
     assert payload["agent"]["runtime"] == "codex"
+    assert payload["agent"]["model"] == "gpt-5.5"
     assert payload["agent"]["solver_workflow"] == "./examples/solver_workflows/codex-benchmark-solver"
     assert payload["benchmark"]["kind"] == "harbor_dab"
     assert payload["benchmark"]["datasets"] == ["bookreview"]
     assert payload["benchmark"]["data_root"] == str(tmp_path / "dab-data")
     assert payload["trials"] == 1
+
+
+def test_emit_dab_codex_spec_allows_model_override(tmp_path: Path) -> None:
+    generator = _load_generator()
+    row = generator.plan_dab_specs(data_root=tmp_path / "dab-data")[0]
+
+    spec_path = generator.emit_dab_spec(
+        row, out_dir=tmp_path / "out", model="gpt-future-codex"
+    )
+    payload = yaml.safe_load(spec_path.read_text())
+
+    assert payload["agent"]["model"] == "gpt-future-codex"
 
 
 def test_emit_ade_bench_codex_spec_uses_local_task_entry(tmp_path: Path) -> None:
@@ -90,6 +103,7 @@ def test_emit_ade_bench_codex_spec_uses_local_task_entry(tmp_path: Path) -> None
 
     assert payload["agent"]["kind"] == "spacedock_solver_v2"
     assert payload["agent"]["runtime"] == "codex"
+    assert payload["agent"]["model"] == "gpt-5.5"
     assert payload["benchmark"]["kind"] == "ade-bench"
     assert payload["benchmark"]["ade_bench_root"] == str(tmp_path / "ade-bench")
     assert payload["benchmark"]["tasks"] == [{"slug": "example001"}]
