@@ -22,58 +22,59 @@ class RazorbackCodex(Codex):
     """Codex installed agent with benchmark-safe defaults layered on top."""
 
     def build_cli_flags(self) -> str:
+        # Extends Codex.build_cli_flags: web search is disabled for offline benchmark solving.
+        # This prevents solver answers from depending on live web access.
         base = super().build_cli_flags()
         web_search_disabled = f"-c {shlex.quote('web_search=\"disabled\"')}"
         return " ".join(part for part in (base, web_search_disabled) if part)
 
     async def install(self, environment: BaseEnvironment) -> None:
-        install_env = _without_proxy_env({"DEBIAN_FRONTEND": "noninteractive"})
-        await self.exec_as_root(
+        # Extends Codex.install only to clear benchmark proxy variables during
+        # upstream install commands; Harbor owns the install script itself.
+        self._razorback_installing = True
+        try:
+            await super().install(environment)
+        finally:
+            self._razorback_installing = False
+
+    async def exec_as_root(
+        self,
+        environment: BaseEnvironment,
+        command: str,
+        env: dict[str, str] | None = None,
+        cwd: str | None = None,
+        timeout_sec: int | None = None,
+    ) -> Any:
+        # Extends BaseInstalledAgent.exec_as_root for the same benchmark proxy
+        # install constraint documented on RazorbackCodex.install.
+        if getattr(self, "_razorback_installing", False):
+            env = _without_proxy_env(env)
+        return await super().exec_as_root(
             environment,
-            command=(
-                "if ldd --version 2>&1 | grep -qi musl || [ -f /etc/alpine-release ]; then"
-                "  apk add --no-cache curl bash nodejs npm ripgrep;"
-                " elif command -v apt-get &>/dev/null; then"
-                "  apt-get update && apt-get install -y curl ripgrep;"
-                " elif command -v yum &>/dev/null; then"
-                "  yum install -y curl ripgrep;"
-                " else"
-                '  echo "Warning: No known package manager found, assuming curl is available" >&2;'
-                " fi"
-            ),
-            env=install_env,
+            command=command,
+            env=env,
+            cwd=cwd,
+            timeout_sec=timeout_sec,
         )
 
-        version_spec = f"@{self._version}" if self._version else "@latest"
-        await self.exec_as_agent(
+    async def exec_as_agent(
+        self,
+        environment: BaseEnvironment,
+        command: str,
+        env: dict[str, str] | None = None,
+        cwd: str | None = None,
+        timeout_sec: int | None = None,
+    ) -> Any:
+        # Extends BaseInstalledAgent.exec_as_agent for the same benchmark proxy
+        # install constraint documented on RazorbackCodex.install.
+        if getattr(self, "_razorback_installing", False):
+            env = _without_proxy_env(env)
+        return await super().exec_as_agent(
             environment,
-            command=(
-                "set -euo pipefail; "
-                "if ldd --version 2>&1 | grep -qi musl || [ -f /etc/alpine-release ]; then"
-                f"  npm install -g @openai/codex{version_spec};"
-                " else"
-                "  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.2/install.sh | bash &&"
-                '  export NVM_DIR="$HOME/.nvm" &&'
-                '  \\. "$NVM_DIR/nvm.sh" || true &&'
-                "  command -v nvm &>/dev/null || { echo 'Error: NVM failed to load' >&2; exit 1; } &&"
-                "  nvm install 22 && nvm alias default 22 && npm -v &&"
-                f"  npm install -g @openai/codex{version_spec};"
-                " fi && "
-                "codex --version"
-            ),
-            env=_without_proxy_env(),
-        )
-
-        await self.exec_as_root(
-            environment,
-            command=(
-                "for bin in node codex; do"
-                '  BIN_PATH="$(which "$bin" 2>/dev/null || true)";'
-                '  if [ -n "$BIN_PATH" ] && [ "$BIN_PATH" != "/usr/local/bin/$bin" ]; then'
-                '    ln -sf "$BIN_PATH" "/usr/local/bin/$bin";'
-                "  fi;"
-                " done"
-            ),
+            command=command,
+            env=env,
+            cwd=cwd,
+            timeout_sec=timeout_sec,
         )
 
 

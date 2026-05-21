@@ -6,6 +6,23 @@ from typing import Any
 
 from harbor.agents.installed.claude_code import ClaudeCode
 
+from razorback.agents.spacedock_solver_v2 import SpacedockSolverAgentError
+
+
+_CLAUDE_SUPPORTED_KWARGS = {
+    descriptor.kwarg
+    for descriptor in [*ClaudeCode.CLI_FLAGS, *getattr(ClaudeCode, "ENV_VARS", [])]
+} | {"skills_dir"}
+
+_RAZORBACK_TO_HARBOR_KWARGS = {
+    "tools_allowed": "allowed_tools",
+    "tools_denied": "disallowed_tools",
+}
+
+
+class RazorbackClaudeCode(ClaudeCode):
+    """Harbor ClaudeCode subclass for live Razorback benchmark solving."""
+
 
 def build_inner_agent(
     *,
@@ -18,18 +35,37 @@ def build_inner_agent(
 
     Maps razorback field names to harbor's CLI flags:
     tools_allowed -> allowed_tools; tools_denied -> disallowed_tools.
-    Drops None values so harbor uses its own defaults.
+    Drops no-op values so harbor uses its own defaults.
     """
-    kw: dict[str, Any] = {
-        "max_turns": harbor_agent_kwargs.get("max_turns"),
-    }
-    if "tools_allowed" in harbor_agent_kwargs and harbor_agent_kwargs["tools_allowed"]:
-        kw["allowed_tools"] = ",".join(harbor_agent_kwargs["tools_allowed"])
-    if "tools_denied" in harbor_agent_kwargs and harbor_agent_kwargs["tools_denied"]:
-        kw["disallowed_tools"] = ",".join(harbor_agent_kwargs["tools_denied"])
-    if "append_system_prompt" in harbor_agent_kwargs:
-        kw["append_system_prompt"] = harbor_agent_kwargs["append_system_prompt"]
-    if "skills_dir" in harbor_agent_kwargs:
-        kw["skills_dir"] = harbor_agent_kwargs["skills_dir"]
-    kw = {k: v for k, v in kw.items() if v is not None}
-    return ClaudeCode(logs_dir=Path(logs_dir), model_name=model, **kw)
+    kw = _claude_kwargs(harbor_agent_kwargs)
+    return RazorbackClaudeCode(
+        logs_dir=Path(logs_dir),
+        model_name=model,
+        extra_env=dict(extra_env),
+        **kw,
+    )
+
+
+def _claude_kwargs(harbor_agent_kwargs: dict[str, Any]) -> dict[str, Any]:
+    kw: dict[str, Any] = {}
+    for name, value in harbor_agent_kwargs.items():
+        if _is_empty_noop(name, value):
+            continue
+        harbor_name = _RAZORBACK_TO_HARBOR_KWARGS.get(name, name)
+        if harbor_name not in _CLAUDE_SUPPORTED_KWARGS:
+            raise SpacedockSolverAgentError(
+                "claude runtime adapter cannot honor unsupported harbor_agent_kwargs "
+                f"field {name!r}; refusing to silently drop it."
+            )
+        if name in {"tools_allowed", "tools_denied"}:
+            value = ",".join(value)
+        kw[harbor_name] = value
+    return kw
+
+
+def _is_empty_noop(name: str, value: Any) -> bool:
+    if value is None:
+        return True
+    if name in {"tools_allowed", "tools_denied"} and value == []:
+        return True
+    return False
