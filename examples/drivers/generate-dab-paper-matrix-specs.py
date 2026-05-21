@@ -25,10 +25,15 @@ def build_spec(variant: str, dataset: str) -> dict:
         "version": 1,
         "experiment": experiment,
         "agent": {
-            "kind": "claude-cli",
+            "kind": "spacedock_solver_v2",
+            "runtime": "claude",
             "model": "claude-opus-4-7",
             "sampling": {"temperature": 0.0},
+            "solver_workflow": "./examples/solver_workflows/claude-benchmark-solver",
+            "spacedock_skill_version": "1.0.0",
+            "max_turns": 200,
             "tools_allowed": ["Bash", "Read", "Write", "Edit", "Glob", "Grep"],
+            "tools_denied": [],
         },
         "benchmark": {
             "kind": "harbor_dab",
