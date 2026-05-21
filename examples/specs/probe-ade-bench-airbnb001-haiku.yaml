@@ -1,0 +1,32 @@
+# Goal 2 T0 probe — single-task Haiku end-to-end smoke through the v2 surface stack
+# + PKG-19's bind-mount data path. Gates the 44-cell matrix dispatch: if any of
+# rk run / rk score / rk audit / provenance v2 sealed-input set fails, do not
+# dispatch T1+.
+version: 1
+experiment: goal2-probe-ade-bench-airbnb001-haiku
+agent:
+  kind: claude-cli
+  model: claude-haiku-4-5
+  sampling:
+    temperature: 0.0
+  tools_allowed:
+    - Bash
+    - Read
+    - Write
+    - Edit
+    - Glob
+    - Grep
+benchmark:
+  kind: ade-bench
+  tasks_root: .  # ignored when every entry is a local-task; required by current schema
+  ade_bench_root: /Users/clkao/git/ade-bench
+  tasks:
+    - slug: airbnb001
+trials: 1
+experiment_meta:
+  max_budget_usd: 5.0
+  estimated_cost_usd: 0.0
+observers:
+  - kind: jsonl
+    path: events.jsonl
+  - kind: stdout
