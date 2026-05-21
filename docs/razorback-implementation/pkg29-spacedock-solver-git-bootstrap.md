@@ -1,13 +1,13 @@
 ---
 id: 311jw5b14cpjk1bk06qr36w0
 title: PKG-29 — ensure git is available for spacedock_solver_v2 freeze repo
-status: backlog
+status: implementation
 source: PKG-28 smoke follow-up — Codex auth reached Harbor, then spacedock_solver_v2 failed at freeze repo git command with rc=127
-started:
+started: 2026-05-21T08:27:16Z
 completed:
 verdict:
 score: 0.95
-worktree:
+worktree: .worktrees/spacedock-ensign-pkg29-spacedock-solver-git-bootstrap
 issue:
 pr:
 mod-block:
