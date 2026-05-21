@@ -1,0 +1,25 @@
+# ABOUTME: Goal 1 T0 — cost-shape verification (1 trial opus-4.7 bookreview direct-minimal).
+# ABOUTME: Confirms whether the subscription tier covers opus-4.7 before the 36-cell matrix burn.
+version: 1
+experiment: goal1-t0-cost-shape-probe
+agent:
+  kind: claude-cli
+  model: claude-opus-4-7
+  sampling:
+    temperature: 0.0
+  tools_allowed: [Bash, Read, Write, Edit, Glob, Grep]
+benchmark:
+  kind: harbor_dab
+  data_root: /Users/clkao/git/dataagentbench/data
+  datasets:
+    - bookreview
+  workspace_variant: direct-minimal
+  hints: true
+trials: 1
+experiment_meta:
+  max_budget_usd: 5.0
+  estimated_cost_usd: 1.5
+observers:
+  - kind: jsonl
+    path: events.jsonl
+  - kind: stdout
