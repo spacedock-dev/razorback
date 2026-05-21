@@ -1,9 +1,9 @@
 ---
 id: dy0w211g9dp8w80jyje1rgz9
 title: PKG-40 Harbor task view materializer for ADE-Bench and Spider2-DBT
-status: backlog
+status: plan
 source: captain request 2026-05-21 - Harbor-shaped ADE plus Spider2-DBT shared-image, batching, freeze/resume path
-started:
+started: 2026-05-21T22:35:16Z
 completed:
 verdict:
 score: 0.95
