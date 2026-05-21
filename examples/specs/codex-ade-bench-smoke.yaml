@@ -1,0 +1,28 @@
+# ABOUTME: PKG-27 ade-bench Codex smoke spec; override ade_bench_root before live execution.
+# ABOUTME: Freezes without a local ade-bench checkout to prove Codex spec construction.
+version: 1
+experiment: codex-ade-bench-example001-smoke
+agent:
+  kind: spacedock_solver_v2
+  runtime: codex
+  model: gpt-5.1-codex
+  sampling:
+    temperature: 0.0
+    top_p: null
+    seed: 1
+  solver_workflow: ./examples/solver_workflows/codex-benchmark-solver
+  spacedock_skill_version: "1.0.0"
+  max_turns: 200
+  tools_allowed: []
+  tools_denied: []
+benchmark:
+  kind: ade-bench
+  tasks_root: .
+  ade_bench_root: /path/to/ade-bench
+  tasks:
+    - slug: example001
+trials: 1
+observers:
+  - kind: jsonl
+    path: events.jsonl
+  - kind: stdout

@@ -1,7 +1,7 @@
 ---
 id: 0h4p8jt0bj7yejbjxbhwtjbq
 title: PKG-27 — reusable Codex benchmark solver workflow and specs
-status: implementation
+status: validation
 source: Captain directive 2026-05-21 — "get 1x score for full dataset of DAB and ade-bench, using codex"
 started: 2026-05-21T07:56:58Z
 completed:
@@ -67,3 +67,28 @@ run-dir paths.
   runtime success; this task may still ship specs before the live
   ade-bench run unblocks.
 
+## Stage Report: implementation
+
+- DONE: Adds a reusable Codex benchmark solver workflow and DAB/ade-bench Codex spec generation surfaces with portable data-root arguments.
+  Added `examples/solver_workflows/codex-benchmark-solver/README.md`, `examples/drivers/generate-codex-benchmark-specs.py`, and smoke specs `examples/specs/codex-{dab,ade-bench}-smoke.yaml`; roots are caller arguments or placeholder paths.
+- DONE: Dry-run or tests prove DAB enumerates 12 datasets and ade-bench enumerates discovered local-task slugs at N=1.
+  `uv run pytest tests/unit/test_codex_benchmark_spec_generator.py` passed 4/4; dry-runs listed 12 DAB datasets and 3 discovered fixture ade-bench tasks at N=1.
+- DONE: Stage report records smoke/freeze attempts and exact blockers for live Codex or ade-bench execution, without running full score matrices.
+  `uv run rk freeze examples/specs/codex-dab-smoke.yaml --allow-missing` and `uv run rk freeze examples/specs/codex-ade-bench-smoke.yaml --allow-missing` wrote frozen specs with solver workflow hash `sha256:803a512c01f0f9ce346933ea3860efd1cd7a70e73e4c4b6fe215a84c4a9f69ff`; `rk run` attempts to `/tmp/razorback-pkg27-{dab,ade}-smoke` failed before Harbor with `AuthDiscoveryError: no codex credentials found. Add OPENAI_API_KEY to <worktree>/.env.`
+
+### Summary
+
+Implemented the reusable Codex benchmark solver workflow and a portable generator for DAB `harbor_dab` and ade-bench local-task `spacedock_solver_v2` Codex specs. Harbor-facing surfaces touched are example specs and driver emission only; no translator, scorer, or Harbor runtime code changed. Full live score matrices were intentionally not run; smoke execution is blocked on missing Codex credentials in the worktree `.env`.
+
+## Stage Report: validation
+
+- DONE: Validation independently proves AC-1 through AC-3 with exact commands and reviews generated specs for portable data-root handling.
+  `uv run pytest tests/unit/test_codex_benchmark_spec_generator.py` passed 4/4; DAB dry-run listed 12 datasets at N=1; ade-bench dry-run listed discovered `task_a` and `task_b`; portability review is in `docs/razorback-implementation/validation/pkg27-codex-benchmark-solver-workflow.md`.
+- DONE: Validation independently attempts AC-4 smoke freeze/run checks and records exact auth or infrastructure blockers without requiring full matrix dispatch.
+  Both smoke specs froze with `--allow-missing`; both `rk run` smoke attempts failed before Harbor dispatch with `AuthDiscoveryError: no codex credentials found. Add OPENAI_API_KEY ...`.
+- DONE: Validation report gives a clear PASS/REJECT gate decision with blocking findings separated from non-blocking findings.
+  Validation report recommends APPROVE to `done`; blocking findings: none; non-blocking findings: unrelated full-suite failures and local missing Codex credentials.
+
+### Summary
+
+Validated the PKG-27 solver workflow, generator, dry-runs, smoke freezes, and portability of tracked roots from the assigned worktree branch. Live smoke run-dir artifact checks could not proceed because the Codex auth preflight failed before Harbor dispatch, so the gate is approved with that environment blocker recorded.
