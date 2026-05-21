@@ -1,7 +1,7 @@
 ---
 id: dy0w211g9dp8w80jyje1rgz9
 title: PKG-40 Harbor task view materializer for ADE-Bench and Spider2-DBT
-status: validation
+status: implementation
 source: captain request 2026-05-21 - Harbor-shaped ADE plus Spider2-DBT shared-image, batching, freeze/resume path
 started: 2026-05-21T22:35:16Z
 completed:
@@ -191,3 +191,16 @@ The ADE smoke was rerun through the generic Harbor task-view abstraction with `s
 ### Summary
 
 Cycle 2 validation confirms the prior AC-1 and AC-3 blockers are fixed: new ADE score specs reject the retired local upstream shape, and the ADE Codex smoke summary reports one completed trial with dataset `ade-bench`, query `adebench-fixture-001`, and reward `1.0` through the generic task-view manifest. The gate remains rejected because `uv run --frozen rk score runs/pkg40-cycle2/runs-python/pkg40-ade-harbor-task-view-codex/72b3dd571f3c865f --format json` exits with `score input error: trial ade-bench-adebench-fixture-001__NyS5nr6 has no stratum tag`, leaving PKG-40 task identity unavailable to the public scoring path.
+
+#### Cycle 2 - validation to implementation
+
+Validation rejected PKG-40 back to implementation again. Concrete fix
+requested:
+
+- AC-5: make the public `rk score` path resolve task identity for Harbor
+  task-view runs. Either teach `src/razorback/score/load.py` to resolve
+  strata from `_razorback/task_views/*/view_manifest.json`, matching the
+  aggregator fallback, or write an equivalent `agent/stratum.json` during
+  task-view runs. Prove the fix by scoring
+  `runs/pkg40-cycle2/runs-python/pkg40-ade-harbor-task-view-codex/72b3dd571f3c865f`
+  successfully with `uv run --frozen rk score ... --format json`.
