@@ -278,6 +278,8 @@ def _build_ade_bench(
                 docker_image=docker_image,
                 cache_root=cache_root,
                 materialize_mode=materialize_mode,
+                db_type=spec.benchmark.db_type,
+                project_type=spec.benchmark.project_type,
             )
             tasks.append(TaskConfig(path=materialized))
         elif r.git_url is not None and r.git_commit_id is not None:

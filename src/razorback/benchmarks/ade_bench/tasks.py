@@ -19,6 +19,61 @@ from razorback.spec.schema import AdeBenchLocalTaskEntry, AdeBenchTaskEntry
 
 _SOLUTION_FILE_GLOB = "seeds/solution__*.csv"
 
+_DEFAULT_COMPOSE_FILENAME = "docker-compose.yaml"
+
+
+def _select_compose_variant(
+    task_yaml: dict,
+    *,
+    db_type: str | None,
+    project_type: str | None,
+) -> str:
+    """Return the bare compose filename to pull from `shared/defaults/`.
+
+    Mirrors ade_bench upstream's `docker_compose_path` property
+    (`ade_bench/handlers/trial_handler.py:292-314`): the (db_type,
+    project_type) pair on the selected variant entry resolves to one of four
+    filenames under `shared/defaults/`. When `task.yaml` has no `variants:`
+    block, or when the resolved entry doesn't carry a db_type/project_type
+    pair that matches the rule, falls through to the default compose.
+
+    Selection of WHICH `variants[]` entry uses `variants[0]` as the baseline
+    when callers don't pin (db_type, project_type). When both filter fields
+    are supplied, picks the first matching entry; raises ValueError if no
+    entry matches.
+    """
+    variants = task_yaml.get("variants") or []
+    if not variants:
+        return _DEFAULT_COMPOSE_FILENAME
+
+    if db_type is not None and project_type is not None:
+        chosen = next(
+            (
+                v for v in variants
+                if v.get("db_type") == db_type
+                and v.get("project_type") == project_type
+            ),
+            None,
+        )
+        if chosen is None:
+            raise ValueError(
+                f"ade-bench task has no variant matching "
+                f"db_type={db_type!r}, project_type={project_type!r}; "
+                f"available={[(v.get('db_type'), v.get('project_type')) for v in variants]}"
+            )
+    else:
+        chosen = variants[0]
+
+    v_db = chosen.get("db_type")
+    v_project = chosen.get("project_type")
+    if v_db == "snowflake" and v_project == "dbt-fusion":
+        return "docker-compose-snowflake-dbtf.yaml"
+    if v_db == "snowflake" and v_project == "dbt":
+        return "docker-compose-snowflake-dbt.yaml"
+    if v_db == "duckdb":
+        return "docker-compose-duckdb-dbt.yaml"
+    return _DEFAULT_COMPOSE_FILENAME
+
 
 def _run_async(coro: Awaitable[Any]) -> Any:
     """Run ``coro`` to completion whether or not we're inside an event loop.
@@ -237,6 +292,8 @@ def materialize_local_task(
     cache_root: Path,
     exclude_globs: tuple[str, ...] = (_SOLUTION_FILE_GLOB,),
     materialize_mode: Literal["bind", "copy"] = "bind",
+    db_type: str | None = None,
+    project_type: str | None = None,
 ) -> Path:
     """Build a view-dir for an ade-bench task that re-uses ade_bench_root data.
 
@@ -318,5 +375,23 @@ def materialize_local_task(
                     _reflect(sub, target_dir / sub_rel)
         else:
             _reflect(entry, target_dir / rel)
+
+    compose_filename = _select_compose_variant(
+        task_yaml, db_type=db_type, project_type=project_type
+    )
+    env_rel = f"environment/{compose_filename}"
+    if not any(fnmatch.fnmatch(env_rel, g) for g in exclude_globs):
+        source_compose = (
+            ade_bench_root / "shared" / "defaults" / compose_filename
+        )
+        if not source_compose.exists():
+            raise FileNotFoundError(
+                f"materialize_local_task: shared/defaults/{compose_filename} "
+                f"missing under ade_bench_root={ade_bench_root}; ade_bench_root "
+                f"may be a stale or shallow checkout"
+            )
+        env_dir = target_dir / "environment"
+        env_dir.mkdir()
+        _reflect(source_compose, env_dir / "docker-compose.yaml")
 
     return target_dir

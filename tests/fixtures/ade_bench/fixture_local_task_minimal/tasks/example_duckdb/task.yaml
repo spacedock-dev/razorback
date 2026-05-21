@@ -1,0 +1,16 @@
+task_id: example_duckdb
+status: ready
+description: PKG-20 fixture — duckdb variant first
+prompts:
+  - key: base
+    prompt: |
+      Do the duckdb task.
+variants:
+- db_type: duckdb
+  db_name: example
+  project_type: dbt
+  project_name: example
+- db_type: snowflake
+  db_name: example
+  project_type: dbt
+  project_name: example

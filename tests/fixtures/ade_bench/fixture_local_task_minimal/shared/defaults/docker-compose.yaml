@@ -1,0 +1,2 @@
+# PKG-20 fixture: default compose stub for env synthesis tests
+services: {}

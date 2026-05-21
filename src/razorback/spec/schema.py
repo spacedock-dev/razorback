@@ -162,6 +162,8 @@ class AdeBenchBenchmarkBlock(BaseModel):
     tasks: list[str | AdeBenchTaskEntry | AdeBenchLocalTaskEntry] = Field(min_length=1)
     docker_image_override: str | None = None
     ade_bench_root: Path | None = None
+    db_type: Literal["duckdb", "snowflake"] | None = None
+    project_type: Literal["dbt", "dbt-fusion"] | None = None
 
 
 BenchmarkBlock = Annotated[
