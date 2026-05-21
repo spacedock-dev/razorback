@@ -1,5 +1,7 @@
 # ABOUTME: ClaudeCliAgent (§6.2) — wraps `claude -p`. setup() validates auth & CLI presence;
 # ABOUTME: run() emits one claude invocation per trial; version() parses `claude --version`.
+# Legacy manual wrapper retained for historical tests; active translation routes
+# agent.kind: claude-cli to Harbor ClaudeCode.
 
 import subprocess
 from pathlib import Path

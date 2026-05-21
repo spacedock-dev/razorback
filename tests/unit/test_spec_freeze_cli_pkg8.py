@@ -160,8 +160,22 @@ trials: 1
 
     assert result.exit_code == 0, result.output
     frozen = yaml.safe_load(spec_file.with_suffix(".frozen.yaml").read_text())
+    expected = compute_sealed_hash(
+        model="gpt-5.1-codex",
+        sampling={"temperature": 0.0, "top_p": None, "seed": None},
+        solver_workflow_content_hash="sha256:" + "a" * 64,
+        prompt_content_hashes={},
+        spacedock_skill_version="1.0.0",
+        harbor_agent_kwargs={
+            "max_turns": 200,
+            "tools_allowed": [],
+            "tools_denied": [],
+        },
+    )
     assert frozen["agent"]["solver_workflow_content_hash"] == "sha256:" + "a" * 64
-    assert frozen["agent"]["sealed_hash"]
+    assert frozen["agent"]["sealed_hash"] == expected
+    assert frozen["agent"].get("reasoning_effort") is None
+    assert frozen["agent"].get("reasoning_summary") is None
 
 
 def test_freeze_includes_codex_reasoning_kwargs_in_v2_sealed_hash(

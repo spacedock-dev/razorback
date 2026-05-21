@@ -51,6 +51,21 @@ def test_constructor_validates_and_computes_sealed_hash(tmp_path):
     assert agent.sealed_hash == expected
 
 
+def test_known_v2_sealed_hash_value_is_stable(tmp_path):
+    kw = _valid_kwargs(tmp_path)
+
+    sealed_hash = compute_sealed_hash(
+        model=kw["model"],
+        sampling=kw["sampling"],
+        solver_workflow_content_hash=kw["solver_workflow_content_hash"],
+        prompt_content_hashes=kw["prompt_content_hashes"],
+        spacedock_skill_version=kw["spacedock_skill_version"],
+        harbor_agent_kwargs=kw["harbor_agent_kwargs"],
+    )
+
+    assert sealed_hash == "cfcb9927177d50b777fa17d0e7a36b98"
+
+
 @pytest.mark.asyncio
 async def test_run_sends_solver_workflow_readme_before_task_instruction(tmp_path):
     kw = _valid_kwargs(tmp_path)
