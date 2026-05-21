@@ -310,11 +310,142 @@ def _compute_t_bench_env(
     }
 
 
+_TEST_SH_TEMPLATE = """\
+#!/bin/bash
+# ABOUTME: PKG-27 — synthesized harbor test.sh that bridges to ade-bench
+# ABOUTME: upstream run-tests.sh via docker exec into the client container.
+set -uo pipefail
+
+# Harbor's reward file (per harbor.models.trial.paths.EnvironmentPaths).
+# REWARD_DIR is honored only for unit-test stubs that cannot write under /.
+REWARD_DIR="${REWARD_DIR:-/logs/verifier}"
+REWARD_FILE="${REWARD_DIR}/reward.txt"
+mkdir -p "${REWARD_DIR}"
+
+CLIENT="${T_BENCH_TASK_DOCKER_CLIENT_CONTAINER_NAME:?T_BENCH_TASK_DOCKER_CLIENT_CONTAINER_NAME unset}"
+
+# Stage test/scripts/seeds files into the client container. Upstream
+# ade-bench's host-side harness (ade_bench/harness.py) does this via
+# DockerComposeManager.put_archive. Our equivalent tar-streams over
+# `docker exec` stdin from main → client.
+#
+# Harbor's verifier uploads our task's tests/ dir into main:/tests/.
+# materialize_local_task packs upstream's shared/scripts + run-tests.sh
+# + task seeds under tests/_ade_bench_assets/ so a single upload_dir
+# delivers everything we need.
+ASSETS=/tests/_ade_bench_assets
+
+_stage_dir() {
+    local src_dir="$1"
+    local dest_dir="$2"
+    if [ -d "${src_dir}" ] && [ -n "$(ls -A "${src_dir}" 2>/dev/null)" ]; then
+        docker exec "${CLIENT}" mkdir -p "${dest_dir}"
+        tar -C "${src_dir}" -cf - . \\
+            | docker exec -i "${CLIENT}" tar -C "${dest_dir}" -xf -
+    fi
+}
+
+_stage_file() {
+    local src="$1"
+    local dest_dir="$2"
+    if [ -f "${src}" ]; then
+        docker exec "${CLIENT}" mkdir -p "${dest_dir}"
+        tar -C "$(dirname "${src}")" -cf - "$(basename "${src}")" \\
+            | docker exec -i "${CLIENT}" tar -C "${dest_dir}" -xf -
+    fi
+}
+
+_stage_dir "${ASSETS}/scripts" /scripts
+_stage_file "${ASSETS}/run-tests.sh" /tests
+_stage_dir "${ASSETS}/seeds" /seeds
+# Stage the AUTO_*.sql files harbor uploaded to /tests/. Filter to .sql so
+# we do not re-stage the test.sh + _ade_bench_assets subdir.
+_AUTO_DIR="$(mktemp -d)"
+for f in /tests/*.sql; do
+    [ -f "${f}" ] && cp "${f}" "${_AUTO_DIR}/"
+done
+_stage_dir "${_AUTO_DIR}" /tests
+rm -rf "${_AUTO_DIR}"
+
+DBT_STDOUT="$(mktemp)"
+# Invoke ade-bench upstream's run-tests.sh verbatim inside the client
+# container. The host docker socket is bind-mounted into main so this exec
+# reaches the sibling client container managed by the same daemon.
+docker exec -w /app "${CLIENT}" bash /tests/run-tests.sh \\
+    --db-type=__DB_TYPE__ --project-type=__PROJECT_TYPE__ \\
+    2>&1 | tee "${DBT_STDOUT}"
+
+# Parse dbt stdout. Logic mirrors ade_bench.parsers.dbt_parser.DbtParser +
+# ade_bench.harness._is_resolved (upstream commit-pinned regex):
+#   FAIL if Compilation Error
+#   FAIL if zero test lines parsed
+#   FAIL if expected_test_count > parsed lines
+#   FAIL if any line shows FAIL or ERROR
+#   PASS otherwise.
+TEST_LINE_RE='[0-9]+ of [0-9]+ (PASS|FAIL|ERROR)( [0-9]+)? [^ ]+ \\.+ \\[(PASS|FAIL|ERROR)'
+
+if grep -qE 'Compilation Error|Encountered an error' "${DBT_STDOUT}"; then
+    echo 0 > "${REWARD_FILE}"
+    exit 0
+fi
+
+EXPECTED="$(grep -oE '\\[ade-bench\\] expected_test_count=[0-9]+' "${DBT_STDOUT}" \\
+    | tail -n1 | grep -oE '[0-9]+$' || echo 0)"
+
+PARSED="$(grep -cE "${TEST_LINE_RE}" "${DBT_STDOUT}" || true)"
+
+if [ "${PARSED}" -eq 0 ]; then
+    echo 0 > "${REWARD_FILE}"
+    exit 0
+fi
+
+if [ "${EXPECTED}" -gt "${PARSED}" ]; then
+    echo 0 > "${REWARD_FILE}"
+    exit 0
+fi
+
+# Any FAIL/ERROR test line is a fail.
+if grep -E "${TEST_LINE_RE}" "${DBT_STDOUT}" | grep -qE '(FAIL|ERROR)'; then
+    echo 0 > "${REWARD_FILE}"
+    exit 0
+fi
+
+echo 1 > "${REWARD_FILE}"
+"""
+
+
+def _build_test_sh(
+    *,
+    db_type: str | None,
+    project_type: str | None,
+) -> str:
+    """Synthesize the harbor-shaped tests/test.sh for an ade-bench task.
+
+    The script runs in harbor's ``main`` service. It `docker exec`s into the
+    sibling ``client`` container (via the bind-mounted host socket) and runs
+    ade-bench upstream's ``shared/defaults/run-tests.sh`` verbatim. dbt stdout
+    is parsed by the same regex shape upstream's ``DbtParser`` uses; the
+    result is written as ``1`` (PASS) or ``0`` (FAIL) to harbor's
+    ``/logs/verifier/reward.txt`` per ``EnvironmentPaths.reward_text_path``.
+
+    ``db_type`` and ``project_type`` are forwarded to run-tests.sh as
+    ``--db-type=...`` / ``--project-type=...`` flags so upstream's
+    ``run-dbt-test.sh`` filters SQL files by db/project type. ``None`` is
+    rendered as an empty string (upstream tolerates missing flags).
+    """
+    return (
+        _TEST_SH_TEMPLATE
+        .replace("__DB_TYPE__", db_type or "")
+        .replace("__PROJECT_TYPE__", project_type or "")
+    )
+
+
 def _build_task_toml_from_yaml(
     *,
     task_yaml: dict,
     docker_image: str,
     t_bench_env: dict[str, str] | None = None,
+    verifier_user: str | None = None,
 ) -> str:
     """Synthesize a harbor-shaped task.toml from an upstream ade-bench task.yaml.
 
@@ -326,6 +457,12 @@ def _build_task_toml_from_yaml(
     When ``t_bench_env`` is provided, an ``[environment.env]`` sub-table is
     emitted so harbor's ``DockerEnvironment._compose_task_env`` forwards the
     six ``T_BENCH_*`` vars into ``docker compose up``'s environment.
+
+    When ``verifier_user`` is set, a ``[verifier]`` block emits the user the
+    verifier exec should run as. PKG-27 sets this to ``"root"`` so the bridge
+    test.sh has access to the bind-mounted docker socket on `main` (the
+    upstream base image's default user `exedev` is in a docker group whose
+    GID does not match the host socket's GID).
     """
     prompts = task_yaml.get("prompts") or []
     base_prompt = next(
@@ -344,6 +481,20 @@ def _build_task_toml_from_yaml(
     if t_bench_env:
         lines.append('')
         lines.append('[environment.env]')
+        for k, v in t_bench_env.items():
+            v_escaped = v.replace('\\', '\\\\').replace('"', '\\"')
+            lines.append(f'{k} = "{v_escaped}"')
+    if verifier_user is not None:
+        lines.append('')
+        lines.append('[verifier]')
+        lines.append(f'user = "{verifier_user}"')
+    if t_bench_env:
+        # PKG-27: forward the T_BENCH_* keys to the verifier exec env so the
+        # synthesized tests/test.sh can resolve $T_BENCH_TASK_DOCKER_CLIENT_*.
+        # Harbor's verifier exec uses task.config.verifier.env (per
+        # verifier.py:145), separate from compose's [environment.env].
+        lines.append('')
+        lines.append('[verifier.env]')
         for k, v in t_bench_env.items():
             v_escaped = v.replace('\\', '\\\\').replace('"', '\\"')
             lines.append(f'{k} = "{v_escaped}"')
@@ -410,6 +561,7 @@ def materialize_local_task(
             task_yaml=task_yaml,
             docker_image=docker_image,
             t_bench_env=t_bench_env,
+            verifier_user="root",
         )
     )
     prompts = task_yaml.get("prompts") or []
@@ -427,9 +579,24 @@ def materialize_local_task(
             else:
                 shutil.copy2(src, dst)
 
+    # PKG-27: `tests/` becomes a real dir so we can pack the harbor test.sh +
+    # upstream's shared assets (scripts + run-tests.sh + seeds) under it. A
+    # single harbor upload_dir(tests/) ships them all into main:/tests/.
+    _materialize_tests_dir(
+        source_tests_dir=source_task_dir / "tests",
+        source_seeds_dir=source_task_dir / "seeds",
+        ade_bench_root=ade_bench_root,
+        target_tests_dir=target_dir / "tests",
+        db_type=db_type,
+        project_type=project_type,
+        exclude_globs=exclude_globs,
+    )
+
     for entry in source_task_dir.iterdir():
         if entry.name == "task.yaml":
             continue  # consumed into task.toml + instruction.md
+        if entry.name == "tests":
+            continue  # handled above
         rel = entry.relative_to(source_task_dir)
         if entry.is_dir():
             has_excluded = any(
@@ -467,6 +634,128 @@ def materialize_local_task(
             )
         env_dir = target_dir / "environment"
         env_dir.mkdir()
-        _reflect(source_compose, env_dir / "docker-compose.yaml")
+        # PKG-27: harbor's `_environment_docker_compose_path` is hardcoded to
+        # `environment/docker-compose.yaml` — a second YAML under env/ is
+        # NOT auto-discovered. Synthesize a merged compose that includes
+        # upstream's services (via `extends`) AND a socket bind on `main`
+        # so the bridge test.sh can `docker exec` into client.
+        (env_dir / "docker-compose.yaml").write_text(
+            _build_environment_compose(source_compose=source_compose)
+        )
 
     return target_dir
+
+
+def _materialize_tests_dir(
+    *,
+    source_tests_dir: Path,
+    source_seeds_dir: Path,
+    ade_bench_root: Path,
+    target_tests_dir: Path,
+    db_type: str | None,
+    project_type: str | None,
+    exclude_globs: tuple[str, ...],
+) -> None:
+    """Build the per-task tests/ dir uploaded by harbor's verifier into main.
+
+    Layout:
+        tests/test.sh                         (synthesized harbor entrypoint)
+        tests/AUTO_*.sql                      (copy from upstream task tests/)
+        tests/_ade_bench_assets/run-tests.sh  (upstream shared/defaults/)
+        tests/_ade_bench_assets/scripts/*     (upstream shared/scripts/)
+        tests/_ade_bench_assets/seeds/*       (task seeds — solution__*.csv
+                                                 excluded per exclude_globs)
+    """
+    target_tests_dir.mkdir(parents=True)
+    test_sh_path = target_tests_dir / "test.sh"
+    test_sh_path.write_text(_build_test_sh(db_type=db_type, project_type=project_type))
+    test_sh_path.chmod(0o755)
+
+    if source_tests_dir.is_dir():
+        for sub in source_tests_dir.iterdir():
+            if not sub.is_file():
+                continue
+            shutil.copy2(sub, target_tests_dir / sub.name)
+
+    assets_dir = target_tests_dir / "_ade_bench_assets"
+    assets_dir.mkdir()
+
+    shared_scripts_src = ade_bench_root / "shared" / "scripts"
+    if shared_scripts_src.is_dir():
+        shutil.copytree(shared_scripts_src, assets_dir / "scripts")
+
+    run_tests_src = ade_bench_root / "shared" / "defaults" / "run-tests.sh"
+    if run_tests_src.is_file():
+        shutil.copy2(run_tests_src, assets_dir / "run-tests.sh")
+
+    if source_seeds_dir.is_dir():
+        target_seeds = assets_dir / "seeds"
+        target_seeds.mkdir()
+        for entry in source_seeds_dir.iterdir():
+            rel = entry.relative_to(source_seeds_dir)
+            if any(
+                fnmatch.fnmatch(f"seeds/{rel}", g) for g in exclude_globs
+            ):
+                continue
+            if entry.is_file():
+                shutil.copy2(entry, target_seeds / rel)
+
+
+_COMPOSE_BRIDGE_HEADER = (
+    "# Synthesized by razorback PKG-27 materialize_local_task.\n"
+    "# Merges ade-bench upstream's compose with a docker-socket bind on main\n"
+    "# so harbor's bridge test.sh can `docker exec` into the client container.\n"
+)
+
+
+def _build_environment_compose(*, source_compose: Path) -> str:
+    """Synthesize the materialized environment/docker-compose.yaml.
+
+    Includes upstream's compose verbatim (textually) and adds a `services.main`
+    block with a host-side docker socket bind. Harbor's compose stack already
+    contributes the `main` service via docker-compose-base.yaml; this file is
+    layered last so the volume entries merge.
+
+    Uses textual concatenation rather than YAML round-trip so authored comments
+    + key order in the upstream compose survive (consistent with razorback's
+    other compose handling).
+    """
+    upstream = source_compose.read_text()
+    socket_block = (
+        "\n"
+        "services:\n"
+        "  main:\n"
+        "    volumes:\n"
+        "      - /var/run/docker.sock:/var/run/docker.sock\n"
+    )
+    if upstream.lstrip().startswith("services:"):
+        # Merge by appending a second top-level mapping; docker compose
+        # tolerates this via YAML's multi-document merge inside one stream
+        # only if expressed as separate YAML docs. To be safe we emit a
+        # single docs YAML by appending the main block under services:.
+        return _COMPOSE_BRIDGE_HEADER + _merge_services_block(
+            upstream=upstream,
+            main_volumes=["/var/run/docker.sock:/var/run/docker.sock"],
+        )
+    return _COMPOSE_BRIDGE_HEADER + upstream + socket_block
+
+
+def _merge_services_block(
+    *, upstream: str, main_volumes: list[str]
+) -> str:
+    """Append a `main` service block under the upstream `services:` mapping.
+
+    Uses a YAML round-trip for the merge — preserving authored comments isn't
+    a requirement once we synthesize the file (we're already replacing the
+    PKG-20 symlink).
+    """
+    import yaml
+
+    data = yaml.safe_load(upstream) or {}
+    services = data.setdefault("services", {})
+    main = services.setdefault("main", {})
+    volumes = main.setdefault("volumes", [])
+    for v in main_volumes:
+        if v not in volumes:
+            volumes.append(v)
+    return yaml.safe_dump(data, sort_keys=False)
