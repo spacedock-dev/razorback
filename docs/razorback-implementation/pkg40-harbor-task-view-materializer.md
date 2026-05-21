@@ -85,3 +85,16 @@ This task does not require full-score ADE-Bench or Spider2-DBT runs. It creates
 the reusable execution substrate and smoke-proves the benchmark sets are runnable
 through it. Full matrix scoring remains in the score-run goal entities after
 this substrate lands.
+
+## Stage Report: plan
+
+- DONE: The plan clearly separates the generic Harbor task view materializer from ADE-Bench and Spider2-DBT consumer transforms, with concrete files/modules and tests for each.
+  Evidence: `docs/razorback-implementation/plans/pkg40-harbor-task-view-materializer.md` defines `src/razorback/harbor_tasks/*` for generic materialization and separate `ade_bench/harbor_view.py` plus `spider2_dbt/harbor_view.py` consumer tasks/tests.
+- DONE: The plan includes a bounded spike section for uncertain Harbor/Spider2 surfaces and names the commands or local/web sources used or still required.
+  Evidence: plan Task 1 names exact `uv run harbor`, `rg`, and `curl` commands, plus public Harbor docs/registry/Hugging Face Spider2 sources and fixture fallback criteria.
+- DONE: The plan directly covers freeze/resume collision safety, parallelism, normal batching, shared-context batching, task identity in scoring, and solution/verifier-data leakage controls.
+  Evidence: AC map and Tasks 6-10 cover `n_concurrent_trials`, per-task versus shared-context layouts, task-scoped freeze keys, kill/resume tests, scoring strata, and leakage scans.
+
+### Summary
+
+Wrote the standard separate plan doc at `docs/razorback-implementation/plans/pkg40-harbor-task-view-materializer.md`. The plan starts with Spider2/Harbor discovery, then proves the generic materializer before routing ADE and Spider2 through thin consumer transforms; batching, task identity, freeze/resume, and leakage controls are tested before live smokes.
