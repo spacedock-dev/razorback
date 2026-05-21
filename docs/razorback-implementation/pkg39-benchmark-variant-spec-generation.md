@@ -54,3 +54,16 @@ root using the new ADE workflow to prove the generated spec seals.
 This task does not run the full DAB or ADE benchmark datasets. It only makes
 the variant specs reproducible and documents the DAB variant candidates so the
 benchmark operations can run from generated/frozen specs.
+
+## Stage Report: plan
+
+- DONE: The plan maps each PKG-39 AC to concrete files, tests, and freeze/smoke verification.
+  Evidence: `docs/razorback-implementation/plans/pkg39-benchmark-variant-spec-generation.md` has an AC-to-task map, file table, focused pytest command, and ADE/DAB freeze smoke steps.
+- DONE: The plan calls out Harbor-shaped ADE data support and DAB variant axes from `~/git/dataagentbench` without requiring full benchmark runs in this task.
+  Evidence: plan Task 3 targets `harbor-data/ade-bench/<task>/task.toml`; DataAgentBench reconnaissance notes cite the local equivalent checkout and Task 5 documents batch/context-fresh/context-resume axes as planning-only.
+- DONE: The plan keeps implementation scope conservative: checked-in ADE workflow, generator/test updates, and concise DAB variant documentation.
+  Evidence: plan file structure limits implementation to the ADE workflow README, Codex generator/tests, and one note; schema/translator/ADE resolver are inspect-only unless red tests prove a gap.
+
+### Summary
+
+Wrote the standard separate plan doc at `docs/razorback-implementation/plans/pkg39-benchmark-variant-spec-generation.md`. The plan follows the existing generator and v2 spec surfaces, prioritizes generator unit tests plus freeze smoke over full benchmark runs, and records that `/home/exedev/dataagentbench` is the available equivalent of the dispatched `~/git/dataagentbench` path in this VM.
