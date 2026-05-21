@@ -79,3 +79,16 @@ run-dir paths.
 ### Summary
 
 Implemented the reusable Codex benchmark solver workflow and a portable generator for DAB `harbor_dab` and ade-bench local-task `spacedock_solver_v2` Codex specs. Harbor-facing surfaces touched are example specs and driver emission only; no translator, scorer, or Harbor runtime code changed. Full live score matrices were intentionally not run; smoke execution is blocked on missing Codex credentials in the worktree `.env`.
+
+## Stage Report: validation
+
+- DONE: Validation independently proves AC-1 through AC-3 with exact commands and reviews generated specs for portable data-root handling.
+  `uv run pytest tests/unit/test_codex_benchmark_spec_generator.py` passed 4/4; DAB dry-run listed 12 datasets at N=1; ade-bench dry-run listed discovered `task_a` and `task_b`; portability review is in `docs/razorback-implementation/validation/pkg27-codex-benchmark-solver-workflow.md`.
+- DONE: Validation independently attempts AC-4 smoke freeze/run checks and records exact auth or infrastructure blockers without requiring full matrix dispatch.
+  Both smoke specs froze with `--allow-missing`; both `rk run` smoke attempts failed before Harbor dispatch with `AuthDiscoveryError: no codex credentials found. Add OPENAI_API_KEY ...`.
+- DONE: Validation report gives a clear PASS/REJECT gate decision with blocking findings separated from non-blocking findings.
+  Validation report recommends APPROVE to `done`; blocking findings: none; non-blocking findings: unrelated full-suite failures and local missing Codex credentials.
+
+### Summary
+
+Validated the PKG-27 solver workflow, generator, dry-runs, smoke freezes, and portability of tracked roots from the assigned worktree branch. Live smoke run-dir artifact checks could not proceed because the Codex auth preflight failed before Harbor dispatch, so the gate is approved with that environment blocker recorded.
