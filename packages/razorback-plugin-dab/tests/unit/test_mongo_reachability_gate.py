@@ -51,12 +51,14 @@ def test_mongo_dataset_emits_content_presence_healthcheck(tmp_path: Path):
     task_toml = tomllib.loads((manifest[0]["task_dir"] / "task.toml").read_text())
     hc = task_toml["steps"][0]["healthcheck"]
     cmd = hc["command"]
-    assert "mongosh" in cmd
+    assert "python3 -c" in cmd
+    assert "pymongo" in cmd
+    assert "MongoClient" in cmd
     assert "dab-mongo" in cmd
     assert "articles_db" in cmd
     assert "articles" in cmd
-    assert "countDocuments" in cmd
-    assert "> 0" in cmd or ">0" in cmd
+    assert "count_documents" in cmd
+    assert "limit=1" in cmd
     assert hc["retries"] >= 3
 
 

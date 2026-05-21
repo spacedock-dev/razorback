@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import stat
 import subprocess
@@ -345,15 +346,23 @@ def _task_toml(
         # of mongo's container start; mongorestore of agnews/yelp (~120-150k
         # docs) empirically completes in ~30s but the headroom is cheap.
         db_name, collection = mongo_probes[0]
-        eval_js = (
-            f"db.getSiblingDB('{db_name}').getCollection('{collection}').countDocuments() > 0"
+        # Harbor runs this per-step healthcheck inside the `main` agent
+        # container. `dab-agent:latest` carries pymongo but not mongosh, so use
+        # Python here and leave mongosh to the mongo sidecar's own healthcheck.
+        probe_py = (
+            "import sys; "
+            "from pymongo import MongoClient; "
+            "client = MongoClient("
+            "'mongodb://dab-mongo:27017', "
+            "serverSelectionTimeoutMS=5000, connectTimeoutMS=5000"
+            "); "
+            f"count = client[{db_name!r}][{collection!r}].count_documents({{}}, limit=1); "
+            "sys.exit(0 if count > 0 else 1)"
         )
-        probe = (
-            f"mongosh --quiet --host dab-mongo --eval \\\"{eval_js}\\\" | grep -q true"
-        )
+        probe = f"python3 -c {shlex.quote(probe_py)}"
         body += (
             "\n[steps.healthcheck]\n"
-            f'command = "{probe}"\n'
+            f'command = "{_toml_escape(probe)}"\n'
             "interval_sec = 5\n"
             "timeout_sec = 10\n"
             "start_period_sec = 60\n"

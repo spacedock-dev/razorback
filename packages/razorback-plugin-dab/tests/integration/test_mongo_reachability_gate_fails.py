@@ -2,12 +2,10 @@
 # ABOUTME: when dab-mongo is unreachable (closes Bug 2 fail-fast contract).
 
 import re
-import shutil
 import subprocess
 import tomllib
 from pathlib import Path
 
-import pytest
 import yaml
 
 from razorback_plugin_dab.generate.prepare import prepare_dataset_tasks
@@ -49,16 +47,11 @@ def _scaffold(root: Path) -> Path:
 
 
 def test_mongo_reachability_gate_fails_when_dab_mongo_unreachable(tmp_path: Path):
-    """AC-2 negative path: gate exits non-zero when mongosh can't reach dab-mongo.
+    """AC-2 negative path: gate exits non-zero when pymongo can't reach dab-mongo.
 
     Run from the host where `dab-mongo` doesn't resolve to model the
     "compose not loaded / mongorestore did not run" failure mode.
-    Skipped if mongosh is not on PATH (it lives in dab-agent:latest; the
-    host CI runner may not have it).
     """
-    if shutil.which("mongosh") is None:
-        pytest.skip("mongosh not on host PATH (it lives in container only)")
-
     data_root = _scaffold(tmp_path)
     out = tmp_path / "tasks"
     manifest = prepare_dataset_tasks(data_root=data_root, dataset="agnews", tasks_root=out)
@@ -73,6 +66,6 @@ def test_mongo_reachability_gate_fails_when_dab_mongo_unreachable(tmp_path: Path
     )
     combined = (result.stdout + result.stderr).lower()
     assert re.search(
-        r"(nodename nor servname|name or service not known|getaddrinfo|connection refused|server selection|host)",
+        r"(nodename nor servname|name or service not known|getaddrinfo|connection refused|server selection|host|pymongo)",
         combined,
     ), f"expected connection-failure text; got: {combined!r}"
