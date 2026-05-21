@@ -1,13 +1,13 @@
 ---
 id: 76e3zhyq7wvk89zq4eqay30x
 title: PKG-37 — ade-bench Docker build proxy separation
-status: implementation
+status: done
 source: Goal 4 smoke failure 2026-05-21 — Docker build inherited runtime egress block
 started: 2026-05-21T15:24:59Z
-completed:
-verdict:
+completed: 2026-05-21T15:31:22Z
+verdict: PASSED
 score: 0.88
-worktree: .worktrees/spacedock-ensign-pkg37-ade-bench-build-proxy-separation
+worktree: 
 issue:
 pr:
 mod-block:
