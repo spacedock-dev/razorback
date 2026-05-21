@@ -67,3 +67,15 @@ run-dir paths.
   runtime success; this task may still ship specs before the live
   ade-bench run unblocks.
 
+## Stage Report: implementation
+
+- DONE: Adds a reusable Codex benchmark solver workflow and DAB/ade-bench Codex spec generation surfaces with portable data-root arguments.
+  Added `examples/solver_workflows/codex-benchmark-solver/README.md`, `examples/drivers/generate-codex-benchmark-specs.py`, and smoke specs `examples/specs/codex-{dab,ade-bench}-smoke.yaml`; roots are caller arguments or placeholder paths.
+- DONE: Dry-run or tests prove DAB enumerates 12 datasets and ade-bench enumerates discovered local-task slugs at N=1.
+  `uv run pytest tests/unit/test_codex_benchmark_spec_generator.py` passed 4/4; dry-runs listed 12 DAB datasets and 3 discovered fixture ade-bench tasks at N=1.
+- DONE: Stage report records smoke/freeze attempts and exact blockers for live Codex or ade-bench execution, without running full score matrices.
+  `uv run rk freeze examples/specs/codex-dab-smoke.yaml --allow-missing` and `uv run rk freeze examples/specs/codex-ade-bench-smoke.yaml --allow-missing` wrote frozen specs with solver workflow hash `sha256:803a512c01f0f9ce346933ea3860efd1cd7a70e73e4c4b6fe215a84c4a9f69ff`; `rk run` attempts to `/tmp/razorback-pkg27-{dab,ade}-smoke` failed before Harbor with `AuthDiscoveryError: no codex credentials found. Add OPENAI_API_KEY to <worktree>/.env.`
+
+### Summary
+
+Implemented the reusable Codex benchmark solver workflow and a portable generator for DAB `harbor_dab` and ade-bench local-task `spacedock_solver_v2` Codex specs. Harbor-facing surfaces touched are example specs and driver emission only; no translator, scorer, or Harbor runtime code changed. Full live score matrices were intentionally not run; smoke execution is blocked on missing Codex credentials in the worktree `.env`.
