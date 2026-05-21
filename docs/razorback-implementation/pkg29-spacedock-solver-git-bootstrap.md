@@ -64,3 +64,15 @@ tests/unit/test_spacedock_solver_v2_class.py -q` passes.
 
 - `pkg28-codex-auth-json-passthrough` — shipped.
 
+## Stage Report: implementation
+
+- DONE: `SpacedockSolverAgent` ensures `git` is present before sealed freeze-repo commands, with tests proving install-before-git-init behavior.
+  Added `_ensure_freeze_repo_git()` in `src/razorback/agents/spacedock_solver_v2.py`; `test_first_stage_installs_git_before_git_init_when_missing` proves the apt-get install precedes `git init`.
+- DONE: Unsupported package-manager or install failure raises a clear `SpacedockSolverAgentError` naming the sealed freeze repo git requirement.
+  Added unsupported-package-manager and install-failure tests; both assert `git is required for the sealed freeze repo` appears in the raised `SpacedockSolverAgentError`.
+- DONE: `_codex-smoke-v2` no longer fails with freeze-repo `git` rc=127; stage report records the exact next outcome and targeted tests.
+  `uv run rk run examples/specs/_codex-smoke-v2.frozen.yaml --runs-dir runs/pkg29-codex-git-smoke --allow-plugin-drift --allow-alias-drift` completed Harbor execution with `SpacedockSolverAgentError: freeze repo init failed at: git -C <run-dir>/_razorback/freeze/<sealed_hash> init -q (rc=128)`, not rc=127.
+
+### Summary
+
+Implemented a narrow git bootstrap in `SpacedockSolverAgent.setup`: it probes `command -v git`, installs via `apk`, `apt-get`, or `yum` when available, verifies the binary, and raises a clear agent error on unsupported or failed install paths. Verification passed with `uv run pytest tests/unit/test_spacedock_solver_v2_lifecycle.py tests/integration/test_v2_freeze_dir_mechanism.py tests/unit/test_spacedock_solver_v2_class.py -q` (`20 passed`) plus the required `_codex-smoke-v2` freeze/run commands; the smoke now advances past missing git and exposes a later `git init rc=128` environment/filesystem failure.

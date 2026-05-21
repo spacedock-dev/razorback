@@ -22,6 +22,8 @@ _REQUIRED_PHASE_STATS_KEYS = (
     "wallclock_s",
 )
 
+_FREEZE_REPO_GIT_REQUIREMENT = "git is required for the sealed freeze repo"
+
 
 class SpacedockSolverAgentError(RazorbackError):
     """Raised on SpacedockSolverAgent v2 contract violations."""
@@ -195,6 +197,53 @@ class SpacedockSolverAgent(BaseAgent):
                     f"freeze stage commit failed at: {cmd} (rc={r.return_code})"
                 )
 
+    async def _ensure_freeze_repo_git(self, environment: BaseEnvironment) -> None:
+        r = await environment.exec("command -v git >/dev/null 2>&1")
+        if r.return_code == 0:
+            return
+
+        installers = (
+            (
+                "apk",
+                "command -v apk >/dev/null 2>&1",
+                "apk add --no-cache git",
+            ),
+            (
+                "apt-get",
+                "command -v apt-get >/dev/null 2>&1",
+                "DEBIAN_FRONTEND=noninteractive apt-get update -qq && "
+                "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git",
+            ),
+            (
+                "yum",
+                "command -v yum >/dev/null 2>&1",
+                "yum install -y git",
+            ),
+        )
+
+        for name, probe_cmd, install_cmd in installers:
+            probe = await environment.exec(probe_cmd)
+            if probe.return_code != 0:
+                continue
+            install = await environment.exec(install_cmd)
+            if install.return_code != 0:
+                raise SpacedockSolverAgentError(
+                    f"{_FREEZE_REPO_GIT_REQUIREMENT}; installing via {name} "
+                    f"failed (rc={install.return_code})."
+                )
+            verify = await environment.exec("command -v git >/dev/null 2>&1")
+            if verify.return_code == 0:
+                return
+            raise SpacedockSolverAgentError(
+                f"{_FREEZE_REPO_GIT_REQUIREMENT}; installing via {name} "
+                f"completed but git is still unavailable (rc={verify.return_code})."
+            )
+
+        raise SpacedockSolverAgentError(
+            f"{_FREEZE_REPO_GIT_REQUIREMENT}; no supported package manager "
+            "(apk, apt-get, yum) found."
+        )
+
     def _build_inner_agent(self) -> BaseAgent:
         """Dispatch to the per-runtime adapter sub-module (spec §8.4)."""
         from razorback.agents._runtime import claude as _claude
@@ -223,6 +272,8 @@ class SpacedockSolverAgent(BaseAgent):
         """
         freeze_dir = self.resolve_freeze_dir()
         sealed_file = freeze_dir / "sealed_hash.txt"
+
+        await self._ensure_freeze_repo_git(environment)
 
         if sealed_file.exists():
             prior = sealed_file.read_text().strip()
