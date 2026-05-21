@@ -10,7 +10,7 @@ score:
 worktree: .worktrees/spacedock-ensign-pkg39-benchmark-variant-spec-generation
 issue:
 pr:
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 ## Problem
