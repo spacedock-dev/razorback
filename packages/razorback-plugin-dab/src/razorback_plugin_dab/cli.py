@@ -18,6 +18,7 @@ app = typer.Typer(no_args_is_help=True, add_completion=False, help="razorback-pl
 
 
 WORKSPACE_VARIANTS = ("direct-minimal", "direct-structured", "spacedock")
+QUERY_MODES = ("batch", "per-query")
 
 
 @app.command()
@@ -43,6 +44,12 @@ def generate(
         "--postgres-volume-mode",
         help="postgres data volume strategy: reuse (default — dataset-keyed shared volume) or fresh (per-task unique volume).",
     ),
+    query_mode: str = typer.Option(
+        "per-query",
+        "--query-mode",
+        help="One of: batch, per-query (default: per-query). "
+             "batch emits one task per dataset; per-query emits one per (dataset, query).",
+    ),
 ) -> None:
     """Emit harbor task directories under <out>/<dataset>-q<n>/ for each requested dataset."""
     if workspace_variant not in WORKSPACE_VARIANTS:
@@ -64,6 +71,13 @@ def generate(
         typer.echo(
             f"razorback-plugin-dab: --postgres-volume-mode must be one of reuse|fresh; "
             f"got {postgres_volume_mode!r}",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
+    if query_mode not in QUERY_MODES:
+        typer.echo(
+            f"razorback-plugin-dab: --query-mode must be one of {QUERY_MODES}; got {query_mode!r}",
             err=True,
         )
         raise typer.Exit(code=2)
@@ -104,6 +118,7 @@ def generate(
             hints=hints,
             materialize_mode=materialize,
             postgres_volume_mode=postgres_volume_mode,
+            query_mode=query_mode,
         )
 
 

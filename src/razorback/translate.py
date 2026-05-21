@@ -354,20 +354,25 @@ def _build_harbor_dab(
     jobs_dir: Path,
     tasks_root: Path,
     agent_cfg: AgentConfig,
-) -> tuple[JobConfig, dict[str, tuple[str, int]]]:
+) -> tuple[JobConfig, dict[str, tuple[str, int] | tuple[str, list[int]]]]:
     """Translate harbor_dab block by invoking the sibling plugin.
 
     Calls `razorback-plugin-dab generate` as a subprocess, collects emitted
     task directories under `tasks_root`, and builds a harbor JobConfig that
     points `tasks:` at each emitted (dataset, query) directory. Razorback
     core never imports from the plugin.
+
+    Under `query_mode: batch`, the plugin emits one task per dataset and the
+    trial_name_map carries `(dataset, list[int])` so the aggregator can fan
+    that single trial out into N per-query outcomes.
     """
     import subprocess
 
     assert isinstance(spec.benchmark, HarborDabBenchmarkBlock)
 
+    query_mode = spec.benchmark.query_mode
     task_dirs: list[Path] = []
-    trial_name_map: dict[str, tuple[str, int]] = {}
+    trial_name_map: dict[str, tuple[str, int] | tuple[str, list[int]]] = {}
     for dataset in spec.benchmark.datasets:
         out_dir = tasks_root / dataset
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -377,6 +382,7 @@ def _build_harbor_dab(
             "--data-root", str(Path(spec.benchmark.data_root).resolve()),
             "--out", str(out_dir.resolve()),
             "--workspace-variant", spec.benchmark.workspace_variant,
+            "--query-mode", query_mode,
         ]
         if spec.benchmark.hints:
             cmd.append("--hints")
@@ -388,17 +394,34 @@ def _build_harbor_dab(
                 f"razorback-plugin-dab generate failed for dataset {dataset!r} "
                 f"(exit {result.returncode}): {result.stderr.strip()}"
             )
-        for entry in sorted(out_dir.iterdir()):
-            if not entry.is_dir():
-                continue
-            task_name = entry.name
-            task_dirs.append(entry)
-            if "-q" in task_name:
-                ds, qpart = task_name.rsplit("-q", 1)
-                try:
-                    trial_name_map[task_name] = (ds, int(qpart))
-                except ValueError:
-                    pass
+        emitted_dirs = sorted(p for p in out_dir.iterdir() if p.is_dir())
+        if query_mode == "batch":
+            for entry in emitted_dirs:
+                task_name = entry.name
+                if task_name != dataset:
+                    continue
+                task_dirs.append(entry)
+                workdir = entry / "steps" / "main" / "workdir"
+                query_ids: list[int] = []
+                if workdir.is_dir():
+                    for p in workdir.iterdir():
+                        if not (p.is_dir() and p.name.startswith("query")):
+                            continue
+                        suffix = p.name[len("query"):]
+                        if suffix.isdigit():
+                            query_ids.append(int(suffix))
+                query_ids.sort()
+                trial_name_map[task_name] = (dataset, query_ids)
+        else:
+            for entry in emitted_dirs:
+                task_name = entry.name
+                task_dirs.append(entry)
+                if "-q" in task_name:
+                    ds, qpart = task_name.rsplit("-q", 1)
+                    try:
+                        trial_name_map[task_name] = (ds, int(qpart))
+                    except ValueError:
+                        pass
 
     tasks = [TaskConfig(path=p) for p in task_dirs]
     cfg = JobConfig(

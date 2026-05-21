@@ -147,3 +147,35 @@ After this entity merges:
 ### Summary
 
 The plan extends HarborDabBenchmarkBlock with `query_mode: Literal["batch", "per-query"] = "per-query"` (back-compat default) and threads it through razorback-plugin-dab generate → translator → aggregator. Batch mode emits one harbor task per dataset with `query1/query2/query3` sibling workdir layout matching DAB upstream's `workspace-readme-direct-entity-output.md` shape verbatim; a new `tests/verify_batch.py` writes a per-query `reward_per_query.json` sidecar that the razorback aggregator fans out into per-(dataset, query_id) outcomes. Key non-obvious decision: `trial_name_map` becomes `dict[str, tuple[str, int] | tuple[str, list[int]]]` to keep the per-query path's existing scalar-key contract while letting batch trials expand to N outcomes — alternative single-value-with-N-entries was rejected because `_resolve_key` is a dict lookup that would collide on duplicate task_names.
+
+## Stage Report: implementation
+
+- DONE: AC-1 — schema query_mode field on HarborDabBenchmarkBlock (Literal["batch", "per-query"], default "per-query"). RED → GREEN cycle.
+  Commit e1c9651; tests/unit/test_spec_harbor_dab_block.py: 8/8 (added test_harbor_dab_default_query_mode_is_per_query, test_harbor_dab_accepts_query_mode_batch_and_per_query, test_harbor_dab_rejects_unknown_query_mode).
+- DONE: AC-2 — batch materialize emits ONE task_dir per dataset; workdir has query1/query2/query3 sibling subdirs; instruction enumerates them with merged answers.json (q1/q2/q3) contract.
+  Commit e1c9651; packages/razorback-plugin-dab/tests/unit/test_prepare_batch_query_mode.py: 5/5 (manifest len 1 + task_name=bookreview, queryN/ siblings, instruction enumerates 3 queries with q1/q2/q3 keys, tests/validate_q[1-3].py + verify_batch.py, stratum payload uses query_ids: [1,2,3]). Materialized run-dir confirms layout under _runs/.../tasks/bookreview/bookreview/.
+- DONE: AC-3 — per-query path unchanged by construction (per-query loop in prepare.py:118-148 untouched). Full unit suite 128/128 dab plugin + 480/480 razorback GREEN under default query_mode=per-query.
+  Commit e1c9651; uv run pytest packages/razorback-plugin-dab/tests/unit/ + uv run pytest tests/unit/ both pass.
+- DONE: AC-4 — verifier aggregation branches on tuple[str, list[int]]; reads <trial_dir>/steps/main/verifier/reward_per_query.json sidecar; fans one trial into N per-query outcomes. Translator forwards --query-mode and emits list-keyed map. Missing-sidecar regression yields 0.0 per query_id.
+  Commit e1c9651; tests/unit/test_dab_aggregate_batch_query_mode.py: 3/3 + tests/unit/test_translator_harbor_dab.py::test_translator_harbor_dab_batch_emits_list_keyed_map 1/1.
+- DONE: AC-5 — Goal 1 matrix spec generator emits query_mode: batch for all 36 cells. Regenerated examples/specs/goal1/<variant>/<dataset>.yaml; frozen spec for spacedock/bookreview carries `benchmark.query_mode: batch`.
+  Commit e1c9651; tests/unit/test_generate_matrix_specs.py: 2/2; emitted 36 specs (3 variants × 12 datasets).
+- FAILED: AC-5 live `rk run` (one agent invocation, q1/q2/q3 verdicts in reward_per_query.json) — trial aborted at environment setup with RuntimeError: `docker compose --project-name ... up --detach --wait` returned `unknown flag: --project-name`. This is the same host docker-compose-shim issue that bites every DAB run on this machine (PKG-15 host-side live AC caveat); not query_mode-related. Materialized run-dir confirms batch shape end-to-end up to docker-compose-up.
+  _runs/goal1-spacedock-bookreview/b05be787ec5037d3/bookreview__aeZw7rD/trial.log shows the docker error; host docker compose v2 (2.36.2) works directly but harbor's subprocess sees an older shim. Mechanism validation evidence: tasks/bookreview/bookreview/ task tree has the documented batch shape (instruction enumerates query1/2/3 + answers.json contract; tests/ has validate_q1.py/validate_q2.py/validate_q3.py + verify_batch.py + stratum.json with query_ids:[1,2,3]; workdir/ has query1/query2/query3 sibling subdirs).
+
+### Summary
+
+T0-T6 shipped GREEN — schema, plugin generator, translator, aggregator, matrix-spec generator. 128/128 dab plugin unit + 480/480 razorback unit tests pass. The 36 frozen matrix specs carry `query_mode: batch`. T7 live `rk run` materialized the batch task tree correctly (one task per dataset, query1/query2/query3 workdir siblings, verify_batch.py + per-query validators, stratum with query_ids list); execution aborted at `docker compose up` due to a host docker-compose-shim issue that is independent of query_mode (host docker compose v2 works directly outside harbor's subprocess). Materialized run-dir evidence at _runs/goal1-spacedock-bookreview/b05be787ec5037d3/tasks/bookreview/bookreview/ documents the mechanism end-to-end. Approve conditional on host-side docker-compose plumbing.
+
+## Stage Report: validation
+
+- DONE: Re-run unit tests on worktree: 128/128 dab plugin unit + 480/480 razorback unit GREEN. No regressions in PKG-13/14/15/16/17/21/25 dab tests.
+  `uv run pytest packages/razorback-plugin-dab/tests/unit/` → 128 passed, 1 skipped. `uv run pytest tests/unit/` → 480 passed. Caveat: combined `packages/.../tests/ tests/` invocation fails collection due to two pyproject rootdirs; split-invocation form is clean. Pre-existing mongo-init integration test failure (`test_mongo_init_shim_loads_bsondump_on_first_start`, intro'd at 06e094e/PKG-15) is unrelated to query_mode.
+- DONE: Inspect materialized batch task tree (commit e1c9651) for shape correctness.
+  `_runs/goal1-spacedock-bookreview/b05be787ec5037d3/tasks/bookreview/bookreview/` verified: task_dir=`bookreview` (no `-q<n>`); `steps/main/workdir/{query1,query2,query3,query_dataset}/` siblings; `instruction.md` enumerates query1/2/3 with q1/q2/q3 answer-key contract; `tests/verify_batch.py` + `tests/validate_q[1-3].py` present; `tests/stratum.json` has `query_ids:[1,2,3]`. AC-2 verified end-to-end.
+- DONE: Code review via superpowers:requesting-code-review — material vs polish.
+  Reviewed schema.py (+1), cli.py (+15), prepare.py (+313 incl. new `_materialize_batch_task_dir`), verify_batch.py (+90 new file), aggregate.py (+76 with `_load_per_query_rewards` sidecar reader), translate.py (+49 with list-keyed map under batch), and the 36 emitted matrix specs (confirmed `examples/specs/goal1/spacedock/bookreview.yaml` carries `benchmark.query_mode: batch`). Contract handshake symmetric; ABOUTME headers on new files; per-query path untouched (AC-3 by construction). No defects.
+
+### Summary
+
+Verdict: **PASSED (conditional)**. Material implementation is correct against all 5 ACs. Live `rk run` (T7) is blocked by the host's docker-compose shim — the same caveat carried by PKG-15 and PKG-21 — and is orthogonal to query_mode shape. Materialized run-dir at `_runs/goal1-spacedock-bookreview/b05be787ec5037d3/tasks/bookreview/bookreview/` documents the batch mechanism end-to-end up to docker-compose-up. Validation report at `docs/razorback-implementation/validation/harbor-dab-batch-query-mode.md`.

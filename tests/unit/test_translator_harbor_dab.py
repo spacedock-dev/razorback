@@ -74,6 +74,59 @@ def test_harbor_dab_translator_invokes_plugin_and_builds_tasks(tmp_path: Path):
     assert cfg.n_attempts == 1
 
 
+def _spec_text_batch(data_root: Path) -> str:
+    return (
+        "version: 1\n"
+        "experiment: phase2-translator-batch-test\n"
+        "agent:\n"
+        "  kind: nop\n"
+        "benchmark:\n"
+        "  kind: harbor_dab\n"
+        f"  data_root: {data_root}\n"
+        "  datasets: [bookreview]\n"
+        "  workspace_variant: direct-minimal\n"
+        "  query_mode: batch\n"
+        "trials: 1\n"
+    )
+
+
+def test_translator_harbor_dab_batch_emits_list_keyed_map(tmp_path: Path):
+    """AC-2/AC-4 handshake — batch mode emits one task per dataset and the
+    trial_name_map carries list[int] query_ids so the aggregator can fan one
+    trial out into N per-query outcomes."""
+    data_root = tmp_path / "data"
+    data_root.mkdir()
+    tasks_root = tmp_path / "tasks"
+    spec = parse_spec_text(_spec_text_batch(data_root))
+
+    forwarded: dict[str, str] = {}
+
+    def fake_run(cmd, capture_output, text):
+        assert "--query-mode" in cmd, f"plugin invocation missing --query-mode: {cmd}"
+        forwarded["query_mode"] = cmd[cmd.index("--query-mode") + 1]
+        ds = cmd[cmd.index("--datasets") + 1]
+        out = Path(cmd[cmd.index("--out") + 1])
+        task_dir = out.parent / ds / ds
+        workdir = task_dir / "steps" / "main" / "workdir"
+        workdir.mkdir(parents=True, exist_ok=True)
+        for qid in (1, 2, 3):
+            (workdir / f"query{qid}").mkdir()
+        return _FakeCompleted(returncode=0)
+
+    with patch.object(subprocess, "run", side_effect=fake_run):
+        cfg, trial_name_map = spec_to_job_config(
+            spec,
+            job_name="job-test",
+            jobs_dir=tmp_path / "jobs",
+            tasks_root=tasks_root,
+        )
+
+    assert forwarded == {"query_mode": "batch"}
+    task_paths = sorted(t.path.name for t in cfg.tasks)
+    assert task_paths == ["bookreview"]
+    assert trial_name_map == {"bookreview": ("bookreview", [1, 2, 3])}
+
+
 def test_harbor_dab_translator_propagates_plugin_failure(tmp_path: Path):
     data_root = tmp_path / "data"
     data_root.mkdir()
