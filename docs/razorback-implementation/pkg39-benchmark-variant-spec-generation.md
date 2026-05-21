@@ -1,9 +1,9 @@
 ---
 id: 68b1z4ct15jfcxmvdkxezf73
 title: PKG-39 benchmark variant spec generation for Codex ADE/DAB
-status: backlog
+status: plan
 source: captain request 2026-05-21
-started:
+started: 2026-05-21T19:57:39Z
 completed:
 verdict:
 score:
