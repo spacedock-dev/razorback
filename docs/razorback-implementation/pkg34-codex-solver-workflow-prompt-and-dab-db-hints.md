@@ -189,3 +189,16 @@ portable by using repo-relative scratch paths and a caller-supplied data root.
 ### Summary
 
 Implemented PKG-34 by injecting the solver workflow README into the inner runtime prompt before task text, changing Codex DAB generated/smoke specs to structured workspaces without enabling DAB hints, and tightening the Codex benchmark workflow no-probing rules. Live BookReview score/audit validation was not run in this stage; validation still needs the caller-supplied DAB data root and the generated BookReview rerun to prove 3 clean strict-audit trials.
+
+## Stage Report: validation
+
+- DONE: Validation independently verifies AC-1 through AC-3 with tests/review and confirms `hints: false` is preserved.
+  Evidence: `uv run --frozen pytest tests/unit/test_spacedock_solver_v2_class.py tests/unit/test_codex_benchmark_spec_generator.py -q` passed with `13 passed`; review confirmed README-before-task prompt composition, `direct-structured`, and `hints: false`.
+- DONE: Validation runs the generated BookReview Codex rerun and captures score output showing all 3 trials complete.
+  Evidence: `.runs/pkg34/bookreview-codex/codex-dab-bookreview/32e361679554f5e4`; `rk score` reported `n_total=3`, `n_completed=3`, `n_pass=3`, and `stratified_pass_at_1=1.0`.
+- DONE: Validation runs strict audit on that rerun and captures whether it is clean or tainted, with a clear gate decision.
+  Evidence: `rk audit --policy strict` reported `clean=3`, `coverage_missing=0`, and `tainted=0`; gate decision is PASS.
+
+### Summary
+
+Validation independently reran the focused unit suite, reviewed the implementation against AC-1 through AC-3, generated the BookReview frozen spec from the local DAB data root, and ran the live BookReview Codex rerun. Score and strict audit both pass for the generated job, so PKG-34 is ready to pass the validation gate.
