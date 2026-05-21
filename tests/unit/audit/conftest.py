@@ -72,6 +72,56 @@ def _write_trial(trial_dir, child_command="pwd", include_manifest=True):
         }) + "\n")
 
 
+def _codex_response_item(payload):
+    return json.dumps({
+        "type": "response_item",
+        "timestamp": "2026-05-21T00:00:00Z",
+        "payload": payload,
+    }) + "\n"
+
+
+def _codex_custom_tool_call(command, call_id="call-1"):
+    return _codex_response_item({
+        "type": "custom_tool_call",
+        "call_id": call_id,
+        "name": "unified_exec.exec_command",
+        "input": json.dumps({"cmd": command}),
+        "status": "completed",
+    })
+
+
+def _codex_item_completed_command(command):
+    return json.dumps({
+        "type": "item.completed",
+        "thread_id": "parent-thread",
+        "item": {
+            "id": "cmd-1",
+            "type": "command_execution",
+            "command": command,
+            "status": "completed",
+        },
+    }) + "\n"
+
+
+def _write_harbor_codex_trial(
+    trial_dir,
+    *,
+    codex_txt="",
+    session_jsonl="",
+    job_log=None,
+):
+    agent_dir = trial_dir / "steps" / "main" / "agent"
+    agent_dir.mkdir(parents=True, exist_ok=True)
+    if codex_txt is not None:
+        (agent_dir / "codex.txt").write_text(codex_txt)
+    if session_jsonl:
+        session_dir = agent_dir / "sessions" / "2026" / "05" / "21"
+        session_dir.mkdir(parents=True)
+        (session_dir / "session.jsonl").write_text(session_jsonl)
+    if job_log is not None:
+        (trial_dir / "job.log").write_text(job_log)
+
+
 @pytest.fixture
 def three_trial_run_dir(tmp_path):
     """Run-dir with three trials: clean, tainted (pip install datasets), coverage_missing."""
@@ -94,4 +144,57 @@ def clean_only_run_dir(tmp_path):
     """Run-dir with a single clean trial."""
     run_dir = tmp_path / "run"
     _write_trial(run_dir / "task-a" / "query-1" / "trial-0", child_command="pwd")
+    return run_dir
+
+
+@pytest.fixture
+def harbor_codex_clean_txt_run_dir(tmp_path):
+    """Harbor-shaped Codex run-dir with one clean codex.txt trace."""
+    run_dir = tmp_path / "run"
+    _write_harbor_codex_trial(
+        run_dir / "task-a" / "query-1" / "trial-0",
+        codex_txt=_codex_response_item({
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "done"}],
+        }),
+    )
+    return run_dir
+
+
+@pytest.fixture
+def harbor_codex_tainted_session_run_dir(tmp_path):
+    """Harbor-shaped Codex run-dir with a forbidden solver command in session JSONL."""
+    run_dir = tmp_path / "run"
+    _write_harbor_codex_trial(
+        run_dir / "task-a" / "query-1" / "trial-0",
+        codex_txt="",
+        session_jsonl=_codex_custom_tool_call("curl https://example.com/data.csv"),
+    )
+    return run_dir
+
+
+@pytest.fixture
+def harbor_codex_tainted_txt_run_dir(tmp_path):
+    """Harbor-shaped Codex run-dir with a forbidden solver command in codex.txt."""
+    run_dir = tmp_path / "run"
+    _write_harbor_codex_trial(
+        run_dir / "task-a" / "query-1" / "trial-0",
+        codex_txt=_codex_item_completed_command("curl https://example.com/data.csv"),
+    )
+    return run_dir
+
+
+@pytest.fixture
+def harbor_codex_setup_install_only_run_dir(tmp_path):
+    """Harbor-shaped Codex run-dir where install text is outside the solver trace."""
+    run_dir = tmp_path / "run"
+    _write_harbor_codex_trial(
+        run_dir / "task-a" / "query-1" / "trial-0",
+        codex_txt=_codex_custom_tool_call("pwd"),
+        job_log=(
+            "setup: npm install -g @openai/codex\n"
+            "setup: pip install harbor\n"
+        ),
+    )
     return run_dir
