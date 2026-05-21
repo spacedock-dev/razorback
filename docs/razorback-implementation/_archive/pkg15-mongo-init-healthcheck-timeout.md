@@ -1,16 +1,17 @@
 ---
 id: mbvd6v5j5cscffzfryvr88qs
 title: PKG-15 follow-up — mongo init healthcheck timeout (extend retries / startup wait)
-status: validation
+status: done
 source: PKG-15 follow-up — Goal 1 matrix 2026-05-20 (commits dae5d33 + 148c6af on archived branch spacedock-ensign/goal1-dab-paper-reproduction); direct-minimal/agnews failed Step main healthcheck after 12 consecutive retries
 started: 2026-05-21T06:11:54Z
-completed:
-verdict:
+completed: 2026-05-21T15:15:38Z
+verdict: PASSED
 score: 0.85
-worktree: .worktrees/spacedock-ensign-pkg15-mongo-init-healthcheck-timeout
+worktree: 
 issue:
 pr:
 mod-block:
+archived: 2026-05-21T15:15:38Z
 ---
 
 ## Problem
