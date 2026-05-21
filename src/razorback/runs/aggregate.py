@@ -101,6 +101,10 @@ def _resolve_stratum(trial_dir: Path) -> dict | None:
     {dataset: bookreview, query_id: 1}) so DAB trials without per-trial
     stratum.json sidecars (e.g. nop agent runs) still aggregate cleanly.
     """
+    manifest_stratum = _resolve_stratum_from_task_view_manifest(trial_dir)
+    if manifest_stratum is not None:
+        return manifest_stratum
+
     candidates = [
         trial_dir / "agent" / "stratum.json",
         trial_dir / "logs" / "verifier" / "stratum.json",
@@ -114,6 +118,33 @@ def _resolve_stratum(trial_dir: Path) -> dict | None:
         if payload is not None:
             return payload.get("stratum")
     return _parse_stratum_from_trial_name(trial_dir.name)
+
+
+def _resolve_stratum_from_task_view_manifest(trial_dir: Path) -> dict | None:
+    run_dir = trial_dir.parent
+    views_root = run_dir / "_razorback" / "task_views"
+    if not views_root.is_dir():
+        return None
+
+    trial_prefix = trial_dir.name.split("__", 1)[0]
+    for manifest_path in sorted(views_root.glob("*/view_manifest.json")):
+        payload = _read_json(manifest_path)
+        if payload is None:
+            continue
+        view_name = manifest_path.parent.name[:32].rstrip("_-")
+        if trial_prefix != view_name:
+            continue
+        benchmark_kind = payload.get("benchmark_kind")
+        benchmark_task_id = payload.get("benchmark_task_id")
+        if not benchmark_kind or not benchmark_task_id:
+            return None
+        return {
+            "dataset": str(benchmark_kind),
+            "query_id": str(benchmark_task_id),
+            "benchmark_kind": str(benchmark_kind),
+            "benchmark_task_id": str(benchmark_task_id),
+        }
+    return None
 
 
 def _parse_stratum_from_trial_name(trial_name: str) -> dict | None:
@@ -255,6 +286,7 @@ def aggregate_summary(run_dir: Path) -> None:
                 "cost_usd": t["cost_usd"],
                 "wall_seconds": t["wall_seconds"],
                 "error_reason": t["error_reason"],
+                "stratum": t["stratum"],
             }
             for t in trials
         ],
@@ -323,6 +355,8 @@ def write_per_trial_outcomes(run_dir: Path) -> None:
             {
                 "dataset": dataset,
                 "query_id": query_id,
+                "benchmark_kind": stratum.get("benchmark_kind"),
+                "benchmark_task_id": stratum.get("benchmark_task_id"),
                 "trial_index": idx,
                 "trial_name": trial_dir.name,
                 "reward": float(reward),

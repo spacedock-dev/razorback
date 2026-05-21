@@ -260,6 +260,52 @@ trials: 1
     assert "ANTHROPIC_API_KEY" not in agent_cfg.env
 
 
+def test_freeze_dir_includes_explicit_benchmark_task_identity(tmp_path):
+    logs_dir = _make_harbor_run_dir(tmp_path, "ade-bench-task-a__abc1234")
+    workflow = tmp_path / "solver"
+    workflow.mkdir()
+    (workflow / "README.md").write_text("## Stages\n- model\n")
+    kw = _common_kwargs(workflow)
+
+    agent_a = SpacedockSolverAgent(
+        logs_dir=logs_dir,
+        **kw,
+        benchmark_kind="ade-bench",
+        benchmark_task_id="task-a",
+        batch_mode="per-task",
+    )
+    agent_b = SpacedockSolverAgent(
+        logs_dir=logs_dir,
+        **kw,
+        benchmark_kind="ade-bench",
+        benchmark_task_id="task-b",
+        batch_mode="per-task",
+    )
+
+    assert agent_a.sealed_hash != agent_b.sealed_hash
+    assert agent_a.resolve_freeze_dir() != agent_b.resolve_freeze_dir()
+
+
+def test_freeze_dir_discovers_benchmark_task_identity_from_view_manifest(tmp_path):
+    run_dir = tmp_path / "run"
+    view = run_dir / "_razorback" / "task_views" / "ade-bench-task-a"
+    view.mkdir(parents=True)
+    (view / "view_manifest.json").write_text(
+        '{"benchmark_kind":"ade-bench","benchmark_task_id":"task-a"}'
+    )
+    logs_a = _make_harbor_run_dir(tmp_path, "ade-bench-task-a__abc1234")
+    logs_b = _make_harbor_run_dir(tmp_path, "bookreview-0001__abc1234")
+    workflow = tmp_path / "solver"
+    workflow.mkdir()
+    (workflow / "README.md").write_text("## Stages\n- model\n")
+
+    with_identity = SpacedockSolverAgent(logs_dir=logs_a, **_common_kwargs(workflow))
+    without_identity = SpacedockSolverAgent(logs_dir=logs_b, **_common_kwargs(workflow))
+
+    assert with_identity.sealed_hash != without_identity.sealed_hash
+    assert with_identity.resolve_freeze_dir() != without_identity.resolve_freeze_dir()
+
+
 def test_translator_includes_codex_reasoning_kwargs_for_v2_agent(tmp_path):
     workflow = tmp_path / "solver"
     workflow.mkdir()
