@@ -1,26 +1,25 @@
 # Codex ADE dbt Minimal Workflow
 
-Work offline in the task workspace. Do not clear proxy environment variables,
-use public network access, or make a network package install part of the
-solution. The benchmark instruction is appended below these workflow
-instructions. The graded artifact is the final dbt project source state; do not
-create an answer file unless the task explicitly asks for one.
+Work in the task workspace as delivered by the benchmark harness. Do not clear
+proxy environment variables or treat public-network access as a source-code fix.
+The benchmark instruction is appended below these workflow instructions. The
+graded artifact is the final dbt project source state; do not create an answer
+file unless the task explicitly asks for one.
 
 Preserve existing dbt dependencies, package files, profiles, seeds, and macros
 unless the task explicitly requires changing them. Hidden verifier tests may
 depend on the existing project structure and package namespaces.
 
-Do not rely on generated `target/`, `logs/`, or a transient `dbt_packages/`
-directory created during the agent run. The verifier may rebuild from source in
-an offline environment. If `dbt compile` reports missing packages, inspect the
-package config and make the source project self-contained for offline verifier
-execution; for example, use already-present local package sources or a minimal
-local package/macro replacement that preserves the package namespace expected by
-models and tests. Running `dbt deps` against the public registry is not a fix.
-Do not replace a package namespace with an incomplete shim: hidden verifier
-tests may call package test macros even when visible models only call one macro.
-For `dbt_utils`, preserve or provide common verifier-facing APIs such as
-equality-test macros, not just model helper macros.
+It is acceptable to run `dbt deps` for setup and validation when `packages.yml`
+or `package-lock.yml` declares dependencies and `dbt_packages/` is absent.
+Preserve any `dbt_packages/` directory already present at task start; the
+verifier may reuse image-installed dependencies without registry access. Treat
+`target/` and `logs/` as generated scratch state. Do not rewrite `packages.yml`,
+`package-lock.yml`, package namespaces, profiles, or dependency macros unless the
+task explicitly requires that change. In particular, never replace `dbt_utils`
+or another declared package with a partial local shim; hidden verifier tests may
+call package macros such as `dbt_utils.test_equality` even when visible models
+only use one helper macro.
 
 If `/razorback-freeze` exists and has exactly one child directory, write concise
 stage notes there as `exploration.md`, `implementation.md`, and `validation.md`.
@@ -34,10 +33,10 @@ macros, seeds, schema YAML, and existing logs.
 
 Run cheap baseline probes when useful, such as `dbt compile --profiles-dir .`,
 targeted `dbt run`, targeted `dbt test`, or log inspection. If a baseline probe
-fails because dependencies are missing, treat that as project state to repair
-offline, not permission to fetch packages from the network. For data-correctness
-tasks, sample relevant source tables and current model outputs: row counts,
-nulls, duplicates, key distributions, and representative rows.
+fails because declared packages are missing, run `dbt deps` before interpreting
+the project as broken. For data-correctness tasks, sample relevant source tables
+and current model outputs: row counts, nulls, duplicates, key distributions, and
+representative rows.
 
 Record suspected task type, affected files/models, baseline errors, and useful
 data observations before making project changes.
@@ -51,8 +50,10 @@ materialization, source, ref, macro, and schema patterns.
 Run basic confirmation as part of implementation. Use the cheapest command that
 proves the edited area compiles or builds: `dbt compile`, targeted `dbt run`,
 targeted `dbt test`, or selected `dbt build`. Fix build/compile errors caused by
-your change before moving on. Confirmation must work from source without relying
-on network access or scratch artifacts that the verifier will not keep.
+your change before moving on. Build outputs can remain scratch state during
+validation, but remove `target/` and `logs/` before finalizing unless the task
+explicitly requires them. Do not remove `dbt_packages/` when it existed at task
+start.
 
 ## Stage: Validation
 

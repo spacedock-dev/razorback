@@ -60,3 +60,58 @@ def test_ade_harbor_view_keeps_verifier_solution_seeds(tmp_path):
 
     assert not (view / "seeds" / "solution__x.csv").exists()
     assert (view / "tests" / "seeds" / "solution__x.csv").read_text() == "expected\n"
+
+
+def test_ade_harbor_view_installs_dbt_packages_during_image_build(tmp_path):
+    source = tmp_path / "source"
+    (source / "environment").mkdir(parents=True)
+    (source / "project").mkdir()
+    (source / "tests").mkdir()
+    (source / "task.toml").write_text(
+        "\n".join(
+            [
+                'schema_version = "1.0"',
+                "[environment]",
+                'os = "linux"',
+                "cpus = 1",
+                "memory_mb = 1024",
+                "storage_mb = 1024",
+                "",
+            ]
+        )
+    )
+    (source / "instruction.md").write_text("Fix the dbt project.\n")
+    (source / "project" / "packages.yml").write_text(
+        "packages:\n  - package: dbt-labs/dbt_utils\n    version: 1.3.2\n"
+    )
+    (source / "tests" / "test-setup.sh").write_text(
+        "#!/bin/bash\n"
+        "dbt deps\n"
+        "dbt run --full-refresh\n"
+    )
+    (source / "environment" / "Dockerfile").write_text(
+        "\n".join(
+            [
+                "FROM python:3.11-slim",
+                "WORKDIR /app",
+                "COPY project/ /app/",
+                'CMD ["bash"]',
+                "",
+            ]
+        )
+    )
+
+    view = materialize_ade_harbor_task_view(
+        source_task_dir=source,
+        view_root=tmp_path / "views",
+        task_slug="ade-bench-dbt001",
+    )
+
+    dockerfile = (view / "environment" / "Dockerfile").read_text()
+    assert "RUN if [ -f /app/packages.yml ]; then cd /app && dbt deps; fi" in dockerfile
+    assert dockerfile.index("dbt deps") < dockerfile.index('CMD ["bash"]')
+
+    test_setup = (view / "tests" / "test-setup.sh").read_text()
+    assert "reuse image-installed dbt packages" in test_setup
+    assert "Skipping dbt deps; dbt_packages already present." in test_setup
+    assert "dbt run --full-refresh" in test_setup
