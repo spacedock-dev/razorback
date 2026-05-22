@@ -392,6 +392,35 @@ rates) are deferred as a follow-up dispatch entity, available for
 captain re-dispatch after debrief. The matrix driver, spec set, and
 aggregator all support a direct-only burn unchanged.
 
+### AC-4 audit gate (rk audit --policy strict)
+
+Audit ran per-cell over each spacedock run-dir; aggregate result:
+
+- 12 cells × strict policy
+- total_tainted = 0
+- total_clean = 0
+- total_coverage_missing = 0
+- n_trials_scanned = 0 per cell
+
+Per the audit walker contract, trial roots are discovered by looking
+for `claude-output.jsonl` / `codex-output.jsonl` / `traces/manifest.json`
+sentinels under each run-dir. NONE of these sentinels were published
+under spacedock_solver_v2 trial dirs because of the same path mismatch
+described in "Three follow-up bugs surfaced" above — the audit walker
+finds nothing to scan, so coverage is structurally 0.
+
+Strict-policy `n_tainted=0` is therefore technically clean (no taint
+patterns observed) but the AC-4 verification is degraded: we did not
+actually scan any trial trajectories. The two surfacing fixes are the
+same as the cost-emit fix (path alignment in
+`ClaudeCliAgent.populate_context_post_run` under spacedock_solver_v2's
+logs_dir wiring) plus an audit-walker fallback to recognize harbor's
+stream-json tee at `<trial>/agent/claude-code.txt`. Both deferred to
+the next-session debrief.
+
+Per-cell + aggregate JSON: `runs/goal1-resume/audit-aggregate.json`
+and `runs/goal1-resume/audit/<dataset>.json`.
+
 ### Run-dir references (resume)
 
 - Spacedock matrix run-dirs: `runs/goal1-resume/spacedock/<dataset>/`
@@ -399,6 +428,8 @@ aggregator all support a direct-only burn unchanged.
   cost-projection note at
   `docs/razorback-implementation/goal1-resume-t0-cost-projection.md`
 - Aggregate JSON: `runs/goal1-resume/aggregate-report.json`
+- Audit aggregate JSON: `runs/goal1-resume/audit-aggregate.json`
+- Per-cell audit JSON: `runs/goal1-resume/audit/<dataset>.json`
 - Dispatch ledger: `runs/goal1-resume/dispatch-ledger.tsv`
 - Driver logs: `runs/goal1-resume/dispatch-*.log`
 - Cost aggregator script: `examples/drivers/aggregate-goal1-resume-cost.py`
