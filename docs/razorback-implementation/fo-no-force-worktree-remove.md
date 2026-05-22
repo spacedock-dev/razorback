@@ -10,7 +10,7 @@ score: 0.85
 worktree: .worktrees/spacedock-ensign-fo-no-force-worktree-remove
 issue:
 pr:
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 ## Problem
