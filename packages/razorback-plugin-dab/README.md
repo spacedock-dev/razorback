@@ -38,3 +38,11 @@ Hydrate with:
 ```
 
 Run the hydrate command, then re-invoke `generate`.
+
+## Where do runs go?
+
+This plugin is invoked by `rk run` as a subprocess; it does not write run-dirs
+itself. The run-dir location is controlled by `rk run`'s `--runs-dir` flag.
+When omitted, `rk run` defaults to `$RAZORBACK_RUNS_DIR` / `$XDG_DATA_HOME/razorback/runs`
+/ `~/.local/share/razorback/runs` — outside any git worktree. See the top-level
+razorback README for details.

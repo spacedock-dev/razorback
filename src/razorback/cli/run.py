@@ -25,6 +25,7 @@ from razorback.runs_dir_canary import (
     check_runs_dir_visible,
     default_container_probe_factory,
 )
+from razorback.runs_dir_default import resolve_default_runs_dir
 from razorback.spec.freeze import derive_job_name
 from razorback.spec.parse import parse_spec_file
 from razorback.translate import spec_to_job_config
@@ -138,7 +139,17 @@ def _write_provenance_artifacts(
 
 def run_command(
     spec_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
-    runs_dir: Path = typer.Option(Path("_runs"), "--runs-dir", help="Base directory for run-dirs."),
+    runs_dir: Optional[Path] = typer.Option(
+        None,
+        "--runs-dir",
+        help=(
+            "Base directory for run-dirs. Defaults to $RAZORBACK_RUNS_DIR, "
+            "else $XDG_DATA_HOME/razorback/runs, else "
+            "~/.local/share/razorback/runs. The default lives OUTSIDE any "
+            "git worktree so `git worktree remove --force` cannot destroy "
+            "experiment outputs."
+        ),
+    ),
     allow_alias_drift: bool = typer.Option(
         False,
         "--allow-alias-drift",
@@ -169,6 +180,9 @@ def run_command(
     except SpecError as exc:
         typer.echo(f"SpecError: {exc}", err=True)
         raise typer.Exit(ExitCode.SPEC_ERROR)
+
+    if runs_dir is None:
+        runs_dir = resolve_default_runs_dir()
 
     # AC-8: runs-dir mount-visibility canary BEFORE any agent invocation.
     runs_dir_resolved = Path(runs_dir).expanduser().resolve()
