@@ -1,5 +1,6 @@
 # ABOUTME: PKG-15 follow-up — mongo content-presence healthcheck retries budget.
-# ABOUTME: AC-1 default 240 retries (20min), AC-2 per-dataset healthcheck_retries override.
+# ABOUTME: AC-1 default 90 retries (7.5min), AC-2 per-dataset healthcheck_retries override.
+# ABOUTME: AC-3 probe uses python3+pymongo (dab-agent ships pymongo, not mongosh).
 
 import tomllib
 from pathlib import Path
@@ -49,14 +50,38 @@ def _healthcheck(manifest_entry) -> dict:
     return tomllib.loads(text)["steps"][0]["healthcheck"]
 
 
-def test_mongo_healthcheck_default_retries_is_240(tmp_path: Path):
+def test_mongo_healthcheck_default_retries_is_90(tmp_path: Path):
     data_root = _scaffold(tmp_path, db_config=_AGNEWS_LIKE)
     out = tmp_path / "tasks"
     manifest = prepare_dataset_tasks(data_root=data_root, dataset="agnews", tasks_root=out)
     hc = _healthcheck(manifest[0])
-    assert hc["retries"] == 240, hc
+    assert hc["retries"] == 90, hc
     assert hc["interval_sec"] == 5
     assert hc["start_period_sec"] == 60
+
+
+def test_mongo_healthcheck_probe_uses_pymongo_not_mongosh(tmp_path: Path):
+    """Probe must be runnable from the dab-agent `main` container.
+
+    dab-agent:latest ships python3 + pymongo but NOT mongosh; an earlier
+    mongosh-based probe burned the retry budget without ever testing mongo
+    content presence (command-not-found in main, surfaced live on agnews).
+    The emitted task.toml [steps.healthcheck].command must therefore call
+    python3+pymongo against the dab-mongo service.
+    """
+    data_root = _scaffold(tmp_path, db_config=_AGNEWS_LIKE)
+    out = tmp_path / "tasks"
+    manifest = prepare_dataset_tasks(data_root=data_root, dataset="agnews", tasks_root=out)
+    hc = _healthcheck(manifest[0])
+    cmd = hc["command"]
+    assert "python3" in cmd, cmd
+    assert "pymongo" in cmd, cmd
+    assert "MongoClient" in cmd, cmd
+    assert "dab-mongo" in cmd, cmd
+    assert "count_documents" in cmd, cmd
+    assert "articles_db" in cmd, cmd
+    assert "articles" in cmd, cmd
+    assert "mongosh" not in cmd, cmd
 
 
 def test_mongo_healthcheck_retries_override_honored(tmp_path: Path):
@@ -86,4 +111,4 @@ def test_mongo_healthcheck_retries_override_absent_falls_back_to_default(tmp_pat
     out = tmp_path / "tasks"
     manifest = prepare_dataset_tasks(data_root=data_root, dataset="agnews", tasks_root=out)
     hc = _healthcheck(manifest[0])
-    assert hc["retries"] == 240
+    assert hc["retries"] == 90
