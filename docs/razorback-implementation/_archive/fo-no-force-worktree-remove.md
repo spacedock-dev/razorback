@@ -1,16 +1,17 @@
 ---
 id: z52n4f55c4be6sta05h1gmbn
 title: first-officer contract — no `--force` worktree remove without untracked-file audit
-status: validation
+status: done
 source: goal1-resume-spacedock-first 2026-05-22 — FO ran `git worktree remove --force` at entity terminal cleanup; destroyed gitignored runs/ artifacts (per-cell validation.json, reward_per_query.json, session jsonl, freeze trees). The `--force` flag was needed because untracked files existed — that was a signal the FO ignored.
 started: 2026-05-22T23:11:16Z
-completed:
-verdict:
+completed: 2026-05-22T23:23:49Z
+verdict: PASSED
 score: 0.85
-worktree: .worktrees/spacedock-ensign-fo-no-force-worktree-remove
+worktree: 
 issue:
 pr:
 mod-block: 
+archived: 2026-05-22T23:23:52Z
 ---
 
 ## Problem
