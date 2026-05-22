@@ -6,8 +6,6 @@ import pytest
 from pydantic import ValidationError
 
 from razorback.spec.schema import (
-    AdeBenchBenchmarkBlock,
-    AdeBenchLocalTaskEntry,
     NopAgentBlock,
     Spec,
 )
@@ -36,35 +34,6 @@ def test_schema_rejects_ade_bench_root_score_shape() -> None:
     msg = str(exc_info.value)
     assert "ade_bench_root" in msg
     assert "slug" in msg
-
-
-def test_translator_guard_rejects_legacy_local_entry_if_constructed_directly(
-    tmp_path: Path,
-) -> None:
-    block = AdeBenchBenchmarkBlock.model_construct(
-        kind="ade-bench",
-        tasks_root=Path("."),
-        tasks=[AdeBenchLocalTaskEntry(slug="example001")],
-    )
-    spec = Spec.model_construct(
-        version=1,
-        experiment="pkg40-translator-legacy-guard",
-        agent=NopAgentBlock(kind="nop"),
-        benchmark=block,
-        trials=1,
-        observers=[],
-    )
-
-    with pytest.raises(Exception) as exc_info:
-        spec_to_job_config(
-            spec=spec,
-            job_name="pkg40-legacy-guard",
-            jobs_dir=tmp_path,
-            home=tmp_path / "home",
-        )
-    msg = str(exc_info.value).lower()
-    assert "local upstream task entries are retired" in msg
-
 
 def test_harbor_shaped_ade_spec_still_translates(tmp_path: Path) -> None:
     spec = Spec(

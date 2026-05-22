@@ -146,16 +146,6 @@ class AdeBenchTaskEntry(BaseModel):
     git_commit_id: str
 
 
-class AdeBenchLocalTaskEntry(BaseModel):
-    """Legacy local upstream-checkout entry.
-
-    Defined only so older direct unit tests can name the type. PKG-40 score
-    specs no longer include this entry in AdeBenchBenchmarkBlock.tasks.
-    """
-    model_config = ConfigDict(extra="forbid")
-    slug: str
-
-
 class AdeBenchBenchmarkBlock(BaseModel):
     model_config = ConfigDict(extra="forbid")
     kind: Literal["ade-bench"]

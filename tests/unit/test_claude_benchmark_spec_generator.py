@@ -1,5 +1,5 @@
 # ABOUTME: PKG-38 generator checks for Goal 1 Claude DAB matrix specs.
-# ABOUTME: New generated Claude benchmark specs use solver v2 instead of claude-cli.
+# ABOUTME: Direct variants use claude-cli; spacedock variant uses solver v2.
 
 from __future__ import annotations
 
@@ -20,21 +20,23 @@ def _load_generator():
     return module
 
 
-def test_goal1_claude_specs_use_solver_v2_runtime_claude():
+def test_goal1_claude_specs_use_per_variant_agent_kind():
     generator = _load_generator()
 
-    payload = generator.build_spec("direct-minimal", "bookreview")
+    direct = generator.build_spec("direct-minimal", "bookreview")
+    spacedock = generator.build_spec("spacedock", "bookreview")
 
-    assert payload["agent"]["kind"] == "spacedock_solver_v2"
-    assert payload["agent"]["runtime"] == "claude"
-    assert payload["agent"]["model"] == "claude-opus-4-7"
-    assert (
-        payload["agent"]["solver_workflow"]
-        == "./examples/solver_workflows/claude-benchmark-solver"
+    assert direct["agent"]["kind"] == "claude-cli"
+    assert direct["agent"]["model"] == "claude-opus-4-7"
+    assert direct["benchmark"]["kind"] == "harbor_dab"
+    assert direct["benchmark"]["datasets"] == ["bookreview"]
+    assert direct["benchmark"]["workspace_variant"] == "direct-minimal"
+    assert direct["benchmark"]["hints"] is True
+    assert direct["benchmark"]["query_mode"] == "batch"
+
+    assert spacedock["agent"]["kind"] == "spacedock_solver_v2"
+    assert spacedock["agent"]["runtime"] == "claude"
+    assert spacedock["agent"]["model"] == "claude-opus-4-7"
+    assert spacedock["agent"]["solver_workflow"] == (
+        "./examples/solver_workflows/dab_paper_matrix"
     )
-    assert payload["agent"]["spacedock_skill_version"] == "1.0.0"
-    assert payload["benchmark"]["kind"] == "harbor_dab"
-    assert payload["benchmark"]["datasets"] == ["bookreview"]
-    assert payload["benchmark"]["workspace_variant"] == "direct-minimal"
-    assert payload["benchmark"]["hints"] is True
-    assert "claude-cli" not in repr(payload["agent"])

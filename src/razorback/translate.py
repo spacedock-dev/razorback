@@ -270,7 +270,6 @@ def _build_ade_bench(
     home: Path | None = None,
     materialize_mode: Literal["bind", "copy"] = "bind",
 ) -> JobConfig:
-    # Phase 1 keeps the in-tree ade-bench path until Phase 8's port-out.
     from razorback.benchmarks.ade_bench.harbor_view import (
         materialize_ade_harbor_task_view,
     )
@@ -299,13 +298,7 @@ def _build_ade_bench(
     tasks: list[TaskConfig] = []
     view_root = jobs_dir / job_name / "_razorback" / "task_views"
     for r in resolved:
-        if r.local_slug is not None:
-            raise SpecError(
-                "ade-bench local upstream task entries are retired for score "
-                "specs; provide Harbor-shaped task directories under tasks_root "
-                "with tasks: ['<task-id>']."
-            )
-        elif r.git_url is not None and r.git_commit_id is not None:
+        if r.git_url is not None and r.git_commit_id is not None:
             materialized = materialize_git_task(
                 git_url=r.git_url,
                 git_commit_id=r.git_commit_id,
