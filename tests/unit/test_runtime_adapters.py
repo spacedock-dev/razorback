@@ -1,11 +1,15 @@
 # ABOUTME: AC-3, per-runtime adapter sub-modules exist; codex + pi raise NotImplementedError.
-# ABOUTME: claude.py constructs a harbor ClaudeCode instance with the expected kwargs.
+# ABOUTME: claude.py constructs razorback's ClaudeCliAgent (a ClaudeCode subclass) so
+# ABOUTME: the spacedock v2 inner emits cost_usd + claude-output.jsonl (PKG-26 surface).
 
 import pytest
+
+from harbor.agents.installed.claude_code import ClaudeCode
 
 from razorback.agents._runtime import claude as claude_adapter
 from razorback.agents._runtime import codex as codex_adapter
 from razorback.agents._runtime import pi as pi_adapter
+from razorback.agents.claude_cli import ClaudeCliAgent
 
 
 def test_codex_raises_not_implemented(tmp_path):
@@ -28,7 +32,15 @@ def test_pi_raises_not_implemented(tmp_path):
         )
 
 
-def test_claude_constructs_inner_agent(tmp_path):
+def test_claude_constructs_inner_agent_as_claude_cli_subclass(tmp_path):
+    """Inner must be razorback's ClaudeCliAgent, not harbor's ClaudeCode directly.
+
+    Routing through ClaudeCliAgent inherits PKG-26's cost-emit + claude-output.jsonl
+    audit sentinel. Returning harbor.ClaudeCode directly (the earlier shape) silently
+    dropped cost_usd telemetry even under paid-API auth — surfaced live during
+    Goal 1 RESUME cell 1 (spacedock/agnews) where cost was null on disk despite
+    a 3m54s opus-4.7 run, with raw tokens reconstructible only from session jsonl.
+    """
     inner = claude_adapter.build_inner_agent(
         logs_dir=tmp_path,
         model="claude-opus-4-5",
@@ -40,7 +52,10 @@ def test_claude_constructs_inner_agent(tmp_path):
         },
         extra_env={"ANTHROPIC_API_KEY": "sk-fake"},
     )
-    assert inner.__class__.__name__ == "ClaudeCode"
+    assert isinstance(inner, ClaudeCliAgent)
+    # Defense-in-depth: ClaudeCliAgent IS a ClaudeCode subclass; the harbor base
+    # contract still holds.
+    assert isinstance(inner, ClaudeCode)
 
 
 def test_claude_passes_tools_denied_through_to_harbor_kwargs(tmp_path):

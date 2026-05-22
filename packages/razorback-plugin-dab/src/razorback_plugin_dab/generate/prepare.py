@@ -603,7 +603,7 @@ def _batch_test_sh(*, container_workdir: str) -> str:
     )
 
 
-_MONGO_HEALTHCHECK_DEFAULT_RETRIES = 60
+_MONGO_HEALTHCHECK_DEFAULT_RETRIES = 90
 
 
 def _task_toml(
@@ -655,17 +655,24 @@ def _task_toml(
     elif mongo_probes:
         # PKG-15 AC-2: content-presence probe, NOT TCP-only. TCP would have
         # missed Bug 1 from the dab-mongo-probe (mongo ignored .bson and
-        # started healthy with an empty DB). countDocuments() > 0 fails fast
+        # started healthy with an empty DB). count_documents() > 0 fails fast
         # if mongorestore did not run or produced no documents.
-        # retries default = 60 × interval 5s = 5min budget covers
+        #
+        # Probe runs from the agent's `main` step container (dab-agent:latest),
+        # which ships python3 + pymongo but NOT mongosh. The probe must use
+        # python3/pymongo for the call to succeed; an earlier mongosh-based
+        # probe was unrunnable from `main` (command-not-found) and burned the
+        # retry budget without ever testing mongo content presence.
+        #
+        # retries default = 90 × interval 5s = 7.5min budget covers
         # mongorestore wall time for agnews/yelp (~120-150k docs). Per-dataset
         # override via db_config[<client>].healthcheck_retries handles outliers.
         db_name, collection = mongo_probes[0]
-        eval_js = (
-            f"db.getSiblingDB('{db_name}').getCollection('{collection}').countDocuments() > 0"
-        )
         probe = (
-            f"mongosh --quiet --host dab-mongo --eval \\\"{eval_js}\\\" | grep -q true"
+            "python3 -c \\\"from pymongo import MongoClient; "
+            "c = MongoClient('mongodb://dab-mongo:27017', "
+            "serverSelectionTimeoutMS=5000); "
+            f"assert c['{db_name}']['{collection}'].count_documents({{}}) > 0\\\""
         )
         retries = (
             mongo_healthcheck_retries

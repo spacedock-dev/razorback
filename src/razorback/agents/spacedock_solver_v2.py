@@ -267,3 +267,16 @@ class SpacedockSolverAgent(BaseAgent):
     async def cleanup(self, environment):
         if self._inner is not None and hasattr(self._inner, "cleanup"):
             await self._inner.cleanup(environment)
+
+    def populate_context_post_run(self, context):
+        """Delegate context-population to the inner agent.
+
+        Harbor's trial framework invokes this hook on the OUTER agent only.
+        The inner agent (razorback ClaudeCliAgent for runtime=claude) holds
+        the cost_usd / claude-output.jsonl surface from PKG-26 — without this
+        delegation that surface stays dark on the spacedock variant.
+        """
+        if self._inner is not None and hasattr(
+            self._inner, "populate_context_post_run"
+        ):
+            self._inner.populate_context_post_run(context)
