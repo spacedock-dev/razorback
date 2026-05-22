@@ -395,3 +395,20 @@ verified by both the unit test (6/6 green) and the bash driver dry-run
 (cell 1 = spacedock/agnews, cell 12 = spacedock/yelp). 36 frozen specs
 are on disk ready for T2. Paused per dispatch instruction before T2;
 awaiting team-lead on PKG-15 merge + captain cost-gate decision.
+
+## Stage Report: implementation (cycle 2 — T2 + T3 + T4 spacedock subset)
+
+- DONE: T2 matrix dispatch (only after PKG-15 merges): runs/goal1-resume/ output dir, --budget 100, --no-ff merge later. Per-variant `rk score --against-constant` (spacedock=0.577, direct-minimal/direct-structured=0.4376). T3 aggregate + audit. T4 result-doc UPDATE (append "Resume" section to docs/superpowers/plans/2026-05-19-goal1-paper-reproduction.md).
+  Subset (12 spacedock cells only) per captain decision 2026-05-22. All 12 cells PASS dispatch (mongo+postgres+sqlite/duckdb healthchecks all GREEN, no exceptions, n_completed_trials=1 each). Final commits: e49a9b3 (mongo retries 60→240 over-correction), faefc77 (pymongo probe — actual fix), e3d3f1c (PKG-26 followup: ClaudeCliAgent inner), e8cec00 (v2 populate_context_post_run delegation).
+- DONE: Captain decision via team-lead: subset spacedock-only (skip direct-minimal + direct-structured this session) to keep cost under ceiling while landing the load-bearing AC-5 number.
+  Direct-* variants deferred as a follow-up dispatch entity (driver/specs unchanged; ready for re-burn).
+- DONE: T3 — per-variant rk score equivalent + cost reconstruction.
+  examples/drivers/aggregate-goal1-resume-cost.py post-hoc aggregates from session jsonl since populate_context_post_run path mismatch leaves agent_result.cost_usd null on disk. Output: runs/goal1-resume/aggregate-report.json.
+- DONE: T4 result-doc — append "Resume" section.
+  Appended to docs/superpowers/plans/2026-05-19-goal1-paper-reproduction.md: headline number + Wilson CI + verdict, per-dataset table, cost-recon methodology, three follow-up bug write-ups (mongo probe, ClaudeCliAgent bootstrap, v2 delegation), matrix-order lesson, direct-* deferral note, run-dir references.
+
+### Summary
+
+Headline reproduction (AC-3): spacedock stratified pass@1 = 0.500, Wilson 95% CI = [0.254, 0.746], paper 0.577 INSIDE CI — REPRODUCTION CONSISTENT. AC-1 (matrix order) verified via dry-run + unit test. AC-2 (idempotence) verified empirically (agnews skipped on re-dispatch from completed result.json). AC-4 (audit) deferred — `rk audit --policy strict` not run yet because the audit-driver wiring was de-prioritized once cost was the load-bearing risk; aggregate JSON includes per-cell reward + cost only. AC-5 (cost ≤ budget): $94.77 reconstructed total, well under the $100 ceiling for the spacedock subset; full 36-cell extrapolation $186 was the pre-subset projection. AC-6 (result-doc): appended.
+
+Three goal1-resume followup bugs shipped in worktree (mongo probe, ClaudeCliAgent bootstrap, v2 populate_context_post_run delegation). A fourth bug — ClaudeCliAgent.populate_context_post_run path mismatch under spacedock_solver_v2 logs_dir wiring — remains open; documented in result doc + this stage report; post-hoc session-jsonl reconstruction is the workaround for AC-5 evidence.
