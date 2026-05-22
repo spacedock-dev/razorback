@@ -103,6 +103,16 @@ def _report_to_jsonable(report: ScoreReport) -> dict[str, Any]:
     for name, stats in report["strata"].items():
         ci = stats["wilson_ci"]
         strata[name] = {
+            **{
+                key: stats[key]
+                for key in (
+                    "dataset",
+                    "query_id",
+                    "benchmark_kind",
+                    "benchmark_task_id",
+                )
+                if key in stats
+            },
             "n_total": stats["n_total"],
             "n_completed": stats["n_completed"],
             "n_errored": stats["n_errored"],

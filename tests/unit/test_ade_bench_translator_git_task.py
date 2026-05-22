@@ -1,15 +1,15 @@
 # ABOUTME: FU-2 — translator materializes git-task entries via materialize_git_task,
-# ABOUTME: emitting a LOCAL TaskConfig (no git fields). Legacy slug entries pass through.
+# ABOUTME: emitting a LOCAL TaskConfig (no git fields). Slug entries use PKG-40 task views.
 
 from pathlib import Path
 
-from razorback.compat import spec_to_job_config
 from razorback.spec.schema import (
     AdeBenchBenchmarkBlock,
     AdeBenchTaskEntry,
     NopAgentBlock,
     Spec,
 )
+from razorback.translate import spec_to_job_config
 
 FIXTURE_TASKS = Path(__file__).parent.parent / "fixtures" / "ade_bench" / "tasks"
 GIT_URL = "https://github.com/laude-institute/harbor-datasets.git"
@@ -51,7 +51,7 @@ def _stub_materialize(monkeypatch, target_root: Path):
         return target
 
     monkeypatch.setattr(
-        "razorback.compat.harbor_0_6_6.materialize_git_task",
+        "razorback.benchmarks.ade_bench.tasks.materialize_git_task",
         fake_materialize,
     )
 
@@ -81,7 +81,11 @@ def test_spec_to_job_config_with_legacy_slug(tmp_path, monkeypatch):
     spec = _spec_with_tasks(["adebench-fixture-001"])
     cfg, _ = spec_to_job_config(spec, job_name="testjob", jobs_dir=tmp_path, home=tmp_path)
     [task] = cfg.tasks
-    assert task.path == (FIXTURE_TASKS / "adebench-fixture-001").resolve()
+    assert task.path == (
+        tmp_path / "testjob" / "_razorback" / "task_views"
+        / "ade-bench-adebench-fixture-001"
+    )
+    assert (task.path / "view_manifest.json").exists()
     assert task.git_url is None
     assert task.git_commit_id is None
     assert task.is_git_task() is False
@@ -101,7 +105,10 @@ def test_spec_to_job_config_mixed_list(tmp_path, monkeypatch):
     assert len(cfg.tasks) == 2
     legacy, git = cfg.tasks
     assert legacy.is_git_task() is False
-    assert legacy.path == (FIXTURE_TASKS / "adebench-fixture-001").resolve()
+    assert legacy.path == (
+        tmp_path / "testjob" / "_razorback" / "task_views"
+        / "ade-bench-adebench-fixture-001"
+    )
     # FU-2: git entry is now LOCAL after materialization.
     assert git.is_git_task() is False
     assert git.path is not None

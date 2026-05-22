@@ -1,13 +1,11 @@
-# PKG-19 AC-7 — ade-bench probe re-dispatch spec.
+# PKG-40 — ade-bench Harbor-shaped probe spec.
 #
 # DO NOT RUN from the implementation stage. Validation dispatches this AFTER
 # the captain frees disk (≥ 10 GiB free) and exports CLAUDE_CODE_OAUTH_TOKEN.
 # The implementation stage emits the spec only.
 #
-# This spec exercises the PKG-19 bind-mount path: tasks reference ~/git/ade-bench
-# via `ade_bench_root` + AdeBenchLocalTaskEntry, so no harbor-datasets clone
-# happens per task and `seeds/solution__*.csv` is filtered out of the agent's
-# view-dir.
+# This spec intentionally uses Harbor-shaped task directories. The retired
+# Retired local upstream adapter specs are not accepted for new score specs.
 version: 1
 experiment: probe-ade-bench-airbnb001-claude-harbor-local
 agent:
@@ -24,11 +22,13 @@ agent:
     - Grep
 benchmark:
   kind: ade-bench
-  tasks_root: .  # ignored when every entry is a local-task; required by current schema
-  ade_bench_root: ~/git/ade-bench
+  tasks_root: ./tests/fixtures/ade_bench/tasks
   tasks:
-    - slug: airbnb001
+    - adebench-fixture-001
+  batch_mode: per-task
 trials: 1
+concurrency:
+  trials: 1
 experiment_meta:
   max_budget_usd: 5.0
   estimated_cost_usd: 2.0

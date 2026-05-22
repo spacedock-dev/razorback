@@ -47,7 +47,7 @@ def test_dab_dry_run_enumerates_twelve_datasets(tmp_path: Path) -> None:
     assert all(row.data_root == tmp_path / "dab-data" for row in rows)
 
 
-def test_ade_bench_dry_run_enumerates_discovered_local_task_slugs(tmp_path: Path) -> None:
+def test_ade_bench_dry_run_rejects_upstream_local_task_root(tmp_path: Path) -> None:
     generator = _load_generator()
     tasks_root = tmp_path / "ade-bench" / "tasks"
     for slug in ("task_b", "task_a"):
@@ -55,11 +55,15 @@ def test_ade_bench_dry_run_enumerates_discovered_local_task_slugs(tmp_path: Path
         task_dir.mkdir(parents=True)
         (task_dir / "task.yaml").write_text(f"task_id: {slug}\n")
 
-    rows = generator.plan_ade_bench_specs(ade_bench_root=tmp_path / "ade-bench")
+    try:
+        generator.plan_ade_bench_specs(ade_bench_root=tmp_path / "ade-bench")
+    except FileNotFoundError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("expected upstream local ade-bench root rejection")
 
-    assert [row.task_slug for row in rows] == ["task_a", "task_b"]
-    assert all(row.trials == 1 for row in rows)
-    assert all(row.ade_bench_root == tmp_path / "ade-bench" for row in rows)
+    assert "Harbor-shaped task root" in message
+    assert "tasks/*/task.yaml roots are retired" in message
 
 
 def test_emit_dab_codex_spec_uses_solver_v2_codex_and_harbor_dab(tmp_path: Path) -> None:
@@ -98,11 +102,11 @@ def test_codex_ade_dbt_repair_workflow_is_checked_in() -> None:
 def test_emit_specs_allow_solver_workflow_selection(tmp_path: Path) -> None:
     generator = _load_generator()
     dab_row = generator.plan_dab_specs(data_root=tmp_path / "dab-data")[0]
-    ade_tasks_root = tmp_path / "ade-bench" / "tasks"
+    ade_tasks_root = tmp_path / "harbor-data" / "ade-bench"
     ade_task_dir = ade_tasks_root / "example001"
     ade_task_dir.mkdir(parents=True)
-    (ade_task_dir / "task.yaml").write_text("task_id: example001\n")
-    ade_row = generator.plan_ade_bench_specs(ade_bench_root=tmp_path / "ade-bench")[0]
+    (ade_task_dir / "task.toml").write_text('schema_version = "1.2"\n')
+    ade_row = generator.plan_ade_bench_specs(ade_bench_root=ade_tasks_root)[0]
 
     dab_spec_path = generator.emit_dab_spec(
         dab_row,
@@ -203,7 +207,7 @@ def test_cli_can_emit_custom_ade_solver_workflow(tmp_path: Path, monkeypatch) ->
         lambda *, ade_bench_root: [
             generator.AdeBenchSpecRow(
                 task_slug="example001",
-                ade_bench_root=ade_bench_root,
+                tasks_root=ade_bench_root,
                 trials=1,
             )
         ],
@@ -321,13 +325,13 @@ def test_display_path_handles_relative_and_external_out_roots(tmp_path: Path) ->
     assert generator._display_path(external) == str(external.resolve())
 
 
-def test_emit_ade_bench_codex_spec_uses_local_task_entry(tmp_path: Path) -> None:
+def test_emit_ade_bench_codex_spec_never_uses_local_task_entry(tmp_path: Path) -> None:
     generator = _load_generator()
-    tasks_root = tmp_path / "ade-bench" / "tasks"
+    tasks_root = tmp_path / "harbor-data" / "ade-bench"
     task_dir = tasks_root / "example001"
     task_dir.mkdir(parents=True)
-    (task_dir / "task.yaml").write_text("task_id: example001\n")
-    row = generator.plan_ade_bench_specs(ade_bench_root=tmp_path / "ade-bench")[0]
+    (task_dir / "task.toml").write_text('schema_version = "1.2"\n')
+    row = generator.plan_ade_bench_specs(ade_bench_root=tasks_root)[0]
 
     spec_path = generator.emit_ade_bench_spec(row, out_dir=tmp_path / "out")
     payload = yaml.safe_load(spec_path.read_text())
@@ -336,8 +340,10 @@ def test_emit_ade_bench_codex_spec_uses_local_task_entry(tmp_path: Path) -> None
     assert payload["agent"]["runtime"] == "codex"
     assert payload["agent"]["model"] == "gpt-5.5"
     assert payload["benchmark"]["kind"] == "ade-bench"
-    assert payload["benchmark"]["ade_bench_root"] == str(tmp_path / "ade-bench")
-    assert payload["benchmark"]["tasks"] == [{"slug": "example001"}]
+    assert payload["benchmark"]["tasks_root"] == str(tasks_root)
+    assert payload["benchmark"]["tasks"] == ["example001"]
+    assert "ade_bench_root" not in payload["benchmark"]
+    assert {"slug": "example001"} not in payload["benchmark"]["tasks"]
     assert payload["trials"] == 1
 
 
@@ -376,8 +382,8 @@ def test_plan_ade_bench_specs_rejects_unknown_root_shape(tmp_path: Path) -> None
     else:
         raise AssertionError("expected FileNotFoundError")
 
-    assert "upstream tasks/*/task.yaml" in message
-    assert "Harbor-shaped */task.toml" in message
+    assert "Harbor-shaped task root" in message
+    assert "tasks/*/task.yaml roots are retired" in message
     assert str(missing_root) in message
 
 

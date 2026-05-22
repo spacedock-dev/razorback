@@ -1,7 +1,7 @@
-# ABOUTME: PKG-40 ade-bench Codex smoke spec using Harbor-shaped task directories.
-# ABOUTME: Does not use the retired local upstream adapter path.
+# ABOUTME: PKG-40 Spider2-DBT Harbor-shaped task-view Codex smoke spec.
+# ABOUTME: Fixture-backed because public spider2-dbt@1.0 checkout failed in T1.
 version: 1
-experiment: codex-ade-bench-example001-smoke
+experiment: pkg40-spider2-dbt-harbor-task-view-codex
 agent:
   kind: spacedock_solver_v2
   runtime: codex
@@ -16,11 +16,11 @@ agent:
   tools_allowed: []
   tools_denied: []
 benchmark:
-  kind: ade-bench
-  tasks_root: ./tests/fixtures/ade_bench/tasks
+  kind: spider2-dbt
+  tasks_root: ./tests/fixtures/spider2_dbt/harbor_task_minimal
   tasks:
-    - adebench-fixture-001
-  docker_image_override: python:3.12
+    - spider2-fixture-001
+  docker_image_override: shared-dbt-duckdb:latest
   batch_mode: per-task
 trials: 1
 concurrency:

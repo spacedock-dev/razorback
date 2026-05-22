@@ -103,3 +103,34 @@ def test_json_canonical_shape_with_tuple_serialized_as_list() -> None:
     report = _report({"A": _stratum(lo=0.30, hi=0.70)})
     parsed = json.loads(render_json(report, None))
     assert parsed["strata"]["A"]["wilson_ci"] == [0.30, 0.70]
+
+
+def test_json_includes_task_view_identity_metadata() -> None:
+    report = _report(
+        {
+            "ade-bench": StratumStats(
+                dataset="ade-bench",
+                query_id="adebench-fixture-001",
+                benchmark_kind="ade-bench",
+                benchmark_task_id="adebench-fixture-001",
+                n_total=1,
+                n_completed=1,
+                n_errored=0,
+                n_pass=1,
+                pass_at_1=1.0,
+                wilson_ci=(0.21, 1.0),
+                error_reason=None,
+            )
+        },
+        mean=1.0,
+    )
+
+    parsed = json.loads(render_json(report, None))
+
+    assert parsed["strata"]["ade-bench"]["dataset"] == "ade-bench"
+    assert parsed["strata"]["ade-bench"]["query_id"] == "adebench-fixture-001"
+    assert parsed["strata"]["ade-bench"]["benchmark_kind"] == "ade-bench"
+    assert (
+        parsed["strata"]["ade-bench"]["benchmark_task_id"]
+        == "adebench-fixture-001"
+    )

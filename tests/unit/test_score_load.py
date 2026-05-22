@@ -61,3 +61,32 @@ def test_load_skips_non_trial_children(tmp_path: Path) -> None:
 def test_load_missing_run_dir_raises(tmp_path: Path) -> None:
     with pytest.raises((FileNotFoundError, ScoreInputError)):
         load_run_dir(tmp_path / "does-not-exist")
+
+
+def test_load_resolves_task_view_manifest_stratum(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    view = run_dir / "_razorback" / "task_views" / "ade-bench-adebench-fixture-001"
+    view.mkdir(parents=True)
+    (view / "view_manifest.json").write_text(
+        """{
+          "benchmark_kind": "ade-bench",
+          "benchmark_task_id": "adebench-fixture-001"
+        }"""
+    )
+    trial = run_dir / "ade-bench-adebench-fixture-001__abc1234"
+    trial.mkdir(parents=True)
+    (trial / "result.json").write_text(
+        """{"verifier_result": {"rewards": {"reward": 1.0}}}"""
+    )
+
+    [record] = load_run_dir(run_dir)
+
+    assert record.stratum == "ade-bench"
+    assert record.stratum_payload == {
+        "dataset": "ade-bench",
+        "query_id": "adebench-fixture-001",
+        "benchmark_kind": "ade-bench",
+        "benchmark_task_id": "adebench-fixture-001",
+    }
+    assert record.state == "completed"
+    assert record.passed is True

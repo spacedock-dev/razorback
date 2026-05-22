@@ -5,13 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from razorback.compat import spec_to_job_config
 from razorback.spec.schema import (
     AdeBenchBenchmarkBlock,
     AdeBenchTaskEntry,
     NopAgentBlock,
     Spec,
 )
+from razorback.translate import spec_to_job_config
 
 
 GIT_URL = "https://github.com/laude-institute/harbor-datasets.git"
@@ -68,7 +68,7 @@ def _record_materialize_calls(monkeypatch, fake_target_root: Path):
         return target
 
     monkeypatch.setattr(
-        "razorback.compat.harbor_0_6_6.materialize_git_task",
+        "razorback.benchmarks.ade_bench.tasks.materialize_git_task",
         fake_materialize,
     )
     return calls
@@ -114,6 +114,9 @@ def test_translator_passes_through_local_slug_unchanged(monkeypatch, tmp_path):
     assert len(cfg.tasks) == 2
     legacy, git = cfg.tasks
     assert legacy.is_git_task() is False
-    assert legacy.path == slug_dir.resolve()
+    assert legacy.path == (
+        tmp_path / "testjob" / "_razorback" / "task_views"
+        / "ade-bench-adebench-fixture-001"
+    )
     # materialize_git_task was called exactly once — for the git entry only.
     assert len(calls) == 1
