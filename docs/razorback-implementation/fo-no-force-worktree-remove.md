@@ -292,3 +292,16 @@ Inline plan recommends a cross-repo edit to spacedock's `first-officer-shared-co
 ### Summary
 
 Cross-repo edit shipped on spacedock branch `fo-no-force-worktree-remove` (commit `4b29a50e`), updating `skills/first-officer/references/first-officer-shared-core.md` with the new `### Worktree removal safety` subsection inside `## Merge and Cleanup` (after step 9, before `## State Management`). Installed-plugin mirror at `/Users/clkao/.claude/plugins/marketplaces/spacedock/skills/first-officer/references/first-officer-shared-core.md` was updated by file copy and verified bit-identical via `diff -q`. AC-3 remains deferred per the approved plan; the next FO cleanup session is the real acceptance signal. No deviations from the plan.
+
+## Stage Report: validation
+
+- DONE: Verify AC-1 prose lives at /Users/clkao/git/spacedock/.worktrees/fo-no-force-worktree-remove/skills/first-officer/references/first-officer-shared-core.md as a `### Worktree removal safety` subsection inside `## Merge and Cleanup` after step 9, matching the entity body's exact prose verbatim. Cite line numbers.
+  Subsection at lines 235–254 of shared-core; `## Merge and Cleanup` at line 215, step 9 at line 233, `## State Management` at line 256. Prose matches entity-body AC-1 spec (lines 167–188) verbatim.
+- DONE: Verify the marketplace mirror at /Users/clkao/.claude/plugins/marketplaces/spacedock/skills/first-officer/references/first-officer-shared-core.md is bit-identical to the spacedock worktree copy (`diff -q` returns no output).
+  `diff -q` exit=0, no output — files identical.
+- DONE: Code-review the prose: technically clear, grammatically clean, consistent with surrounding shared-core. Write validation report to docs/razorback-implementation/validation/fo-no-force-worktree-remove.md with PASS/FAIL per AC + gate decision (approve to done or reject back to implementation with concrete fixes).
+  Review found no blocking or non-blocking findings; imperative voice, em-dash usage, `###` depth, and `{path}` placeholder convention all match surrounding shared-core. Report at `docs/razorback-implementation/validation/fo-no-force-worktree-remove.md`; gate decision: APPROVE → done.
+
+### Summary
+
+Validation PASSED. AC-1 prose is present at spacedock worktree shared-core lines 235–254 verbatim per the entity-body spec; AC-2 is satisfied transitively by the existing `@references/first-officer-shared-core.md` include in the first-officer SKILL.md; AC-3 SKIPPED per captain-approved plan-stage deferral (prose contract; FO simulator not justified). Source ↔ plugin mirror is bit-identical (`diff -q` clean). Prose code-review found no blocking or non-blocking findings. Gate decision: approve to `done`.
