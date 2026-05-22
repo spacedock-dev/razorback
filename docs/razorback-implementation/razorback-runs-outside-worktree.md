@@ -1,7 +1,7 @@
 ---
 id: x9wz0wb8x4gm2wfqdn5c7de6
 title: razorback runs_dir default outside the worktree
-status: implementation
+status: validation
 source: goal1-resume-spacedock-first 2026-05-22 — FO `git worktree remove --force` destroyed `runs/goal1-resume/` with per-cell validation.json, reward_per_query.json, session jsonl traces, audit-aggregate. Per-query rescore against paper's metric now impossible without re-running.
 started: 2026-05-22T23:11:16Z
 completed:
