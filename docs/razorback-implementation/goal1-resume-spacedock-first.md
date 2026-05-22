@@ -1,7 +1,7 @@
 ---
 id: djrw746ny83bf47t4cj4h5vz
 title: Goal 1 RESUME — DAB paper reproduction (spacedock-first matrix order)
-status: implementation
+status: validation
 source: Goal 1 PARTIAL ship 2026-05-20 (archived at _archive/goal1-dab-paper-reproduction.md) — matrix order put spacedock variant last; ENOSPC at cell 20/36 left spacedock 0/12. Captain directive 2026-05-20: redispatch with spacedock-first ordering since AC-5 names spacedock as the primary reproduction claim.
 started: 2026-05-21T06:11:54Z
 completed:
