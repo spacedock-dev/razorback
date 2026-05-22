@@ -1,5 +1,5 @@
 # ABOUTME: AC-3, per-runtime adapter sub-modules exist; pi raises NotImplementedError.
-# ABOUTME: claude.py and codex.py construct harbor installed agents with expected kwargs.
+# ABOUTME: claude.py and codex.py construct installed agents with expected kwargs.
 
 import inspect
 from types import SimpleNamespace
@@ -11,6 +11,7 @@ from harbor.agents.installed.codex import Codex
 from razorback.agents._runtime import claude as claude_adapter
 from razorback.agents._runtime import codex as codex_adapter
 from razorback.agents._runtime import pi as pi_adapter
+from razorback.agents.claude_cli import ClaudeCliAgent
 from razorback.agents.spacedock_solver_v2 import SpacedockSolverAgentError
 
 
@@ -132,7 +133,15 @@ def test_pi_raises_not_implemented(tmp_path):
         )
 
 
-def test_claude_constructs_inner_agent(tmp_path):
+def test_claude_constructs_inner_agent_as_claude_cli_subclass(tmp_path):
+    """Inner must be razorback's ClaudeCliAgent, not harbor's ClaudeCode directly.
+
+    Routing through ClaudeCliAgent inherits PKG-26's cost-emit + claude-output.jsonl
+    audit sentinel. Returning harbor.ClaudeCode directly (the earlier shape) silently
+    dropped cost_usd telemetry even under paid-API auth — surfaced live during
+    Goal 1 RESUME cell 1 (spacedock/agnews) where cost was null on disk despite
+    a 3m54s opus-4.7 run, with raw tokens reconstructible only from session jsonl.
+    """
     inner = claude_adapter.build_inner_agent(
         logs_dir=tmp_path,
         model="claude-opus-4-5",
@@ -145,7 +154,9 @@ def test_claude_constructs_inner_agent(tmp_path):
         },
         extra_env={"ANTHROPIC_API_KEY": "sk-fake"},
     )
-    assert inner.__class__.__name__ == "RazorbackClaudeCode"
+    assert isinstance(inner, ClaudeCliAgent)
+    # Defense-in-depth: ClaudeCliAgent IS a ClaudeCode subclass; the harbor base
+    # contract still holds.
     assert isinstance(inner, ClaudeCode)
     assert getattr(inner, "_extra_env", {}) == {"ANTHROPIC_API_KEY": "sk-fake"}
     flag_kwargs = getattr(inner, "_flag_kwargs", {})

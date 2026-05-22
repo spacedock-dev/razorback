@@ -1,10 +1,9 @@
 # ABOUTME: SpacedockSolverAgent v2 (spec §4 + §8.4), runtime adapter for claude|codex|pi.
 # ABOUTME: __init__ computes sealed_hash from six inputs; refuses on resume mismatch BEFORE harbor I/O.
 
+import asyncio
 import json
-import shlex
 from pathlib import Path
-from pathlib import PurePosixPath
 from typing import Any, Literal
 
 from harbor.agents.base import BaseAgent
@@ -24,19 +23,9 @@ _REQUIRED_PHASE_STATS_KEYS = (
     "wallclock_s",
 )
 
-_FREEZE_REPO_GIT_REQUIREMENT = "git is required for the sealed freeze repo"
-_CONTAINER_FREEZE_ROOT = PurePosixPath("/razorback-freeze")
 CHECKPOINT_SETUP_READY = "setup/ready"
 CHECKPOINT_RUN_BEFORE_AGENT = "run/before-agent"
 CHECKPOINT_RUN_AFTER_AGENT = "run/after-agent"
-_PROXY_ENV_KEYS = (
-    "HTTP_PROXY",
-    "HTTPS_PROXY",
-    "http_proxy",
-    "https_proxy",
-    "NO_PROXY",
-    "no_proxy",
-)
 
 
 class SpacedockSolverAgentError(RazorbackError):
@@ -251,108 +240,31 @@ class SpacedockSolverAgent(BaseAgent):
             return out
         return {}
 
-    def _resolve_git_freeze_dir(self, environment: BaseEnvironment) -> str:
-        try:
-            agent_dir = str(environment.env_paths.agent_dir)
-        except Exception:
-            return str(self.resolve_freeze_dir())
-        if not agent_dir.startswith("/"):
-            return str(self.resolve_freeze_dir())
-        return str(_CONTAINER_FREEZE_ROOT / self.sealed_hash)
-
-    @staticmethod
-    def _git_cmd(freeze_dir: str, *args: str) -> str:
-        quoted = " ".join(shlex.quote(arg) for arg in args)
-        safe_dir = shlex.quote(f"safe.directory={freeze_dir}")
-        return f"git -c {safe_dir} -C {shlex.quote(freeze_dir)} {quoted}"
-
-    @staticmethod
-    def _exec_failure(command: str, result, *, prefix: str) -> str:
-        return (
-            f"{prefix} at: {command}\n"
-            f"rc={result.return_code} "
-            f"stdout={getattr(result, 'stdout', '')!r} "
-            f"stderr={getattr(result, 'stderr', '')!r}"
+    async def _host_git(self, *args: str) -> None:
+        # freeze tree is host-side bookkeeping; git runs on host
+        freeze_dir = self.resolve_freeze_dir()
+        argv = ("git", "-C", str(freeze_dir), *args)
+        proc = await asyncio.create_subprocess_exec(
+            *argv,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
+        _, stderr = await proc.communicate()
+        if proc.returncode != 0:
+            raise SpacedockSolverAgentError(
+                f"freeze repo git failed at: {' '.join(argv)} "
+                f"(rc={proc.returncode}); stderr={stderr.decode(errors='replace')!r}"
+            )
 
     async def _commit_stage(
         self, environment: BaseEnvironment, stage: str
     ) -> None:
         """Per-stage commit helper exposed for the workflow's freeze mod."""
-        freeze_dir = self._resolve_git_freeze_dir(environment)
-        for cmd in (
-            self._git_cmd(freeze_dir, "add", "-A"),
-            self._git_cmd(
-                freeze_dir, "commit", "-q", "--allow-empty", "-m", f"stage: {stage}"
-            ),
-        ):
-            r = await environment.exec(cmd)
-            if r.return_code != 0:
-                raise SpacedockSolverAgentError(
-                    self._exec_failure(cmd, r, prefix="freeze stage commit failed")
-                )
-
-    async def _ensure_freeze_repo_git(self, environment: BaseEnvironment) -> None:
-        r = await environment.exec("command -v git >/dev/null 2>&1")
-        if r.return_code == 0:
-            return
-
-        installers = (
-            (
-                "apk",
-                "command -v apk >/dev/null 2>&1",
-                "apk add --no-cache git",
-            ),
-            (
-                "apt-get",
-                "command -v apt-get >/dev/null 2>&1",
-                "DEBIAN_FRONTEND=noninteractive apt-get update -qq && "
-                "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git",
-            ),
-            (
-                "yum",
-                "command -v yum >/dev/null 2>&1",
-                "yum install -y git",
-            ),
+        # freeze tree is host-side bookkeeping; git runs on host
+        await self._host_git("add", "-A")
+        await self._host_git(
+            "commit", "-q", "--allow-empty", "-m", f"stage: {stage}"
         )
-
-        for name, probe_cmd, install_cmd in installers:
-            probe = await environment.exec(probe_cmd)
-            if probe.return_code != 0:
-                continue
-            install = await environment.exec(
-                install_cmd, env={key: "" for key in _PROXY_ENV_KEYS}
-            )
-            if install.return_code != 0:
-                raise SpacedockSolverAgentError(
-                    f"{_FREEZE_REPO_GIT_REQUIREMENT}; installing via {name} "
-                    f"failed (rc={install.return_code})."
-                )
-            verify = await environment.exec("command -v git >/dev/null 2>&1")
-            if verify.return_code == 0:
-                return
-            raise SpacedockSolverAgentError(
-                f"{_FREEZE_REPO_GIT_REQUIREMENT}; installing via {name} "
-                f"completed but git is still unavailable (rc={verify.return_code})."
-            )
-
-        raise SpacedockSolverAgentError(
-            f"{_FREEZE_REPO_GIT_REQUIREMENT}; no supported package manager "
-            "(apk, apt-get, yum) found."
-        )
-
-    async def _make_freeze_repo_host_writable(
-        self, environment: BaseEnvironment, git_freeze_dir: str
-    ) -> None:
-        r = await environment.exec(f"chmod -R a+rwX {shlex.quote(git_freeze_dir)}")
-        if r.return_code != 0:
-            raise SpacedockSolverAgentError(
-                self._exec_failure(
-                    f"chmod -R a+rwX {shlex.quote(git_freeze_dir)}",
-                    r,
-                    prefix="freeze repo permission fix failed",
-                )
-            )
 
     def _build_inner_agent(self) -> BaseAgent:
         """Dispatch to the per-runtime adapter sub-module (spec §8.4)."""
@@ -398,11 +310,9 @@ class SpacedockSolverAgent(BaseAgent):
         Resume mismatch: SeedMismatchError (exit 20).
         """
         freeze_dir = self.resolve_freeze_dir()
-        git_freeze_dir = self._resolve_git_freeze_dir(environment)
         sealed_file = freeze_dir / "sealed_hash.txt"
 
-        await self._ensure_freeze_repo_git(environment)
-
+        # freeze tree is host-side bookkeeping; git runs on host
         if sealed_file.exists():
             prior = sealed_file.read_text().strip()
             if prior != self.sealed_hash:
@@ -410,38 +320,16 @@ class SpacedockSolverAgent(BaseAgent):
                     f"freeze dir {freeze_dir} sealed_hash ({prior}) does not match "
                     f"this agent's sealed_hash ({self.sealed_hash})."
                 )
-            checkout_cmd = self._git_cmd(git_freeze_dir, "checkout", "--", ".")
-            r = await environment.exec(checkout_cmd)
-            if r.return_code != 0:
-                raise SpacedockSolverAgentError(
-                    self._exec_failure(
-                        checkout_cmd,
-                        r,
-                        prefix="resume restore via git checkout failed",
-                    )
-                )
-            await self._make_freeze_repo_host_writable(environment, git_freeze_dir)
+            await self._host_git("checkout", "--", ".")
         else:
             freeze_dir.mkdir(parents=True, exist_ok=True)
             sealed_file.write_text(self.sealed_hash)
-            for cmd in (
-                self._git_cmd(git_freeze_dir, "init", "-q"),
-                self._git_cmd(
-                    git_freeze_dir, "config", "user.email", "razorback@local"
-                ),
-                self._git_cmd(git_freeze_dir, "config", "user.name", "razorback"),
-                self._git_cmd(git_freeze_dir, "config", "commit.gpgsign", "false"),
-                self._git_cmd(git_freeze_dir, "add", "-A"),
-                self._git_cmd(
-                    git_freeze_dir, "commit", "-q", "--allow-empty", "-m", "seed"
-                ),
-            ):
-                r = await environment.exec(cmd)
-                if r.return_code != 0:
-                    raise SpacedockSolverAgentError(
-                        self._exec_failure(cmd, r, prefix="freeze repo init failed")
-                    )
-            await self._make_freeze_repo_host_writable(environment, git_freeze_dir)
+            await self._host_git("init", "-q")
+            await self._host_git("config", "user.email", "razorback@local")
+            await self._host_git("config", "user.name", "razorback")
+            await self._host_git("config", "commit.gpgsign", "false")
+            await self._host_git("add", "-A")
+            await self._host_git("commit", "-q", "--allow-empty", "-m", "seed")
 
         self._freeze_checkpointing_ready = True
         await self._commit_stage(environment, CHECKPOINT_SETUP_READY)
@@ -464,3 +352,16 @@ class SpacedockSolverAgent(BaseAgent):
     async def cleanup(self, environment):
         if self._inner is not None and hasattr(self._inner, "cleanup"):
             await self._inner.cleanup(environment)
+
+    def populate_context_post_run(self, context):
+        """Delegate context-population to the inner agent.
+
+        Harbor's trial framework invokes this hook on the OUTER agent only.
+        The inner agent (razorback ClaudeCliAgent for runtime=claude) holds
+        the cost_usd / claude-output.jsonl surface from PKG-26 — without this
+        delegation that surface stays dark on the spacedock variant.
+        """
+        if self._inner is not None and hasattr(
+            self._inner, "populate_context_post_run"
+        ):
+            self._inner.populate_context_post_run(context)

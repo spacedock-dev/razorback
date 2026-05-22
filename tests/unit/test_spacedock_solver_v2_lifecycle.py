@@ -1,18 +1,16 @@
 # ABOUTME: AC-2 + AC-6, halt-resume lifecycle wiring; freeze-dir resolution per b5 contract.
 # ABOUTME: Tests resolve_freeze_dir, first-stage init, sealed_hash.txt write, resume-restore.
 
-from types import SimpleNamespace
+import subprocess
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from harbor.environments.base import EnvironmentPaths
 
 from razorback.agents.spacedock_solver_v2 import (
     CHECKPOINT_RUN_AFTER_AGENT,
     CHECKPOINT_RUN_BEFORE_AGENT,
     CHECKPOINT_SETUP_READY,
     SpacedockSolverAgent,
-    SpacedockSolverAgentError,
 )
 from razorback.errors import SeedMismatchError
 
@@ -40,18 +38,11 @@ def _kw(tmp_path, **overrides):
     return base
 
 
-def _exec_result(return_code=0):
-    return MagicMock(return_code=return_code)
-
-
-def _stage_commit_messages(fake_env):
-    calls = [c.args[0] for c in fake_env.exec.call_args_list]
-    prefix = " commit -q --allow-empty -m "
-    return [
-        call.rsplit(prefix, 1)[1].strip("'")
-        for call in calls
-        if prefix in call and "stage: " in call
-    ]
+def _git_commit_subjects(path):
+    out = subprocess.check_output(
+        ["git", "-C", str(path), "log", "--format=%s"], text=True
+    )
+    return out.splitlines()
 
 
 def test_freeze_dir_resolves_to_sealed_hash_keyed_external_path(tmp_path):
@@ -99,20 +90,35 @@ async def test_first_stage_writes_sealed_hash_txt(tmp_path):
 
 @pytest.mark.asyncio
 async def test_resume_restores_workspace_from_freeze_git(tmp_path):
-    """b5 contract point 5: on resume, restore from <freeze_dir>/.git/."""
+    """b5 contract point 5: on resume, restore from <freeze_dir>/.git/ on host."""
     agent = SpacedockSolverAgent(**_kw(tmp_path))
     freeze = agent.resolve_freeze_dir()
     freeze.mkdir(parents=True)
     (freeze / "sealed_hash.txt").write_text(agent.sealed_hash)
-    (freeze / ".git").mkdir()
+    subprocess.run(["git", "-C", str(freeze), "init", "-q"], check=True)
+    subprocess.run(
+        ["git", "-C", str(freeze), "config", "user.email", "razorback@local"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(freeze), "config", "user.name", "razorback"], check=True,
+    )
+    subprocess.run(["git", "-C", str(freeze), "add", "-A"], check=True)
+    subprocess.run(
+        ["git", "-C", str(freeze), "commit", "-q", "-m", "seed"], check=True,
+    )
     fake_env = MagicMock()
     fake_env.exec = AsyncMock(return_value=MagicMock(return_code=0))
     agent._inner = MagicMock()
     agent._inner.setup = AsyncMock()
     await agent.setup(fake_env)
-    git_calls = [c.args[0] for c in fake_env.exec.call_args_list if "git" in c.args[0]]
-    assert any("checkout" in c for c in git_calls), (
-        f"setup did not call git checkout on resume; calls: {git_calls}"
+    # Resume path runs `git checkout -- .` on host (no environment.exec for git).
+    env_git_calls = [
+        c.args[0] for c in fake_env.exec.call_args_list
+        if c.args and "git" in str(c.args[0])
+    ]
+    assert env_git_calls == [], (
+        f"resume path executed git via environment.exec: {env_git_calls}"
     )
 
 
@@ -133,15 +139,22 @@ async def test_resume_with_mismatched_sealed_hash_in_freeze_dir_refuses(tmp_path
 
 @pytest.mark.asyncio
 async def test_first_stage_runs_git_init(tmp_path):
-    """b5 contract point 3: create freeze dir + git init on first stage."""
+    """b5 contract point 3: create freeze dir + git init on first stage (on host)."""
     agent = SpacedockSolverAgent(**_kw(tmp_path))
     fake_env = MagicMock()
     fake_env.exec = AsyncMock(return_value=MagicMock(return_code=0))
     agent._inner = MagicMock()
     agent._inner.setup = AsyncMock()
     await agent.setup(fake_env)
-    git_calls = [c.args[0] for c in fake_env.exec.call_args_list if "git" in c.args[0]]
-    assert any("init" in c for c in git_calls), f"git init missing; calls: {git_calls}"
+    # Host-side git: a real .git dir lands at the freeze path.
+    assert (agent.resolve_freeze_dir() / ".git").is_dir()
+    env_git_calls = [
+        c.args[0] for c in fake_env.exec.call_args_list
+        if c.args and "git" in str(c.args[0])
+    ]
+    assert env_git_calls == [], (
+        f"setup executed git via environment.exec: {env_git_calls}"
+    )
 
 
 @pytest.mark.asyncio
@@ -158,140 +171,8 @@ async def test_setup_and_run_write_named_checkpoint_commits(tmp_path):
     await agent.setup(fake_env)
     await agent.run("solve this", fake_env, context)
 
-    assert _stage_commit_messages(fake_env) == [
-        f"stage: {CHECKPOINT_SETUP_READY}",
-        f"stage: {CHECKPOINT_RUN_BEFORE_AGENT}",
+    assert _git_commit_subjects(agent.resolve_freeze_dir())[:3] == [
         f"stage: {CHECKPOINT_RUN_AFTER_AGENT}",
+        f"stage: {CHECKPOINT_RUN_BEFORE_AGENT}",
+        f"stage: {CHECKPOINT_SETUP_READY}",
     ]
-
-
-@pytest.mark.asyncio
-async def test_first_stage_uses_container_freeze_mount_for_git_commands(tmp_path):
-    """PKG-29: containerized git commands use the mounted freeze root."""
-    agent = SpacedockSolverAgent(**_kw(tmp_path))
-    fake_env = SimpleNamespace(env_paths=EnvironmentPaths())
-    fake_env.exec = AsyncMock(return_value=_exec_result(0))
-    agent._inner = MagicMock()
-    agent._inner.setup = AsyncMock()
-
-    await agent.setup(fake_env)
-
-    calls = [c.args[0] for c in fake_env.exec.call_args_list]
-    assert any(
-        f"git -c safe.directory=/razorback-freeze/{agent.sealed_hash} "
-        f"-C /razorback-freeze/{agent.sealed_hash} init -q" == cmd
-        for cmd in calls
-    )
-    assert f"chmod -R a+rwX /razorback-freeze/{agent.sealed_hash}" in calls
-    assert not any(str(agent.resolve_freeze_dir()) in cmd for cmd in calls)
-
-
-@pytest.mark.asyncio
-async def test_freeze_repo_init_error_includes_stdout_and_stderr(tmp_path):
-    """PKG-29: freeze-repo git failures expose command output for diagnosis."""
-    agent = SpacedockSolverAgent(**_kw(tmp_path))
-    fake_env = MagicMock()
-
-    async def fake_exec(cmd, **_kwargs):
-        if " -C " in cmd and " init " in cmd:
-            result = _exec_result(128)
-            result.stdout = "out text"
-            result.stderr = "fatal: bad path"
-            return result
-        return _exec_result(0)
-
-    fake_env.exec = AsyncMock(side_effect=fake_exec)
-    agent._inner = MagicMock()
-    agent._inner.setup = AsyncMock()
-
-    with pytest.raises(SpacedockSolverAgentError) as excinfo:
-        await agent.setup(fake_env)
-
-    message = str(excinfo.value)
-    assert "freeze repo init failed at:" in message
-    assert "rc=128" in message
-    assert "stdout='out text'" in message
-    assert "stderr='fatal: bad path'" in message
-
-
-@pytest.mark.asyncio
-async def test_first_stage_installs_git_before_git_init_when_missing(tmp_path):
-    """PKG-29 AC-1: missing git is installed before sealed freeze repo init."""
-    agent = SpacedockSolverAgent(**_kw(tmp_path))
-    fake_env = MagicMock()
-
-    async def fake_exec(cmd, **_kwargs):
-        if cmd == "command -v git >/dev/null 2>&1":
-            prior_calls = [c.args[0] for c in fake_env.exec.call_args_list[:-1]]
-            installed = any("apt-get install" in c for c in prior_calls)
-            return _exec_result(0 if installed else 1)
-        if cmd == "command -v apk >/dev/null 2>&1":
-            return _exec_result(1)
-        return _exec_result(0)
-
-    fake_env.exec = AsyncMock(side_effect=fake_exec)
-    agent._inner = MagicMock()
-    agent._inner.setup = AsyncMock()
-
-    await agent.setup(fake_env)
-
-    calls = [c.args[0] for c in fake_env.exec.call_args_list]
-    install_index = calls.index(
-        "DEBIAN_FRONTEND=noninteractive apt-get update -qq && "
-        "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git"
-    )
-    install_call = fake_env.exec.call_args_list[install_index]
-    assert install_call.kwargs["env"]["HTTP_PROXY"] == ""
-    assert install_call.kwargs["env"]["https_proxy"] == ""
-    init_index = next(
-        i for i, cmd in enumerate(calls) if " -C " in cmd and "init" in cmd
-    )
-    assert install_index < init_index
-
-
-@pytest.mark.asyncio
-async def test_setup_reports_clear_error_when_git_has_no_package_manager(tmp_path):
-    """PKG-29 AC-2: unsupported install path names sealed freeze repo git requirement."""
-    agent = SpacedockSolverAgent(**_kw(tmp_path))
-    fake_env = MagicMock()
-
-    async def fake_exec(cmd, **_kwargs):
-        if cmd.startswith("command -v "):
-            return _exec_result(1)
-        return _exec_result(0)
-
-    fake_env.exec = AsyncMock(side_effect=fake_exec)
-    agent._inner = MagicMock()
-    agent._inner.setup = AsyncMock()
-
-    with pytest.raises(
-        SpacedockSolverAgentError,
-        match="git is required for the sealed freeze repo",
-    ):
-        await agent.setup(fake_env)
-
-
-@pytest.mark.asyncio
-async def test_setup_reports_clear_error_when_git_install_fails(tmp_path):
-    """PKG-29 AC-2: install failure names sealed freeze repo git requirement."""
-    agent = SpacedockSolverAgent(**_kw(tmp_path))
-    fake_env = MagicMock()
-
-    async def fake_exec(cmd, **_kwargs):
-        if cmd == "command -v git >/dev/null 2>&1":
-            return _exec_result(1)
-        if cmd == "command -v apk >/dev/null 2>&1":
-            return _exec_result(0)
-        if cmd == "apk add --no-cache git":
-            return _exec_result(42)
-        return _exec_result(0)
-
-    fake_env.exec = AsyncMock(side_effect=fake_exec)
-    agent._inner = MagicMock()
-    agent._inner.setup = AsyncMock()
-
-    with pytest.raises(
-        SpacedockSolverAgentError,
-        match="git is required for the sealed freeze repo.*apk.*rc=42",
-    ):
-        await agent.setup(fake_env)

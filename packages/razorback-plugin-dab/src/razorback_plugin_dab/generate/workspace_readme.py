@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 
-WORKSPACE_VARIANTS = ("direct-minimal", "direct-structured", "spacedock")
+WORKSPACE_VARIANTS = ("spacedock", "direct-structured", "direct-minimal")
 
 
 _DIRECT_MINIMAL = """# Task

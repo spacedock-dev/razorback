@@ -130,6 +130,7 @@ class HarborDabBenchmarkBlock(BaseModel):
     datasets: list[str] = Field(min_length=1)
     workspace_variant: Literal["direct-minimal", "direct-structured", "spacedock"] = "direct-minimal"
     hints: bool = False
+    query_mode: Literal["batch", "per-query"] = "per-query"
 
 
 class AdeBenchTaskEntry(BaseModel):

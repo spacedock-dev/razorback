@@ -29,3 +29,31 @@ def write_stratum_file(
     tests_dir.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(payload, indent=2) + "\n")
     return out
+
+
+def batch_stratum_payload(
+    *, dataset: str, query_ids: list[int], backends: tuple[str, ...]
+) -> dict:
+    return {
+        "stratum": {
+            "dataset": dataset,
+            "query_ids": list(query_ids),
+            "backends": list(backends),
+        }
+    }
+
+
+def write_batch_stratum_file(
+    *,
+    tests_dir: Path,
+    dataset: str,
+    query_ids: list[int],
+    backends: tuple[str, ...],
+) -> Path:
+    payload = batch_stratum_payload(
+        dataset=dataset, query_ids=query_ids, backends=backends,
+    )
+    out = tests_dir / "stratum.json"
+    tests_dir.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(payload, indent=2) + "\n")
+    return out

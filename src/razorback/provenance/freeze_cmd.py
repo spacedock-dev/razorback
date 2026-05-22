@@ -114,6 +114,7 @@ def freeze_command(
     if solver_workflow_hash is not None:
         frozen_provenance_block["solver_workflow_hash"] = solver_workflow_hash
     frozen_body["provenance"] = frozen_provenance_block
+
     frozen_path.write_text(yaml.safe_dump(frozen_body, sort_keys=False))
 
     write_provenance_yaml(spec_path.parent / "provenance.yaml", resolved)
@@ -159,6 +160,8 @@ def _stamp_v2_sealed_fields(
         return
     if solver_workflow_hash is not None:
         agent["solver_workflow_content_hash"] = solver_workflow_hash
+    if agent.get("spacedock_skill_version") is None:
+        agent["spacedock_skill_version"] = "1.0.0"
     harbor_agent_kwargs = build_v2_harbor_agent_kwargs(
         max_turns=agent.get("max_turns"),
         tools_allowed=agent.get("tools_allowed"),
