@@ -319,7 +319,7 @@ def _build_ade_bench(
                 source_task_dir=r.path,
                 view_root=view_root,
                 task_slug=r.path.name,
-                docker_image=docker_image,
+                docker_image=spec.benchmark.docker_image_override,
                 view_mode="copy",
             )
             tasks.append(TaskConfig(path=materialized))

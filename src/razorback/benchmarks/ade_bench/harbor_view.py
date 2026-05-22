@@ -9,7 +9,6 @@ from razorback.harbor_tasks.materialize import materialize_harbor_task_view
 
 ADE_BENCH_DENY_GLOBS = DEFAULT_SOLUTION_DENY_GLOBS + (
     "seeds/solution__*.csv",
-    "**/solution__*.csv",
 )
 
 
