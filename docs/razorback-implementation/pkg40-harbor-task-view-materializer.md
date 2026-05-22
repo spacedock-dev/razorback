@@ -10,7 +10,7 @@ score: 0.95
 worktree: .worktrees/spacedock-ensign-pkg40-harbor-task-view-materializer
 issue:
 pr:
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 ## Problem
