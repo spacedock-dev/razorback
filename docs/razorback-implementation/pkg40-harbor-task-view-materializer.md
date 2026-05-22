@@ -221,3 +221,16 @@ Cycle 3 fixed only the AC-5 validation blocker. The public score loader now pres
 Commands run: `uv run --frozen pytest tests/unit/test_score_load.py tests/unit/test_score_reduce.py tests/unit/test_score_render.py tests/unit/test_score_json_schema_snapshot.py -q` (`28 passed`); `uv run --frozen rk score runs/pkg40-cycle2/runs-python/pkg40-ade-harbor-task-view-codex/72b3dd571f3c865f --format json` (succeeded with ADE identity and pass@1/reward signal); `uv run --frozen pytest tests/unit/test_task_identity_scoring.py tests/integration/test_v2_freeze_dir_mechanism.py tests/unit/test_harbor_task_view_materializer.py tests/unit/test_harbor_task_view_leakage.py tests/unit/test_ade_bench_harbor_view.py tests/unit/test_spider2_dbt_harbor_view.py tests/unit/test_translate_harbor_task_batches.py tests/unit/test_codex_benchmark_spec_generator.py tests/unit/test_ade_bench_schema.py tests/unit/test_ade_bench_translator.py tests/unit/test_ade_bench_translator_local_root.py -q` (`53 passed`); `git diff --check`.
 
 No new blockers. Prior accepted fixes remain intact: the retired local ADE score-spec path is still blocked, the ADE `rk run` summary artifact remains `runs/pkg40-cycle2/runs-python/pkg40-ade-harbor-task-view-codex/72b3dd571f3c865f/summary.json`, and the Spider2 live-data blocker remains non-blocking fixture-backed evidence from earlier cycles.
+
+## Stage Report: validation (cycle 3)
+
+- DONE: Validation cycle 3 report confirms AC-5 public scoring path with exact command/output and all AC-1..AC-8 statuses.
+  Evidence: `docs/razorback-implementation/validation/pkg40-harbor-task-view-materializer.md` records AC-1 PASS through AC-8 PASS; exact `uv run --frozen rk score runs/pkg40-cycle2/runs-python/pkg40-ade-harbor-task-view-codex/72b3dd571f3c865f --format json` output reports dataset `ade-bench`, query/task id `adebench-fixture-001`, `n_pass: 1`, `pass_at_1: 1.0`, and `stratified_pass_at_1: 1.0`.
+- DONE: Independent code review finds no blocking issue, or rejects with concrete implementation fixes.
+  Evidence: reviewed cycle-3 commit `3fc4ccb` score loader/reducer/renderer changes and focused tests; no blocking or non-blocking findings were identified.
+- DONE: Stage report gives a gate recommendation and names the ADE score output, ADE summary artifact, and Spider2 blocker status.
+  Evidence: gate recommendation is PASS/approve under delegated auto-approval, not human-gated; ADE score output is the exact `rk score` JSON above; ADE summary artifact is `runs/pkg40-cycle2/runs-python/pkg40-ade-harbor-task-view-codex/72b3dd571f3c865f/summary.json`; Spider2 live export remains blocked at Harbor `git checkout 82d1fb0c144d28b1fd9852006cee0a39e74bd4a8`.
+
+### Summary
+
+Validation cycle 3 rechecked the prior AC-5 blocker with the exact public scoring command, reran focused score tests and the PKG-40 regression set, spot-checked AC-1 and AC-3 artifacts, and reconfirmed the Spider2 live-data blocker. All ACs pass, no blocking code-review issue was found, and the recommendation is approve under delegated auto-approval; this was not human-gated.

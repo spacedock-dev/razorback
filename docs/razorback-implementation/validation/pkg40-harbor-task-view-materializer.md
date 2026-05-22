@@ -775,3 +775,302 @@ find runs/pkg40-validation-cycle2/job-configs -type f \( -path '*/solution/*' -o
 - DONE: Validation cycle 2 report re-checks AC-1 and AC-3 fixes with exact commands/output and confirms all AC-1..AC-8 statuses.
 - DONE: Independent code review finds no blocking issue, or rejects with concrete implementation fixes.
 - DONE: Stage report gives a gate recommendation and names the ADE summary artifact and Spider2 blocker status.
+
+## Validation Cycle 3
+
+Validator: `dy-validation3/Ensign`
+Date: 2026-05-21
+Branch: `spacedock-ensign/pkg40-harbor-task-view-materializer`
+Worktree: `/home/exedev/razorback/.worktrees/spacedock-ensign-pkg40-harbor-task-view-materializer`
+
+## Gate Decision
+
+PASS. Recommend approval under delegated auto-approval; this was not human-gated.
+
+Blocking findings: none.
+
+Non-blocking findings: none.
+
+## Acceptance Criteria
+
+### AC-1 - PASS
+
+Spot-check confirms new ADE score specs reject the retired local upstream shape
+and emit Harbor-shaped task-root specs without `ade_bench_root` or `{slug: ...}`.
+
+```bash
+uv run --frozen python - <<'PY'
+import importlib.util, tempfile, yaml
+from pathlib import Path
+from pydantic import ValidationError
+from razorback.errors import SpecError
+from razorback.spec.schema import AdeBenchBenchmarkBlock, AdeBenchLocalTaskEntry, NopAgentBlock, Spec
+from razorback.translate import spec_to_job_config
+
+module_path = Path('examples/drivers/generate-codex-benchmark-specs.py').resolve()
+spec = importlib.util.spec_from_file_location('generator', module_path)
+generator = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(generator)
+
+with tempfile.TemporaryDirectory() as d:
+    d = Path(d)
+    upstream = d / 'ade-bench-upstream'
+    task = upstream / 'tasks' / 'example001'
+    task.mkdir(parents=True)
+    (task / 'task.yaml').write_text('task_id: example001\n')
+    try:
+        generator.plan_ade_bench_specs(ade_bench_root=upstream)
+    except (ValueError, FileNotFoundError) as exc:
+        print(f'upstream_error={exc}')
+    else:
+        raise AssertionError('generator accepted retired upstream ADE task.yaml root')
+
+    harbor = d / 'ade-bench-harbor'
+    htask = harbor / 'adebench-fixture-001'
+    htask.mkdir(parents=True)
+    (htask / 'task.toml').write_text('[task]\nname = "adebench-fixture-001"\n')
+    row = generator.plan_ade_bench_specs(ade_bench_root=harbor)[0]
+    spec_path = generator.emit_ade_bench_spec(row, out_dir=d / 'out')
+    payload = yaml.safe_load(spec_path.read_text())
+    print(f'row.input_shape={row.input_shape}')
+    print(f'benchmark_keys={sorted(payload["benchmark"].keys())}')
+    print(f'tasks={payload["benchmark"]["tasks"]}')
+    print(f'has_ade_bench_root={"ade_bench_root" in payload["benchmark"]}')
+
+try:
+    Spec(version=1, experiment='pkg40-retired-local-shape', agent=NopAgentBlock(kind='nop'), benchmark={'kind': 'ade-bench', 'tasks_root': '.', 'ade_bench_root': '/tmp/retired-ade-root', 'tasks': [{'slug': 'example001'}]}, trials=1, observers=[])
+except ValidationError as exc:
+    print('schema_error_contains_ade_bench_root=' + str('ade_bench_root' in str(exc)))
+    print('schema_error_contains_slug=' + str('slug' in str(exc)))
+else:
+    raise AssertionError('schema accepted retired local ADE score shape')
+
+block = AdeBenchBenchmarkBlock.model_construct(kind='ade-bench', tasks_root=Path('.'), tasks=[AdeBenchLocalTaskEntry(slug='example001')])
+constructed = Spec.model_construct(version=1, experiment='pkg40-translator-legacy-guard', agent=NopAgentBlock(kind='nop'), benchmark=block, trials=1, observers=[])
+try:
+    spec_to_job_config(spec=constructed, job_name='pkg40-legacy-guard', jobs_dir=Path(tempfile.mkdtemp()))
+except SpecError as exc:
+    print(f'translator_error={exc}')
+else:
+    raise AssertionError('translator accepted retired local ADE task entry')
+PY
+```
+
+Output:
+
+```text
+upstream_error=ade-bench score specs require a Harbor-shaped task root containing */task.toml entries; upstream tasks/*/task.yaml roots are retired: /tmp/tmprqgeb6a0/ade-bench-upstream
+row.input_shape=harbor_task_root
+benchmark_keys=['batch_mode', 'kind', 'tasks', 'tasks_root']
+tasks=['adebench-fixture-001']
+has_ade_bench_root=False
+schema_error_contains_ade_bench_root=True
+schema_error_contains_slug=True
+translator_error=ade-bench local upstream task entries are retired for score specs; provide Harbor-shaped task directories under tasks_root with tasks: ['<task-id>'].
+```
+
+### AC-2 - PASS
+
+Generic materializer regression coverage remains green as part of the PKG-40
+regression set:
+
+```bash
+uv run --frozen pytest tests/unit/test_task_identity_scoring.py tests/integration/test_v2_freeze_dir_mechanism.py tests/unit/test_harbor_task_view_materializer.py tests/unit/test_harbor_task_view_leakage.py tests/unit/test_ade_bench_harbor_view.py tests/unit/test_spider2_dbt_harbor_view.py tests/unit/test_translate_harbor_task_batches.py tests/unit/test_codex_benchmark_spec_generator.py tests/unit/test_ade_bench_schema.py tests/unit/test_ade_bench_translator.py tests/unit/test_ade_bench_translator_local_root.py -q
+```
+
+Output:
+
+```text
+.....................................................                    [100%]
+53 passed in 0.69s
+```
+
+### AC-3 - PASS
+
+The ADE smoke summary artifact still exists and carries the generic task-view
+identity from the ADE task-view manifest.
+
+```bash
+uv run --frozen python - <<'PY'
+import json
+from pathlib import Path
+summary_path = Path('runs/pkg40-cycle2/runs-python/pkg40-ade-harbor-task-view-codex/72b3dd571f3c865f/summary.json')
+summary = json.loads(summary_path.read_text())
+trial = summary['trials'][0]
+stratum = trial['stratum']
+view_manifest = summary_path.parent / '_razorback' / 'task_views' / 'ade-bench-adebench-fixture-001' / 'view_manifest.json'
+manifest = json.loads(view_manifest.read_text())
+print(f'summary_path={summary_path}')
+print(f'n_trials_total={summary["n_trials_total"]}')
+print(f'n_trials_completed={summary["n_trials_completed"]}')
+print(f'n_trials_errored={summary["n_trials_errored"]}')
+print(f'stratified_pass_at_1={summary["stratified_pass_at_1"]}')
+print(f'trial_id={trial["trial_id"]}')
+print(f'reward={trial["reward"]}')
+print(f'dataset={stratum["dataset"]}')
+print(f'query_id={stratum["query_id"]}')
+print(f'benchmark_task_id={stratum["benchmark_task_id"]}')
+print(f'manifest_path={view_manifest}')
+print(f'manifest_kind={manifest["benchmark_kind"]}')
+print(f'manifest_task_id={manifest["benchmark_task_id"]}')
+print(f'manifest_transform={manifest["transform_name"]}')
+PY
+```
+
+Output:
+
+```text
+summary_path=runs/pkg40-cycle2/runs-python/pkg40-ade-harbor-task-view-codex/72b3dd571f3c865f/summary.json
+n_trials_total=1
+n_trials_completed=1
+n_trials_errored=0
+stratified_pass_at_1=1.0
+trial_id=ade-bench-adebench-fixture-001__NyS5nr6
+reward=1.0
+dataset=ade-bench
+query_id=adebench-fixture-001
+benchmark_task_id=adebench-fixture-001
+manifest_path=runs/pkg40-cycle2/runs-python/pkg40-ade-harbor-task-view-codex/72b3dd571f3c865f/_razorback/task_views/ade-bench-adebench-fixture-001/view_manifest.json
+manifest_kind=ade-bench
+manifest_task_id=adebench-fixture-001
+manifest_transform=ade-bench-harbor-task-view
+```
+
+ADE summary artifact:
+`runs/pkg40-cycle2/runs-python/pkg40-ade-harbor-task-view-codex/72b3dd571f3c865f/summary.json`.
+
+### AC-4 - PASS
+
+Spider2 live export remains blocked by the same upstream Harbor package checkout
+failure; fixture-backed materializer coverage remains green.
+
+```bash
+uv run --frozen harbor download spider2-dbt@1.0 --output-dir runs/pkg40-validation-cycle3/spider2-download --export --overwrite
+```
+
+Output excerpt:
+
+```text
+Downloading dataset: spider2-dbt@1.0
+0/64 Downloading tasks...
+CalledProcessError: Command '['git', 'checkout', '82d1fb0c144d28b1fd9852006cee0a39e74bd4a8']' returned non-zero exit status 128.
+```
+
+Spider2 live-data blocker status: non-blocking, fixture-backed; live export is
+blocked before model execution at Harbor `git checkout
+82d1fb0c144d28b1fd9852006cee0a39e74bd4a8`.
+
+### AC-5 - PASS
+
+The public `rk score` path now resolves ADE task-view identity from the existing
+cycle-2 run artifacts and reports the expected pass fields.
+
+```bash
+uv run --frozen rk score runs/pkg40-cycle2/runs-python/pkg40-ade-harbor-task-view-codex/72b3dd571f3c865f --format json
+```
+
+Output:
+
+```json
+{
+  "score_version": 1,
+  "alpha": 0.05,
+  "strata": {
+    "ade-bench": {
+      "dataset": "ade-bench",
+      "query_id": "adebench-fixture-001",
+      "benchmark_kind": "ade-bench",
+      "benchmark_task_id": "adebench-fixture-001",
+      "n_total": 1,
+      "n_completed": 1,
+      "n_errored": 0,
+      "n_pass": 1,
+      "pass_at_1": 1.0,
+      "wilson_ci": [
+        0.20654931437723745,
+        1.0
+      ],
+      "error_reason": null
+    }
+  },
+  "stratified_pass_at_1": 1.0,
+  "stratified_n_completed": 1,
+  "stratified_n_errored": 0,
+  "error_reason": null
+}
+```
+
+Focused score regression coverage:
+
+```bash
+uv run --frozen pytest tests/unit/test_score_load.py tests/unit/test_score_reduce.py tests/unit/test_score_render.py tests/unit/test_score_json_schema_snapshot.py -q
+```
+
+Output:
+
+```text
+............................                                             [100%]
+28 passed in 0.99s
+```
+
+### AC-6 - PASS
+
+Freeze/resume task-identity coverage remains green in the PKG-40 regression set:
+`53 passed in 0.69s`.
+
+### AC-7 - PASS
+
+Per-task batching and explicit shared-context behavior remain covered in the
+PKG-40 regression set: `53 passed in 0.69s`.
+
+### AC-8 - PASS
+
+Leakage regression tests passed in the PKG-40 regression set, and a direct scan
+of the ADE task view returned no denied solution or answer paths.
+
+```bash
+find runs/pkg40-cycle2/runs-python/pkg40-ade-harbor-task-view-codex/72b3dd571f3c865f/_razorback/task_views -type f \( -path '*/solution/*' -o -path '*/tests/expected/*' -o -name '*answer*' \) -print
+```
+
+Output:
+
+```text
+```
+
+## Code Review Findings
+
+### Blocking
+
+None.
+
+Cycle-3 code changes are scoped to `src/razorback/score/load.py`,
+`src/razorback/score/reduce.py`, `src/razorback/score/render.py`, and focused
+score tests. The loader now falls back to `_razorback/task_views/*/view_manifest.json`
+when no stratum sidecar exists, carries the task-view identity through reduction,
+and renders it in public JSON without changing pass/fail aggregation.
+
+### Non-Blocking
+
+None.
+
+## Commands Run
+
+- `git status --short --branch`
+- `sed -n '1,260p' docs/razorback-implementation/pkg40-harbor-task-view-materializer.md`
+- `sed -n '1,260p' docs/razorback-implementation/validation/pkg40-harbor-task-view-materializer.md`
+- `uv run --frozen rk score runs/pkg40-cycle2/runs-python/pkg40-ade-harbor-task-view-codex/72b3dd571f3c865f --format json`
+- `uv run --frozen pytest tests/unit/test_score_load.py tests/unit/test_score_reduce.py tests/unit/test_score_render.py tests/unit/test_score_json_schema_snapshot.py -q`
+- `uv run --frozen pytest tests/unit/test_task_identity_scoring.py tests/integration/test_v2_freeze_dir_mechanism.py tests/unit/test_harbor_task_view_materializer.py tests/unit/test_harbor_task_view_leakage.py tests/unit/test_ade_bench_harbor_view.py tests/unit/test_spider2_dbt_harbor_view.py tests/unit/test_translate_harbor_task_batches.py tests/unit/test_codex_benchmark_spec_generator.py tests/unit/test_ade_bench_schema.py tests/unit/test_ade_bench_translator.py tests/unit/test_ade_bench_translator_local_root.py -q`
+- `uv run --frozen python - <<'PY'` AC-1 generator/schema/translator probe shown above
+- `uv run --frozen python - <<'PY'` ADE summary/view-manifest probe shown above
+- `uv run --frozen harbor download spider2-dbt@1.0 --output-dir runs/pkg40-validation-cycle3/spider2-download --export --overwrite`
+- `find runs/pkg40-cycle2/runs-python/pkg40-ade-harbor-task-view-codex/72b3dd571f3c865f/_razorback/task_views -type f \( -path '*/solution/*' -o -path '*/tests/expected/*' -o -name '*answer*' \) -print`
+- `git show --no-renames --format=fuller --find-renames=0 3fc4ccb -- src/razorback/score/load.py src/razorback/score/reduce.py src/razorback/score/render.py tests/unit/test_score_load.py tests/unit/test_score_render.py`
+- `git diff --check`
+
+## Completion Checklist
+
+- DONE: Validation cycle 3 report confirms AC-5 public scoring path with exact command/output and all AC-1..AC-8 statuses.
+- DONE: Independent code review finds no blocking issue.
+- DONE: Stage report gives a gate recommendation and names the ADE score output, ADE summary artifact, and Spider2 blocker status.
