@@ -107,3 +107,27 @@ Plan doc: `docs/razorback-implementation/plans/runs-aggregate-single-score-reduc
 ### Summary
 
 The plan keeps `reduce_per_query_stratified` as the single canonical reducer and moves the behavior fix into `read_trial_outcomes` — fan a batch trial into N outcome rows when `reward_per_query.json` exists, otherwise preserve today's one-row-per-trial path. `aggregate_summary` is rewritten to call the canonical reducer and render its `StratifiedReport` into the existing `summary.json` `datasets` shape; `_stratified_pass_at_1` is deleted. Riskiest contract is the sidecar parser + outcome-fan path, validated end-to-end by Task 1's 6/7 fixture before any downstream rewrite. Out of scope: the `goal1-rerun` 12/12 recompute (separate follow-on dispatch) and any change to `per_trial_outcomes.json` / `rk runs diff`.
+
+## Stage Report: implementation
+
+- DONE: Execute Task 1 (Mechanism Validation First — RED 6/7 fixture)
+  Fixture `tests/fixtures/score/dab_batch_run_dir/yelp__Cc94VEd/` (composite reward 0.857, sidecar of six 1.0s + one 0.0) + RED test `tests/unit/test_runs_aggregate_per_query_reducer.py::test_batch_mode_reads_reward_per_query_sidecar` committed at 56f9290; confirmed RED ("{None: 0}" vs expected "{1:1,...,4:0,...,7:1}") before any production code change.
+- DONE: Execute plan Tasks 2-4 (T2 sidecar reader; T3 delete `_stratified_pass_at_1`; T4 render adapter)
+  T2 (commit 290d958): added `_load_reward_per_query` (mirrors legacy `_load_per_query_rewards`) and `_fan_batch_trial` in `src/razorback/runs/aggregate.py`; `read_trial_outcomes` now emits one row per `qN` when the sidecar exists. T1 went GREEN; aggregate unit tests still pass (22/22). T3+T4 (commit fb4732b): `_stratified_pass_at_1` deleted, `aggregate_summary` rewritten to call `reduce_per_query_stratified` with explicit `trial_counts` so trial accounting stays per physical trial despite fanning; `_render_legacy_datasets(report)` maps `StratifiedReport.strata` into the legacy `{dataset_pass_at_1, n_queries, queries:[{query_id,n_trials,n_correct,pass_at_1}]}` shape verbatim (no per-cell wilson_ci, no stratum-level metadata). `rk score` CLI passes the same override via the new public `count_trials(run_dir)` helper. `grep '_stratified_pass_at_1' src/ tests/` returns 0 matches outside `_legacy/`.
+- DONE: Execute plan Tasks 5-6 (T5 three-family coverage; T6 paired integration regression)
+  Commit 3b594ee: `test_runs_aggregate_per_query_reducer.py` now exercises all three families — the new `dab_batch_run_dir` (sidecar fan + render-adapter snapshot for AC-2), `mixed_trial_run_dir` (DAB per-query, fall-through), and `ade_bench_run_dir` (task-view stratum, no `dataset` key, no sidecar). `tests/integration/test_rk_score_matches_summary.py::test_rk_score_matches_summary_json_for_dab_batch_fixture` asserts `summary['stratified_pass_at_1'] == score['stratified_pass_at_1'] == 6/7` on the new fixture. Full integration suite 4/4 passing; full pytest suite passes except 10 pre-existing failures (LFS-hydration + matrix-spec-generator + dab-retirement) that reproduce on baseline `main` (verified by `git stash`/baseline pytest).
+
+### Summary
+
+Collapsed the two stratified pass@1 reducers into one canonical reducer
+(`reduce_per_query_stratified`), with the DAB batch-mode fix moved into
+`read_trial_outcomes` via a per-query sidecar reader that fans one trial into
+N outcome rows keyed `(dataset, query_id)`. `aggregate_summary` is now a thin
+render adapter over the canonical reducer; the private duplicate
+`_stratified_pass_at_1` is deleted. Trial accounting stays per physical trial
+via an optional `trial_counts` override (used by both `aggregate_summary` and
+`rk score` CLI through the new public `count_trials(run_dir)` helper). The
+6/7 yelp regression is now caught in three places: the unit reducer test, the
+render-adapter snapshot, and the paired integration regression. Branch
+`spacedock-ensign/runs-aggregate-single-score-reducer`, 4 commits
+(56f9290, 290d958, fb4732b, 3b594ee).
