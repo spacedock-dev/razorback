@@ -66,7 +66,7 @@ def test_spacedock_solver_emits_import_path(
 
     assert len(jc.agents) == 1
     agent_cfg = jc.agents[0]
-    assert agent_cfg.import_path == "razorback.agents.spacedock_solver_v2:SpacedockSolverAgent"
+    assert agent_cfg.import_path == "razorback.agents.spacedock_solver:SpacedockSolverAgent"
     assert agent_cfg.model_name == "gpt-5.1-codex"
     # AC-6 cross-cut: per harbor source probe (AC-0.4), auth lands on AgentConfig.env,
     # NOT kwargs. The FU-1 AC-1 invariant survives in v2.

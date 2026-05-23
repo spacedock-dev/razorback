@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from razorback.agents.spacedock_solver_v2 import SpacedockSolverAgent
+from razorback.agents.spacedock_solver import SpacedockSolverAgent
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 

@@ -31,15 +31,15 @@ from razorback.spec.schema import (
 
 
 SPACEDOCK_SOLVER_IMPORT_PATH = (
-    "razorback.agents.spacedock_solver_v2:SpacedockSolverAgent"
+    "razorback.agents.spacedock_solver:SpacedockSolverAgent"
 )
-SPACEDOCK_SOLVER_V2_ENVIRONMENT_IMPORT_PATH = (
+SPACEDOCK_SOLVER_ENVIRONMENT_IMPORT_PATH = (
     "razorback.environments.docker:ProxySeparatedDockerEnvironment"
 )
 RAZORBACK_CLAUDE_CODE_IMPORT_PATH = (
     "razorback.agents._runtime.claude:RazorbackClaudeCode"
 )
-SPACEDOCK_SOLVER_V2_CONTAINER_FREEZE_ROOT = "/razorback-freeze"
+SPACEDOCK_SOLVER_CONTAINER_FREEZE_ROOT = "/razorback-freeze"
 
 
 def spec_to_job_config(
@@ -480,14 +480,14 @@ def _environment_config(agent_cfg: AgentConfig, run_dir: Path) -> EnvironmentCon
     host_freeze_root = run_dir / "_razorback" / "freeze"
     host_freeze_root.mkdir(parents=True, exist_ok=True)
     return EnvironmentConfig(
-        import_path=SPACEDOCK_SOLVER_V2_ENVIRONMENT_IMPORT_PATH,
+        import_path=SPACEDOCK_SOLVER_ENVIRONMENT_IMPORT_PATH,
         delete=False,
         env=dict(PROXY_BLOCK_ENV),
         mounts_json=[
             {
                 "type": "bind",
                 "source": str(host_freeze_root.resolve()),
-                "target": SPACEDOCK_SOLVER_V2_CONTAINER_FREEZE_ROOT,
+                "target": SPACEDOCK_SOLVER_CONTAINER_FREEZE_ROOT,
             }
         ],
     )

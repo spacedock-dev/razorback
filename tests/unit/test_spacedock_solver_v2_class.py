@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from razorback.agents.seal import compute_sealed_hash
-from razorback.agents.spacedock_solver_v2 import (
+from razorback.agents.spacedock_solver import (
     SpacedockSolverAgent,
     SpacedockSolverAgentError,
 )

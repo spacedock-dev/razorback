@@ -166,7 +166,7 @@ class SpacedockSolverAgent(BaseAgent):
 
     @staticmethod
     def name() -> str:
-        return "spacedock-solver-v2"
+        return "spacedock_solver"
 
     def version(self) -> str | None:
         return None
