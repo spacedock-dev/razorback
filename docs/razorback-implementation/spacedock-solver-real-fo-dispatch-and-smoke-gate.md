@@ -202,6 +202,22 @@ number). If FO-dispatch produces a meaningfully different number
 (higher or lower), the spacedock crew loop's value is finally measured
 in isolation from the prompt-engineering effect.
 
+### Feedback Cycles
+
+**Cycle 1 — 2026-05-23 validation REJECT, routed back to implementation.**
+
+Validator finding (AC-2 blocker): the `_maybe_write_subagent_trace_manifest` post-run hook is wired into `SpacedockSolverAgent.cleanup()` at `src/razorback/agents/spacedock_solver.py:393-422`. Harbor's trial framework does NOT invoke `cleanup()` on the outer agent — it invokes `populate_context_post_run()` (proven by the existing delegation pattern at `spacedock_solver.py:360-371` and by the live bookreview pilot: AC-1 PASS — 3 `Agent` dispatches to `spacedock:ensign` recorded in `claude-code.txt` — but no `subagent-trace-manifest.json` written next to the trial's `provenance.yaml`).
+
+Unit test `test_spacedock_cleanup_writes_trace_manifest.py` passed in cycle-1 only because it called `agent.cleanup()` directly, bypassing the real harbor lifecycle.
+
+Routed back to implementation for the narrow fix:
+1. Move `_maybe_write_subagent_trace_manifest` invocation from `cleanup()` into `populate_context_post_run()`. Preserve inner-agent delegation (call `super().populate_context_post_run(context)` first / inner agent's own hook second, then write the manifest).
+2. Update the existing unit test (or add a sibling) to call `populate_context_post_run(context)` instead of `cleanup()` so the test exercises the same lifecycle hook harbor uses.
+3. Re-run the live bookreview pilot smoke; confirm `subagent-trace-manifest.json` appears next to `provenance.yaml` with `captured >= 1`.
+4. Optionally keep a `cleanup()` no-op fallback that warns if the manifest wasn't already written, or remove the cleanup hook entirely.
+
+Cycle count: 1 of 3.
+
 ## Stage Report: plan
 
 - DONE: Apply plan-output flex rule per README. 5 ACs but multi-subsystem ... Recommend separate plan doc.
