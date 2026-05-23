@@ -67,3 +67,16 @@ Wrote the standard implementation plan at `docs/razorback-implementation/plans/p
 ### Summary
 
 Removed the active `DabBenchmarkBlock` translator branch, retired the old parse alias, kept `harbor_dab` on the plugin subprocess path, and replaced ADE's borrowed DAB image import with a local ADE default constant. The in-tree DAB adapter and historical adapter tests moved under `_legacy`, active run-dir sidecar tests now exercise `razorback.runs.aggregate`, and empty plugin test package markers were removed so the required combined pytest command can collect plugin and repo tests together. No dataset-definition or dataset-ref work was added; that remains with `dab-harbor-dataset-definition` per the coordination boundary.
+
+## Stage Report: validation
+
+- DONE: AC-1 and AC-2 are independently verified with exact command results and rationale for any remaining allowed DAB hits.
+  Evidence: AC-1 grep returned only `packages/razorback-plugin-dab/src/razorback_plugin_dab/verify/__init__.py:2` ABOUTME provenance comment; AC-2 `test -d src/razorback/benchmarks/dab` exited `1`.
+- DONE: AC-3 required pytest command is rerun and its actual result is recorded.
+  Evidence: `uv run pytest packages/razorback-plugin-dab/tests tests/unit/test_spec_harbor_dab_block.py tests/unit/test_generate_matrix_specs.py tests/unit/test_codex_benchmark_spec_generator.py -q` exited `0` with `163 passed, 2 skipped, 1 warning`.
+- DONE: Code review findings are classified as blocking or non-blocking, with a clear PASS/REJECTED gate recommendation.
+  Evidence: `superpowers:code-reviewer` via Claude CLI found no Critical/blocking issues; non-blocking Important/Minor cleanup items are recorded in `docs/razorback-implementation/validation/phase6-followup-retire-in-tree-dab-adapter.md`; gate recommendation PASSED.
+
+### Summary
+
+Validation independently reproduced all three acceptance commands from the assigned worktree branch, and the broader `uv run pytest` suite passed with `580 passed, 12 skipped`. Gate recommendation: PASSED. The code review raised only non-blocking cleanup/hardening follow-ups around `_legacy` dead code and active-schema symbol hygiene.
