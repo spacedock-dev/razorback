@@ -189,3 +189,16 @@ Coordination risks:
 ### Summary
 
 Inline plan written on the entity per the first-officer tiny/small scope call; no separate `plans/phase6-followup-retire-cli-agent-wrapper.md` document was created. I read the packaged `spacedock:ensign` role and the cached `superpowers:writing-plans` skill guidance, inspected the Phase 6 validation report, current runtime adapter, wrapper, translation path, and focused tests, and did not edit production code.
+
+## Stage Report: implementation
+
+- DONE: Claude runtime adapter preserves auth, proxy/tool policy, sampling, setup, and telemetry behavior without importing `razorback.agents.claude_cli`.
+  `c9343b6` adds `_runtime/claude.RazorbackClaudeCode` with auth alternation/env stamping, proxy setup, tool flags, sampling metadata, version validation, and `claude-output.jsonl` sentinel publication.
+- DONE: `src/razorback/agents/claude_cli.py` is sidelined to `_legacy` or removed, with active tests retargeted to the runtime helper.
+  `34251d2` moves the wrapper to `src/razorback/_legacy/agents/claude_cli.py`, retargets active tests/comments, and leaves no active `_runtime` or translator import from the old path.
+- DONE: Required runtime adapter and tool-denial validation commands pass, or any remaining blocker is isolated with exact command output and next fix.
+  `uv run pytest tests/unit/test_runtime_adapters.py tests/unit/test_tools_denied_claude_hook.py -q` passed `18 passed`; compatibility/auth/proxy suite passed `26 passed`; import smoke printed `RazorbackClaudeCode`.
+
+### Summary
+
+Implemented the v2-owned Claude runtime helper in `src/razorback/agents/_runtime/claude.py` and kept Harbor `ClaudeCode` surfaces for CLI flags, env descriptors, setup/version behavior, and post-run cost/audit population. The standalone wrapper is retained only under `_legacy`; `translate.py` continues to route legacy `agent.kind: claude-cli` specs to `razorback.agents._runtime.claude:RazorbackClaudeCode`. No deviations from the approved inline plan.
