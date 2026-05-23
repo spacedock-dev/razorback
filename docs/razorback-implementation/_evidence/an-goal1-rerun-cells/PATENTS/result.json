@@ -1,8 +1,8 @@
 {
-    "id": "948395c9-2319-4f29-bfa9-98071c4ece1f",
-    "started_at": "2026-05-23T09:01:18.772907",
-    "updated_at": "2026-05-23T09:09:02.218217",
-    "finished_at": "2026-05-23T09:09:02.218217",
+    "id": "f7b69152-fb9f-440d-b72f-59c78157749e",
+    "started_at": "2026-05-23T10:13:26.188904",
+    "updated_at": "2026-05-23T10:23:43.971955",
+    "finished_at": "2026-05-23T10:23:43.971955",
     "n_total_trials": 1,
     "stats": {
         "n_completed_trials": 1,
@@ -13,7 +13,7 @@
         "n_retries": 0,
         "evals": {
             "spacedock_solver__claude-opus-4-7__adhoc": {
-                "n_trials": 0,
+                "n_trials": 1,
                 "n_errors": 0,
                 "metrics": [
                     {
@@ -21,7 +21,13 @@
                     }
                 ],
                 "pass_at_k": {},
-                "reward_stats": {},
+                "reward_stats": {
+                    "reward": {
+                        "0.0": [
+                            "PATENTS__vSYaYfV"
+                        ]
+                    }
+                },
                 "exception_stats": {}
             }
         },

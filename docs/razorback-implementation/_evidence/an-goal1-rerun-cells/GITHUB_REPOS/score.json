@@ -1,18 +1,47 @@
 {
   "score_version": 1,
   "alpha": 0.05,
-  "strata": {},
-  "stratified_pass_at_1": null,
-  "stratified_n_completed": 0,
-  "stratified_n_errored": 1,
+  "strata": {
+    "GITHUB_REPOS": {
+      "dataset": "GITHUB_REPOS",
+      "n_total": 1,
+      "n_completed": 1,
+      "n_errored": 0,
+      "n_pass": 0,
+      "pass_at_1": 0.0,
+      "wilson_ci": null,
+      "error_reason": null,
+      "queries": [
+        {
+          "query_id": null,
+          "n_trials": 1,
+          "n_correct": 0,
+          "pass_at_1": 0.0,
+          "wilson_ci": [
+            0.0,
+            0.7934506856227626
+          ]
+        }
+      ]
+    }
+  },
+  "stratified_pass_at_1": 0.0,
+  "stratified_n_completed": 1,
+  "stratified_n_errored": 0,
   "error_reason": null,
   "against_constant": {
     "name": "spacedock",
     "value": 0.577,
-    "per_stratum": {},
+    "per_stratum": {
+      "GITHUB_REPOS": {
+        "verdict": "below",
+        "ci": null,
+        "side": null
+      }
+    },
     "stratified": {
-      "mean": null,
-      "verdict": null
+      "mean": 0.0,
+      "verdict": "below"
     }
   }
 }

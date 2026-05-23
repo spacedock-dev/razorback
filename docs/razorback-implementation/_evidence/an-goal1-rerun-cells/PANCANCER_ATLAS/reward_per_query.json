@@ -1,0 +1,14 @@
+{
+  "q1": {
+    "reward": 0.0,
+    "reason": "Missing histology type: 9382/3"
+  },
+  "q2": {
+    "reward": 1.0,
+    "reason": "All histological types matched (fuzzy)."
+  },
+  "q3": {
+    "reward": 1.0,
+    "reason": "Matched value: 305.1239 -> rounded 305.12"
+  }
+}

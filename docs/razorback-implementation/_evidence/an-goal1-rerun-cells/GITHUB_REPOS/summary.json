@@ -3,12 +3,25 @@
   "n_trials_total": 1,
   "n_trials_completed": 1,
   "n_trials_errored": 0,
-  "stratified_pass_at_1": null,
-  "datasets": {},
+  "stratified_pass_at_1": 0.0,
+  "datasets": {
+    "GITHUB_REPOS": {
+      "dataset_pass_at_1": 0.0,
+      "n_queries": 1,
+      "queries": [
+        {
+          "query_id": null,
+          "n_trials": 1,
+          "n_correct": 0,
+          "pass_at_1": 0.0
+        }
+      ]
+    }
+  },
   "trials": [
     {
-      "trial_id": "GITHUB_REPOS__49Vf6Ks",
-      "reward": null,
+      "trial_id": "GITHUB_REPOS__PyCMP7y",
+      "reward": 0.5,
       "cost_usd": null,
       "wall_seconds": null,
       "error_reason": null,
