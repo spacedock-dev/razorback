@@ -1,13 +1,13 @@
 ---
 id: njy7knzwtg7bwjrhcfxchxat
 title: Direct Codex minimal agent kind
-status: backlog
+status: implementation
 source: Captain directive 2026-05-23 — solver variant separation
-started:
+started: 2026-05-23T21:43:32Z
 completed:
 verdict:
 score: 0.93
-worktree:
+worktree: .worktrees/spacedock-ensign-direct-codex-minimal-agent-kind
 issue:
 pr:
 mod-block:

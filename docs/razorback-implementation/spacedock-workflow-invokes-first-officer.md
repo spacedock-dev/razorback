@@ -1,13 +1,13 @@
 ---
 id: sapf12faaz8fcy34s4c3dfb0
 title: Spacedock workflow solver invokes first officer
-status: backlog
+status: implementation
 source: Captain directive 2026-05-23 — true Spacedock workflow variant
-started:
+started: 2026-05-23T21:43:32Z
 completed:
 verdict:
 score: 0.96
-worktree:
+worktree: .worktrees/spacedock-ensign-spacedock-workflow-invokes-first-officer
 issue:
 pr:
 mod-block:
