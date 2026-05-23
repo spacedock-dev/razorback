@@ -174,16 +174,19 @@ def aggregate_variant(matrix_root: Path, variant: str) -> dict[str, Any]:
         pooled_per_query_ci = None
 
     target_name, target_value = VARIANT_TARGETS[variant]
-    if stratified_mean is None:
-        verdict = "no_data"
-    else:
-        lo, hi = stratified_ci
+
+    def _verdict(ci: tuple[float, float] | None) -> str:
+        if ci is None:
+            return "no_data"
+        lo, hi = ci
         if lo <= target_value <= hi:
-            verdict = "matches"
-        elif target_value > hi:
-            verdict = "below"
-        else:
-            verdict = "above"
+            return "matches"
+        if target_value > hi:
+            return "below"
+        return "above"
+
+    verdict = _verdict(stratified_ci)
+    per_query_verdict = _verdict(pooled_per_query_ci)
 
     return {
         "variant": variant,
@@ -205,6 +208,7 @@ def aggregate_variant(matrix_root: Path, variant: str) -> dict[str, Any]:
             "name": target_name,
             "value": target_value,
             "verdict": verdict,
+            "per_query_verdict": per_query_verdict,
         },
         "strata": strata,
     }
