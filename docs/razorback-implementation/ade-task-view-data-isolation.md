@@ -1,13 +1,13 @@
 ---
 id: kcns444rns45420fe4g0jaza
 title: ADE task-view data isolation preflight
-status: plan
+status: implementation
 source: Goal 4 invalid full-run blocker 2026-05-23
 started: 2026-05-23T20:43:23Z
 completed:
 verdict:
 score: 0.9
-worktree:
+worktree: .worktrees/spacedock-ensign-ade-task-view-data-isolation
 issue:
 pr:
 mod-block:
