@@ -451,13 +451,15 @@ class SpacedockSolverAgent(BaseAgent):
         """Emit a per-cell subagent-trace-manifest.json next to provenance.yaml.
 
         AC-2: every spacedock-variant cell writes a manifest carrying the count
-        of Task/Agent tool_use events from the inner claude session. The
-        manifest lives at the cell-run-dir (one level above the per-trial dir,
-        adjacent to provenance.yaml) so the matrix dispatcher's per-cell smoke
-        gate can find it without recursing into trial subdirs.
+        of Task/Agent tool_use events from the inner claude session.
 
-        Resolution: logs_dir is `<cell-run-dir>/<trial>/steps/main/agent/`,
-        so the per-trial dir is parents[2] and the cell-run-dir is parents[3].
+        Resolution: harbor's `TrialPaths.agent_dir` is `<trial-dir>/agent`,
+        and during run() the contents are still at that pre-relocation
+        location (the trial runner relocates into `steps/<step>/agent/`
+        after our `run()` returns — harbor/trial/trial.py:673). The
+        trials-job dir (where `provenance.yaml` lives and where the matrix
+        dispatcher's smoke validator expects the manifest) is one level
+        above the per-trial dir, i.e. `logs_dir.parents[1]`.
         """
         from razorback.agents.subagent_traces import (
             write_subagent_trace_manifest,
@@ -465,7 +467,7 @@ class SpacedockSolverAgent(BaseAgent):
 
         try:
             logs_dir = Path(self.logs_dir).resolve()
-            cell_run_dir = logs_dir.parents[3]
+            cell_run_dir = logs_dir.parents[1]
             write_subagent_trace_manifest(cell_run_dir)
         except (FileNotFoundError, IndexError, OSError) as exc:
             self.logger.debug(

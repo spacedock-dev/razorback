@@ -59,11 +59,15 @@ async def test_run_writes_manifest_adjacent_to_provenance(
     only hook harbor.trial invokes on a BaseAgent outer agent — see
     harbor/trial/trial.py:466-471 gate on BaseInstalledAgent) parses
     claude-code.txt at logs_dir and writes subagent-trace-manifest.json at
-    logs_dir.parents[3] (the cell-run-dir adjacent to provenance.yaml)."""
+    logs_dir.parents[1] (the trials-job dir adjacent to provenance.yaml).
+
+    The pre-relocation layout `<trials-job-dir>/<trial-name>/agent/` is
+    what harbor exposes during `run()`; the steps/<step>/agent/ subpath
+    only exists AFTER our hook returns (harbor/trial/trial.py:673)."""
     monkeypatch.setenv("RAZORBACK_SPACEDOCK_PLUGIN_DIR", str(tmp_path))
 
     cell_run_dir = tmp_path / "cell-run"
-    logs_dir = cell_run_dir / "trial-001__aaaa1234" / "steps" / "main" / "agent"
+    logs_dir = cell_run_dir / "trial-001__aaaa1234" / "agent"
     logs_dir.mkdir(parents=True)
     (cell_run_dir / "provenance.yaml").write_text("placeholder")
 
@@ -89,7 +93,7 @@ async def test_run_for_codex_runtime_does_not_write_manifest(
     """The manifest write is gated to runtime=claude; codex cells must not
     get a stray manifest (per plan §Risk register)."""
     cell_run_dir = tmp_path / "cell-run"
-    logs_dir = cell_run_dir / "trial-001__aaaa1234" / "steps" / "main" / "agent"
+    logs_dir = cell_run_dir / "trial-001__aaaa1234" / "agent"
     logs_dir.mkdir(parents=True)
 
     kw = _common_kwargs(tmp_path)
