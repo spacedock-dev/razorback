@@ -68,3 +68,60 @@ Verified by: `uv run pytest packages/razorback-plugin-dab/tests/ -v` green; pre-
 ## Resume hook
 
 When this lands, the razorback workspace READMEs have parity with upstream's leak-guard discipline. The 7q agnews re-run can then proceed (file as follow-on impl cycle on 7q or as a sibling entity). The verify-stage audit entity (`wp`) builds on this — leak-guard prose IN the prompt + adversarial trace audit AT the verify stage = defense in depth.
+
+## Plan
+
+### Mechanism validation (done at plan time)
+
+- **Upstream prose source:** `~/git/dataagentbench/benchmark/workspace-readmes/workspace-readme.md` lines 77–83 (the `Use only the workspace data.` paragraph + 4-bullet forbidden list + closing `UNABLE TO DETERMINE` sentence) — quoted verbatim below.
+- **Razorback target file:** `packages/razorback-plugin-dab/src/razorback_plugin_dab/generate/workspace_readme.py`, three templates `_DIRECT_MINIMAL` (lines 10–20), `_DIRECT_STRUCTURED` (lines 22–51), `_SPACEDOCK` (lines 53–84).
+- **Image rebuild check (resolved — NO rebuild needed):** `prepare.py` lines 283–286 (and again at line 440) call `render_workspace_readme(...)` and write the result to `workdir/README.md` at workspace prep time. The README is rendered per-cell from the razorback source package at every prepare invocation — it is NOT baked into the dab-agent image. A code edit to `workspace_readme.py` propagates to the next live re-run without rebuilding `dab-agent`.
+- **Existing test scope:** `packages/razorback-plugin-dab/tests/unit/test_workspace_readme_variants.py` covers per-variant character (terse vs layout vs crew-loop framing) but says nothing about leak-guard prose. The new test file is purely additive — no risk of conflict.
+- **Per-variant character preservation:**
+  - `_DIRECT_MINIMAL` currently has no headers beyond `# Task` — adding a `## Rules` section is acceptable (it stays the shortest variant; the test `"Workspace layout" not in text` still holds).
+  - `_DIRECT_STRUCTURED` already has `## Workspace layout` / `## Database access` / `## Output contract` — add `## Rules` as a fourth section between database-access and output-contract (matches upstream ordering).
+  - `_SPACEDOCK` keeps its crew-loop framing (`first officer` / `model -> analyze -> verify`); add `## Rules` in the same slot as direct-structured. The crew-loop framing references "an honest verifier" — the leak-guard prose reinforces that framing rather than competing with it.
+
+### Verbatim upstream prose to port (cite: dataagentbench workspace-readme.md L77–83)
+
+```
+**Use only the workspace data.** The benchmark provides everything needed to answer each query in the workspace's databases (`connections.yaml`, attached SQLite/PostgreSQL/MongoDB/DuckDB sources). Do **not** consult external data sources to look up answer values, labels, or ground truth — even if the workspace data appears to come from a public dataset. Specifically forbidden:
+- HuggingFace `datasets` library (`datasets.load_dataset`, `hf://...`) for label/oracle lookup
+- Public CSV/JSON downloads of the same dataset (kaggle, GitHub, vendor sites)
+- Web search engines, search APIs, or LLM-as-oracle calls (e.g., asking another model "what is the answer to X")
+- Cached prior answers from earlier runs in `_runs/` or any artifacts outside the current workspace
+
+The workspace databases are the only authoritative source. If a question is unanswerable from them, return `"UNABLE TO DETERMINE"`.
+```
+
+Razorback variants reference `db_config.yaml` (not `connections.yaml`); single-query mode (`query.json`, not `query{N}/query.json`); and per-cell workspaces (no `_runs/` peer dir). The port should swap those names — that is mechanical adaptation, not creative paraphrasing, and the forbidden-list bullets stay verbatim. Concretely, the line `(`connections.yaml`, attached SQLite/PostgreSQL/MongoDB/DuckDB sources)` becomes `(`db_config.yaml`, attached SQLite/PostgreSQL/MongoDB/DuckDB sources)` and the `_runs/` bullet becomes `Cached prior answers from earlier runs or any artifacts outside the current workspace`.
+
+### Task sequence (mechanism-first per CLAUDE.md)
+
+The riskiest contract is empirical: does the leak-guard prose ACTUALLY deter opus-4.7+xhigh on agnews? That only validates at T4 (live re-run). Everything before T4 is cheap and deterministic.
+
+- **T0 — RED unit test.** Create `packages/razorback-plugin-dab/tests/unit/test_workspace_readme_leak_guard.py`. For each variant in `WORKSPACE_VARIANTS`, assert the rendered README contains each of: `"HuggingFace"`, `"datasets.load_dataset"`, `"hf://"`, `"Public CSV"`, `"Web search engines"`, `"UNABLE TO DETERMINE"`, `"Use only the workspace data"`. Run once to confirm RED before any prose edit (proves the test actually exercises the new contract).
+- **T1 — GREEN prose edits.** Add a `## Rules` section carrying the ported leak-guard paragraph to each of `_DIRECT_MINIMAL`, `_DIRECT_STRUCTURED`, `_SPACEDOCK`. Use the verbatim upstream prose with the three mechanical name swaps documented above. Keep the existing per-variant character (no extra paraphrase).
+- **T2 — Unit tests green.** Run `uv run pytest packages/razorback-plugin-dab/tests/unit/test_workspace_readme_leak_guard.py packages/razorback-plugin-dab/tests/unit/test_workspace_readme_variants.py -v`. Both files green. AC-3 + AC-4-narrow gate here.
+- **T3 — (No image rebuild.)** Mechanism validation above confirmed the README is rendered at workspace prep time, not baked into `dab-agent`. Skip explicitly and note in the impl stage report. If a later inspection of `_runs/...` for the live re-run shows the agent's `workdir/README.md` lacks the new prose, raise as a concern then — but the code path is direct.
+- **T4 — Live agnews re-run (mechanism gate, AC-2).** Re-dispatch the single agnews cell against the post-T1 source. Budget ~$0.50–2 API. Verify per AC-2: the agent either declines `load_dataset` outright or self-corrects mid-trace, and the final result text contains no `canonical AG News` / `matched article_id to` / equivalent oracle-derivation language. Run the cheating audit re-runner against the new trace; expect `clean`. If the agent still cheats, raise as a finding (do NOT silently add more guards in this entity — that is sibling-entity scope: network block + verify-stage audit + taint scanner).
+- **T5 — Full pytest.** `uv run pytest packages/razorback-plugin-dab/tests/ -v`. Existing tests stay green; pre-existing failures (LFS-hydration etc.) reproduce on baseline `main`. AC-4 gate here.
+
+### Risks and notes
+
+- The verbatim port keeps razorback's prose identical to upstream's, which means future upstream changes to the leak-guard paragraph create drift. Acceptable for now — sibling entities (verify-stage audit + network block) provide defense in depth so prose drift is not a single point of failure.
+- `_DIRECT_MINIMAL` gains a `## Rules` section, which means it is no longer header-free. The existing test `assert "Workspace layout" not in text` for that variant still passes (the new section is `## Rules`, not `## Workspace layout`), and the variant remains the shortest of the three by a clear margin.
+- AC-2's `grep` assertion is over the final result text only; a trace where the agent explored `load_dataset` then self-corrected is acceptable per the AC's `(b)` branch. The impl-stage worker should record which branch (`a` decline / `b` self-correct) the agent took, as captain-relevant signal.
+
+## Stage Report: plan
+
+- DONE: Plan-output flex: 4 ACs, narrow scope (one source file + one test file + one live re-run). Recommend inline plan.
+  Inline plan written above; ACs already crisp in entity body (4 ACs, exactly one source file `workspace_readme.py`, one new test file `test_workspace_readme_leak_guard.py`, one live re-run cell `agnews`).
+- DONE: Mechanism validation — read DAB upstream's workspace README at `~/git/dataagentbench/benchmark/workspace-readmes/workspace-readme.md` (lines 70-138) for the exact leak-guard prose. Cite line numbers. Compare to razorback's three variants in `packages/razorback-plugin-dab/src/razorback_plugin_dab/generate/workspace_readme.py`. Identify the smallest diff that ports the prose without dropping the existing per-variant character.
+  Upstream prose quoted verbatim from L77–83. Smallest diff = one new `## Rules` section per variant; three mechanical name swaps (`connections.yaml`→`db_config.yaml`, query-dir pattern, `_runs/` reference). Per-variant character preserved (direct-minimal stays shortest, direct-structured keeps layout section, spacedock keeps crew-loop framing).
+- DONE: Sequence the impl-stage tasks per CLAUDE.md mechanism-first.
+  Sequence T0 RED → T1 GREEN → T2 unit-test gate → T3 skip-image-rebuild (mechanism-validated: prepare.py L283-286 renders per-cell) → T4 live agnews re-run (mechanism gate / AC-2) → T5 full pytest (AC-4 gate).
+
+### Summary
+
+Inline plan landed: verbatim port of DAB upstream's L77–83 leak-guard paragraph into all three razorback workspace variants, with three mechanical name swaps (db_config.yaml / single-query / no _runs). Image rebuild explicitly NOT required — `prepare.py` renders the README per-cell at workspace prep time from the razorback source, so a code edit propagates to the next live re-run without touching the dab-agent image. Sequenced T0→T5 with the live agnews re-run (~$0.50–2) as the empirical AC-2 gate; cheaper deterministic gates (unit test + full pytest) front-loaded.
