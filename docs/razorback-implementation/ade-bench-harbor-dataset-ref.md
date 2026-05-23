@@ -180,3 +180,46 @@ codifies the invariant for CI).
 ### Summary
 
 Independent re-run of the focused 93-bundle + full unit suite passes cleanly on a HEAD checkout (after resetting the in-progress gb-T9 override work that was uncommitted in the worktree). AC-2/AC-3/AC-4/AC-5 are solid PASSes against the team-lead's stated criteria; AC-1 is PARTIAL — bare-name rejection guardrail is in place, but the schema regex rejects the captain-designated paper-grade digest tier. Gate decision: REJECT (option b). Five concrete fixes enumerated in the validation report; the gb-T9 override work that's already in the worktree carries most of them.
+
+### Feedback Cycles
+
+**Cycle 1 (2026-05-23, validation REJECT cited at bf32ae1):**
+
+Validator chose option (b) reject-to-implementation on AC-1 PARTIAL FAIL.
+The schema regex `[A-Za-z0-9_.+-]*` at `src/razorback/spec/schema.py:178-180`
+and `dataset_ref.py:18` does not accept the `@sha256:` digest tier (colon
+not in the character class), but AC-1 explicitly requires tri-acceptance
+(tag / revision / digest) per `PackageReference.parse` round-trip. The
+canonical example file also still uses `@latest` rather than the
+captain-designated digest form. Concrete fixes routed to the next
+implementation dispatch:
+
+1. Replace regex with `PackageReference.parse` round-trip in
+   `src/razorback/spec/schema.py:AdeBenchBenchmarkBlock._validate_source_selection`;
+   require `parsed.org` + `parsed.short_name` + `parsed.ref` non-empty.
+   Preserve the bare-name rejection error message naming both rule and
+   canonical example (AC-1 guardrail).
+2. Same swap in `src/razorback/benchmarks/ade_bench/dataset_ref.py:parse_dataset_ref`.
+   Return `(parsed.org, parsed.short_name, parsed.ref)`.
+3. Update `examples/specs/ade-bench-harbor-dataset-codex.yaml` line 20 from
+   `dataset: dbt-labs/ade-bench@latest` to
+   `dataset: dbt-labs/ade-bench@sha256:2c1f9e6966d01b0a5de2235d1a0b64089c7eead42c85c3b7b61d0929405c2bd5`.
+   Update ABOUTME comments to reflect the digest tier as canonical.
+4. Update `docs/razorback-implementation/notes/ade-bench-harbor-dataset-ref-probe.md`
+   lines 87-94 to lead with the digest tier; keep `@latest` documented as
+   valid for daily smoke.
+5. Add (or restore — Circle K race may have reverted some) 4 tri-acceptance
+   tests in `tests/unit/test_ade_bench_dataset_ref_schema.py`:
+   `test_schema_accepts_tag_ref`, `test_schema_accepts_revision_ref`,
+   `test_schema_accepts_digest_ref_canonical_pin`,
+   `test_schema_validation_uses_harbor_package_reference_parser`. With the
+   schema fix in place, the 12-test schema suite passes green.
+
+Cycle 1 also covers a captain-flagged context: the prior cycle's
+implementation worker (terminated mid-flight) had applied roughly the
+correct fix to `dataset_ref.py` + `schema.py` but suffered file-revert
+race conditions with the concurrent validator worker; those uncommitted
+changes are still present in the worktree at start of cycle 2 and are a
+reasonable starting point. Validator's report at
+`docs/razorback-implementation/validation/ade-bench-harbor-dataset-ref.md`
+(commit `bf32ae1`) is the authoritative source for the required fixes.
