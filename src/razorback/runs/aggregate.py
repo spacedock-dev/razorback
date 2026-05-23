@@ -27,6 +27,7 @@ def write_manifest(
     n_trials_errored: int,
     per_trial_paths: list[str],
     benchmark_kind: str | None,
+    ordering_hint: dict | None = None,
 ) -> None:
     """AC-1: write <run_dir>/manifest.json.
 
@@ -49,6 +50,8 @@ def write_manifest(
         "per_trial_paths": per_trial_paths,
         "benchmark_kind": benchmark_kind,
     }
+    if ordering_hint is not None:
+        payload["ordering_hint"] = ordering_hint
     (run_dir / "manifest.json").write_text(json.dumps(payload, indent=2) + "\n")
 
 
@@ -375,6 +378,7 @@ def aggregate_run_dir(
     provenance_hash: str,
     harbor_job_name: str,
     benchmark_kind: str | None,
+    ordering_hint: dict | None = None,
 ) -> None:
     """Single post-harbor entrypoint. Writes the four canonical PKG-17 artifacts.
 
@@ -401,6 +405,7 @@ def aggregate_run_dir(
         n_trials_errored=n_errored,
         per_trial_paths=sorted(td.name for td in trial_dirs),
         benchmark_kind=benchmark_kind,
+        ordering_hint=ordering_hint,
     )
     aggregate_summary(run_dir)
     concatenate_events(run_dir)
@@ -420,6 +425,7 @@ def safe_aggregate_run_dir(
     provenance_hash: str,
     harbor_job_name: str,
     benchmark_kind: str | None,
+    ordering_hint: dict | None = None,
 ) -> list[str]:
     """Run aggregate_run_dir; collect warnings instead of raising.
 
@@ -436,6 +442,7 @@ def safe_aggregate_run_dir(
             provenance_hash=provenance_hash,
             harbor_job_name=harbor_job_name,
             benchmark_kind=benchmark_kind,
+            ordering_hint=ordering_hint,
         )
     except Exception as exc:
         warnings.append(f"aggregate_run_dir failed: {type(exc).__name__}: {exc}")
