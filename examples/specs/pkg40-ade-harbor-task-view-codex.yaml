@@ -1,5 +1,5 @@
-# ABOUTME: PKG-40 ADE-Bench Harbor-shaped task-view Codex smoke spec.
-# ABOUTME: Uses the in-repo Harbor task fixture; live ADE data remains out of scope.
+# ABOUTME: FIXTURE/DEV PKG-40 ADE-Bench task-view Codex smoke — uses in-repo Harbor task fixture.
+# ABOUTME: Canonical score path is examples/specs/ade-bench-harbor-dataset-codex.yaml (Harbor dataset ref).
 version: 1
 experiment: pkg40-ade-harbor-task-view-codex
 agent:

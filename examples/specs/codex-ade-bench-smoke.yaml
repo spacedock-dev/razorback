@@ -1,5 +1,5 @@
-# ABOUTME: PKG-40 ade-bench Codex smoke spec using Harbor-shaped task directories.
-# ABOUTME: Does not use the retired local upstream adapter path.
+# ABOUTME: FIXTURE/DEV ade-bench Codex smoke — uses local Harbor-shaped fixture tasks.
+# ABOUTME: Canonical score path is examples/specs/ade-bench-harbor-dataset-codex.yaml (Harbor dataset ref).
 version: 1
 experiment: codex-ade-bench-example001-smoke
 agent:

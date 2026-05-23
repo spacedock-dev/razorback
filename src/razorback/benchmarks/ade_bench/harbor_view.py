@@ -26,6 +26,9 @@ def materialize_ade_harbor_task_view(
     task_slug: str,
     docker_image: str | None = None,
     view_mode: Literal["copy", "link"] = "copy",
+    dataset_ref: str | None = None,
+    dataset_content_hash: str | None = None,
+    task_content_hash: str | None = None,
 ) -> Path:
     view = materialize_harbor_task_view(
         source_task_dir=source_task_dir,
@@ -40,6 +43,9 @@ def materialize_ade_harbor_task_view(
         },
         exclude_globs=ADE_BENCH_DENY_GLOBS,
         view_mode=view_mode,
+        dataset_ref=dataset_ref,
+        dataset_content_hash=dataset_content_hash,
+        task_content_hash=task_content_hash,
     )
     _ensure_dbt_deps_image_layer(view)
     _ensure_dbt_deps_test_setup_uses_preinstalled_packages(view)
