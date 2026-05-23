@@ -1,4 +1,4 @@
-# ABOUTME: T13 (unit-level integration) — SpacedockSolverAgent.cleanup writes
+# ABOUTME: SpacedockSolverAgent.populate_context_post_run writes
 # ABOUTME: subagent-trace-manifest.json at logs_dir.parents[3] from real claude-code.txt.
 
 import json
@@ -33,13 +33,13 @@ def _common_kwargs(tmp_path):
     )
 
 
-@pytest.mark.asyncio
-async def test_cleanup_writes_manifest_adjacent_to_provenance(
+def test_populate_context_post_run_writes_manifest_adjacent_to_provenance(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ):
-    """End-to-end of the AC-2 post-run hook: cleanup parses claude-code.txt at
-    logs_dir and writes subagent-trace-manifest.json at logs_dir.parents[3]
-    (the cell-run-dir adjacent to provenance.yaml)."""
+    """End-to-end of the AC-2 post-run hook: populate_context_post_run
+    (the hook harbor.trial actually invokes on the outer agent) parses
+    claude-code.txt at logs_dir and writes subagent-trace-manifest.json at
+    logs_dir.parents[3] (the cell-run-dir adjacent to provenance.yaml)."""
     monkeypatch.setenv("RAZORBACK_SPACEDOCK_PLUGIN_DIR", str(tmp_path))
 
     cell_run_dir = tmp_path / "cell-run"
@@ -51,7 +51,7 @@ async def test_cleanup_writes_manifest_adjacent_to_provenance(
     kw = _common_kwargs(tmp_path)
     agent = SpacedockSolverAgent(logs_dir=logs_dir, **kw)
 
-    await agent.cleanup(environment=None)
+    agent.populate_context_post_run(context=None)
 
     manifest_path = cell_run_dir / "subagent-trace-manifest.json"
     assert manifest_path.exists()
@@ -62,8 +62,7 @@ async def test_cleanup_writes_manifest_adjacent_to_provenance(
     assert payload["schema_version"] == "razorback-subagent-traces-v1"
 
 
-@pytest.mark.asyncio
-async def test_cleanup_for_codex_runtime_does_not_write_manifest(
+def test_populate_context_post_run_for_codex_runtime_does_not_write_manifest(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ):
     """The manifest write is gated to runtime=claude; codex cells must not get
@@ -85,6 +84,6 @@ async def test_cleanup_for_codex_runtime_does_not_write_manifest(
     kw["extra_env"] = {"OPENAI_API_KEY": "x"}
     agent = SpacedockSolverAgent(logs_dir=logs_dir, **kw)
 
-    await agent.cleanup(environment=None)
+    agent.populate_context_post_run(context=None)
 
     assert not (cell_run_dir / "subagent-trace-manifest.json").exists()

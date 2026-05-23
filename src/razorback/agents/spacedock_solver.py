@@ -433,8 +433,6 @@ class SpacedockSolverAgent(BaseAgent):
     async def cleanup(self, environment):
         if self._inner is not None and hasattr(self._inner, "cleanup"):
             await self._inner.cleanup(environment)
-        if self._runtime == "claude":
-            self._maybe_write_subagent_trace_manifest()
 
     def _maybe_write_subagent_trace_manifest(self) -> None:
         """Emit a per-cell subagent-trace-manifest.json next to provenance.yaml.
@@ -462,14 +460,18 @@ class SpacedockSolverAgent(BaseAgent):
             )
 
     def populate_context_post_run(self, context):
-        """Delegate context-population to the inner agent.
+        """Delegate context-population to the inner agent and write the AC-2 manifest.
 
-        Harbor's trial framework invokes this hook on the OUTER agent only.
-        The inner agent (RazorbackClaudeCode for runtime=claude) holds
-        the cost_usd / claude-output.jsonl surface from PKG-26 — without this
-        delegation that surface stays dark on the spacedock variant.
+        Harbor's trial framework invokes this hook on the OUTER agent only —
+        `cleanup()` is not part of the harbor agent lifecycle, so the
+        subagent-trace manifest must land here to actually be written on real
+        cell runs. The inner agent (RazorbackClaudeCode for runtime=claude)
+        holds the cost_usd / claude-output.jsonl surface from PKG-26 — without
+        the inner delegation that surface stays dark on the spacedock variant.
         """
         if self._inner is not None and hasattr(
             self._inner, "populate_context_post_run"
         ):
             self._inner.populate_context_post_run(context)
+        if self._runtime == "claude":
+            self._maybe_write_subagent_trace_manifest()
