@@ -23,12 +23,12 @@ SOLVER_WORKFLOW_PATH = "./examples/solver_workflows/dab_paper_matrix"
 
 
 def _build_agent_block(variant: str) -> dict:
-    """PKG-26: spacedock variant → spacedock_solver_v2 (halt/resume + skill injection);
+    """PKG-26: spacedock variant → spacedock_solver (halt/resume + skill injection);
     direct-minimal + direct-structured → claude-cli (now a ClaudeCode subclass).
     """
     if variant == "spacedock":
         return {
-            "kind": "spacedock_solver_v2",
+            "kind": "spacedock_solver",
             "runtime": "claude",
             "model": "claude-opus-4-7",
             "sampling": {"temperature": 0.0, "top_p": None, "seed": None},

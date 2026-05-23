@@ -34,7 +34,7 @@ def test_goal1_claude_specs_use_per_variant_agent_kind():
     assert direct["benchmark"]["hints"] is True
     assert direct["benchmark"]["query_mode"] == "batch"
 
-    assert spacedock["agent"]["kind"] == "spacedock_solver_v2"
+    assert spacedock["agent"]["kind"] == "spacedock_solver"
     assert spacedock["agent"]["runtime"] == "claude"
     assert spacedock["agent"]["model"] == "claude-opus-4-7"
     assert spacedock["agent"]["solver_workflow"] == (
