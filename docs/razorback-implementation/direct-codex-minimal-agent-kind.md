@@ -10,7 +10,7 @@ score: 0.93
 worktree: .worktrees/spacedock-ensign-direct-codex-minimal-agent-kind
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 ---
 
 ## Problem
