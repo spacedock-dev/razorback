@@ -171,3 +171,44 @@ Recommended next dispatch: re-enter implementation, rewrite the
 `_load_reward_per_query` docstring to drop the literal `benchmarks/dab`
 substring, re-run `tests/unit/test_dab_retirement.py`, commit, and re-dispatch
 validation. Expected turnaround is minutes.
+
+---
+
+## Cycle 2 Addendum (2026-05-23)
+
+- Cycle-2 commit: `310f76f` (`fix(runs): paraphrase _load_reward_per_query docstring to drop dab-retirement needle`)
+- New branch HEAD: `310f76f`
+- **Verdict: PASSED**
+
+### Resolved finding
+
+`src/razorback/runs/aggregate.py:_load_reward_per_query` docstring paraphrased from the literal `_legacy/benchmarks/dab/aggregate.py:_load_per_query_rewards` reference to "the legacy DAB aggregator's per-query-rewards loader." No production code touched. Verified:
+
+```
+$ grep -n 'benchmarks/dab' src/razorback/runs/aggregate.py
+$ echo $?
+1   # zero matches
+```
+
+### Re-verification
+
+```
+$ uv run pytest tests/unit/test_dab_retirement.py -v
+… test_active_code_does_not_import_in_tree_dab_adapter PASSED
+… test_in_tree_dab_adapter_directory_is_not_active     PASSED
+… 2 passed in 0.10s
+
+$ uv run pytest tests/unit/test_runs_aggregate_per_query_reducer.py tests/integration/test_rk_score_matches_summary.py -v
+… 8 passed in 0.91s    # 4 unit + 4 integration, all four ACs still satisfied
+
+$ uv run pytest --ignore=tests/unit/test_task_identity_scoring.py -q
+… 9 failed, 600 passed, 12 skipped in 45.24s
+```
+
+Failure count drops from 10 → 9 (the dab-retirement regression resolves). All 9 remaining failures reproduce on baseline `main`: `test_worktree_remove_force_does_not_destroy_runs` (LFS hydration), `test_goal1_claude_specs_use_per_variant_agent_kind`, `test_matrix_specs_carry_query_mode_batch`, `test_matrix_specs_query_mode_batch_for_all_variants`, and 5 `test_generate_matrix_specs_per_variant_kind` cases.
+
+Non-blocking observations from cycle 1 (cost-on-row-0, synthetic `BatchSidecarEmpty` label, stale `_resolve_stratum` docstring) are unchanged and remain non-blocking per team-lead's cycle-2 brief.
+
+### Gate Decision (final)
+
+**PASS.** All four ACs satisfied end-to-end; zero net-new test failures vs baseline `main`. Recommend FO auto-merge + archive per captain's pre-authorization.

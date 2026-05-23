@@ -153,6 +153,19 @@ render-adapter snapshot, and the paired integration regression. Branch
 
 Four ACs pass end-to-end: the canonical reducer reads `reward_per_query.json` and returns 6/7 for the yelp batch fixture; `_stratified_pass_at_1` is deleted; `aggregate_summary` and `rk score` agree byte-for-byte; three-family coverage + paired integration regression both green. Blocker: the branch introduces one new test failure — `test_dab_retirement.py::test_active_code_does_not_import_in_tree_dab_adapter` — because `_load_reward_per_query`'s docstring contains the literal `benchmarks/dab` substring (in `_legacy/benchmarks/dab/aggregate.py`). Recommended verdict: **REJECT-bounce-to-implementation** for a one-line docstring rewrite, then re-validate. Full validation report at `docs/razorback-implementation/validation/runs-aggregate-single-score-reducer.md`.
 
+## Stage Report: validation (cycle 2)
+
+- DONE: Re-run dab-retirement guard after cycle-1 docstring fix (commit 310f76f)
+  `uv run pytest tests/unit/test_dab_retirement.py -v` → 2/2 PASS. Both `test_active_code_does_not_import_in_tree_dab_adapter` (the cycle-1 regression) and `test_in_tree_dab_adapter_directory_is_not_active` now green. `grep -n 'benchmarks/dab' src/razorback/runs/aggregate.py` returns 0 matches.
+- DONE: Re-run cycle-1 green tests to confirm no regression
+  `uv run pytest tests/unit/test_runs_aggregate_per_query_reducer.py tests/integration/test_rk_score_matches_summary.py -v` → 8/8 PASS (4 unit + 4 integration). All four ACs remain satisfied; the docstring paraphrase is doc-only and changes no production behavior.
+- DONE: Confirm full-suite baseline diff drops by 1
+  `uv run pytest --ignore=tests/unit/test_task_identity_scoring.py -q` → 600 passed / **9 failed** / 12 skipped (down from 10). The 9 remaining are the same pre-existing failures present on baseline `main`: 1 worktree-teardown LFS hydration, 1 claude-benchmark-spec, 2 generate-matrix-specs, 5 generate-matrix-specs-per-variant-kind. Zero net-new failures attributable to the branch.
+
+### Summary
+
+Cycle-2 docstring paraphrase resolves the sole blocker from cycle 1. All four ACs remain functionally satisfied (6/7 yelp reduction, single-reducer grep clean, byte-equal summary↔score, three-family + paired integration green); the dab-retirement guard is now green; full pytest failure count drops from 10 to 9 with all remaining failures reproducing verbatim on baseline `main`. Final verdict: **PASS**. Cycle-2 addendum appended to validation report at `docs/razorback-implementation/validation/runs-aggregate-single-score-reducer.md`.
+
 ## Stage Report: implementation (cycle 2)
 
 - DONE: Rewrite the docstring of `_load_reward_per_query` in `src/razorback/runs/aggregate.py` (around line 197) to drop the literal `benchmarks/dab` path token while preserving the design pointer.
