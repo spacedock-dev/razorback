@@ -158,21 +158,3 @@ def test_harbor_dab_requires_tasks_root(tmp_path: Path):
         spec_to_job_config(spec, job_name="job-test", jobs_dir=tmp_path / "jobs")
     assert "harbor_dab" in str(exc_info.value)
     assert "tasks_root" in str(exc_info.value)
-
-
-def test_in_tree_dab_translator_path_unchanged(tmp_path: Path):
-    """AC-7 regression: legacy `kind: dab` (and v2 alias `in_tree_dab`) still
-    dispatches to _build_dab, not the new harbor branch."""
-    from razorback.spec.schema import DabBenchmarkBlock
-    spec = parse_spec_text(
-        "version: 1\n"
-        "experiment: phase2-translator-test\n"
-        "agent:\n"
-        "  kind: nop\n"
-        "benchmark:\n"
-        "  kind: in_tree_dab\n"
-        f"  data_root: /Users/clkao/git/dataagentbench/data\n"
-        "  datasets: [bookreview]\n"
-        "trials: 1\n"
-    )
-    assert isinstance(spec.benchmark, DabBenchmarkBlock)

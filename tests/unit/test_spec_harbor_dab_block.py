@@ -1,5 +1,5 @@
 # ABOUTME: Phase 2 — HarborDabBenchmarkBlock parses with defaults and rejects unknowns.
-# ABOUTME: Confirms the v2 in_tree_dab alias still produces a DabBenchmarkBlock.
+# ABOUTME: Confirms retired in-tree DAB spellings are rejected.
 
 from pathlib import Path
 
@@ -7,10 +7,7 @@ import pytest
 
 from razorback.errors import SpecError
 from razorback.spec.parse import parse_spec_text
-from razorback.spec.schema import (
-    DabBenchmarkBlock,
-    HarborDabBenchmarkBlock,
-)
+from razorback.spec.schema import HarborDabBenchmarkBlock
 
 
 def _spec(benchmark_yaml: str) -> str:
@@ -102,20 +99,21 @@ def test_harbor_dab_rejects_unknown_query_mode(tmp_path: Path) -> None:
         ))
 
 
-def test_in_tree_dab_alias_resolves_to_dab(tmp_path: Path) -> None:
-    spec = parse_spec_text(_spec(
-        "  kind: in_tree_dab\n"
-        f"  data_root: {tmp_path}\n"
-        "  datasets: [bookreview]\n"
-    ))
-    assert isinstance(spec.benchmark, DabBenchmarkBlock)
-    assert spec.benchmark.kind == "dab"
+def test_in_tree_dab_kind_is_retired_from_active_specs(tmp_path: Path) -> None:
+    with pytest.raises(SpecError) as exc_info:
+        parse_spec_text(_spec(
+            "  kind: in_tree_dab\n"
+            f"  data_root: {tmp_path}\n"
+            "  datasets: [bookreview]\n"
+        ))
+    assert "harbor_dab" in str(exc_info.value) or "Input tag" in str(exc_info.value)
 
 
-def test_legacy_dab_kind_still_parses(tmp_path: Path) -> None:
-    spec = parse_spec_text(_spec(
-        "  kind: dab\n"
-        f"  data_root: {tmp_path}\n"
-        "  datasets: [bookreview]\n"
-    ))
-    assert isinstance(spec.benchmark, DabBenchmarkBlock)
+def test_dab_kind_is_retired_from_active_specs(tmp_path: Path) -> None:
+    with pytest.raises(SpecError) as exc_info:
+        parse_spec_text(_spec(
+            "  kind: dab\n"
+            f"  data_root: {tmp_path}\n"
+            "  datasets: [bookreview]\n"
+        ))
+    assert "harbor_dab" in str(exc_info.value) or "Input tag" in str(exc_info.value)
