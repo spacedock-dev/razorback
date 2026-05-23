@@ -3,6 +3,7 @@
 
 import json
 import time
+import warnings
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -59,6 +60,12 @@ class SpacedockSolverAgent(BaseAgent):
         extra_env: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> None:
+        warnings.warn(
+            "SpacedockSolverAgent v1 is legacy-only; use agent.kind "
+            "'spacedock_solver' for the v2 runtime-adapter solver.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         super().__init__(
             logs_dir=logs_dir,
             model_name=model_name or model,
