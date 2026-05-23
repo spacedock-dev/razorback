@@ -1,13 +1,13 @@
 ---
 id: qhtser5qkf5b77pk43z4pnb9
 title: DAB consumes Harbor dataset definitions
-status: plan
+status: implementation
 source: 2026-05-23 captain directive — make wrapped DAB consume dataset definitions like Harbor-native datasets
 started: 2026-05-23T04:58:35Z
 completed:
 verdict:
 score: 0.8
-worktree:
+worktree: .worktrees/spacedock-ensign-dab-harbor-dataset-definition
 issue:
 pr:
 mod-block:
