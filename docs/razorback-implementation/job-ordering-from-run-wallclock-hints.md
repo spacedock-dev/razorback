@@ -107,3 +107,16 @@ Wrote the standard separate implementation plan at `docs/razorback-implementatio
 ### Summary
 
 Added `src/razorback/run_ordering.py` for historical wallclock extraction and deterministic longest-known-first sorting, then wired `src/razorback/cli/run.py` to apply it after translation and before Harbor serialization. Harbor-facing changes are limited to the `JobConfig.tasks` list order; additive `ordering_hint` metadata is written through `src/razorback/runs/aggregate.py` and `src/razorback/provenance/provenance_yaml.py`. No plan deviations were needed; the requested `superpowers` sub-skill was unavailable in this session, so the approved plan was executed directly with TDD commits.
+
+## Stage Report: validation
+
+- DONE: Independently verifies AC-1 through AC-5 with code inspection and concrete command output.
+  Evidence: `docs/razorback-implementation/validation/job-ordering-from-run-wallclock-hints.md` records PASS evidence per AC from focused pytest output and inspection of `run_ordering.py`, `cli/run.py`, `runs/aggregate.py`, and `provenance_yaml.py`.
+- DONE: Runs the focused ordering/provenance/scoring/translator regression tests or reports exact blockers.
+  Evidence: focused commands passed with `18 passed`, `16 passed`, and `3 passed`; full `uv run pytest` was also run and failed with `6 failed, 566 passed, 9 skipped`.
+- DONE: Writes a validation report with blocking/non-blocking findings and an explicit gate decision of PASSED or REJECTED.
+  Evidence: validation report written at `docs/razorback-implementation/validation/job-ordering-from-run-wallclock-hints.md` with gate decision `REJECTED`.
+
+### Summary
+
+Validation reproduced the focused AC evidence and found the feature-specific behavior passes those targeted checks. The gate is rejected because full `uv run pytest` fails, including two branch-local unit regressions from new `ordering_hint` keyword plumbing in existing test doubles; no production code was edited during validation.
