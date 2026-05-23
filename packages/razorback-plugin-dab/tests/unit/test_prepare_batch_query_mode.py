@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
 
@@ -51,6 +52,35 @@ def _build_synthetic_three_query_data_root(root: Path) -> Path:
             "    return (ok, 'ok' if ok else 'no')\n"
         )
         (q / "ground_truth.csv").write_text(f"answer\na{n}\n")
+    return data_root
+
+
+def _build_common_scaffold_data_root(root: Path) -> Path:
+    data_root = root / "data"
+    scaffold_validate = data_root / "common_scaffold" / "validate"
+    scaffold_validate.mkdir(parents=True)
+    (data_root / "common_scaffold" / "__init__.py").write_text("")
+    (scaffold_validate / "__init__.py").write_text("")
+    (scaffold_validate / "levenshtein.py").write_text(
+        "def levenshtein(left, right):\n"
+        "    return 0 if left == right else 1\n"
+    )
+    pycache = scaffold_validate / "__pycache__"
+    pycache.mkdir()
+    (pycache / "ignored.pyc").write_bytes(b"cached")
+
+    qdir = data_root / "query_PATENTS"
+    qdir.mkdir(parents=True)
+    (qdir / "db_description.txt").write_text("Synthetic affected DAB dataset.")
+    q1 = qdir / "query1"
+    q1.mkdir()
+    (q1 / "query.json").write_text(json.dumps({"question": "Return abc."}))
+    (q1 / "validate.py").write_text(
+        "from common_scaffold.validate.levenshtein import levenshtein\n\n"
+        "def validate(answer):\n"
+        "    distance = levenshtein(answer, 'abc')\n"
+        "    return (distance == 0, f'distance={distance}')\n"
+    )
     return data_root
 
 
@@ -123,6 +153,32 @@ def test_batch_mode_tests_dir_has_per_query_validators(tmp_path: Path) -> None:
     assert (tests_dir / "validate_q3.py").exists()
     assert (tests_dir / "verify_batch.py").exists()
     assert (tests_dir / "test.sh").exists()
+
+
+def test_batch_mode_materializes_common_scaffold_for_upstream_validators(
+    tmp_path: Path, monkeypatch
+) -> None:
+    data_root = _build_common_scaffold_data_root(tmp_path)
+    manifest = prepare_dataset_tasks(
+        data_root=data_root,
+        dataset="PATENTS",
+        tasks_root=tmp_path / "tasks",
+        query_mode="batch",
+    )
+    tests_dir = manifest[0]["task_dir"] / "tests"
+
+    assert (tests_dir / "common_scaffold" / "validate" / "levenshtein.py").exists()
+    assert not (tests_dir / "common_scaffold" / "validate" / "__pycache__").exists()
+
+    monkeypatch.syspath_prepend(str(tests_dir))
+    spec = importlib.util.spec_from_file_location(
+        "_generated_validate_q1", tests_dir / "validate_q1.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert module.validate("abc") == (True, "distance=0")
 
 
 def test_batch_mode_stratum_payload_uses_query_ids_list(tmp_path: Path) -> None:
