@@ -27,7 +27,7 @@ reproducibility audit trail currently goes thin.
 ┌───────────────────────────────────────────────────────────────┐
 │ Layer 2: Local data (the cache)                               │
 │ ADE: Harbor's task download dir (resolver-managed)            │
-│ DAB: ~/git/dataagentbench/data/ (captain-managed clone + LFS) │
+│ DAB: $DATAAGENTBENCH_DATA_ROOT (operator-managed clone + LFS) │
 └───────────────────────────────────────────────────────────────┘
                           │
                           ▼
@@ -161,15 +161,15 @@ and image digest, which are independently pinned).
 | Dataset identity (which tasks/queries) | ✅ dataset.toml content in plugin wheel; `solver_workflow_content_hash` in `provenance.yaml` | ✅ schema-level validation | ✅ |
 | ADE task contents (per-task) | ✅ via `view_manifest.json` v2 `task_content_hash` (gb) | ✅ resolver refuses mismatched content | ✅ |
 | ADE dataset version (set of tasks) | ✅ via `dataset_content_hash` (gb) | ✅ resolver refuses mismatched content | ✅ |
-| DAB data_root contents (dumps, configs) | ❌ env-template only; no hash | ❌ no check | ⚠️ only via captain memory of upstream commit |
+| DAB data_root contents (dumps, configs) | ❌ env-template only; no hash | ❌ no check | ⚠️ only via operator memory of upstream commit |
 | Container image digest | ✅ via `pin_image_digest: true` → `provenance.yaml.image_digest` | ✅ harbor enforces digest match at compose-up | ✅ |
 | Init script content (in plugin) | ✅ implicit via plugin wheel version | ✅ wheel version is what's loaded | ✅ |
 | DB is up + sentinel table exists | n/a | ✅ pkg13's pre-trial smoke (in verifier scaffold) | n/a |
 | DB schema/row contents match expected | n/a | ⚠️ implicitly via verifier outcome (NOT a separate check) | n/a |
 
 **The DAB `data_root` row is the audit hole.** Image, init scripts, and
-dataset identity are pinned. The actual database dumps in
-`~/git/dataagentbench/data/` are not.
+dataset identity are pinned. The actual database dumps under
+`$DATAAGENTBENCH_DATA_ROOT` are not.
 
 ---
 
@@ -178,30 +178,30 @@ dataset identity are pinned. The actual database dumps in
 Concrete scenarios where the current setup silently produces
 inconsistent results without flagging:
 
-1. **Captain `git pull`s dataagentbench between freeze and run.** Same
+1. **Operator `git pull`s dataagentbench between freeze and run.** Same
    frozen spec → re-run gets a different DB state → different score.
    `sealed_hash` still matches; nothing flags the drift.
-2. **Captain edits `~/git/dataagentbench/data/...` locally** (e.g., to
-   test something) and forgets to revert. All subsequent runs use the
-   modified data; provenance doesn't catch it.
+2. **Operator edits files under `$DATAAGENTBENCH_DATA_ROOT` locally**
+   (e.g., to test something) and forgets to revert. All subsequent
+   runs use the modified data; provenance doesn't catch it.
 3. **Two researchers on different machines** with different commits of
    dataagentbench. They run the same frozen spec. Scores diverge.
    The freeze CAS at `$XDG_DATA_HOME/razorback/freeze/<sealed_hash>/`
    consolidates them as "the same experiment."
-4. **Trial fails mid-run; resume after captain pulled an unrelated fix
+4. **Trial fails mid-run; resume after operator pulled an unrelated fix
    upstream.** Resumed trial loads a different DB than the un-resumed
    trials did. Stratified pass@1 averages across inconsistent trials.
 5. **`DATAAGENTBENCH_DATA_ROOT` not set; default `~/dataagentbench/data`
    doesn't exist on this machine.** Plugin reports
    `dataset not hydrated, found LFS pointer at <wrong path>`. Today's
-   workaround is the captain sets the env var; the frozen spec still
+   workaround is the operator sets the env var; the frozen spec still
    records the env-template.
 
 ---
 
 ## 6. Future improvements
 
-Filed in priority order. Each is a separate entity if/when the captain
+Filed in priority order. Each is a separate entity if/when the operator
 greenlights the scope.
 
 ### 6.1 Resolve `data_root` to absolute path at freeze time *(small)*
@@ -222,7 +222,7 @@ run).
 Compute recursive sha256 of the resolved `data_root` at freeze time
 and store it alongside `solver_workflow_content_hash`. At run time,
 the plugin re-hashes and refuses on mismatch (`DataRootDriftError`,
-mirror of `AliasDriftError`'s discipline). Captain can override with
+mirror of `AliasDriftError`'s discipline). Operator can override with
 `--allow-data-root-drift` for legitimate cases (e.g., reproducing an
 old run that was frozen pre-hash).
 
@@ -249,13 +249,13 @@ verifier scaffold loses its smoke gate).
 
 Today DAB is asymmetric with ADE: ADE consumes a Harbor-registry
 dataset ref (`dbt-labs/ade-bench@sha256:...`), DAB consumes a
-plugin-shipped `dataset.toml` + captain-managed local clone.
+plugin-shipped `dataset.toml` + operator-managed local clone.
 
 Publishing DAB as a Harbor registry dataset (e.g.,
 `dataagentbench-team/dab@1.0`) would:
 - Unify the resolver path (DAB + ADE both via `PackageDatasetClient`)
 - Give DAB content-hash pinning for free (per-task `task_content_hash`)
-- Eliminate the captain-managed `~/git/dataagentbench/data/` clone
+- Eliminate the operator-managed `$DATAAGENTBENCH_DATA_ROOT` clone
 - Make DAB reproducible across machines without coordinating clones
 
 **Tradeoffs:**
