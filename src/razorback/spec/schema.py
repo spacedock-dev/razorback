@@ -174,15 +174,61 @@ class AdeBenchTaskEntry(BaseModel):
     git_commit_id: str
 
 
+_ADE_BENCH_DATASET_REF_SHAPE = "<org>/<name>@<ref>"
+_ADE_BENCH_DATASET_REF_EXAMPLE = "dbt-labs/ade-bench@latest"
+_ADE_BENCH_DATASET_REF_RE = re.compile(
+    r"^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*@[A-Za-z0-9][A-Za-z0-9_.+-]*$"
+)
+
+
 class AdeBenchBenchmarkBlock(BaseModel):
+    """ADE-Bench benchmark block.
+
+    Source selection is exclusive: either `dataset` (Harbor published dataset
+    ref, fully qualified as `<org>/<name>@<ref>`, e.g. `dbt-labs/ade-bench@latest`)
+    or `tasks_root` (local Harbor-shaped directory, the dev/fixture escape hatch).
+    `tasks` is the spec-side task subset; on the dataset-ref path each entry is
+    matched against per-task package names with the dataset prefix stripped
+    (e.g. spec `tasks: [airbnb001]` matches the resolved `ade-bench-airbnb001`).
+    """
     model_config = ConfigDict(extra="forbid")
     kind: Literal["ade-bench"]
-    tasks_root: Path
-    tasks: list[str | AdeBenchTaskEntry] = Field(min_length=1)
+    dataset: str | None = None
+    tasks_root: Path | None = None
+    tasks: list[str | AdeBenchTaskEntry] | None = None
     docker_image_override: str | None = None
     batch_mode: Literal["per-task", "shared-context"] = "per-task"
     db_type: Literal["duckdb", "snowflake"] | None = None
     project_type: Literal["dbt", "dbt-fusion"] | None = None
+
+    @model_validator(mode="after")
+    def _validate_source_selection(self) -> "AdeBenchBenchmarkBlock":
+        if self.dataset is not None and self.tasks_root is not None:
+            raise ValueError(
+                "exactly one of `dataset` (Harbor dataset ref) or `tasks_root` "
+                "(local task directory) may be set; both were provided"
+            )
+        if self.dataset is None and self.tasks_root is None:
+            raise ValueError(
+                "ade-bench benchmark requires exactly one of `dataset` "
+                f"(Harbor dataset ref, e.g. {_ADE_BENCH_DATASET_REF_EXAMPLE!r}) "
+                "or `tasks_root` (local Harbor-shaped task directory); "
+                "neither was provided"
+            )
+        if self.dataset is not None:
+            if not _ADE_BENCH_DATASET_REF_RE.match(self.dataset):
+                raise ValueError(
+                    f"invalid Harbor dataset ref {self.dataset!r}: "
+                    f"required shape is {_ADE_BENCH_DATASET_REF_SHAPE} "
+                    f"(e.g. {_ADE_BENCH_DATASET_REF_EXAMPLE!r})"
+                )
+        if self.tasks_root is not None:
+            if not self.tasks:
+                raise ValueError(
+                    "`tasks_root` (local task directory) requires a non-empty "
+                    "`tasks` list naming task subdirectories"
+                )
+        return self
 
 
 class Spider2DbtBenchmarkBlock(BaseModel):

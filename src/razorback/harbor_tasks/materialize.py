@@ -35,6 +35,9 @@ def materialize_harbor_task_view(
     resource_overrides: dict[str, int] | None = None,
     exclude_globs: tuple[str, ...] = DEFAULT_SOLUTION_DENY_GLOBS,
     view_mode: Literal["copy", "link"] = "copy",
+    dataset_ref: str | None = None,
+    dataset_content_hash: str | None = None,
+    task_content_hash: str | None = None,
 ) -> Path:
     """Create a Razorback-owned Harbor task view and return its local path."""
     source = Path(source_task_dir).resolve()
@@ -85,6 +88,9 @@ def materialize_harbor_task_view(
         harbor_version=_harbor_version(),
         source_size_bytes=directory_size_bytes(source),
         view_size_bytes=directory_size_bytes(view_dir),
+        dataset_ref=dataset_ref,
+        dataset_content_hash=dataset_content_hash,
+        task_content_hash=task_content_hash,
     )
     manifest.write(view_dir / TASK_VIEW_MANIFEST)
     return view_dir

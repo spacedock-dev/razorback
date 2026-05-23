@@ -242,37 +242,70 @@ def _build_ade_bench(
             "ade-bench batch_mode='shared-context' is explicit but not yet "
             "supported for Harbor dispatch; use batch_mode='per-task'."
         )
-    resolved = resolve_task_dirs(
-        tasks_root=spec.benchmark.tasks_root,
-        tasks=spec.benchmark.tasks,
-    )
-    docker_image = (
-        spec.benchmark.docker_image_override or _DEFAULT_DOCKER_IMAGE
-    )
+
     home_dir = Path(home) if home is not None else Path.home()
     cache_root = home_dir / ".cache" / "razorback" / "ade-bench"
-
-    tasks: list[TaskConfig] = []
     view_root = jobs_dir / job_name / "_razorback" / "task_views"
-    for r in resolved:
-        if r.git_url is not None and r.git_commit_id is not None:
-            materialized = materialize_git_task(
-                git_url=r.git_url,
-                git_commit_id=r.git_commit_id,
-                source_path=r.path,
-                docker_image=docker_image,
-                cache_root=cache_root,
-            )
-            tasks.append(TaskConfig(path=materialized))
-        else:
+    tasks: list[TaskConfig] = []
+
+    if spec.benchmark.dataset is not None:
+        from razorback.benchmarks.ade_bench.dataset_ref import (
+            resolve_dataset_tasks,
+        )
+
+        dataset_cache_root = cache_root / "datasets"
+        # Spec-side task subset entries must be plain strings on the dataset-ref
+        # path; AdeBenchTaskEntry (git tasks) is local-only.
+        requested_subset: list[str] | None = None
+        if spec.benchmark.tasks:
+            requested_subset = [
+                t for t in spec.benchmark.tasks if isinstance(t, str)
+            ]
+        resolved_dataset = resolve_dataset_tasks(
+            dataset_ref=spec.benchmark.dataset,
+            tasks=requested_subset,
+            cache_root=dataset_cache_root,
+        )
+        for r in resolved_dataset:
             materialized = materialize_ade_harbor_task_view(
                 source_task_dir=r.path,
                 view_root=view_root,
-                task_slug=r.path.name,
+                task_slug=r.requested_slug,
                 docker_image=spec.benchmark.docker_image_override,
                 view_mode="copy",
+                dataset_ref=spec.benchmark.dataset,
+                dataset_content_hash=r.dataset_content_hash,
+                task_content_hash=r.content_hash,
             )
             tasks.append(TaskConfig(path=materialized))
+    else:
+        resolved = resolve_task_dirs(
+            tasks_root=spec.benchmark.tasks_root,
+            tasks=spec.benchmark.tasks,
+        )
+        docker_image = (
+            spec.benchmark.docker_image_override or _DEFAULT_DOCKER_IMAGE
+        )
+        for r in resolved:
+            if r.git_url is not None and r.git_commit_id is not None:
+                materialized = materialize_git_task(
+                    git_url=r.git_url,
+                    git_commit_id=r.git_commit_id,
+                    source_path=r.path,
+                    docker_image=docker_image,
+                    cache_root=cache_root,
+                )
+                tasks.append(TaskConfig(path=materialized))
+            else:
+                materialized = materialize_ade_harbor_task_view(
+                    source_task_dir=r.path,
+                    view_root=view_root,
+                    task_slug=r.path.name,
+                    docker_image=spec.benchmark.docker_image_override,
+                    view_mode="copy",
+                )
+                tasks.append(TaskConfig(path=materialized))
+
     run_dir = jobs_dir / job_name
     return JobConfig(
         job_name=job_name,
