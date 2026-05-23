@@ -16,6 +16,7 @@ FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "fixtures" / "score"
 DAB_FIXTURE = FIXTURE_ROOT / "mixed_trial_run_dir"
 ADE_FIXTURE = FIXTURE_ROOT / "ade_bench_run_dir"
 UNEQUAL_FIXTURE = FIXTURE_ROOT / "unequal_trials_run_dir"
+DAB_BATCH_FIXTURE = FIXTURE_ROOT / "dab_batch_run_dir"
 
 
 def _copy_trial_subdirs(src: Path, dst: Path) -> None:
@@ -73,4 +74,19 @@ def test_rk_score_matches_summary_with_unequal_trials_per_query(tmp_path: Path) 
     score = _run_score(work)
 
     assert summary["stratified_pass_at_1"] == 0.25
+    assert score["stratified_pass_at_1"] == summary["stratified_pass_at_1"]
+
+
+def test_rk_score_matches_summary_json_for_dab_batch_fixture(tmp_path: Path) -> None:
+    """AC-4 round-trip on a DAB batch trial: composite reward 0.857 binarizes
+    to 0 under the old reducer; the canonical reducer must report 6/7 from
+    `reward_per_query.json` and both surfaces must agree byte-for-byte."""
+    work = tmp_path / "exp" / "job"
+    _copy_trial_subdirs(DAB_BATCH_FIXTURE, work)
+
+    aggregate_summary(work)
+    summary = json.loads((work / "summary.json").read_text())
+    score = _run_score(work)
+
+    assert summary["stratified_pass_at_1"] == 6 / 7
     assert score["stratified_pass_at_1"] == summary["stratified_pass_at_1"]
