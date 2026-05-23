@@ -73,3 +73,54 @@ def test_harbor_dab_rejects_unknown_dataset_ref_format() -> None:
             "  kind: harbor_dab\n"
             "  dataset: dab-no-version\n"
         ))
+
+
+def test_translator_uses_dataset_ref_to_enumerate_datasets(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """When `dataset:` is set and `datasets:` is empty, the translator
+    enumerates ALL datasets from the definition. Mock the plugin subprocess so
+    we just observe the dataset list that was passed."""
+    from razorback.translate import spec_to_job_config
+
+    captured_datasets: list[str] = []
+
+    def fake_run(cmd, capture_output, text):
+        for i, arg in enumerate(cmd):
+            if arg == "--datasets":
+                captured_datasets.append(cmd[i + 1])
+        out_idx = cmd.index("--out") + 1
+        out_dir = Path(cmd[out_idx])
+        out_dir.mkdir(parents=True, exist_ok=True)
+        task_dir = out_dir / captured_datasets[-1]
+        task_dir.mkdir(exist_ok=True)
+
+        class R:
+            returncode = 0
+            stderr = ""
+
+        return R()
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.setenv("DATAAGENTBENCH_DATA_ROOT", str(tmp_path / "fake-data"))
+
+    spec = parse_spec_text(
+        "version: 1\n"
+        "experiment: ac2-translator\n"
+        "agent:\n  kind: nop\n"
+        "benchmark:\n"
+        "  kind: harbor_dab\n"
+        "  dataset: dab@1.0\n"
+        "  workspace_variant: spacedock\n"
+        "  query_mode: batch\n"
+        "trials: 1\n"
+    )
+    jobs_dir = tmp_path / "jobs"
+    spec_to_job_config(
+        spec, job_name="j", jobs_dir=jobs_dir, tasks_root=tmp_path / "tr"
+    )
+    assert sorted(captured_datasets) == sorted([
+        "agnews", "bookreview", "crmarenapro", "DEPS_DEV_V1",
+        "GITHUB_REPOS", "googlelocal", "music_brainz_20k",
+        "PANCANCER_ATLAS", "PATENTS", "stockindex", "stockmarket", "yelp",
+    ])

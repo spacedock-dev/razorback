@@ -353,16 +353,54 @@ def _build_harbor_dab(
 
     assert isinstance(spec.benchmark, HarborDabBenchmarkBlock)
 
+    # AC-2: dataset ref resolution. If `dataset:` is set, the definition supplies
+    # the dataset inventory; `benchmark.datasets` (if present) is a subset selector.
+    # `data_root` falls back to env default — local data is still needed at
+    # materialize time (per entity Notes).
+    if spec.benchmark.dataset is not None:
+        from razorback_plugin_dab.dataset_def import load_default_definition
+
+        definition = load_default_definition()
+        if definition.ref != spec.benchmark.dataset:
+            raise SpecError(
+                f"benchmark.dataset {spec.benchmark.dataset!r} does not match "
+                f"the plugin's shipped definition {definition.ref!r}; "
+                f"upgrade razorback-plugin-dab or pin the matching version."
+            )
+        if spec.benchmark.datasets:
+            known = {d.name for d in definition.datasets}
+            unknown = [d for d in spec.benchmark.datasets if d not in known]
+            if unknown:
+                raise SpecError(
+                    f"benchmark.datasets subset references unknown DAB datasets "
+                    f"{unknown!r}; definition {definition.ref} knows {sorted(known)}"
+                )
+            resolved_datasets = list(spec.benchmark.datasets)
+        else:
+            resolved_datasets = [d.name for d in definition.datasets]
+        if spec.benchmark.data_root is not None:
+            data_root = Path(spec.benchmark.data_root).resolve()
+        else:
+            import os
+            env_default = os.environ.get(
+                "DATAAGENTBENCH_DATA_ROOT",
+                str(Path.home() / "dataagentbench" / "data"),
+            )
+            data_root = Path(env_default).expanduser().resolve()
+    else:
+        resolved_datasets = list(spec.benchmark.datasets)
+        data_root = Path(spec.benchmark.data_root).resolve()
+
     query_mode = spec.benchmark.query_mode
     task_dirs: list[Path] = []
     trial_name_map: dict[str, tuple[str, int] | tuple[str, list[int]]] = {}
-    for dataset in spec.benchmark.datasets:
+    for dataset in resolved_datasets:
         out_dir = tasks_root / dataset
         out_dir.mkdir(parents=True, exist_ok=True)
         cmd = [
             "uv", "run", "razorback-plugin-dab", "generate",
             "--datasets", dataset,
-            "--data-root", str(Path(spec.benchmark.data_root).resolve()),
+            "--data-root", str(data_root),
             "--out", str(out_dir.resolve()),
             "--workspace-variant", spec.benchmark.workspace_variant,
             "--query-mode", query_mode,
