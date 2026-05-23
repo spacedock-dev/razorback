@@ -20,6 +20,7 @@ from razorback.spec.agent_kwargs import build_spacedock_harbor_agent_kwargs
 from razorback.spec.schema import (
     AdeBenchBenchmarkBlock,
     CodexAgentBlock,
+    HarborBenchmarkBlock,
     HarborDabBenchmarkBlock,
     LocalBenchmarkBlock,
     NopAgentBlock,
@@ -98,6 +99,14 @@ def spec_to_job_config(
             job_name=job_name,
             jobs_dir=jobs_dir,
             agent_cfg=agent_cfg,
+        ), {}
+    if isinstance(spec.benchmark, HarborBenchmarkBlock):
+        return _build_harbor(
+            spec=spec,
+            job_name=job_name,
+            jobs_dir=jobs_dir,
+            agent_cfg=agent_cfg,
+            home=home,
         ), {}
     raise SpecError(f"unsupported benchmark block: {type(spec.benchmark).__name__}")
 
@@ -513,6 +522,133 @@ def _build_spider2_dbt(
         retry=RetryConfig(max_retries=0),
         environment=_environment_config(agent_cfg, run_dir),
     )
+
+
+def _build_harbor(
+    *,
+    spec: Spec,
+    job_name: str,
+    jobs_dir: Path,
+    agent_cfg: AgentConfig,
+    home: Path | None = None,
+) -> JobConfig:
+    """Translate a generic `kind: harbor` block into a Harbor JobConfig.
+
+    Pure pass-through path: resolves the dataset ref via
+    `PackageDatasetClient` (or globs a local `tasks_root`), applies
+    spec-side selectors (`tasks`, `exclude_tasks`, `n_tasks`), emits one
+    `TaskConfig(path=...)` per resolved task. No per-dataset transforms
+    (those stay in the per-benchmark kinds — `harbor_dab` invokes the
+    DAB plugin; `ade-bench` applies leakage deny-globs).
+
+    Spec-side `tasks:` entries match `PackageTaskId.name` verbatim. No
+    prefix stripping — task-name conventions are heterogeneous across
+    Harbor-published datasets (dabstep uses bare ints, swe-bench-verified
+    uses project-prefixed slugs, ade-bench uses dataset-prefixed slugs).
+    """
+    assert isinstance(spec.benchmark, HarborBenchmarkBlock)
+    block = spec.benchmark
+
+    task_paths: list[Path] = []
+    if block.dataset is not None:
+        home_dir = Path(home) if home is not None else Path.home()
+        cache_root = home_dir / ".cache" / "razorback" / "harbor" / "datasets"
+        task_paths = _resolve_harbor_dataset_tasks(
+            dataset_ref=block.dataset,
+            tasks=block.tasks,
+            cache_root=cache_root,
+        )
+    else:
+        assert block.tasks_root is not None
+        source_root = Path(block.tasks_root).resolve()
+        if not block.tasks:
+            raise SpecError(
+                "harbor benchmark with `tasks_root` requires non-empty `tasks`"
+            )
+        for slug in block.tasks:
+            source_task_dir = source_root / slug
+            if not (source_task_dir / "task.toml").is_file():
+                raise SpecError(
+                    f"harbor task {slug!r} not found at {source_task_dir} "
+                    f"(missing task.toml); tasks_root={source_root}"
+                )
+            task_paths.append(source_task_dir)
+
+    if block.exclude_tasks:
+        excluded = set(block.exclude_tasks)
+        task_paths = [p for p in task_paths if p.name not in excluded]
+
+    if block.n_tasks is not None:
+        task_paths = task_paths[: block.n_tasks]
+
+    run_dir = jobs_dir / job_name
+    return JobConfig(
+        job_name=job_name,
+        jobs_dir=jobs_dir,
+        n_concurrent_trials=spec.concurrency.trials,
+        n_attempts=spec.trials,
+        agents=[agent_cfg],
+        tasks=[TaskConfig(path=p) for p in task_paths],
+        verifier=VerifierConfig(disable=False),
+        retry=RetryConfig(max_retries=0),
+        environment=_environment_config(agent_cfg, run_dir),
+    )
+
+
+def _resolve_harbor_dataset_tasks(
+    *, dataset_ref: str, tasks: list[str] | None, cache_root: Path
+) -> list[Path]:
+    """Resolve a Harbor dataset ref into local task directories.
+
+    Wraps `PackageDatasetClient.download_dataset` (the same entry point
+    ade-bench's dataset-ref path uses). Returns paths in spec-order when
+    `tasks` is provided, alphabetical order otherwise.
+
+    Errors are wrapped in `SpecError` so `rk freeze`/`rk run` surface
+    SPEC_ERROR exit code rather than raw network/registry exceptions.
+    """
+    import asyncio
+
+    from harbor.registry.client import PackageDatasetClient
+
+    cache_root = Path(cache_root)
+    cache_root.mkdir(parents=True, exist_ok=True)
+
+    async def _resolve() -> list[Path]:
+        client = PackageDatasetClient()
+        items = await client.download_dataset(
+            dataset_ref,
+            overwrite=False,
+            output_dir=cache_root,
+            export=True,
+        )
+        return items
+
+    try:
+        items = asyncio.run(_resolve())
+    except SpecError:
+        raise
+    except BaseException as exc:
+        raise SpecError(
+            f"failed to resolve harbor dataset {dataset_ref!r}: {exc}"
+        ) from exc
+
+    by_name: dict[str, Path] = {
+        item.id.name: Path(item.downloaded_path).resolve() for item in items
+    }
+
+    if tasks is None:
+        return [by_name[name] for name in sorted(by_name)]
+
+    missing = [t for t in tasks if t not in by_name]
+    if missing:
+        available = sorted(by_name)
+        sample = available[:10]
+        raise SpecError(
+            f"harbor dataset {dataset_ref!r}: requested task(s) {missing!r} "
+            f"not found. available ({len(available)}, first 10): {sample!r}"
+        )
+    return [by_name[t] for t in tasks]
 
 
 def _environment_config(agent_cfg: AgentConfig, run_dir: Path) -> EnvironmentConfig:
