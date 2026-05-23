@@ -1,7 +1,7 @@
 ---
 id: zbg2fm28xjke5zg955mazvz5
 title: rk score delegates to benchmark-native aggregator (drop binary pass@1 reducer)
-status: implementation
+status: validation
 source: 2026-05-23 session — debrief at _debriefs/2026-05-22-01.md flagged the "two metrics from the same data" problem but no entity addressed the reducer itself. Filed after confirming `summary.json` already emits paper-faithful per-query pass@1 while `rk score` still emits binary.
 started: 2026-05-23T04:11:11Z
 completed:
