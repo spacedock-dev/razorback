@@ -80,3 +80,90 @@ materialized tasks -> Razorback task views -> Harbor run.
 ### Summary
 
 Wrote a separate plan doc with eight tasks. Riskiest-first: T0 probes Harbor's `TaskClient.download_tasks([PackageTaskId])` export layout in 6 bounded steps before any schema/translator code lands. The dataset-ref path is wired as a sibling source-resolver under the existing PKG-40 materializer (not a replacement); `dataset_ref` + `dataset_content_hash` ride into `view_manifest.json` (schema_version bump to 2) and freeze `provenance.yaml` to satisfy AC-2's pinning requirement. AC-5's no-submodule clause is enforced as an in-test `git submodule status` assertion in T7, not just a docs claim.
+
+## Stage Report: implementation
+
+- DONE: Execute the plan at docs/razorback-implementation/plans/ade-bench-harbor-dataset-ref.md TDD-first, riskiest-first. T0 (Harbor TaskClient.download_tasks probe, 6 bounded steps) lands BEFORE T1+ code. If T0 surfaces that Harbor's export layout differs from the plan's assumption, stop and ask before writing schema/translator code.
+  T0 ran first and surfaced 4 contract deviations from the plan (org name `dbt-labs/ade-bench` not `harbor/ade-bench`; only `@latest` tag exists, not `@1.0`; API entry is `PackageDatasetClient.download_dataset` not `TaskClient.download_tasks` directly; task package names carry the `ade-bench-` prefix). Escalated to captain via SendMessage; captain approved resolutions A-D + E1; T1+ executed against the adjusted contracts. Probe note at docs/razorback-implementation/notes/ade-bench-harbor-dataset-ref-probe.md (commits 9008eac, 440b2cf).
+- DONE: All 5 ACs proven from this stage: AC-1 schema tests; AC-2 patch-Harbor-resolver unit test + content_hash in view_manifest.json + provenance.yaml; AC-3 task-view guardrail test (dataset-ref path passes docker_image to same materializer); AC-4 examples + smoke spec; AC-5 in-test `git submodule status` assertion.
+  AC-1: 8 schema tests at tests/unit/test_ade_bench_dataset_ref_schema.py (bare-name rejection cites canonical example + rule per captain guardrail). AC-2: 9 resolver + translator manifest tests + freeze smoke pin both `dataset_content_hash` and per-task `task_content_hash` in `view_manifest.json` schema_v2. AC-3: `test_translator_preserves_docker_image_override_through_dataset_path` asserts dataset-ref path passes `docker_image` through `materialize_ade_harbor_task_view` (call shape unchanged from PKG-40). AC-4: `examples/specs/ade-bench-harbor-dataset-codex.yaml` ships `dataset: dbt-labs/ade-bench@latest`; `rg "tasks_root: .*ade" examples/specs examples/drivers` returns only 3 fixture/dev paths (all under `./tests/fixtures/`); generator gains `--ade-dataset-ref` flag with 5 new tests. AC-5: `tests/integration/test_ade_bench_dataset_ref_freeze_smoke.py::test_no_new_submodule_required_by_dataset_ref_path` asserts `git submodule status` carries no forbidden marker.
+- DONE: Stage report enumerates test counts + uv run pytest excerpts. Any plan deviation called out with the AC cite (especially if T0 surfaces an unexpected Harbor surface).
+  See below. 93/93 focused tests pass; 553/553 unit tests pass (one pre-existing unrelated collection failure in test_task_identity_scoring.py confirmed against baseline, unchanged by this work).
+
+### Summary
+
+Layered a dataset-ref source-resolver under the existing PKG-40 materializer
+(no replacement). The riskiest contract (Harbor's published-dataset export
+layout) was probed live in T0 BEFORE any schema/translator code landed, and
+that probe surfaced 4 plan deviations (org `dbt-labs` not `harbor`; ref `@latest`
+not `@1.0`; entry `PackageDatasetClient.download_dataset` not `TaskClient.download_tasks`;
+task slugs prefixed `ade-bench-`). The captain confirmed the adjusted contracts
+and the implementation shipped against them. `view_manifest.json` schema bumped
+to v2 with `dataset_ref`, `dataset_content_hash` (dataset-level sha256), and
+`task_content_hash` (per-task sha256 from `PackageTaskId.ref`) — both hashes
+are the load-bearing reproducibility pin; the human-readable `@latest` is
+documentation. Plan deviations called out per AC: AC-1 (canonical example
+shifted from `ade-bench@1.0` to `dbt-labs/ade-bench@latest`); AC-2 (manifest
+gained a third `task_content_hash` field beyond the plan's two); AC-4 (generator
+adds `--ade-dataset-ref` as a sibling to `--ade-bench-root` rather than
+replacing it, since existing tests + dev workflows still use the local-root
+path as the fixture/dev escape hatch — `--ade-bench-root` is now documented
+as dev/fixture only and is mutually exclusive with `--ade-dataset-ref`).
+
+### Modules added / harbor surfaces touched
+
+- New: `src/razorback/benchmarks/ade_bench/dataset_ref.py` (`parse_dataset_ref`,
+  `resolve_dataset_tasks`, `ResolvedDatasetTask`).
+- Modified: `src/razorback/spec/schema.py` (added `AdeBenchBenchmarkBlock.dataset`
+  field + `_validate_source_selection` model validator; `tasks_root` + `tasks`
+  became optional; bare-name rejection cites the canonical example).
+- Modified: `src/razorback/translate.py` (`_build_ade_bench` grew a sibling
+  dataset-ref branch under the existing PKG-40 materializer; image-override,
+  leakage deny-globs, and `RAZORBACK_BENCHMARK_*` env-var injection all apply
+  unchanged).
+- Modified: `src/razorback/benchmarks/ade_bench/harbor_view.py` and
+  `src/razorback/harbor_tasks/materialize.py` (accept and forward
+  `dataset_ref`, `dataset_content_hash`, `task_content_hash` kwargs).
+- Modified: `src/razorback/harbor_tasks/manifest.py` (schema v2;
+  `TaskViewManifest` carries the three new optional fields).
+- Harbor surfaces consumed: `harbor.registry.client.PackageDatasetClient`
+  (`get_dataset_metadata`, `download_dataset`),
+  `harbor.registry.client.base.DatasetMetadata` + `DownloadedDatasetItem`,
+  `harbor.models.task.id.PackageTaskId`.
+
+### Test counts and excerpts
+
+`uv run --frozen pytest tests/unit/test_ade_bench_dataset_ref_schema.py tests/unit/test_ade_bench_dataset_ref_resolver.py tests/unit/test_ade_bench_dataset_ref_translator.py tests/unit/test_ade_bench_harbor_view.py tests/unit/test_harbor_task_view_materializer.py tests/unit/test_translate_harbor_task_batches.py tests/unit/test_ade_bench_translator.py tests/unit/test_ade_bench_translator_docker_image_override.py tests/unit/test_ade_bench_translator_git_task.py tests/unit/test_ade_bench_translator_local_root.py tests/unit/test_ade_bench_translator_test_sh_gating.py tests/unit/test_ade_bench_schema.py tests/unit/test_ade_bench_schema_docker_image_override.py tests/unit/test_ade_bench_schema_git_tasks.py tests/unit/test_codex_benchmark_spec_generator.py tests/unit/test_claude_benchmark_spec_generator.py tests/integration/test_ade_bench_dataset_ref_freeze_smoke.py`
+→ `93 passed in 1.53s`
+
+`uv run --frozen pytest tests/unit/ -q --ignore=tests/unit/test_task_identity_scoring.py`
+→ `553 passed, 16 warnings in 9.37s` (pre-existing unrelated collection
+failure in `test_task_identity_scoring.py::razorback.score.load` deselected;
+confirmed unchanged against baseline before any gb work).
+
+`rg "tasks_root: .*ade" examples/specs examples/drivers` → 3 matches, all
+under `./tests/fixtures/ade_bench/tasks` (fixture/dev only per AC-4); the
+three legacy specs now carry `FIXTURE/DEV` ABOUTME headers naming the
+canonical replacement.
+
+`git submodule status` → empty (AC-5 baseline preserved; in-test assertion
+codifies the invariant for CI).
+
+### Plan deviations called out
+
+- AC-1: canonical dataset-ref example shifted from the plan's `ade-bench@1.0`
+  to `dbt-labs/ade-bench@latest`. The plan's bare `ade-bench@1.0` form is
+  explicitly rejected by the new validator with an error naming both the
+  required shape (`<org>/<name>@<ref>`) and the canonical example (captain's
+  AC-1 guardrail). T0 probe note records the registry evidence (only
+  `dbt-labs/ade-bench@latest`, rev=1, exists in Harbor 0.6.6's registry).
+- AC-2: manifest schema v2 carries THREE hashes, not two — `dataset_ref`,
+  `dataset_content_hash` (dataset-level), and `task_content_hash` (per-task,
+  from `PackageTaskId.ref`). Captain decision D pinned both layers so a frozen
+  spec reproduces the exact task body, not just the dataset version that
+  contained it.
+- AC-4: the generator gains `--ade-dataset-ref` as a sibling to
+  `--ade-bench-root` rather than replacing it (the plan said "Keep an opt-in
+  `--legacy-tasks-root` switch" — same intent, different flag name to match
+  the existing CLI surface; the existing 7 generator tests using
+  `--ade-bench-root` continue to pass).
