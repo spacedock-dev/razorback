@@ -1,13 +1,13 @@
 ---
 id: 1svqbefxg8fd12cy2ssp2jes
 title: Make run aggregation and rk score use one score reducer
-status: validation
+status: done
 source: 2026-05-23 staff audit + rk-score validator follow-up - duplicate stratified reducers
 started: 2026-05-23T17:24:54Z
-completed:
-verdict:
+completed: 2026-05-23T18:22:57Z
+verdict: PASSED
 score: 0.9
-worktree: .worktrees/spacedock-ensign-runs-aggregate-single-score-reducer
+worktree: 
 issue:
 pr:
 mod-block: 
