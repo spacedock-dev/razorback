@@ -35,3 +35,16 @@ Verified by: `uv run pytest tests/unit/test_spec_schema_spacedock_solver.py test
 Any remaining historical references live in archive docs or validation notes,
 not active examples or agent-readable README/AGENTS surfaces.
 Verified by: validation report includes grep output and rationale for each remaining hit.
+
+## Stage Report: plan
+
+- DONE: Inventory active `V2` / `v2` / `spacedock_solver_v2` hits and classify cleanup targets versus intentional historical assertions.
+  Evidence: plan inventory classifies schema/helper/test/example/README/backlog-doc cleanup targets and marks stale-discriminator tests plus archive/validation/debrief/evidence docs as historical.
+- DONE: Plan canonical rename steps with TDD or focused validation that proves behavior is unchanged.
+  Evidence: plan Tasks 1-6 map ACs to schema/helper/agent/example/doc rename steps, RED grep/import checkpoints, and focused pytest checkpoints.
+- DONE: State exact validation commands and the rationale required for any remaining historical/documentation hits.
+  Evidence: plan Task 6 gives exact AC grep, pytest, and docs grep commands; inventory section states the allowed historical-hit rationale.
+
+### Summary
+
+Wrote a separate implementation plan at `docs/razorback-implementation/plans/phase6-followup-clean-canonical-spacedock-names.md` because the inventory crosses multiple active subsystems despite only three ACs. The plan keeps this stage doc-only, reserves production edits for implementation, and requires validation to report every remaining historical hit explicitly.
