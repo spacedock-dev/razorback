@@ -1,7 +1,7 @@
 ---
 id: 7qwenbebdvmqj3gd7xxdpytd
 title: Goal 1 sibling — DAB direct-structured matrix, opus-4.7, reasoning_effort=xhigh, batch, parallel=1
-status: implementation
+status: validation
 source: Captain directive 2026-05-23 — "run an equivalent of this (same workflow readme) but without spacedock" — paper-comparable direct-baseline run alongside the just-archived `d8 goal1-rerun-headline-per-query-recompute` (spacedock pooled per-query=0.722, verdict=above paper-spacedock=0.577)
 started: 2026-05-23T19:48:50Z
 completed:
