@@ -125,3 +125,16 @@ After this entity merges, halt/resume becomes worktree-
 independent. Goal 1's matrix re-run can reuse freeze trees
 from this session's failed attempts, dropping the cost from
 $95 to ~$0 (only verifier + score on saved answers).
+
+## Stage Report: plan
+
+- DONE: Separate plan doc at docs/razorback-implementation/plans/freeze-tree-content-addressable-store.md with AC↔task map. Re-baseline assumptions: jp (commit-small-artifacts) was SUPERSEDED (see _archive/), so AC-5's 'after this entity + razorback-runs-outside-worktree + commit-small-artifacts-by-default ship' clause becomes 'after this entity + x9 ship' — note this in the plan.
+  Plan at `docs/razorback-implementation/plans/freeze-tree-content-addressable-store.md` with an AC↔Task map covering AC-1..AC-5; "Baseline assumptions" section explicitly re-baselines AC-5 to drop the jp dependency (jp archived 2026-05-22T23:14:13Z per `_archive/commit-small-artifacts-by-default.md`) and notes x9 is shipped.
+- DONE: Reuse x9's resolver pattern: new helper module (e.g., `src/razorback/freeze_dir_default.py` or extension of `runs_dir_default.py`) with `$RAZORBACK_FREEZE_DIR` → `$XDG_DATA_HOME/razorback/freeze` → `~/.local/share/razorback/freeze`. Specify where `spacedock_solver_v2._freeze_dir` is called and how the wiring changes.
+  Plan creates `src/razorback/freeze_dir_default.py` as a direct mirror of `runs_dir_default.py` (T0 RED + T1 GREEN, 6 unit tests). T2 re-wires `SpacedockSolverAgent.resolve_freeze_dir` (current impl at `src/razorback/agents/spacedock_solver_v2.py:162-182`) from `<run-dir>/_razorback/freeze/<sealed_hash>/` to `resolve_default_freeze_dir() / self.sealed_hash`; deletes the dead `_resolve_run_dir_from_logs_dir` static method; updates the four existing host-git unit tests + two existing mechanism integration tests to set `$RAZORBACK_FREEZE_DIR` per-test. Note: the entity body says `_freeze_dir` but the actual symbol is `resolve_freeze_dir` — plan calls out the actual symbol verbatim.
+- DONE: AC-4 migration helper: goal1-resume's old worktree-relative freeze trees were destroyed by prior FO --force cleanup, so there is nothing to migrate today. Recommend either deferring AC-4 (mark out-of-scope) OR scoping it to a simple `--source-dir`-driven helper for future use. Name the recommendation.
+  **Recommendation: DEFER AC-4** — mark out of scope; rationale in plan under "AC-4 re-baseline". No migration target exists today and YAGNI applies; the breakglass sketch (a ~30-min `razorback freeze migrate --source-dir` Typer subcommand) is retained as Task 4 sketch in case captain rejects the deferral.
+
+### Summary
+
+Plan decomposes the entity into 6 TDD tasks (T0..T6, skipping T4) ordered riskiest-contract-first: resolver RED+GREEN (T0+T1) → agent re-wiring with existing-test updates (T2) → cross-worktree discovery mechanism (T3, AC-2 gate) → CAS-resume mechanism (T5, AC-5 gate) → full regression capture (T6, AC-3 gate). AC-4 (migration helper) is SKIPPED with rationale; the entity's other four ACs each get a dedicated task. The plan reuses x9's `runs_dir_default` resolver shape verbatim and removes the worktree-relative freeze path outright (no dual-path backwards compat) per the entity's AC-2 statement that freeze trees must be reachable "after worktree A is removed."
