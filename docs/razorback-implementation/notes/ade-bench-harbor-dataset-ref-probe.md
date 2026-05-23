@@ -87,11 +87,15 @@ Report). The implementation landed against the adjusted contracts:
 - Live Harbor download of `dbt-labs/ade-bench@latest` worked end-to-end during
   T0 (48 task packages, ~49 MB). The runs scratch dir `runs/ade-bench-dataset-ref-probe/`
   is gitignored and not committed; remove it with `rm -rf` for a clean checkout.
-- `dbt-labs/ade-bench@latest` is the canonical example shipped in
-  `examples/specs/ade-bench-harbor-dataset-codex.yaml`. Reproducibility is pinned
-  by `view_manifest.json`'s `dataset_content_hash` + `task_content_hash`, not the
-  human-readable `@latest`; the captain is filing a follow-up entity for
-  migrating to a pinned semver tag once `dbt-labs` publishes one.
+- The canonical example shipped in
+  `examples/specs/ade-bench-harbor-dataset-codex.yaml` is the digest tier
+  `dbt-labs/ade-bench@sha256:2c1f9e6966d01b0a5de2235d1a0b64089c7eead42c85c3b7b61d0929405c2bd5`
+  (paper-grade pin: the resolver itself refuses mismatched content, not just a
+  downstream manifest check). `@latest` remains a valid ref form for daily
+  smoke runs but is documentation-only — the schema accepts all three tiers
+  (tag / revision / digest) via `PackageReference.parse` round-trip. The
+  `view_manifest.json` `dataset_content_hash` + `task_content_hash` continue
+  to codify the same hash for the freeze provenance.
 - Tests use a `tests/fixtures/ade_bench/fake_dataset/` shaped after the live
   export (flat `<output_dir>/ade-bench-<slug>/task.toml`). The integration smoke
   patches `PackageDatasetClient.download_dataset` so CI never touches the live

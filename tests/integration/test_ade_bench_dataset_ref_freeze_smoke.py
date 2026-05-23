@@ -89,7 +89,10 @@ def test_canonical_dataset_ref_spec_translates_with_pinned_hashes(
     view_dir = cfg.tasks[0].path
     manifest = json.loads((view_dir / "view_manifest.json").read_text())
     assert manifest["schema_version"] == 2
-    assert manifest["dataset_ref"] == "dbt-labs/ade-bench@latest"
+    assert manifest["dataset_ref"] == (
+        "dbt-labs/ade-bench@sha256:"
+        "2c1f9e6966d01b0a5de2235d1a0b64089c7eead42c85c3b7b61d0929405c2bd5"
+    )
     assert manifest["dataset_content_hash"] == "c" * 64
     assert manifest["task_content_hash"] == "sha256:" + "a" * 64
     assert manifest["benchmark_kind"] == "ade-bench"
@@ -110,7 +113,10 @@ def test_freeze_command_writes_provenance_for_dataset_ref_spec(
 
     frozen = yaml.safe_load((tmp_path / "spec.frozen.yaml").read_text())
     assert frozen["benchmark"]["kind"] == "ade-bench"
-    assert frozen["benchmark"]["dataset"] == "dbt-labs/ade-bench@latest"
+    assert frozen["benchmark"]["dataset"] == (
+        "dbt-labs/ade-bench@sha256:"
+        "2c1f9e6966d01b0a5de2235d1a0b64089c7eead42c85c3b7b61d0929405c2bd5"
+    )
     assert (tmp_path / "provenance.yaml").is_file()
 
 

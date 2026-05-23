@@ -1,5 +1,5 @@
-# ABOUTME: Canonical ade-bench score spec — Harbor published dataset ref (no local task root).
-# ABOUTME: Reproducibility is pinned by view_manifest.json's dataset_content_hash + task_content_hash, not the human-readable `@latest`.
+# ABOUTME: Canonical ade-bench score spec — Harbor published dataset ref (paper-grade digest pin).
+# ABOUTME: `@sha256:` digest is the load-bearing pin; view_manifest.json's dataset_content_hash + task_content_hash codify the same hash for the freeze provenance.
 version: 1
 experiment: ade-bench-harbor-dataset-codex
 agent:
@@ -17,7 +17,7 @@ agent:
   tools_denied: []
 benchmark:
   kind: ade-bench
-  dataset: dbt-labs/ade-bench@latest
+  dataset: dbt-labs/ade-bench@sha256:2c1f9e6966d01b0a5de2235d1a0b64089c7eead42c85c3b7b61d0929405c2bd5
   tasks:
     - airbnb001
   docker_image_override: shared-dbt-duckdb:latest
