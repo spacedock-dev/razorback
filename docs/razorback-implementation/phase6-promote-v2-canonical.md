@@ -1,7 +1,7 @@
 ---
 id: t1qhefvs93x72m9dbvzw11gn
 title: Phase 6 — promote v2 canonical, sideline v1 to _legacy/
-status: implementation
+status: validation
 source: plan Phase 6 (v2 reconciliation plan at docs/superpowers/plans/2026-05-19-razorback-reconciliation-plan.md)
 started: 2026-05-23T03:52:58Z
 completed:
