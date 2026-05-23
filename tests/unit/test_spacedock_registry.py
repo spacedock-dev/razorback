@@ -1,5 +1,5 @@
-# ABOUTME: AC-2 — agent.kind=spacedock-solver registry entry validates kwargs BEFORE
-# ABOUTME: harbor.AgentConfig is constructed. SpecError on bad stages, bad prompts, unknown fields.
+# ABOUTME: Phase 6 — registry exposes only canonical agent.kind=spacedock_solver.
+# ABOUTME: Stale v1/transitional routes are rejected by the active registry/schema.
 
 import pytest
 
@@ -9,63 +9,78 @@ from razorback.spec.parse import parse_spec_text
 
 
 def test_spacedock_solver_kind_resolves_to_schema_and_import_path():
-    entry = resolve_agent_kind("spacedock-solver")
+    entry = resolve_agent_kind("spacedock_solver")
     assert entry.import_path == "razorback.agents.spacedock_solver:SpacedockSolverAgent"
     cfg = entry.config_schema(
+        runtime="codex",
         model="claude-opus-4-5",
         sampling={"temperature": 0.0, "top_p": None, "seed": 42},
-        stages=["model", "analyze", "verify"],
+        solver_workflow="examples/solver_workflows/codex-benchmark-solver",
         tools_allowed=["Bash", "Read"],
-        prompts={"model": "sha256:aa", "analyze": "sha256:bb", "verify": "sha256:cc"},
+        tools_denied=["Bash(curl*)"],
+        solver_workflow_content_hash="sha256:" + "a" * 64,
         sealed_hash="deadbeef" * 4,
     )
-    assert cfg.stages == ["model", "analyze", "verify"]
+    assert cfg.runtime == "codex"
+    assert cfg.tools_denied == ["Bash(curl*)"]
 
 
-def test_spec_parse_rejects_unknown_stages():
+def test_spec_parse_accepts_canonical_spacedock_solver(tmp_path):
+    workflow = tmp_path / "solver"
+    workflow.mkdir()
+    (workflow / "README.md").write_text("## Stages\n- model\n")
+    spec_text = f"""\
+version: 1
+experiment: canonical-solver
+agent:
+  kind: spacedock_solver
+  runtime: claude
+  model: claude-opus-4-5
+  sampling: {{temperature: 0.0, seed: 42}}
+  solver_workflow: {workflow}
+  tools_allowed: []
+  tools_denied: []
+benchmark:
+  kind: harbor_dab
+  data_root: /tmp/data
+  datasets: [bookreview]
+"""
+    spec = parse_spec_text(spec_text)
+    assert spec.agent.kind == "spacedock_solver"
+
+
+def test_spec_parse_rejects_stale_v1_spelling():
     bad_spec = """\
 version: 1
-experiment: bad-stages
+experiment: stale-v1
 agent:
   kind: spacedock-solver
-  model: claude-opus-4-5
-  sampling: {temperature: 0.0, seed: 42}
-  stages: [model, verify]
-  tools_allowed: []
-  prompts:
-    model: ./prompts/m.md
-    verify: ./prompts/v.md
 benchmark:
-  kind: dab
-  data_root: /Users/clkao/git/dataagentbench/data
+  kind: harbor_dab
+  data_root: /tmp/data
   datasets: [bookreview]
 """
     with pytest.raises(SpecError) as exc:
         parse_spec_text(bad_spec)
-    assert "stages" in str(exc.value)
+    assert "spacedock-solver" in str(exc.value)
 
 
-def test_spec_parse_rejects_prompts_missing_a_stage():
+def test_spec_parse_rejects_transitional_v2_spelling():
     bad_spec = """\
 version: 1
-experiment: missing-prompt
+experiment: stale-v2
 agent:
-  kind: spacedock-solver
+  kind: spacedock_solver_v2
   model: claude-opus-4-5
-  sampling: {temperature: 0.0, seed: 42}
-  stages: [model, analyze, verify]
-  tools_allowed: []
-  prompts:
-    model: ./prompts/m.md
-    analyze: ./prompts/a.md
+  solver_workflow: .
 benchmark:
-  kind: dab
-  data_root: /Users/clkao/git/dataagentbench/data
+  kind: harbor_dab
+  data_root: /tmp/data
   datasets: [bookreview]
 """
     with pytest.raises(SpecError) as exc:
         parse_spec_text(bad_spec)
-    assert "prompts" in str(exc.value) and "verify" in str(exc.value)
+    assert "spacedock_solver_v2" in str(exc.value)
 
 
 def test_spec_parse_rejects_unknown_agent_kwargs():
@@ -73,19 +88,15 @@ def test_spec_parse_rejects_unknown_agent_kwargs():
 version: 1
 experiment: extra-key
 agent:
-  kind: spacedock-solver
+  kind: spacedock_solver
   model: claude-opus-4-5
   sampling: {temperature: 0.0, seed: 42}
-  stages: [model, analyze, verify]
+  solver_workflow: .
   tools_allowed: []
-  prompts:
-    model: ./prompts/m.md
-    analyze: ./prompts/a.md
-    verify: ./prompts/v.md
   frobnicator: true
 benchmark:
-  kind: dab
-  data_root: /Users/clkao/git/dataagentbench/data
+  kind: harbor_dab
+  data_root: /tmp/data
   datasets: [bookreview]
 """
     with pytest.raises(SpecError) as exc:
@@ -99,10 +110,7 @@ def test_unknown_kind_raises_agent_kind_error():
         resolve_agent_kind("definitely-not-real")
 
 
-def test_existing_kinds_still_resolve():
-    """M3's nop + claude-cli kinds keep resolving — M4 only adds, never removes."""
-    assert resolve_agent_kind("nop").import_path is None
-    assert (
-        resolve_agent_kind("claude-cli").import_path
-        == "razorback.agents._runtime.claude:RazorbackClaudeCode"
-    )
+@pytest.mark.parametrize("kind", ["spacedock_solver_v2", "spacedock-solver", "claude-cli"])
+def test_stale_registry_routes_do_not_resolve(kind):
+    with pytest.raises(AgentKindError):
+        resolve_agent_kind(kind)
