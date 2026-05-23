@@ -10,7 +10,7 @@ score: 0.95
 worktree: .worktrees/spacedock-ensign-merge-origin-main
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 ---
 
 ## Problem
