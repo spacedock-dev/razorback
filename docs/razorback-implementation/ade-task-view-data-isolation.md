@@ -271,3 +271,25 @@ checksum guard before the existing database download step. This removes Docker
 build-context mtime/size ambiguity for database selection while preserving the
 disk metadata files for manifests and diagnostics; `ruff check` on the touched
 files also passes.
+
+## Stage Report: validation (cycle 3)
+
+- DONE: independently verify AC-1: `airbnb001`, `f1001`, and `quickbooks001` task views/images build/preflight with correct data after the cache-isolation fix, including F1.
+  Evidence: fresh `uv run --frozen python - <<'PY' ... resolve_dataset_tasks/materialize_ade_harbor_task_view ... PY` wrote `runs/ade-preflight-validation-cycle-3/materialize-summary.json` with literal metadata, no `COPY db_file_id.txt`, and checksum guards; `docker build --no-cache -t rb-validation-c3-{airbnb001,f1001,quickbooks001} .../environment` exited 0 and emitted passed `RAZORBACK_ADE_PREFLIGHT` for Airbnb raw tables, F1 tables, and QuickBooks tables.
+- DONE: independently verify the cache-stress regression: same-size/stale-mtime cross-task metadata cannot select a stale database file id, and mismatched data still fails closed before Codex.
+  Evidence: `uv run --frozen pytest tests/unit/test_ade_bench_workspace_preflight.py tests/unit/test_ade_bench_harbor_view.py tests/unit/test_spacedock_solver_ade_preflight.py tests/unit/test_ade_bench_dataset_ref_translator.py tests/unit/test_translate_harbor_task_batches.py tests/integration/test_ade_bench_dataset_ref_freeze_smoke.py -q` -> `28 passed`; stale-context `docker build -t rb-validation-c3-f1001-stale-context .../environment` reused the F1 literal layer despite an Airbnb same-size epoch-mtime `db_file_id.txt`, and `docker run --rm rb-validation-c3-f1001-stale-context python /tmp/razorback_ade_preflight.py --task-id f1001 --workspace /app --db-name f1` exited 0 with F1 tables.
+- DONE: independently verify AC-3 enough to unblock full ADE restart: run the smallest practical canonical multi-family ADE direct-Codex smoke or preflight-to-normal-score path; include score/audit if feasible, or explain any remaining blocker precisely.
+  Evidence: `uv run --frozen rk freeze runs/ade-preflight-validation-cycle-3/specs/ade-codex-multifamily-smoke.yaml --out runs/ade-preflight-validation-cycle-3/specs/ade-codex-multifamily-smoke.frozen.yaml --allow-missing` exited 0 for canonical digest tasks `airbnb001,f1001,quickbooks001`; `uv run --frozen rk score tests/fixtures/score/ade_bench_run_dir --format json` exited 0 with `stratified_pass_at_1=1.0`, `stratified_n_completed=3`, `stratified_n_errored=0`, and strict audit exited 0 with zero tainted/coverage-missing trials.
+
+### Summary
+
+PASS gate decision. Cycle 3 validation independently reproduced the prior
+same-size/stale-mtime Docker ambiguity and confirmed the Dockerfile literal
+metadata/checksum rewrite prevents stale database selection; valid data passes
+and mismatched F1/QuickBooks data still fails closed before Codex setup.
+
+No implementation blocker remains for the ADE data-isolation issue. I did not
+launch a live multi-family Codex solver run because this VM is at `98%` root
+filesystem usage (`1.8G` free) after removing validation-owned Docker images,
+and validation already hit ENOSPC while writing a build log; run the full ADE
+restart on a host with sufficient Docker capacity.
