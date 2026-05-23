@@ -701,6 +701,21 @@ v2) records `dataset_ref`, `dataset_content_hash` (dataset-level
 sha256), and per-task `task_content_hash` so frozen specs pin both
 layers of identity.
 
+**Generic Harbor surface (`kind: harbor`).** Any harbor-published
+dataset is addressable through a single generic block: `kind: harbor`
++ `dataset: <org>/<name>@<ref>` + optional task selectors (`tasks`,
+`exclude_tasks`, `n_tasks` — matching harbor's `-i` / `-x` / `-l`
+flags) + optional `prep:` discriminator for benchmarks that require
+razorback-side task materialization (currently DAB, via the
+`razorback-plugin-dab` subprocess). The per-benchmark blocks
+`harbor_dab`, `ade-bench`, and `spider2-dbt` stay supported as the
+existing path; new harbor-published benchmarks (dabstep,
+swe-bench-verified, terminal-bench-2, lawbench, replicationbench,
+medagentbench, swe-bench-pro, ...) use `kind: harbor` and cost zero
+razorback code per addition. See
+[`2026-05-23-generic-harbor-benchmark-surface.md`](./2026-05-23-generic-harbor-benchmark-surface.md)
+for the migration shape and prep-block discriminator.
+
 ```yaml
 version: 1
 experiment: dab-paper-reproduction
