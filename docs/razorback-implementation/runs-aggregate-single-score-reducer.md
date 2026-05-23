@@ -10,7 +10,7 @@ score: 0.9
 worktree: .worktrees/spacedock-ensign-runs-aggregate-single-score-reducer
 issue:
 pr:
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 ## Problem
