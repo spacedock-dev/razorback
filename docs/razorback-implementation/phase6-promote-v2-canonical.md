@@ -188,3 +188,16 @@ Wrote the standard separate Phase 6 plan at `docs/razorback-implementation/plans
 ### Summary
 
 Promoted the v2 runtime-adapter solver to canonical `agent.kind: spacedock_solver`, moved the old v1 solver to `_legacy/agents/spacedock_solver_legacy.py` with a deprecation warning, updated active examples/generators, trimmed the active registry, and removed stale v1/transitional tests. The backlog -> plan and plan -> implementation gates were auto-approved by the first officer, not human-gated; broad AC-4 adapter sidelines are intentionally deferred with active-import evidence instead of forced in this pass.
+
+## Stage Report: validation
+
+- DONE: DONE if validation independently reruns focused route/schema/freeze/runtime tests and grep/inventory checks for canonical `spacedock_solver`, rejected `spacedock_solver_v2`, and legacy-only v1 solver references.
+  Evidence: focused route/schema/freeze/runtime/generator suite returned `90 passed in 3.67s`; grep found `spacedock_solver_v2|spacedock-solver` only under `_legacy/`, no active example/generator `spacedock_solver_v2`, and no active `kind: dab|kind: in_tree_dab`.
+- DONE: DONE if validation reviews the implementation commits and AC evidence with explicit PASS/FAIL/SKIPPED for AC-1..AC-9, especially the broad AC-4 deferrals, AC-8 workflow-status failure, AC-1 smoke fallback, AC-7 fallback, and AC-9 full-test status.
+  Evidence: validation report `docs/razorback-implementation/validation/phase6-promote-v2-canonical.md` records AC-1 FAIL, AC-2 PASS, AC-3 PASS, AC-4 FAIL, AC-5 FAIL, AC-6 PASS, AC-7 SKIPPED/partial fallback, AC-8 FAIL, AC-9 FAIL; full pytest was `19 failed, 572 passed, 5 skipped`.
+- DONE: DONE if validation writes `docs/razorback-implementation/validation/phase6-promote-v2-canonical.md`, appends a stage report to the entity, commits only validation artifacts, and gives a clear gate decision: APPROVE to done or REJECT back to implementation with concrete fixes.
+  Evidence: validation artifacts are this entity body update plus the validation report; gate decision is REJECT back to implementation with required fixes for AC-1, AC-4, AC-8, and AC-9.
+
+### Summary
+
+Validation rejected the branch. The canonical `spacedock_solver` route itself is green in focused tests, but the exact AC-1 run target is missing, broad AC-4 sidelines were deferred, workflow status fails on an unrelated malformed active entity, and `uv run pytest` exits non-zero. The plan and implementation gates were first-officer auto-approved, not human-gated.
