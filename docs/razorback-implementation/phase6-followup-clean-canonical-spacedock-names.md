@@ -10,7 +10,7 @@ score: 0.58
 worktree: .worktrees/spacedock-ensign-phase6-followup-clean-canonical-spacedock-names
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 ---
 
 ## Problem
