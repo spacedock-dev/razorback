@@ -371,7 +371,10 @@ SCORE_REPORT_VERSION = 1
 
 
 def reduce_per_query_stratified(
-    outcomes: list[TrialOutcome], *, alpha: float = 0.05
+    outcomes: list[TrialOutcome],
+    *,
+    alpha: float = 0.05,
+    trial_counts: tuple[int, int, int] | None = None,
 ) -> StratifiedReport:
     """Per-query stratified pass@1 with per-query Wilson CIs.
 
@@ -381,11 +384,20 @@ def reduce_per_query_stratified(
     Wilson CI attaches at the cell level only. The dataset stratum is the
     mean of per-query proportions — that is not a binomial, so its
     `wilson_ci` is always `null`.
+
+    `trial_counts` lets the caller override the headline
+    `(total, completed, errored)` accounting when one physical trial has
+    been fanned into N outcome rows (DAB batch mode). When `None`, counts
+    are derived from `outcomes` (one row = one trial).
     """
-    n_trials_total = len(outcomes)
-    completed = [t for t in outcomes if t["error_reason"] is None and t["reward"] is not None]
-    n_trials_completed = len(completed)
-    n_trials_errored = n_trials_total - n_trials_completed
+    if trial_counts is None:
+        n_trials_total = len(outcomes)
+        completed = [t for t in outcomes if t["error_reason"] is None and t["reward"] is not None]
+        n_trials_completed = len(completed)
+        n_trials_errored = n_trials_total - n_trials_completed
+    else:
+        n_trials_total, n_trials_completed, n_trials_errored = trial_counts
+        completed = [t for t in outcomes if t["error_reason"] is None and t["reward"] is not None]
 
     if not completed:
         return StratifiedReport(
@@ -453,37 +465,47 @@ def _dominant_error_reason(outcomes: list[TrialOutcome]) -> str | None:
     return top[0]
 
 
-def _stratified_pass_at_1(trials: list[dict]) -> tuple[dict, float | None]:
-    """Group completed trials by stratum.dataset; pass@1 = mean over datasets of dataset mean.
+def count_trials(run_dir: Path) -> tuple[int, int, int]:
+    """Count physical trial dirs by completion state: (total, completed, errored).
 
-    Mirrors the legacy DAB aggregate summary math. Returns
-    (datasets_block, stratified_pass_at_1_or_None).
+    Trial accounting is per-trial, never per-fanned-row. A DAB batch trial
+    fanning into N outcome rows still counts as one trial here; this keeps
+    `summary.json` and `rk score` headline counts honest for spec §3.2.
     """
-    completed = [t for t in trials if t["error_reason"] is None and t["reward"] is not None]
-    if not completed:
-        return ({}, None)
+    n_total = 0
+    n_errored = 0
+    for td in _iter_trial_dirs(run_dir):
+        n_total += 1
+        result = _read_json(td / "result.json") or {}
+        if result.get("exception_info") is not None or result.get("verifier_result") is None:
+            n_errored += 1
+    return n_total, n_total - n_errored, n_errored
 
-    by_ds_q: dict[tuple[str, int | None], list[float]] = {}
-    for t in completed:
-        ds = (t["stratum"] or {}).get("dataset", "default")
-        qid = (t["stratum"] or {}).get("query_id")
-        by_ds_q.setdefault((str(ds), qid), []).append(float(t["reward"]))
 
+def _render_legacy_datasets(report: StratifiedReport) -> dict:
+    """Render the canonical reducer's strata into summary.json's `datasets` shape.
+
+    The legacy shape predates per-cell Wilson CIs and dataset metadata, so it
+    only carries `dataset_pass_at_1`, `n_queries`, and the query cells'
+    `{query_id, n_trials, n_correct, pass_at_1}`. Preserved verbatim so
+    existing consumers (`rk runs diff`, snapshots) keep working.
+    """
     datasets: dict[str, dict] = {}
-    for (ds, qid), rewards in by_ds_q.items():
-        n = len(rewards)
-        c = sum(1 for r in rewards if r >= 1.0)
-        entry = datasets.setdefault(ds, {"dataset_pass_at_1": 0.0, "n_queries": 0, "queries": []})
-        entry["queries"].append(
-            {"query_id": qid, "n_trials": n, "n_correct": c, "pass_at_1": (c / n) if n else 0.0}
-        )
-    for ds, entry in datasets.items():
-        entry["queries"].sort(key=lambda q: (q["query_id"] is None, q["query_id"]))
-        entry["n_queries"] = len(entry["queries"])
-        entry["dataset_pass_at_1"] = sum(q["pass_at_1"] for q in entry["queries"]) / entry["n_queries"]
-
-    stratified = sum(d["dataset_pass_at_1"] for d in datasets.values()) / len(datasets)
-    return (dict(sorted(datasets.items())), stratified)
+    for ds, stratum in report["strata"].items():
+        datasets[ds] = {
+            "dataset_pass_at_1": stratum["dataset_pass_at_1"],
+            "n_queries": stratum["n_queries"],
+            "queries": [
+                {
+                    "query_id": cell["query_id"],
+                    "n_trials": cell["n_trials"],
+                    "n_correct": cell["n_correct"],
+                    "pass_at_1": cell["pass_at_1"],
+                }
+                for cell in stratum["queries"]
+            ],
+        }
+    return dict(sorted(datasets.items()))
 
 
 def _job_cost_usd(run_dir: Path) -> float | None:
@@ -502,20 +524,28 @@ def _job_cost_usd(run_dir: Path) -> float | None:
 
 
 def aggregate_summary(run_dir: Path) -> None:
-    """AC-2: write <run_dir>/summary.json with per-trial rows + stratified pass@1."""
-    trials = [_read_trial(td) for td in _iter_trial_dirs(run_dir)]
-    n_total = len(trials)
-    n_errored = sum(1 for t in trials if t["error_reason"] is not None)
-    n_completed = n_total - n_errored
+    """AC-2: write <run_dir>/summary.json with per-trial rows + stratified pass@1.
 
-    datasets, stratified = _stratified_pass_at_1(trials)
+    Delegates the headline number and `datasets` block to the single canonical
+    reducer (`reduce_per_query_stratified`), so `summary.json` and `rk score`
+    cannot drift on the same run-dir. Trial-level rows (`trials`) stay per
+    physical trial dir, regardless of DAB batch fanning.
+    """
+    trials = [_read_trial(td) for td in _iter_trial_dirs(run_dir)]
+    n_total, n_completed, n_errored = count_trials(run_dir)
+
+    outcomes = read_trial_outcomes(run_dir)
+    report = reduce_per_query_stratified(
+        outcomes, trial_counts=(n_total, n_completed, n_errored)
+    )
+    datasets = _render_legacy_datasets(report)
 
     summary = {
         "summary_version": SUMMARY_VERSION,
         "n_trials_total": n_total,
         "n_trials_completed": n_completed,
         "n_trials_errored": n_errored,
-        "stratified_pass_at_1": stratified,
+        "stratified_pass_at_1": report["stratified_pass_at_1"],
         "datasets": datasets,
         "trials": [
             {
