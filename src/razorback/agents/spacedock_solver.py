@@ -433,6 +433,33 @@ class SpacedockSolverAgent(BaseAgent):
     async def cleanup(self, environment):
         if self._inner is not None and hasattr(self._inner, "cleanup"):
             await self._inner.cleanup(environment)
+        if self._runtime == "claude":
+            self._maybe_write_subagent_trace_manifest()
+
+    def _maybe_write_subagent_trace_manifest(self) -> None:
+        """Emit a per-cell subagent-trace-manifest.json next to provenance.yaml.
+
+        AC-2: every spacedock-variant cell writes a manifest carrying the count
+        of Task/Agent tool_use events from the inner claude session. The
+        manifest lives at the cell-run-dir (one level above the per-trial dir,
+        adjacent to provenance.yaml) so the matrix dispatcher's per-cell smoke
+        gate can find it without recursing into trial subdirs.
+
+        Resolution: logs_dir is `<cell-run-dir>/<trial>/steps/main/agent/`,
+        so the per-trial dir is parents[2] and the cell-run-dir is parents[3].
+        """
+        from razorback.agents.subagent_traces import (
+            write_subagent_trace_manifest,
+        )
+
+        try:
+            logs_dir = Path(self.logs_dir).resolve()
+            cell_run_dir = logs_dir.parents[3]
+            write_subagent_trace_manifest(cell_run_dir)
+        except (FileNotFoundError, IndexError, OSError) as exc:
+            self.logger.debug(
+                f"subagent-trace-manifest write skipped: {exc}"
+            )
 
     def populate_context_post_run(self, context):
         """Delegate context-population to the inner agent.
