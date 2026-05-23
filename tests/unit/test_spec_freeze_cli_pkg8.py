@@ -134,7 +134,7 @@ def test_freeze_stamps_v2_solver_workflow_hash_and_sealed_hash(tmp_path, monkeyp
 version: 1
 experiment: pkg26-codex-freeze
 agent:
-  kind: spacedock_solver_v2
+  kind: spacedock_solver
   runtime: codex
   model: gpt-5.1-codex
   solver_workflow: {workflow}
@@ -190,7 +190,7 @@ def test_freeze_includes_codex_reasoning_kwargs_in_v2_sealed_hash(
 version: 1
 experiment: pkg35-codex-freeze-reasoning
 agent:
-  kind: spacedock_solver_v2
+  kind: spacedock_solver
   runtime: codex
   model: gpt-5.5
   reasoning_effort: xhigh

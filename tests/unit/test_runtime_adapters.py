@@ -12,7 +12,7 @@ from razorback.agents._runtime import claude as claude_adapter
 from razorback.agents._runtime import codex as codex_adapter
 from razorback.agents._runtime import pi as pi_adapter
 from razorback.agents.claude_cli import ClaudeCliAgent
-from razorback.agents.spacedock_solver_v2 import SpacedockSolverAgentError
+from razorback.agents.spacedock_solver import SpacedockSolverAgentError
 
 
 def _descriptor_kwargs(descriptors):

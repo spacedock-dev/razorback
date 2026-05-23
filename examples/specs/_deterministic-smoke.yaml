@@ -10,7 +10,7 @@ agent:
     seed: 1
   tools_allowed: [Bash, Read, Write, Edit, Glob, Grep]
 benchmark:
-  kind: dab
+  kind: harbor_dab
   data_root: "${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}"
   datasets:
     - bookreview

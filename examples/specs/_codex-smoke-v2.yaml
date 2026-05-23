@@ -3,7 +3,7 @@
 version: 1
 experiment: _codex-smoke-v2
 agent:
-  kind: spacedock_solver_v2
+  kind: spacedock_solver
   runtime: codex
   model: gpt-5.5
   sampling:

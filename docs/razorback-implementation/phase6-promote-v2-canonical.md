@@ -1,7 +1,7 @@
 ---
 id: t1qhefvs93x72m9dbvzw11gn
 title: Phase 6 — promote v2 canonical, sideline v1 to _legacy/
-status: implementation
+status: validation
 source: plan Phase 6 (v2 reconciliation plan at docs/superpowers/plans/2026-05-19-razorback-reconciliation-plan.md)
 started: 2026-05-23T03:52:58Z
 completed:
@@ -165,3 +165,141 @@ Per plan AC-6.9.
 ### Summary
 
 Wrote the standard separate Phase 6 plan at `docs/razorback-implementation/plans/phase6-promote-v2-canonical.md` because the entity has nine ACs and spans multiple subsystems. The plan is based on committed `HEAD` context, treats the current dirty main-worktree edits as contamination, and records the backlog -> plan gate as auto-approved rather than human-gated.
+
+## Stage Report: implementation
+
+- DONE: DONE if canonical `agent.kind: spacedock_solver` routes to the v2 runtime-adapter solver, `spacedock_solver_v2` no longer parses/routes, v1 solver code is sidelined or explicitly legacy-only, and focused route/schema/freeze/runtime tests pass.
+  Evidence: commits `f99876a`, `e761ef5`, `f5c956b`, `ab708ea`, `9792294`; `uv run pytest tests/unit/test_spec_schema_spacedock_solver.py tests/unit/test_translate_spacedock_solver_import_path.py tests/unit/test_spacedock_solver_class.py tests/unit/test_spacedock_solver_lifecycle.py tests/unit/test_spacedock_solver_freeze_on_host.py tests/unit/test_runtime_adapters.py tests/unit/test_spec_freeze_cli_pkg8.py tests/unit/test_seal_v2_six_inputs.py tests/unit/test_tools_denied_parse.py tests/unit/test_spacedock_registry.py tests/unit/test_generate_matrix_specs.py tests/unit/test_generate_matrix_specs_per_variant_kind.py tests/unit/test_codex_benchmark_spec_generator.py tests/unit/test_claude_benchmark_spec_generator.py -q` -> 90 passed.
+- DONE: DONE if active examples/generators use canonical `spacedock_solver`, stale registry/v1 tests are removed or rehomed, and grep/inventory checks show no active `spacedock_solver_v2`/`spacedock-solver` references outside legacy or historical docs.
+  Evidence: commits `25f46ba`, `099c348`, `d9362cd`, `6403daf`; `rg -n "spacedock_solver_v2|spacedock-solver" src/razorback tests examples/specs examples/drivers packages` returns only `_legacy/` hits; `rg -n "kind: dab|kind: in_tree_dab" examples/specs examples/drivers tests/fixtures/specs` returns no hits.
+- DONE: DONE if implementation follows the approved plan's commit boundaries as far as safely possible, documents any blocked AC-4 broad adapter sideline (DAB/ADE/standalone CLI/compat/observers) with evidence rather than forcing it, and commits a stage report with exact tests run.
+  Evidence: commit order is `f99876a`, `e761ef5`, `f5c956b`, `ab708ea`, `25f46ba`, `099c348`, `9792294`, `d9362cd`, `6403daf`; broad AC-4 adapter sidelines were stopped per FO route update and blocker evidence below.
+- SKIPPED: AC-4 standalone CLI agent sideline.
+  Rationale: `src/razorback/agents/_runtime/claude.py` actively imports `razorback.agents.claude_cli.ClaudeCliAgent`, and `tests/unit/test_runtime_adapters.py` asserts the Claude runtime adapter uses it for cost/audit/tool policy.
+- SKIPPED: AC-4 in-tree DAB and ADE-Bench adapter sidelines.
+  Rationale: `src/razorback/translate.py` still imports `razorback.benchmarks.dab.prepare` and `razorback.benchmarks.ade_bench.*`; ADE/DAB task-view tests still exercise those modules, so moving them now would block active adapter work.
+- SKIPPED: AC-4 compat and observer sidelines.
+  Rationale: compat/observer refs remain in ignored legacy/drop tests and `_legacy/`; FO explicitly instructed to defer broad DAB/ADE/standalone-CLI/compat/observer sidelines for this implementation pass.
+- SKIPPED: AC-1 live `rk run`, AC-7 statistical cross-history diff, and AC-9 full pytest completion.
+  Rationale: live run/diff need DAB data/API/baseline availability and full pytest was stopped after FO route update; structural fallback already wrote `/tmp/bookreview-spacedock.phase6.frozen.yaml` with `agent.kind: spacedock_solver`, `benchmark.kind: harbor_dab`, solver hash, and sealed hash, and `uv run rk score tests/fixtures/score/baseline_rerun_bookreview --format json` returned 3/3 completed with `stratified_pass_at_1: 1.0`.
+- FAILED: AC-8 workflow status check.
+  Details: `python /home/exedev/.codex/skills/commission/bin/status --workflow-dir docs/razorback-implementation` fails before rendering because unrelated active entity `goal1-resume-t0-cost-projection.md` is missing required `id`.
+
+### Summary
+
+Promoted the v2 runtime-adapter solver to canonical `agent.kind: spacedock_solver`, moved the old v1 solver to `_legacy/agents/spacedock_solver_legacy.py` with a deprecation warning, updated active examples/generators, trimmed the active registry, and removed stale v1/transitional tests. The backlog -> plan and plan -> implementation gates were auto-approved by the first officer, not human-gated; broad AC-4 adapter sidelines are intentionally deferred with active-import evidence instead of forced in this pass.
+
+## Stage Report: validation
+
+- DONE: DONE if validation independently reruns focused route/schema/freeze/runtime tests and grep/inventory checks for canonical `spacedock_solver`, rejected `spacedock_solver_v2`, and legacy-only v1 solver references.
+  Evidence: focused route/schema/freeze/runtime/generator suite returned `90 passed in 3.67s`; grep found `spacedock_solver_v2|spacedock-solver` only under `_legacy/`, no active example/generator `spacedock_solver_v2`, and no active `kind: dab|kind: in_tree_dab`.
+- DONE: DONE if validation reviews the implementation commits and AC evidence with explicit PASS/FAIL/SKIPPED for AC-1..AC-9, especially the broad AC-4 deferrals, AC-8 workflow-status failure, AC-1 smoke fallback, AC-7 fallback, and AC-9 full-test status.
+  Evidence: validation report `docs/razorback-implementation/validation/phase6-promote-v2-canonical.md` records AC-1 FAIL, AC-2 PASS, AC-3 PASS, AC-4 FAIL, AC-5 FAIL, AC-6 PASS, AC-7 SKIPPED/partial fallback, AC-8 FAIL, AC-9 FAIL; full pytest was `19 failed, 572 passed, 5 skipped`.
+- DONE: DONE if validation writes `docs/razorback-implementation/validation/phase6-promote-v2-canonical.md`, appends a stage report to the entity, commits only validation artifacts, and gives a clear gate decision: APPROVE to done or REJECT back to implementation with concrete fixes.
+  Evidence: validation artifacts are this entity body update plus the validation report; gate decision is REJECT back to implementation with required fixes for AC-1, AC-4, AC-8, and AC-9.
+
+### Summary
+
+Validation rejected the branch. The canonical `spacedock_solver` route itself is green in focused tests, but the exact AC-1 run target is missing, broad AC-4 sidelines were deferred, workflow status fails on an unrelated malformed active entity, and `uv run pytest` exits non-zero. The plan and implementation gates were first-officer auto-approved, not human-gated.
+
+### Feedback Cycles
+
+- Cycle 1, validation -> implementation, 2026-05-23:
+  `docs/razorback-implementation/validation/phase6-promote-v2-canonical.md`
+  rejected the branch. Required fixes:
+  1. Provide the literal AC-1 smoke target
+     `examples/specs/bookreview-claude.frozen.yaml`, or update the
+     entity through planning if a different canonical smoke is intended.
+  2. Resolve AC-4 explicitly: complete safe sideline commits or split
+     broad DAB/ADE/standalone-CLI/compat/observer retirements into
+     separate entities rather than leaving the AC ambiguous.
+  3. Port, rehome, or delete remaining stale v1/Phase-3 tests so
+     `uv run pytest` exits 0.
+  4. Repair or archive malformed active workflow entity
+     `goal1-resume-t0-cost-projection.md` so workflow status can render.
+
+## Stage Report: implementation follow-up
+
+- DONE: Feedback-cycle commits after `21f28bd`.
+  Evidence: `b4fdac5` repaired `goal1-resume-t0-cost-projection.md`
+  workflow metadata; `26b53c7` added the canonical
+  `examples/specs/bookreview-claude.frozen.yaml` smoke target;
+  `1fbb49c` retired stale v1/Phase-3 tests and gated live Docker/API
+  smokes; `8e0306b` refreshed nop run-dir smoke assertions; this report
+  commit records the follow-up status. The backlog -> plan and plan ->
+  implementation gates were first-officer auto-approved, not human-gated.
+- DONE: AC-1 literal smoke target exists at
+  `examples/specs/bookreview-claude.frozen.yaml` with canonical
+  `agent.kind: spacedock_solver` and `benchmark.kind: harbor_dab`.
+  Evidence: generated from `examples/specs/bookreview-claude.yaml` with
+  `uv run rk freeze examples/specs/bookreview-claude.yaml --out examples/specs/bookreview-claude.frozen.yaml --allow-missing`;
+  frozen parse check reported `spacedock_solver`, `harbor_dab`,
+  solver digest `sha256:a7dbdb88f0229b8b8f655283498d6d4cc603c03603505fb5e9fa5d0edaf559fd`,
+  and `allow_missing: True`. The exact smoke command
+  `uv run rk run examples/specs/bookreview-claude.frozen.yaml --runs-dir .runs/phase6-feedback-ac1`
+  was started but bounded-stopped before completion per follow-up
+  instruction; `.runs/phase6-feedback-ac1` was left intact.
+- DONE: AC-8 workflow status can render after the minimal metadata
+  repair.
+  Evidence: `python /home/exedev/.codex/skills/commission/bin/status --workflow-dir docs/razorback-implementation`
+  completed after `b4fdac5`.
+- DONE: AC-9 stale v1/Phase-3 test failures are resolved for the
+  current suite.
+  Evidence: `uv run pytest` returned
+  `574 passed, 12 skipped, 16 warnings in 34.61s`; focused checks also
+  returned `90 passed in 3.85s`,
+  `19 passed, 7 skipped`, and
+  `uv run pytest tests/integration/test_rk_run_nop.py -q` returned
+  `2 passed in 18.98s`.
+- DONE: Core route/schema/freeze/runtime and inventory checks remain
+  aligned with Phase 6.
+  Evidence: `rg -n "spacedock_solver_v2|spacedock-solver" src/razorback tests examples/specs examples/drivers packages`
+  reports only legacy-path references; `rg -n "kind: dab|kind: in_tree_dab" examples/specs examples/drivers tests/fixtures/specs`
+  reports no active stale benchmark-kind references.
+- SKIPPED: Broad AC-4 DAB/ADE/standalone-CLI/compat/observer sidelines.
+  Rationale: per first-officer route update and feedback-cycle bounds,
+  these are deferred rather than forced. Active blocker evidence remains
+  `src/razorback/agents/_runtime/claude.py` importing
+  `ClaudeCliAgent`, and `src/razorback/translate.py` importing
+  `razorback.benchmarks.dab.prepare` and
+  `razorback.benchmarks.ade_bench.*`. Split the broad sideline items
+  into follow-up entities so ADE/DAB task-view work is not blocked by a
+  crude move.
+- DONE: Worktree hygiene for the bounded stop.
+  Evidence: `uv.lock` only removed `[options] exclude-newer` values from
+  tooling churn and was reverted rather than committed.
+
+### Follow-up Checklist
+
+1. DONE: Canonical `agent.kind: spacedock_solver` routes to the v2
+   runtime-adapter solver, `spacedock_solver_v2` is retired from active
+   parsing/routing, v1 solver code is legacy-only, and focused route,
+   schema, freeze, and runtime tests pass.
+2. DONE: Active examples/generators use canonical `spacedock_solver`,
+   stale registry/v1 tests were removed or rehomed, and inventory checks
+   show no active `spacedock_solver_v2`/`spacedock-solver` references
+   outside legacy paths.
+3. DONE: Commit boundaries remain small and scoped; broad AC-4 adapter
+   sidelines are explicitly deferred with active-import evidence and
+   should be split into follow-up entities.
+
+### Readiness
+
+Ready for fresh validation of the core Phase 6 solver-retirement scope.
+Remaining validation work is to rerun the exact live AC-1 smoke if the
+environment has the required DAB/API/Docker prerequisites. Remaining
+product blocker is AC-4 broad adapter retirement, intentionally deferred
+to follow-up entities.
+
+## Stage Report: validation (cycle 2)
+
+- DONE: DONE if validation independently reruns the feedback-cycle checks: focused canonical solver suite, grep inventory, workflow status, and `uv run pytest`.
+  Evidence: focused suite returned `90 passed in 3.68s`; stale-kind grep found only `_legacy/` hits; benchmark-kind grep returned no active stale hits; packaged workflow status exited 0; `uv run pytest` returned `574 passed, 12 skipped, 16 warnings in 33.99s`.
+- DONE: DONE if validation checks `examples/specs/bookreview-claude.frozen.yaml` exists, parses as canonical `spacedock_solver` + `harbor_dab`, and either runs the exact AC-1 command or documents the precise live/Docker/API blocker.
+  Evidence: frozen parse reported `agent.kind: spacedock_solver`, `benchmark.kind: harbor_dab`, sealed hash `58a31226e065199ed4b86f73f638cf6a`; exact `uv run rk run examples/specs/bookreview-claude.frozen.yaml` exited 0 in 8m41s with 3/3 trials, 0 exceptions, mean 1.000, and `summary.json` `stratified_pass_at_1: 1.0`.
+- DONE: DONE if validation writes/updates the validation report and entity stage report with a clear gate decision, especially whether broad AC-4 deferral is acceptable as follow-up scope or still blocking.
+  Evidence: `docs/razorback-implementation/validation/phase6-promote-v2-canonical.md` records APPROVE to done for the core solver-retirement merge; broad AC-4 DAB/ADE/standalone-CLI/compat/observer retirements are non-blocking only under the first-officer scope split and must be filed as follow-up entities.
+
+### Summary
+
+Validation cycle 2 approves the branch for the core Phase 6 solver-retirement merge. The literal AC-1 smoke now runs live and produces the expected run-dir artifacts, workflow status renders, full pytest passes, and the code review found no blocking issues for the scoped merge. The broad AC-4 retirements remain deferred follow-up work, not silently completed scope.

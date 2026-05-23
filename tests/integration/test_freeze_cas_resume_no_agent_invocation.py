@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from razorback.agents.spacedock_solver_v2 import SpacedockSolverAgent
+from razorback.agents.spacedock_solver import SpacedockSolverAgent
 
 
 def _kw(tmp_path: Path) -> dict:

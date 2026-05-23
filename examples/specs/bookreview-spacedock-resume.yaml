@@ -1,19 +1,18 @@
 version: 1
 experiment: m4-bookreview-spacedock
 agent:
-  kind: spacedock-solver
+  kind: spacedock_solver
+  runtime: claude
   model: claude-opus-4-5
   sampling:
     temperature: 0.0
     seed: 42
-  stages: [model, analyze, verify]
+  solver_workflow: ./examples/solver_workflows/claude-benchmark-solver
+  max_turns: 200
   tools_allowed: [Bash, Read, Write, Edit, Glob, Grep]
-  prompts:
-    model: ./examples/specs/prompts/spacedock-model.md
-    analyze: ./examples/specs/prompts/spacedock-analyze.md
-    verify: ./examples/specs/prompts/spacedock-verify.md
+  tools_denied: []
 benchmark:
-  kind: dab
+  kind: harbor_dab
   data_root: "${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}"
   datasets: [bookreview]
 trials: 1

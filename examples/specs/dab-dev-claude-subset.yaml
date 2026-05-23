@@ -9,7 +9,7 @@ agent:
   tools_allowed: []
 
 benchmark:
-  kind: dab
+  kind: harbor_dab
   data_root: "${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}"
   datasets:
     - bookreview

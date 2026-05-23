@@ -1,0 +1,60 @@
+version: 1
+experiment: m3-bookreview-claude
+agent:
+  kind: spacedock_solver
+  runtime: claude
+  model: claude-opus-4-5
+  sampling:
+    temperature: 0.0
+    top_p: null
+    seed: 42
+  solver_workflow: examples/solver_workflows/claude-benchmark-solver
+  solver_workflow_content_hash: sha256:a7dbdb88f0229b8b8f655283498d6d4cc603c03603505fb5e9fa5d0edaf559fd
+  max_turns: 200
+  max_budget_usd: null
+  tools_allowed:
+  - Bash
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  tools_denied: []
+  append_system_prompt: null
+  reasoning_effort: null
+  reasoning_summary: null
+  resume_from_freeze: null
+  sealed_hash: 58a31226e065199ed4b86f73f638cf6a
+  spacedock_skill_version: 1.0.0
+  prompt_content_hashes: {}
+benchmark:
+  kind: harbor_dab
+  data_root: /home/exedev/dataagentbench/data
+  datasets:
+  - bookreview
+  workspace_variant: direct-minimal
+  hints: false
+  query_mode: per-query
+trials: 1
+concurrency:
+  trials: 1
+observers:
+- kind: jsonl
+  path: events.jsonl
+- kind: stdout
+  path: null
+provenance:
+  pin_model_version: true
+  pin_image_digest: true
+  pin_agent_cli_hash: true
+  pin_git_sha: true
+  model_resolved_version: null
+  model_resolved_at: null
+  image_digest: sha256:18b989d81179e49dc51fb05c7bf26a06992ca5c7bb25c904220700aede06cc07
+  agent_cli_hash: sha256:5a78139b679a86a88a0ac5476c706a64c3105bf6a6d435ba10f3aa3fb635bdb2
+  harness_git_sha: b4fdac543990a844917dfc6bda66911d57e15438
+  harbor_version: 0.6.6
+  prompt_file_hashes: {}
+  plugins: []
+  solver_workflow_hash: sha256:a7dbdb88f0229b8b8f655283498d6d4cc603c03603505fb5e9fa5d0edaf559fd
+experiment_meta: null

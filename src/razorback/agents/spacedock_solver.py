@@ -1,39 +1,46 @@
-# ABOUTME: SpacedockSolverAgent (§6.2 third bullet) — staged solver with halt-resume.
-# ABOUTME: __init__ recomputes sealed_hash and refuses on mismatch BEFORE any harbor I/O.
+# ABOUTME: SpacedockSolverAgent v2 (spec §4 + §8.4), runtime adapter for claude|codex|pi.
+# ABOUTME: __init__ computes sealed_hash from six inputs; refuses on resume mismatch BEFORE harbor I/O.
 
+import asyncio
 import json
-import time
-from pathlib import Path, PurePosixPath
-from typing import Any
-
-import yaml
+from pathlib import Path
+from typing import Any, Literal
 
 from harbor.agents.base import BaseAgent
 from harbor.environments.base import BaseEnvironment
-from harbor.models.trial.paths import EnvironmentPaths
 
-from razorback.agents.claude_invoke import build_claude_argv
-from razorback.agents.proxy import PROXY_BLOCK_ENV
-from razorback.agents.seal import compute_sealed_hash, prompt_sha256
+from razorback.agents.seal import compute_sealed_hash, prompt_sha256  # noqa: F401
 from razorback.errors import RazorbackError, SeedMismatchError
+from razorback.freeze_dir_default import resolve_default_freeze_dir
+
+
+_REQUIRED_PHASE_STATS_KEYS = (
+    "tokens_in",
+    "tokens_out",
+    "tokens_reasoning",
+    "tokens_cache_read",
+    "tokens_cache_write",
+    "cost_usd",
+    "wallclock_s",
+)
+
+CHECKPOINT_SETUP_READY = "setup/ready"
+CHECKPOINT_RUN_BEFORE_AGENT = "run/before-agent"
+CHECKPOINT_RUN_AFTER_AGENT = "run/after-agent"
 
 
 class SpacedockSolverAgentError(RazorbackError):
-    """Raised on SpacedockSolverAgent contract violations."""
+    """Raised on SpacedockSolverAgent v2 contract violations."""
 
 
-def assert_phase_stats_schema(path: Path) -> None:
-    """Public schema check for §6.8 phase_stats.json. M5's aggregator imports this."""
+def assert_phase_stats_schema(path: Path, *, stages: list[str]) -> None:
+    """Per §7.2, phase_stats.json carries five token fields + cost + wallclock per stage."""
     data = json.loads(Path(path).read_text())
     assert isinstance(data, dict)
-    for stage in ("model", "analyze", "verify"):
+    for stage in stages:
         assert stage in data, f"missing stage: {stage}"
-        for k in ("tokens_in", "tokens_out", "cost_usd", "wallclock_s"):
+        for k in _REQUIRED_PHASE_STATS_KEYS:
             assert k in data[stage], f"missing key {k!r} in stage {stage!r}"
-        assert isinstance(data[stage]["tokens_in"], int)
-        assert isinstance(data[stage]["tokens_out"], int)
-        assert isinstance(data[stage]["cost_usd"], (int, float))
-        assert isinstance(data[stage]["wallclock_s"], (int, float))
 
 
 class SpacedockSolverAgent(BaseAgent):
@@ -48,14 +55,22 @@ class SpacedockSolverAgent(BaseAgent):
         mcp_servers=None,
         skills_dir=None,
         *,
+        runtime: Literal["claude", "codex", "pi"],
         model: str,
         sampling: dict[str, Any],
-        stages: list[str],
-        tools_allowed: list[str],
-        prompts: dict[str, str],
-        sealed_hash: str,
-        prompt_contents: dict[str, str] | None = None,
-        prior_frozen_spec_path: Path | str | None = None,
+        solver_workflow: Path | str,
+        solver_workflow_content_hash: str,
+        prompt_content_hashes: dict[str, str],
+        spacedock_skill_version: str,
+        harbor_agent_kwargs: dict[str, Any],
+        max_turns: int = 200,
+        tools_allowed: list[str] | None = None,
+        tools_denied: list[str] | None = None,
+        benchmark_kind: str | None = None,
+        benchmark_task_id: str | None = None,
+        batch_mode: str | None = None,
+        child_task_ids_hash: str | None = None,
+        resume_from_freeze: Path | str | None = None,
         extra_env: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> None:
@@ -67,15 +82,8 @@ class SpacedockSolverAgent(BaseAgent):
             skills_dir=skills_dir,
             **kwargs,
         )
-        self._model = model
-        self._sampling = dict(sampling)
-        self._stages = list(stages)
-        self._tools_allowed = list(tools_allowed)
-        self._prompts = dict(prompts)
-        self.sealed_hash = sealed_hash
-        # FU-1 AC-1: auth arrives via harbor's `extra_env` kwarg (resolved from
-        # AgentConfig.env at agent-factory time). env field is redacted on disk;
-        # the literal value never persists.
+        # FU-1: auth via extra_env (sourced from AgentConfig.env; redacted on disk).
+        # KEEP-VERBATIM from spacedock_solver.py:76-86 (co-mingled auth refusal).
         self._extra_env = dict(extra_env or {})
         if (
             "ANTHROPIC_API_KEY" in self._extra_env
@@ -84,84 +92,81 @@ class SpacedockSolverAgent(BaseAgent):
             raise SpacedockSolverAgentError(
                 "ANTHROPIC_API_KEY and CLAUDE_CODE_OAUTH_TOKEN cannot both be set."
             )
-        self._prompt_contents = dict(prompt_contents) if prompt_contents else {}
-        self._exec_env: dict[str, str] = {}
-        self._phase_stats: dict[str, dict] = {}
 
-        # AC-1: BEFORE harbor I/O — refuse on sealed-hash mismatch.
-        self._refuse_on_resume_mismatch(
-            Path(prior_frozen_spec_path) if prior_frozen_spec_path else None
+        self._runtime = runtime
+        self._model = model
+        self._sampling = dict(sampling)
+        self._solver_workflow = Path(solver_workflow)
+        self._solver_workflow_content_hash = solver_workflow_content_hash
+        self._prompt_content_hashes = dict(prompt_content_hashes)
+        self._spacedock_skill_version = spacedock_skill_version
+        self._harbor_agent_kwargs = dict(harbor_agent_kwargs)
+        self._max_turns = max_turns
+        self._tools_allowed = list(tools_allowed or [])
+        self._tools_denied = list(tools_denied or [])
+        discovered_identity = self._discover_task_identity_from_manifest()
+        self._benchmark_kind = benchmark_kind or discovered_identity.get("benchmark_kind")
+        self._benchmark_task_id = benchmark_task_id or discovered_identity.get(
+            "benchmark_task_id"
+        )
+        self._batch_mode = batch_mode or discovered_identity.get("batch_mode")
+        self._child_task_ids_hash = child_task_ids_hash or discovered_identity.get(
+            "child_task_ids_hash"
         )
 
-    def _refuse_on_resume_mismatch(self, prior_frozen_spec_path: Path | None) -> None:
-        if prior_frozen_spec_path is None:
-            return
-        prior = yaml.safe_load(Path(prior_frozen_spec_path).read_text())
-        prior_agent = prior.get("agent", {})
-        prior_sealed = prior_agent.get("sealed_hash")
-        if prior_sealed is None:
-            raise SpacedockSolverAgentError(
-                f"prior frozen spec at {prior_frozen_spec_path} has no agent.sealed_hash — "
-                "cannot validate resume."
-            )
-        # Recompute the sealed_hash from kwargs to detect tampered (sealed_hash, prompts) pairs.
-        recomputed = compute_sealed_hash(
+        # AC-2 + b5 contract point 1: compute sealed_hash from six inputs.
+        self.sealed_hash = compute_sealed_hash(
             model=self._model,
             sampling=self._sampling,
-            stages=self._stages,
-            prompt_hashes={
-                k: v for k, v in self._prompts.items() if v.startswith("sha256:")
-            },
+            solver_workflow_content_hash=self._solver_workflow_content_hash,
+            prompt_content_hashes=self._prompt_content_hashes,
+            spacedock_skill_version=self._spacedock_skill_version,
+            harbor_agent_kwargs=self._harbor_agent_kwargs,
+            benchmark_kind=self._benchmark_kind,
+            benchmark_task_id=self._benchmark_task_id,
+            batch_mode=self._batch_mode,
+            child_task_ids_hash=self._child_task_ids_hash,
         )
-        if recomputed != self.sealed_hash:
-            raise SeedMismatchError(
-                f"resume spec's recomputed sealed_hash ({recomputed}) does not match "
-                f"its declared sealed_hash ({self.sealed_hash}). "
-                "Tampered or stale frozen spec."
-            )
-        if self.sealed_hash != prior_sealed:
-            drifted = self._find_drifted_field(prior_agent)
-            raise SeedMismatchError(
-                f"resume sealed_hash ({self.sealed_hash}) does not match prior seed run "
-                f"sealed_hash ({prior_sealed}). Drifted field: {drifted}. "
-                f"Prior frozen spec: {prior_frozen_spec_path}"
-            )
 
-    def _find_drifted_field(self, prior_agent: dict[str, Any]) -> str:
-        if prior_agent.get("model") != self._model:
-            return f"model (seed={prior_agent.get('model')!r}, resume={self._model!r})"
-        if prior_agent.get("sampling") != self._sampling:
-            return "sampling"
-        if list(prior_agent.get("stages", [])) != self._stages:
-            return "stages"
-        prior_prompts = prior_agent.get("prompts", {})
-        for name, my_hash in self._prompts.items():
-            if not my_hash.startswith("sha256:"):
-                continue
-            if prior_prompts.get(name) != my_hash:
-                return f"prompts.{name}"
-        return "sealed_hash"
+        # AC-2 + b5 contract point 4: refuse on cross-job resume mismatch
+        # BEFORE harbor I/O. In-place harbor jobs resume mismatch is caught
+        # in setup() against the per-run freeze dir.
+        self._resume_from_freeze = (
+            Path(resume_from_freeze) if resume_from_freeze else None
+        )
+        if self._resume_from_freeze is not None:
+            self._refuse_on_resume_mismatch(self._resume_from_freeze)
 
-    def verify_prompt_contents(self) -> None:
-        """AC-3: re-hash each prompt body; refuse if it does not match the pinned sha256."""
-        for stage, pinned in self._prompts.items():
-            if not pinned.startswith("sha256:"):
-                continue
-            body = self._prompt_contents.get(stage)
-            if body is None:
-                raise SpacedockSolverAgentError(
-                    f"prompt_contents.{stage} is missing; cannot verify against pinned {pinned}"
-                )
-            recomputed = prompt_sha256(body.encode("utf-8"))
-            if recomputed != pinned:
-                raise SpacedockSolverAgentError(
-                    f"prompts.{stage} hash drift: pinned {pinned}, recomputed {recomputed}. "
-                    "The frozen spec's prompt_contents has been tampered with after freeze."
-                )
+        self._inner: BaseAgent | None = None
+        self._freeze_checkpointing_ready = False
+
+    def __repr__(self) -> str:
+        # FU-1: never surface secrets in repr.
+        return (
+            f"SpacedockSolverAgent(runtime={self._runtime!r}, model={self._model!r}, "
+            f"sealed_hash={self.sealed_hash!r})"
+        )
+
+    __str__ = __repr__
+
+    def _refuse_on_resume_mismatch(self, freeze_dir: Path) -> None:
+        """Per b5 contract point 4: read sealed_hash.txt; SeedMismatchError on mismatch."""
+        sealed_file = freeze_dir / "sealed_hash.txt"
+        if not sealed_file.exists():
+            raise SpacedockSolverAgentError(
+                f"resume_from_freeze {freeze_dir} has no sealed_hash.txt; "
+                "cannot validate resume."
+            )
+        prior = sealed_file.read_text().strip()
+        if prior != self.sealed_hash:
+            raise SeedMismatchError(
+                f"resume sealed_hash ({self.sealed_hash}) does not match prior "
+                f"sealed_hash ({prior}). Prior freeze dir: {freeze_dir}."
+            )
 
     @staticmethod
     def name() -> str:
-        return "spacedock-solver"
+        return "spacedock_solver"
 
     def version(self) -> str | None:
         return None
@@ -177,139 +182,190 @@ class SpacedockSolverAgent(BaseAgent):
     def supported_sampling() -> set[str]:
         return {"temperature"}
 
-    async def setup(self, environment: BaseEnvironment) -> None:
-        """AC-6: filter MCP servers; build exec env; validate claude + git binaries; AC-3 prompt hashes."""
-        if self._tools_allowed:
-            allowed = set(self._tools_allowed)
-            self.mcp_servers = [s for s in (self.mcp_servers or []) if s.name in allowed]
+    def resolve_freeze_dir(self) -> Path:
+        """Per spec §4.3.4 + AC-1: sealed_hash-keyed external freeze in a CAS.
 
-        self._exec_env = {
-            **PROXY_BLOCK_ENV,
-            **self._extra_env,
-            "HOME": "/root",
-        }
-
-        version = await environment.exec("claude --version")
-        if version.return_code != 0:
-            raise SpacedockSolverAgentError(
-                f"claude CLI not available inside container (exit={version.return_code}, "
-                f"stderr={getattr(version, 'stderr', '')!r})"
-            )
-
-        git_v = await environment.exec("git --version")
-        if git_v.return_code != 0:
-            raise SpacedockSolverAgentError(
-                f"git not available inside container (exit={git_v.return_code}). "
-                "agent_freeze/.git commits require git."
-            )
-
-        self.verify_prompt_contents()
-
-    async def run(
-        self,
-        instruction: str,
-        environment: BaseEnvironment,
-        context,
-    ) -> None:
-        """AC-4/AC-5: staged execution, agent_freeze/.git commits, phase_stats.json."""
-        host_freeze_dir = Path(self.logs_dir) / "agent_freeze"
-        host_freeze_dir.mkdir(parents=True, exist_ok=True)
-        # The container sees harbor's logs_dir bind-mounted under env_paths
-        # (default /logs/agent). Use that path inside environment.exec calls.
-        env_logs_root = self._env_logs_root(environment)
-        container_freeze_dir = env_logs_root / "agent_freeze" if env_logs_root else host_freeze_dir
-        await self._init_agent_freeze_repo(environment, container_freeze_dir)
-
-        self._phase_stats = {}
-        for stage in self._stages:
-            prompt_body = self._prompt_contents[stage]
-            rendered = self._render_stage_prompt(stage, prompt_body, instruction)
-            cmd = build_claude_argv(
-                prompt=rendered, model=self._model, tools_allowed=self._tools_allowed,
-            )
-            t0 = time.monotonic()
-            result = await environment.exec(
-                cmd, cwd=str(container_freeze_dir), env=self._exec_env, timeout_sec=600,
-            )
-            wallclock = time.monotonic() - t0
-            await self._commit_stage(environment, container_freeze_dir, stage)
-            self._phase_stats[stage] = {
-                "tokens_in": 0,
-                "tokens_out": 0,
-                "cost_usd": 0.0,
-                "wallclock_s": round(wallclock, 3),
-            }
-            if result.return_code != 0:
-                context.return_code = result.return_code
-                self._write_phase_stats_file(host_freeze_dir)
-                return
-
-        context.return_code = 0
-        self._write_phase_stats_file(host_freeze_dir)
-
-    @classmethod
-    def _env_logs_root(cls, environment) -> PurePosixPath | None:
-        """Return the container-side logs root for the agent if the environment exposes one.
-
-        Harbor's BaseEnvironment.env_paths gives the in-container view (default /logs/agent).
-        Local-shell fakes used in unit tests have no env_paths; for those we fall back
-        to the host path (which IS the container path in those tests).
+        The freeze tree lives at `<cas-root>/<sealed_hash>/` where `<cas-root>`
+        resolves via `$RAZORBACK_FREEZE_DIR` → `$XDG_DATA_HOME/razorback/freeze`
+        → `~/.local/share/razorback/freeze`. This is independent of any
+        worktree, so:
+        - `git worktree remove --force` cannot destroy freeze trees.
+        - Any worktree can discover any prior freeze by sealed_hash (AC-2).
+        - Re-running the same spec resumes from the existing freeze without
+          re-invoking the agent (AC-5).
         """
+        return resolve_default_freeze_dir() / self.sealed_hash
+
+    @staticmethod
+    def _resolve_run_dir_from_logs_dir(logs_dir: Path) -> Path:
+        """Back out from harbor's per-trial logs_dir to the run-dir root."""
+        p = logs_dir.resolve()
+        for _ in range(6):
+            p = p.parent
+            if (
+                (p / "_job_config.yaml").exists()
+                or (p / "trials").exists()
+                or (p / "spec.frozen.yaml").exists()
+            ):
+                return p
+        # Fallback to b5 line 61's stated default (three .parent calls).
+        return logs_dir.resolve().parent.parent.parent
+
+    def _discover_task_identity_from_manifest(self) -> dict[str, str]:
         try:
-            paths = environment.env_paths
+            run_dir = self._resolve_run_dir_from_logs_dir(Path(self.logs_dir))
+            rel = Path(self.logs_dir).resolve().relative_to(run_dir.resolve())
         except Exception:
-            return None
-        # Read harbor's per-environment path so we can compute the bind-mount path
-        # to use inside environment.exec calls. AC-7 forbids razorback from writing
-        # under that directory itself; we only write to the agent_freeze/ subtree.
-        return PurePosixPath(str(paths.agent_dir))
+            return {}
+        if not rel.parts:
+            return {}
+        if rel.parts[0] == "trials" and len(rel.parts) >= 2:
+            trial_name = rel.parts[1]
+        else:
+            trial_name = rel.parts[0]
+        trial_prefix = trial_name.split("__", 1)[0]
+        views_root = run_dir / "_razorback" / "task_views"
+        if not views_root.is_dir():
+            return {}
+        for manifest_path in sorted(views_root.glob("*/view_manifest.json")):
+            view_prefix = manifest_path.parent.name[:32].rstrip("_-")
+            if view_prefix != trial_prefix:
+                continue
+            try:
+                payload = json.loads(manifest_path.read_text())
+            except (OSError, json.JSONDecodeError):
+                return {}
+            out: dict[str, str] = {}
+            for key in ("benchmark_kind", "benchmark_task_id", "child_task_ids_hash"):
+                value = payload.get(key)
+                if value is not None:
+                    out[key] = str(value)
+            out.setdefault("batch_mode", str(payload.get("batch_mode") or "per-task"))
+            return out
+        return {}
 
-    async def _init_agent_freeze_repo(self, environment, freeze_dir) -> None:
-        cmds = [
-            f"git -C {freeze_dir} init -q",
-            f"git -C {freeze_dir} config user.email razorback@local",
-            f"git -C {freeze_dir} config user.name razorback",
-            f"git -C {freeze_dir} config commit.gpgsign false",
-            f"git -C {freeze_dir} add -A",
-            f"git -C {freeze_dir} commit -q --allow-empty -m seed",
-        ]
-        for c in cmds:
-            r = await environment.exec(c)
-            if r.return_code != 0:
-                raise SpacedockSolverAgentError(
-                    f"agent_freeze repo init failed at: {c}\n"
-                    f"rc={r.return_code} "
-                    f"stdout={getattr(r, 'stdout', '')!r} "
-                    f"stderr={getattr(r, 'stderr', '')!r}"
+    async def _host_git(self, *args: str) -> None:
+        # freeze tree is host-side bookkeeping; git runs on host
+        freeze_dir = self.resolve_freeze_dir()
+        argv = ("git", "-C", str(freeze_dir), *args)
+        proc = await asyncio.create_subprocess_exec(
+            *argv,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await proc.communicate()
+        if proc.returncode != 0:
+            raise SpacedockSolverAgentError(
+                f"freeze repo git failed at: {' '.join(argv)} "
+                f"(rc={proc.returncode}); stderr={stderr.decode(errors='replace')!r}"
+            )
+
+    async def _commit_stage(
+        self, environment: BaseEnvironment, stage: str
+    ) -> None:
+        """Per-stage commit helper exposed for the workflow's freeze mod."""
+        # freeze tree is host-side bookkeeping; git runs on host
+        await self._host_git("add", "-A")
+        await self._host_git(
+            "commit", "-q", "--allow-empty", "-m", f"stage: {stage}"
+        )
+
+    def _build_inner_agent(self) -> BaseAgent:
+        """Dispatch to the per-runtime adapter sub-module (spec §8.4)."""
+        from razorback.agents._runtime import claude as _claude
+        from razorback.agents._runtime import codex as _codex
+        from razorback.agents._runtime import pi as _pi
+
+        builders = {
+            "claude": _claude.build_inner_agent,
+            "codex": _codex.build_inner_agent,
+            "pi": _pi.build_inner_agent,
+        }
+        builder = builders[self._runtime]
+        return builder(
+            logs_dir=self.logs_dir,
+            model=self._model,
+            harbor_agent_kwargs=self._harbor_agent_kwargs,
+            extra_env=self._extra_env,
+        )
+
+    def _solver_workflow_readme_text(self) -> str:
+        readme = self._solver_workflow / "README.md"
+        if not readme.is_file():
+            raise SpacedockSolverAgentError(
+                f"solver workflow README.md not found: {readme}"
+            )
+        return readme.read_text()
+
+    def _compose_run_instruction(self, instruction: str) -> str:
+        workflow_text = self._solver_workflow_readme_text().strip()
+        return (
+            "# Solver workflow instructions\n\n"
+            f"{workflow_text}\n\n"
+            "# Task instruction\n\n"
+            f"{instruction}"
+        )
+
+    async def setup(self, environment: BaseEnvironment) -> None:
+        """Per spec §8.4: bootstrap workspace; write sealed_hash.txt; delegate to inner.
+
+        First-stage path: create freeze dir, git init, write sealed_hash.txt.
+        Resume path (sealed_hash.txt exists with matching hash): restore from .git.
+        Resume mismatch: SeedMismatchError (exit 20).
+        """
+        freeze_dir = self.resolve_freeze_dir()
+        sealed_file = freeze_dir / "sealed_hash.txt"
+
+        # freeze tree is host-side bookkeeping; git runs on host
+        if sealed_file.exists():
+            prior = sealed_file.read_text().strip()
+            if prior != self.sealed_hash:
+                raise SeedMismatchError(
+                    f"freeze dir {freeze_dir} sealed_hash ({prior}) does not match "
+                    f"this agent's sealed_hash ({self.sealed_hash})."
                 )
+            await self._host_git("checkout", "--", ".")
+        else:
+            freeze_dir.mkdir(parents=True, exist_ok=True)
+            sealed_file.write_text(self.sealed_hash)
+            await self._host_git("init", "-q")
+            await self._host_git("config", "user.email", "razorback@local")
+            await self._host_git("config", "user.name", "razorback")
+            await self._host_git("config", "commit.gpgsign", "false")
+            await self._host_git("add", "-A")
+            await self._host_git("commit", "-q", "--allow-empty", "-m", "seed")
 
-    async def _commit_stage(self, environment, freeze_dir, stage: str) -> None:
-        cmds = [
-            f"git -C {freeze_dir} add -A",
-            f"git -C {freeze_dir} commit -q --allow-empty -m 'stage: {stage}'",
-        ]
-        for c in cmds:
-            r = await environment.exec(c)
-            if r.return_code != 0:
-                raise SpacedockSolverAgentError(
-                    f"agent_freeze stage commit failed at: {c}\n"
-                    f"rc={r.return_code} "
-                    f"stdout={getattr(r, 'stdout', '')!r} "
-                    f"stderr={getattr(r, 'stderr', '')!r}"
-                )
+        self._freeze_checkpointing_ready = True
+        await self._commit_stage(environment, CHECKPOINT_SETUP_READY)
 
-    def _render_stage_prompt(self, stage: str, body: str, instruction: str) -> str:
-        return f"# Stage: {stage}\n\n{body}\n\n# Task instruction:\n{instruction}\n"
+        if self._inner is None:
+            self._inner = self._build_inner_agent()
+        await self._inner.setup(environment)
 
-    def _write_phase_stats_file(self, freeze_dir: Path) -> None:
-        """Write the §6.8 phase_stats.json. Public contract — DO NOT add unscoped fields."""
-        out = {}
-        for stage in self._stages:
-            s = self._phase_stats.get(stage, {})
-            out[stage] = {
-                "tokens_in": int(s.get("tokens_in", 0)),
-                "tokens_out": int(s.get("tokens_out", 0)),
-                "cost_usd": float(s.get("cost_usd", 0.0)),
-                "wallclock_s": float(s.get("wallclock_s", 0.0)),
-            }
-        (freeze_dir / "phase_stats.json").write_text(json.dumps(out, indent=2) + "\n")
+    async def run(self, instruction, environment, context):
+        if self._inner is None:
+            raise SpacedockSolverAgentError("run() called before setup()")
+        if self._freeze_checkpointing_ready:
+            await self._commit_stage(environment, CHECKPOINT_RUN_BEFORE_AGENT)
+        await self._inner.run(
+            self._compose_run_instruction(instruction), environment, context
+        )
+        if self._freeze_checkpointing_ready:
+            await self._commit_stage(environment, CHECKPOINT_RUN_AFTER_AGENT)
+
+    async def cleanup(self, environment):
+        if self._inner is not None and hasattr(self._inner, "cleanup"):
+            await self._inner.cleanup(environment)
+
+    def populate_context_post_run(self, context):
+        """Delegate context-population to the inner agent.
+
+        Harbor's trial framework invokes this hook on the OUTER agent only.
+        The inner agent (razorback ClaudeCliAgent for runtime=claude) holds
+        the cost_usd / claude-output.jsonl surface from PKG-26 — without this
+        delegation that surface stays dark on the spacedock variant.
+        """
+        if self._inner is not None and hasattr(
+            self._inner, "populate_context_post_run"
+        ):
+            self._inner.populate_context_post_run(context)

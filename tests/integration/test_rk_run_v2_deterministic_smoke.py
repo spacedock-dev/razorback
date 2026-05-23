@@ -15,6 +15,10 @@ SPEC_TEMPLATE = REPO / "examples" / "specs" / "_deterministic-smoke.yaml"
 
 
 @pytest.mark.integration
+@pytest.mark.skipif(
+    not os.environ.get("RAZORBACK_RUN_DOCKER_TESTS"),
+    reason="deterministic smoke runs Harbor/Docker; set RAZORBACK_RUN_DOCKER_TESTS=1",
+)
 def test_deterministic_smoke_runs_end_to_end(colima_safe_tmp_path: Path):
     runs_root = colima_safe_tmp_path / "_runs"
     runs_root.mkdir()

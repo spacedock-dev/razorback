@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from razorback.agents.spacedock_solver_v2 import (
+from razorback.agents.spacedock_solver import (
     CHECKPOINT_RUN_AFTER_AGENT,
     CHECKPOINT_RUN_BEFORE_AGENT,
     CHECKPOINT_SETUP_READY,

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from harbor.agents.installed.claude_code import ClaudeCode
 
-from razorback.agents.spacedock_solver_v2 import SpacedockSolverAgent
+from razorback.agents.spacedock_solver import SpacedockSolverAgent
 
 
 # Per spec §6.2 + AC-2: the four DAB-recommended denials.
