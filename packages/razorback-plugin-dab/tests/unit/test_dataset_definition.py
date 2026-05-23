@@ -48,3 +48,14 @@ def test_query_ids_match_query_count_for_all_datasets():
         assert len(ds.query_ids) == ds.query_count, (
             f"{ds.name}: query_ids length {len(ds.query_ids)} != query_count {ds.query_count}"
         )
+
+
+def test_definition_drives_inventory_not_hardcoded_list():
+    """AC-1 Verified by: 'tests parse the dataset definition and confirm the expected DAB
+    task inventory and metadata without consulting hardcoded generated spec lists.'"""
+    definition = load_default_definition()
+    actual_query_count = sum(d.query_count for d in definition.datasets)
+    # 54 = 4+3+13+2+4+4+3+3+3+3+5+7 across the 12 upstream DAB datasets;
+    # cross-verified against /Users/clkao/git/dataagentbench/data/query_*/query*/ dir layout.
+    assert actual_query_count == 54
+    assert len(definition.datasets) == 12
