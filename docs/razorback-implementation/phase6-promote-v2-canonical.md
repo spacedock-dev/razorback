@@ -1,7 +1,7 @@
 ---
 id: t1qhefvs93x72m9dbvzw11gn
 title: Phase 6 — promote v2 canonical, sideline v1 to _legacy/
-status: validation
+status: implementation
 source: plan Phase 6 (v2 reconciliation plan at docs/superpowers/plans/2026-05-19-razorback-reconciliation-plan.md)
 started: 2026-05-23T03:52:58Z
 completed:
@@ -201,3 +201,19 @@ Promoted the v2 runtime-adapter solver to canonical `agent.kind: spacedock_solve
 ### Summary
 
 Validation rejected the branch. The canonical `spacedock_solver` route itself is green in focused tests, but the exact AC-1 run target is missing, broad AC-4 sidelines were deferred, workflow status fails on an unrelated malformed active entity, and `uv run pytest` exits non-zero. The plan and implementation gates were first-officer auto-approved, not human-gated.
+
+### Feedback Cycles
+
+- Cycle 1, validation -> implementation, 2026-05-23:
+  `docs/razorback-implementation/validation/phase6-promote-v2-canonical.md`
+  rejected the branch. Required fixes:
+  1. Provide the literal AC-1 smoke target
+     `examples/specs/bookreview-claude.frozen.yaml`, or update the
+     entity through planning if a different canonical smoke is intended.
+  2. Resolve AC-4 explicitly: complete safe sideline commits or split
+     broad DAB/ADE/standalone-CLI/compat/observer retirements into
+     separate entities rather than leaving the AC ambiguous.
+  3. Port, rehome, or delete remaining stale v1/Phase-3 tests so
+     `uv run pytest` exits 0.
+  4. Repair or archive malformed active workflow entity
+     `goal1-resume-t0-cost-projection.md` so workflow status can render.
