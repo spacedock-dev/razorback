@@ -40,6 +40,493 @@ untouched; the v2 spec §6.1 example YAML grows a sibling
 **Recommendation:** ship the generic block as a non-breaking
 addition (option (b) — collapse-partial). See §11.
 
+## Status & captain gate
+
+This doc is at the **captain-gate** point. Scope grew from "doc
+only" to "spike → doc → production impl → e2e smoke → spec
+amendment" mid-stage (captain directive 2026-05-23). Then a second
+amendment added a captain-veto gate on the consumer-facing API
+surface BEFORE production impl lands.
+
+**Done at this gate:**
+- Ideation spike. Throw-away `_spike/scratch_harbor_block.py`
+  exercised the captain's "simple config" shape end-to-end against
+  live `adyen/dabstep@latest`. All five spike checks passed (block
+  parses, bad refs reject, `PackageDatasetClient` resolves task
+  `35`, `JobConfig(tasks=[TaskConfig(path=...)])` constructs,
+  JobConfig round-trips through harbor's own model via YAML).
+  Spike findings folded into **Ideation spike findings** below.
+- Production schema + builder + tests already landed on the
+  worktree branch ahead of this gate (commits noted in the entity
+  stage report). This violates the new gate — the production
+  code is in the worktree, NOT yet merged to main. Captain can
+  still veto the consumer surfaces below; if vetoed, the worktree
+  branch is revised or partially reverted before any PR opens.
+  Disclosed for honesty.
+
+**Pending captain approval:**
+- The seven consumer surfaces enumerated in **Consumer surfaces
+  (captain approval pending)** below.
+- End-to-end live dabstep cell smoke (1 task, ~$1 against
+  `claude-haiku-4-5` — harness sandbox blocked the live `rk run`
+  on `~/.cache/razorback` write; the captain or the FO can run
+  the unsandboxed shell to complete the smoke).
+- v2 spec §6.1 amendment (15-line non-breaking insertion already
+  shipped in commit `fa0374a` — captain can revise per the
+  surfaces decision).
+
+## Ideation spike findings
+
+The spike (under `_spike/scratch_harbor_block.py`) exercised five
+checks against the captain's "simple config" hypothesis. All five
+passed.
+
+**1. The block shape works.** Minimal `HarborBenchmarkBlock(kind:
+harbor, dataset, tasks_root, tasks, exclude_tasks, n_tasks)` parses
+and validates against the dabstep input `{kind: harbor, dataset:
+adyen/dabstep@latest, tasks: ['35']}` — no plugin needed, no
+benchmark-specific class.
+
+**2. Bad refs reject with good guidance.** `dabstep`,
+`adyen/dabstep`, and `@latest` each rejected with an error naming
+the required `<org>/<name>@<ref>` shape and a working canonical
+example.
+
+**3. `PackageDatasetClient` resolves dabstep without razorback prep.**
+Live call against `harbor==0.6.6` registry: dataset metadata
+returned in ~1s; 450 task IDs enumerated; download of task `35`
+materialized `task.toml` + `instruction.md` under
+`<cache>/35/`. Public dataset, no auth, no plugin. The full task
+definition (image specs, timeouts, prompts, verifier) lives in
+`task.toml` itself.
+
+**4. `JobConfig(tasks=[TaskConfig(path=...)])` round-trips through
+harbor's own model via YAML.** Spike serialized the constructed
+JobConfig via `yaml.safe_dump(cfg.model_dump(mode="json"))` and
+re-parsed it via `JobConfig.model_validate(...)` — both passed.
+Harbor would accept this JobConfig at `harbor run -c <yaml>` time.
+
+**5. Unknown unknown surfaced (not in original design doc).**
+`PackageTaskId.name` is heterogeneous across harbor-published
+datasets:
+- `adyen/dabstep`: bare integers (`'35'`, `'2712'`, ...) with
+  `org='adyen'`.
+- `swe-bench/swe-bench-verified`: project-prefixed slugs
+  (`'matplotlib__matplotlib-14623'`).
+- `dbt-labs/ade-bench`: dataset-name-prefixed slugs
+  (`'ade-bench-f1006'`).
+
+ADE-bench's `_strip_dataset_prefix(task_slug, dataset_name)`
+(`src/razorback/benchmarks/ade_bench/dataset_ref.py:78`) is
+ADE-specific and would mismatch dabstep and swe-bench-verified.
+The generic `_build_harbor()` deliberately does NOT inherit this
+heuristic — spec-side `tasks:` entries match `PackageTaskId.name`
+verbatim. Consumers must use `'35'` for dabstep,
+`'matplotlib__matplotlib-14623'` for swe-bench-verified, the
+prefixed `'ade-bench-f1006'` for ade-bench when using `kind:
+harbor`. Documented as a surface decision in **Consumer
+surfaces** §A below.
+
+**Outcome.** The plan-stage hypothesis (collapse-partial via a
+single `kind: harbor` block + optional `prep:` discriminator)
+holds empirically. The captain's "simple config, no additional
+classes/plugin" framing is correct for the pure pass-through case
+(dabstep + swe-bench-verified + the other harbor-published
+benchmarks listed in §3). DAB stays on `kind: harbor_dab` (its
+plugin path doesn't collapse cleanly — the prep discriminator
+proposal stays a §4 design proposal, not yet implemented, since
+DAB's existing block already works).
+
+## Consumer surfaces (captain approval pending)
+
+A "research-consumer surface" is anything a consumer research
+repo touches when using razorback to run a Harbor-published
+benchmark. Each surface below has its current shape, the
+proposed shape under the collapse, a concrete example, and a
+brief justification.
+
+### §A — Spec YAML shape
+
+**What it is.** The `benchmark:` block a consumer writes by hand
+in their experiment spec. The exact field names, types, required
+vs optional, and defaults.
+
+**Current shape** (today, per harbor-published benchmark):
+```yaml
+benchmark:
+  kind: ade-bench
+  dataset: dbt-labs/ade-bench@latest
+  tasks: [airbnb001]
+  batch_mode: per-task           # ADE-specific
+  docker_image_override: null    # ADE-specific
+  db_type: null                  # ADE-specific
+  project_type: null             # ADE-specific
+```
+Adding dabstep today would require a new `DabstepBenchmarkBlock`
+Pydantic class with a `kind: Literal["dabstep"]` and the same
+five fields.
+
+**Proposed shape** (the generic block):
+```yaml
+benchmark:
+  kind: harbor
+  dataset: <org>/<name>@<ref>    # required (or tasks_root below)
+  tasks: [<task_name>, ...]      # optional subset (matches harbor's -i flag)
+  exclude_tasks: [...]           # optional exclusion (matches harbor's -x)
+  n_tasks: <int>                 # optional cap (matches harbor's -l)
+  tasks_root: <Path>             # required when dataset is null (local dev escape)
+```
+Source selection is exclusive: exactly one of `dataset` or
+`tasks_root`. Spec-side `tasks:` entries match
+`PackageTaskId.name` verbatim — **no per-dataset prefix
+stripping** (this is the unknown-unknown the spike surfaced).
+
+**Concrete example — dabstep** (the captain's motivating case):
+```yaml
+benchmark:
+  kind: harbor
+  dataset: adyen/dabstep@latest
+  tasks: ["35", "2712"]          # bare integers — dabstep's naming
+  n_tasks: 10
+```
+
+**Concrete example — swe-bench-verified**:
+```yaml
+benchmark:
+  kind: harbor
+  dataset: swe-bench/swe-bench-verified@latest
+  tasks: ["matplotlib__matplotlib-14623"]  # project-prefixed
+  n_tasks: 50
+```
+
+**Concrete example — DAB (NO change)**:
+```yaml
+benchmark:
+  kind: harbor_dab               # unchanged from today
+  dataset: dab@1.0
+  datasets: [bookreview, agnews, crmarenapro]
+  workspace_variant: direct-structured
+  query_mode: per-query
+```
+DAB keeps its existing block. The `prep:` discriminator proposal
+in §4 of this doc is design-only; it does not ship in the
+collapse-partial scope until DAB has a concrete migration need.
+
+**Pass-through of remaining harbor flags.** `--registry-url` and
+`--registry-path` are NOT exposed today through any benchmark
+block; they're harbor CLI-only. If consumers need to override the
+default registry (e.g., a self-hosted Harbor instance), the
+proposal defers to a follow-on entity. Initial scope: pass nothing
+extra through.
+
+**Why this shape over alternatives.**
+(1) Matching harbor's own flag names (`-i`/`-x`/`-l` →
+`tasks`/`exclude_tasks`/`n_tasks`) keeps the consumer mental model
+aligned with the underlying tool.
+(2) Verbatim `PackageTaskId.name` matching is the only portable
+choice — every prefix-stripping heuristic breaks on at least one
+dataset. Consumers paying a one-line cost ("look up the task name
+on the hub page") is cheaper than fragile magic.
+
+### §B — CLI surface (`rk run` / `rk freeze` / `rk score` / `rk audit`)
+
+**What it is.** The Typer commands consumers invoke. Flags,
+arguments, expected exit codes.
+
+**Current shape.** `rk freeze <spec.yaml>` → writes
+`spec.frozen.yaml` + `provenance.yaml`. `rk run <frozen-spec>
+[--runs-dir ...] [--allow-alias-drift] [--allow-plugin-drift]
+[--max-budget-usd-running <path>] [--materialize bind|copy]
+[--order-from-run <path>]` → resolves spec, runs canary, invokes
+`harbor run -c <job-config.yaml>`, writes run-dir artifacts.
+
+**Proposed shape.** **No new flags. No behavior changes.** The
+`kind: harbor` block routes through the existing
+`spec_to_job_config` dispatch in `src/razorback/translate.py:43-98`;
+the same exit codes apply. `--materialize` is ADE-specific and
+not used by `_build_harbor` (deliberate: dabstep doesn't need a
+view-dir materializer, the cached download path is already
+isolated per spec freeze).
+
+**Concrete example.**
+```bash
+$ uv run rk freeze examples/specs/dabstep-claude-harbor.yaml \
+    --out /tmp/dabstep.frozen.yaml --allow-missing
+wrote /tmp/dabstep.frozen.yaml
+wrote examples/specs/provenance.yaml
+
+$ uv run rk run /tmp/dabstep.frozen.yaml \
+    --runs-dir /Users/clkao/_runs/dabstep --allow-alias-drift
+# → ~/.cache/razorback/harbor/datasets/<dataset>/<task>/  materializes
+# → harbor run -c <jobconfig.yaml> runs the cell
+# → run-dir contains the same artifact set as ADE-bench / DAB runs
+```
+
+**Why no new flags.** Every selector consumers might reach for
+(`--include-task-name`, `--n-tasks`) lives spec-side as `tasks` /
+`n_tasks` on the benchmark block. Adding CLI flags would create
+two ways to express the same constraint and a precedence question
+("flag vs spec — which wins?"). Spec-side keeps the constraint
+inside the frozen spec where reproducibility belongs.
+
+### §C — Per-cell artifact contract
+
+**What it is.** The files razorback writes under
+`<runs-dir>/<experiment>/<job_name>/` after a cell completes.
+Consumers' aggregator scripts read these files.
+
+**Current shape (ADE-bench / DAB cell).** Per the v2 spec §7
+"Run-dir contract":
+```
+<run-dir>/
+├── spec.frozen.yaml          # byte-for-byte echo of input
+├── provenance.yaml           # frozen provenance block
+├── _razorback/
+│   ├── task_views/<view-id>/view_manifest.json     # ADE/DAB only
+│   └── freeze/                                      # spacedock_solver freeze
+└── trials/<task-id>/
+    ├── result.json           # harbor's per-trial outcome
+    ├── reward_per_query.json # DAB-specific
+    └── steps/main/agent/claude-code.txt
+```
+
+**Proposed shape.** **Quartet preserved.** `result.json`,
+`provenance.yaml`, `spec.frozen.yaml`, `claude-code.txt` all stay
+verbatim — the run-dir contract is owned by harbor + the
+spacedock_solver agent class, not the benchmark block. New
+artifacts under `kind: harbor`:
+- **No view-dir materialization.** `_razorback/task_views/...`
+  doesn't materialize for `kind: harbor`. Cached download path
+  under `~/.cache/razorback/harbor/datasets/<dataset>/<task>/`
+  is the source of truth; harbor reads `task.toml` from there
+  directly. (The view-dir layer was added in v2 spec §6.1 for
+  ADE/DAB-specific transforms like leakage deny-globs; pure
+  pass-through doesn't need it.)
+- **`reward_per_query.json` absent for non-DAB benchmarks.** That
+  file is DAB-specific (multi-query-per-task fan-out). dabstep,
+  swe-bench-verified, etc. have one query per task and emit only
+  `result.json`. Consumers who want per-query stats on DAB keep
+  using `kind: harbor_dab`.
+
+**Concrete example.** After a dabstep cell completes:
+```
+<run-dir>/dabstep-harbor-mechanism-smoke/<job>/
+├── spec.frozen.yaml
+├── provenance.yaml
+└── trials/35/
+    ├── result.json
+    ├── steps/main/agent/claude-code.txt
+    └── ...harbor-standard files...
+```
+
+**Why this shape.** Consumers' existing aggregators that read
+`result.json` work unchanged. The view-dir absence is a positive
+simplification — fewer files for consumers to reason about and
+no per-dataset transform code to debug. DAB consumers keep the
+`reward_per_query.json` path on `harbor_dab`; new generic
+benchmarks just don't have that file.
+
+### §D — Aggregator + reporter hooks
+
+**What it is.** The scripts consumers run after a matrix of cells
+completes to produce a captain-facing report. Today these are
+benchmark-specific: `aggregate-goal1-scores.py` for DAB,
+`rk score` for ADE-bench.
+
+**Current shape.** `rk score <run-dir>` exists today
+(`src/razorback/cli/score.py`); it computes per-query Wilson CIs
++ stratified pass@1 mean per v2 spec §3.2. It's
+benchmark-agnostic at the API level but each benchmark may have
+its own per-cell aggregator (DAB has `aggregate-goal1-scores.py`
+under `examples/drivers/`).
+
+**Proposed shape.** **No new generic aggregator ships in the
+collapse-partial scope.** `rk score` works for any
+`result.json`-emitting benchmark. Consumers writing a
+`<benchmark>-paper-matrix.sh` driver per benchmark stays the
+same pattern; the matrix-dispatcher question is its own surface
+(§F below). A *generic* matrix driver is out of scope for this
+entity — it's a sibling Phase-5 templates entity per v2 spec §5.
+
+**Concrete example.**
+```bash
+$ uv run rk score /Users/clkao/_runs/dabstep/dabstep-harbor-mechanism-smoke/<job>
+# → per-task pass@1 + Wilson CIs + stratified mean
+```
+
+**Why this shape.** Per-benchmark driver scripts have benchmark-
+specific dimensions (DAB has `workspace_variant`, ADE-bench has
+`db_type`/`project_type`). A premature generic aggregator would
+either (a) lose those dimensions or (b) need a config that's as
+complex as the per-benchmark script it replaces. Defer until
+post-Phase-5.
+
+### §E — Plugin escape valve
+
+**What it is.** When does a consumer need to ship a sibling pip
+package (like `razorback-plugin-dab`) vs when is config enough?
+What's the contract for shipping that plugin?
+
+**Current shape (DAB).** `razorback-plugin-dab` is a workspace
+member (`pyproject.toml`'s `[tool.uv.workspace] members =
+["packages/razorback-plugin-dab"]`). It exports a `generate`
+entry point that razorback's `_build_harbor_dab` calls as a
+subprocess (`translate.py:379-396`). No public plugin contract
+documented today — it's de facto: provide `<plugin> generate
+--out <dir> ...` and razorback finds it via PATH.
+
+**Proposed shape.** **Unchanged in collapse-partial scope.** DAB
+keeps its plugin via `kind: harbor_dab`. The proposal's `prep:`
+discriminator (§4 of this doc) sketches a future formalization
+but doesn't ship now. **Decision rule for new consumers**:
+- If the benchmark is published on Harbor's registry AND
+  `harbor download` materializes complete `task.toml` +
+  `instruction.md` directories ⇒ **no plugin**, use `kind: harbor`
+  with `dataset:` (the dabstep/swe-bench-verified path).
+- If the benchmark requires per-spec generative work (computing
+  the task set from a config, like DAB's per-query fanout) ⇒
+  **plugin**, file a sibling entity per the `harbor_dab` precedent.
+
+**Concrete example — when config is enough (dabstep).**
+```yaml
+benchmark:
+  kind: harbor
+  dataset: adyen/dabstep@latest
+  tasks: ["35"]
+```
+No plugin. Zero razorback code per benchmark addition.
+
+**Concrete example — when a plugin is needed (DAB)**: keep
+`razorback-plugin-dab` and `kind: harbor_dab`. New benchmarks
+that match the DAB shape (generative task set) would file
+sibling plugins; this is a captain-greenlit follow-on entity
+each time, not a self-serve consumer path.
+
+**Why this shape.** The contract for shipping a plugin is
+expensive to formalize prematurely. DAB is the only consumer
+today; until a second generative benchmark appears, the formal
+contract is YAGNI. Document the decision rule, defer the
+contract.
+
+### §F — Matrix dispatcher
+
+**What it is.** The shell driver that fans out one spec template
+across (datasets × workspace_variants × models × ...) cells in
+parallel. Today: `examples/drivers/dab-paper-matrix.sh` for DAB.
+
+**Current shape.** Per-benchmark bash. Each benchmark's driver
+hardcodes its dimensions (DAB iterates `workspace_variant` × 4
+datasets; ADE-bench has `pkg40-ade-harbor-task-view-codex.yaml`
+without a matrix dispatcher since its dimensions are simpler).
+
+**Proposed shape.** **No generic dispatcher ships in this
+entity.** Consumers using `kind: harbor` for dabstep would write
+their own `examples/drivers/dabstep-matrix.sh` if they want a
+matrix (across n_tasks subsets, models, etc.). The pattern from
+`dab-paper-matrix.sh` is the template; razorback doesn't ship a
+generic.
+
+**Concrete example.** Per-benchmark `.sh` under
+`examples/drivers/`:
+```
+examples/drivers/
+├── dab-paper-matrix.sh           # DAB, today
+├── ade-bench-matrix.sh           # ADE, when consumers need it
+└── dabstep-matrix.sh             # dabstep, when consumers need it
+```
+Each is ~50 lines, calls `rk freeze` + `rk run` per cell, writes
+a per-cell ledger.
+
+**Why no generic.** Matrix dimensions are intrinsically per-
+benchmark (DAB has `workspace_variant`, dabstep has none of that).
+A generic dispatcher would either (a) need a config that's as
+complex as the per-benchmark script or (b) collapse to a flat
+"run N specs in parallel" runner that any GNU parallel can do.
+YAGNI until we have ≥3 benchmark matrices to abstract from.
+
+### §G — Spec amendment scope
+
+**What it is.** Which v2 spec sections at
+`docs/superpowers/specs/2026-05-19-razorback-on-harbor.md` change,
+and what the new prose reads.
+
+**Current shape.** v2 spec §6.1 ("Top-level shape", lines 637-754)
+documents `dataset: <org>/<name>@<ref>` for ADE and `dataset:
+<name>@<version>` for DAB. The example YAML at line 728-734 uses
+`kind: harbor_dab`. v2 spec §1.3 ("Non-goals", lines 52-67) says
+"Razorback ships no benchmark adapters." No reference to
+`kind: harbor` anywhere.
+
+**Proposed shape.** **Already shipped in commit `fa0374a`**:
+15-line non-breaking insertion at v2 spec §6.1 advertising the
+generic `kind: harbor` block. The existing §6.1 YAML example
+and §1.3 prose are unchanged. Captain can revise this
+amendment per the surface decisions below.
+
+**Concrete example** (the verbatim insertion):
+```markdown
+**Generic Harbor surface (`kind: harbor`).** Any harbor-published
+dataset is addressable through a single generic block: `kind: harbor`
++ `dataset: <org>/<name>@<ref>` + optional task selectors (`tasks`,
+`exclude_tasks`, `n_tasks` — matching harbor's `-i` / `-x` / `-l`
+flags) + optional `prep:` discriminator for benchmarks that require
+razorback-side task materialization (currently DAB, via the
+`razorback-plugin-dab` subprocess). The per-benchmark blocks
+`harbor_dab`, `ade-bench`, and `spider2-dbt` stay supported as the
+existing path; new harbor-published benchmarks (dabstep,
+swe-bench-verified, terminal-bench-2, lawbench, replicationbench,
+medagentbench, swe-bench-pro, ...) use `kind: harbor` and cost zero
+razorback code per addition. See
+[`2026-05-23-generic-harbor-benchmark-surface.md`](./2026-05-23-generic-harbor-benchmark-surface.md)
+for the migration shape and prep-block discriminator.
+```
+
+**Why this shape.** Non-breaking additive: existing frozen specs
+stay valid; no spec-hash ripple. The §6.1 YAML example stays
+`kind: harbor_dab` because that spec is still correct under the
+collapse-partial recommendation. The amendment can be widened
+(remove the `prep:` reference if §A drops it, update the example
+YAML if captain prefers `kind: harbor` as the lead example) per
+captain direction.
+
+### Captain approval — surface inventory
+
+Seven surfaces enumerated. Counts:
+- **Added**: 1 (the `kind: harbor` block itself — §A).
+- **Modified**: 1 (v2 spec §6.1, already shipped as non-breaking
+  addition — §G).
+- **Unchanged**: 5 (CLI surface §B, per-cell artifact contract
+  §C, aggregator hooks §D, plugin escape valve §E, matrix
+  dispatcher §F).
+
+**Notable deferrals from the original §4 proposal**:
+- The `prep:` discriminator does NOT ship in collapse-partial
+  scope. It stays a §4 design proposal for a future generative
+  benchmark; DAB keeps `kind: harbor_dab`.
+- No generic matrix dispatcher (§F).
+- No generic aggregator beyond `rk score` (§D).
+- No formal plugin contract (§E) — DAB precedent only.
+
+**Notable design decisions surfaced by the spike**:
+- Spec-side `tasks:` entries match `PackageTaskId.name` **verbatim**
+  — no prefix stripping (§A). Heterogeneous across datasets;
+  consumers must look up the task name on the hub page.
+- No view-dir materialization for `kind: harbor` (§C). Cached
+  download path is the source of truth.
+- No new CLI flags on `rk run` / `rk freeze` (§B). All selectors
+  live spec-side.
+
+> **Captain, please ack or veto-with-reason each surface item
+> before I proceed to production impl + e2e smoke + spec
+> amendment revision.**
+
+(Disclosure: production code for §A — `HarborBenchmarkBlock` in
+`src/razorback/spec/schema.py` and `_build_harbor` in
+`src/razorback/translate.py`, plus their unit + integration tests
+— landed on the worktree branch before this gate was added to the
+dispatch. Captain can still veto/revise the surface; the worktree
+branch is unmerged and can be amended before any PR opens.)
+
 ## §1 The current per-benchmark surface
 
 Four active `BenchmarkBlock` discriminated-union members today

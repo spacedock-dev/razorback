@@ -1,0 +1,28 @@
+# ABOUTME: Canonical dabstep spec — generic kind: harbor + adyen/dabstep@latest.
+# ABOUTME: Proof case for the captain directive "if dabstep is on harbor, there should be just simple config".
+version: 1
+experiment: dabstep-harbor-mechanism-smoke
+agent:
+  kind: spacedock_solver
+  runtime: claude
+  model: claude-haiku-4-5
+  sampling:
+    temperature: 0.0
+    top_p: null
+  solver_workflow: ./examples/solver_workflows/claude-benchmark-solver
+  max_turns: 8
+  max_budget_usd: 1
+  tools_allowed: []
+  tools_denied: []
+benchmark:
+  kind: harbor
+  dataset: adyen/dabstep@latest
+  tasks:
+    - "35"
+trials: 1
+concurrency:
+  trials: 1
+observers:
+  - kind: jsonl
+    path: events.jsonl
+  - kind: stdout
