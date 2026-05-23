@@ -218,6 +218,23 @@ Routed back to implementation for the narrow fix:
 
 Cycle count: 1 of 3.
 
+**Cycle 2 — 2026-05-23 implementation FAILED on item 3, surfaced deeper root cause; captain decided option 1 for cycle 3 + filed `m2 spacedock-solver-base-installed-agent-feasibility` follow-up for option 2.**
+
+Cycle-2 ensign applied the assigned cycle-1 fix (manifest write moved from `cleanup()` to `populate_context_post_run()`), updated the integration test to call the new hook, all 20 owned tests green. Re-ran the live bookreview pilot: AC-1 still PASS (3 `Agent` dispatches in `claude-code.txt`), AC-2 still FAIL (manifest not written).
+
+Root cause is deeper than cycle-1 diagnosed. Harbor's trial runner gates `populate_context_post_run` on `isinstance(self._agent, BaseInstalledAgent)` at `.venv/lib/python3.12/site-packages/harbor/trial/trial.py:466-471`. `SpacedockSolverAgent` extends `BaseAgent` directly, so harbor only calls `setup` + `run` + `to_agent_info`. Both `cleanup()` and `populate_context_post_run()` are dead code on the outer agent.
+
+Cycle-2 ensign surfaced three options to FO + captain:
+1. Move manifest write into `SpacedockSolverAgent.run()` after `await self._inner.run(...)` returns (~3 lines, no harbor surface change)
+2. Migrate `SpacedockSolverAgent` to extend `BaseInstalledAgent` (larger surface change; canonical lifecycle)
+3. Move manifest writer out of agent into matrix dispatcher post-run hook (writer reads `claude-code.txt` directly)
+
+**Captain decision: option 1 for cycle 3; file `m2 spacedock-solver-base-installed-agent-feasibility` as an investigation-only follow-up entity to assess whether option 2 is worth the migration cost.**
+
+Routed back to implementation for cycle 3 (the narrow option-1 fix): move the `_maybe_write_subagent_trace_manifest` call out of `populate_context_post_run` and into `SpacedockSolverAgent.run()` after the inner-agent invocation completes. Update the integration test to invoke `await agent.run(...)` and assert the manifest appears post-run. Re-dispatch the live bookreview pilot; AC-2 must pass.
+
+Cycle count: 2 of 3.
+
 ## Stage Report: plan
 
 - DONE: Apply plan-output flex rule per README. 5 ACs but multi-subsystem ... Recommend separate plan doc.
