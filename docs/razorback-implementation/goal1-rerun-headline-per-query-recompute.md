@@ -127,3 +127,86 @@ a banner about a known under-count, and Goal 1 has a paper-faithful
 headline. If captain wants the same recompute pattern applied to
 other reports (or wants a sibling N=5 entity filed), the precedent is
 set.
+
+## Stage Report: plan
+
+- DONE: Apply plan-output flex rule; justify inline vs separate plan doc.
+  Inline. 4 ACs nominally, but operationally collapses to one driver re-wire
+  + one report rewrite (no production code, no spec re-derivation, no
+  multi-subsystem touch). Separate `plans/{slug}.md` doc would be overhead.
+- DONE: Mechanism validation — verify `examples/drivers/aggregate-goal1-scores.py`
+  consumes `runs/aggregate.py:reduce_per_query_stratified` post-`1s`.
+  BLOCKER FOUND. The aggregator still reads each cell's top-level
+  `result.json` (`stats.evals.<x>.reward_stats.reward`) and binarizes with
+  `r >= 1.0` at `aggregate-goal1-scores.py:64-65`. It never imports from
+  `razorback.runs.aggregate`. Yelp's `0.8571` reward maps to `0/1` (the old
+  under-count). Task 0 (driver re-wire) must land before recompute. The
+  canonical reducer exists at `src/razorback/runs/aggregate.py:372`
+  (`reduce_per_query_stratified`) with `read_trial_outcomes`/`count_trials`
+  helpers; `rk score` (`src/razorback/cli/score.py:52-55`) is the reference
+  caller pattern. The `reward_per_query.json` sidecars exist for DAB cells
+  (verified at `_runs/goal1-rerun-spacedock-opus47-xhigh/spacedock/yelp/.../yelp__Cc94VEd/steps/main/verifier/reward_per_query.json` — 7 q's, 6 with reward=1.0).
+- DONE: Name recompute command sequence + report-edit diff scope.
+  See Task list below.
+
+### Plan (inline)
+
+#### AC↔task map
+- Task 0 (driver re-wire) → enables AC-1, AC-3
+- Task 1 (recompute) → AC-1, AC-3 data
+- Task 2 (report rewrite) → AC-2, AC-3, AC-4
+
+#### Task 0 — Re-wire `examples/drivers/aggregate-goal1-scores.py` to canonical reducer
+
+- **Why first:** Riskiest contract. The driver's reward-extraction path
+  (binary `r >= 1.0` over the cell-level `result.json`) is the bug. No
+  recompute can produce a per-query number until this is fixed.
+- **TDD checkpoint:** Mechanism smoke test against the yelp cell.
+  Before any code change, run `uv run python -c "from razorback.runs.aggregate import read_trial_outcomes, reduce_per_query_stratified, count_trials; from pathlib import Path; run_dir = Path('_runs/goal1-rerun-spacedock-opus47-xhigh/spacedock/yelp/goal1-spacedock-yelp/484d0b940af2aa7b'); out = read_trial_outcomes(run_dir); r = reduce_per_query_stratified(out, trial_counts=count_trials(run_dir)); print(r['stratified_pass_at_1'], r['strata'])"`. Expected: `0.857...` with one `yelp` stratum, 7 query cells, 6 with `pass_at_1=1.0`. This proves the canonical reducer reads the sidecar correctly against a real cell before we touch the driver.
+- **Code change (smallest reasonable):** Replace `extract_cell_stats(result_json)`'s reward-walking loop (lines 48-72) with a delegation to `reduce_per_query_stratified` on the cell's run-dir (the hash directory, i.e., the parent of the trial dirs). `find_result_json(cell_dir)` returns `cell_dir/*/*/result.json` — its `.parent` is the run-dir (`{cell_dir}/{task-folder}/{hash}/`). Pass that run-dir to `read_trial_outcomes` and `reduce_per_query_stratified`. The per-cell return dict gains `per_query_pass_at_1` (the reducer's `stratified_pass_at_1` on a single-dataset stratum) alongside the existing binary `pass_at_1`; keep `n_total`/`n_pass`/`n_errored` from `count_trials` so the pooled Wilson CI math at lines 107-109 keeps a consistent denominator. Spec §3.2 (per-query stratified pass@1) governs the contract.
+- **Aggregate-level wiring:** `aggregate_variant` (lines 75-143) keeps the same shape but the per-stratum `pass_at_1` becomes the per-query number. The pooled headline still wants a Wilson CI over a binomial denominator; the cleanest reading of §3.2 is to pool `(sum of n_correct, sum of n_trials)` across all `(dataset, query_id)` cells (i.e., 7 yelp queries contribute 7 trials, 6 correct), and the cycle-1 binary denominator (1 cell = 1 trial) for non-batch strata stays unchanged. Add a `per_query_pass_at_1` field on the per-cell dict and a `pooled_per_query_pass_at_1` field on the aggregate dict to keep the binary numbers visible for audit (do not overwrite them).
+- **Failing-test-first equivalent:** No formal pytest covers this driver (one-off script). Use the yelp-cell mechanism smoke above as the failing test; capture before/after numbers in the recompute step's stdout for evidence.
+
+#### Task 1 — Recompute the 12-cell matrix
+
+- **Command:** `uv run python examples/drivers/aggregate-goal1-scores.py --matrix-root _runs/goal1-rerun-spacedock-opus47-xhigh --out-dir _runs/goal1-rerun-spacedock-opus47-xhigh`
+- **Expected output:** `_runs/goal1-rerun-spacedock-opus47-xhigh/spacedock/aggregate-score.json` carries the new `pooled_per_query_pass_at_1` + per-cell `per_query_pass_at_1`. Yelp's per-cell entry should show `per_query_pass_at_1: 0.857` (6/7); strata where the binary cell-level reward is already in `{0.0, 1.0}` (e.g., `bookreview` at 1.0, `agnews` at 0.5 binary→0/2 if it has 2 queries) should preserve their fan-out. The pooled headline drifts from `0.333` upward, capturing the partial-credit cells (`crmarenapro 0.692`, `googlelocal 0.750`, `PANCANCER_ATLAS 0.667`, `yelp 0.857`, etc.).
+- **Mechanism-validation gate:** Before believing the full pooled number, eyeball the per-cell sub-table for any stratum whose new `per_query_pass_at_1` is structurally implausible (e.g., a cell whose continuous reward column says `0.857` but per-query reports `0.0` — that would indicate the sidecar didn't load and we silently fell back to the cell-level reward). Failing that check forces a Task 0 fix-cycle, not a Task 2 report rewrite.
+- **Wallclock budget:** Driver runs in seconds (no re-execution). The full recompute should finish under 30s; if it exceeds 2 minutes, investigate.
+
+#### Task 2 — Rewrite `docs/razorback-implementation/_evidence/goal1-rerun-dab-spacedock-opus47-xhigh-report.md`
+
+Diff scope (read-mostly edits — keep cycle 1/2 detail, dispatch ledger, freeze CAS, wallclock ledger, cost ledger, AC-5 provenance enumeration sections verbatim):
+
+1. **Remove the cycle-2 banner box** (lines 7-23). The under-count is fixed by `1s`. Replace with a single line at the same position: `> **Headline scoring:** canonical per-query reducer (`runs/aggregate.py:reduce_per_query_stratified`, post-`1s` merge at commit `f76443b` on main).`
+2. **Replace the Headline section** (lines 25-34, "## Headline (cycle 2 — clean 12/12)"). New title: `## Headline (post-1s recompute — per-query)`. New top line: `**Spacedock pooled per-query pass@1 = {N} (95% Wilson CI [{lo}, {hi}]) across {n_query_cells} query cells over 12 dataset strata.**` Followed by the `--against-constant paper=0.577` verdict. Then 1-2 sentences narrating the gain over binary (e.g., "Up from binary 0.333; yelp now contributes 6/7 instead of 0; <ds> still binary because <reason>"). Numbers filled in from Task 1 output.
+3. **Preserve cycle-1 and cycle-2 binary headlines** in a new `## Audit history — prior headlines` subsection (immediately after the new Headline). Move the existing `## Cycle-1 headline (preserved for trail)` block (lines 42-52) under it AS-IS, and add: `### Cycle-2 binary headline (pre-1s, archived)` with the old `0.333 [0.138, 0.609]` number and the original verdict line. Do NOT delete these; they are the audit trail per AC-2's verified-by clause.
+4. **Per-dataset table (lines 54-68)** — add one new column `per_query_pass@1` between the existing `pass@1` (binary) and `wilson_ci_95` columns. Update the column header. Each row's value comes from Task 1's `_runs/.../spacedock/aggregate-score.json`'s strata block. The pooled row's `per_query_pass@1` cell is the new headline number; the binary `pass@1` cell stays `0.333` for audit. Flag any row where `per_query_pass@1` and continuous `reward` diverge by > 0.05 with a footnote.
+5. **Provenance block (new section at end, immediately after `## Wallclock ledger`):**
+   ```
+   ## Provenance — post-1s recompute
+
+   - **Reducer source:** `src/razorback/runs/aggregate.py:reduce_per_query_stratified` (introduced by entity `1s runs-aggregate-single-score-reducer`, merged into `main` at commit `f76443b` on 2026-05-23).
+   - **Fixture source:** 12 cell run-dirs at `_runs/goal1-rerun-spacedock-opus47-xhigh/spacedock/<dataset>/` (8 cycle-1 preserved + 4 cycle-2 re-executed; `reward_per_query.json` sidecars under each trial's `steps/main/verifier/`).
+   - **Matrix-execution source:** entity `an goal1-rerun-dab-spacedock-opus47-xhigh` (archived; produced the run-dir artifacts above).
+   - **Recompute date:** {YYYY-MM-DD filled at implementation time}.
+   ```
+
+#### Verified-by spot-checks (post-rewrite)
+
+- `grep -F 'stratified_pass_at_1 = 0.333' docs/razorback-implementation/_evidence/goal1-rerun-dab-spacedock-opus47-xhigh-report.md` returns ≥1 match inside the `Audit history` subsection (preserved) and 0 matches inside the new `Headline (post-1s recompute — per-query)` block. (AC-2 verified-by clause.)
+- New `per_query_pass@1` column header is grep-able; yelp's row shows `0.857`. (AC-3 verified-by clause.)
+- Provenance section is 4 lines; `git log --oneline main -- docs/razorback-implementation/runs-aggregate-single-score-reducer.md` confirms commit `c1fa7ad` (archive) lineage; `git log --oneline --merges main -- src/razorback/runs/aggregate.py` confirms `f76443b` as the merge. (AC-4 verified-by clause.)
+- `uv run pytest` stays green (no production code changes; driver is not under pytest). (Test plan line 4.)
+
+### Summary
+
+Plan committed inline; 4 ACs collapse to 3 tasks (driver re-wire, recompute,
+report rewrite). Task 0 (driver re-wire) is a hard prerequisite that the entity
+body's AC-1 verified-by clause did not call out — the goal1 aggregator script
+still binarizes via `r >= 1.0` and does not consume the canonical
+`reduce_per_query_stratified`. The reducer + the per-cell `reward_per_query.json`
+sidecars are confirmed present; only the driver wiring is missing. The riskiest
+contract (canonical-reducer-against-real-cell yelp smoke) is named as the
+first mechanism check before any driver code change, per the workflow's
+mechanism-validation rule.
