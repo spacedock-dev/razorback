@@ -1,9 +1,9 @@
 ---
 id: hcds9v8a9k8sgtzzkhn51cge
 title: Phase 6 follow-up — retire in-tree DAB adapter
-status: backlog
+status: plan
 source: phase6-promote-v2-canonical validation — deferred AC-4 DAB sideline
-started:
+started: 2026-05-23T05:27:23Z
 completed:
 verdict:
 score: 0.82
