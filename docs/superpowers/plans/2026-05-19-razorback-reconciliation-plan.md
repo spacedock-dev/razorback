@@ -4,7 +4,55 @@
 in [`2026-05-19-razorback-on-harbor.md`](../specs/2026-05-19-razorback-on-harbor.md).**
 
 **Date:** 2026-05-19
-**Status:** Draft
+**Status:** Draft (phases 0-6 SHIPPED; phases 4b/5/7/8 backlog; identity-layer entities `gb`/`qh` in validation)
+
+---
+
+## Phase completeness status (as of 2026-05-23)
+
+This section is a running ledger maintained by the first officer.
+Linked entities live under `docs/razorback-implementation/`.
+
+| Phase | Subject | Status | Entity / notes |
+|---|---|---|---|
+| Phase 0 | Probe, decide, baseline, re-file | ✅ DONE | reconciliation-baseline.md committed; D1-D7 resolved |
+| Phase 1 | `rk run` v2 wrapper | ✅ DONE | `pkg1-v2-rk-runs-cli` + siblings shipped |
+| Phase 2 | DAB harbor adapter (sibling package) | ✅ DONE (1 follow-up) | `phase2-dab-harbor-adapter` shipped; harbor-dab plugin at `packages/razorback-plugin-dab/`. AC-2.5 multi-dataset baseline gap → folded into Goal 1's resume hook (Goal 1's matrix run produces the data AC-2.5 wants committed to baseline doc). |
+| Phase 3 | SpacedockSolverAgent v2 + runtime adapters | ✅ DONE | `phase3-spacedock-solver-v2` shipped; `_runtime/{claude,codex,pi}.py` (codex/pi stubs by D2) |
+| Phase 4a | `rk score` Wilson + stratified mean | ✅ DONE | `phase4a-rk-score-wilson-stratified` + `pkg2-v2-rk-score-counting` shipped; superseded by `rk-score-uses-benchmark-aggregator` (zb, just shipped) which delegates to `runs/aggregate.py:_stratified_pass_at_1` for single-source-of-truth scoring |
+| Phase 4b | `rk diff` (cluster bootstrap + McNemar + MDE) | ⏳ BACKLOG | `gn phase4b-rk-diff-paired-stats` filed; awaits autoresearch consumer |
+| Phase 5 | Solver workflow templates | ⏳ BACKLOG | `zg phase5-workflow-templates` filed |
+| Phase 6 | Promote v2 to canonical, sideline v1 | ✅ DONE (4 follow-ups) | `t1 phase6-promote-v2-canonical` shipped 2026-05-23 by codex; canonical kind = `spacedock_solver`; v1 sidelined to `_legacy/`. Deferred items filed as `phase6-followup-{clean-canonical-spacedock-names, retire-ade-bench-adapter-surface, retire-cli-agent-wrapper, retire-in-tree-dab-adapter}` (all backlog). `phase6-followup-retire-ade-bench-adapter-surface` depends on `gb` shipping first. |
+| Phase 7 | Delete `_legacy/` holding tank (optional) | ⏳ BACKLOG | `sd phase7-delete-legacy` filed; partially absorbed by Phase 6 (which kept `_legacy/` as rollback) |
+| Phase 8 | Validate end-to-end + tag v2 release | ⏳ BACKLOG | `kf phase8-validate-tag-release` filed; gates on Phase 4b + Goal 1 reproduction |
+
+### Post-plan identity layer (filed 2026-05-23)
+
+Two new entities reshape benchmark identity to consume Harbor dataset
+definitions, layering *above* the Phase 2/3 adapter surface:
+
+| Entity | Status | Scope |
+|---|---|---|
+| `gb ade-bench-harbor-dataset-ref` | 🚧 in validation | ADE specs accept `dataset: <org>/<name>@<ref>` (tag/revision/digest); resolver via Harbor `PackageDatasetClient.download_dataset`; view_manifest v2 carries `dataset_ref` + `dataset_content_hash` + `task_content_hash`. |
+| `qh dab-harbor-dataset-definition` | 🚧 in validation | DAB consumes a `dataset.toml` shipped inside `razorback-plugin-dab`; canonical kind = `harbor_dab + dataset: dab@1.0`; in-tree `kind: dab` retained with `DeprecationWarning`. |
+
+These are spec §6.1+§6.2 refinements that the original reconciliation
+plan did not anticipate. Both compose with `query_mode` + wallclock
+ordering hints (which remain on the spec/CLI layer as behavior-side,
+orthogonal to dataset identity).
+
+### Auxiliary sprint (just shipped)
+
+- `z5 fo-no-force-worktree-remove` — FO contract: require untracked-file audit before `--force` worktree remove
+- `x9 razorback-runs-outside-worktree` — default `runs_dir` lives at `$XDG_DATA_HOME/razorback/runs/`
+- `f1 freeze-tree-content-addressable-store` — sealed-hash freeze CAS at `$XDG_DATA_HOME/razorback/freeze/<sealed_hash>/`
+- `zb rk-score-uses-benchmark-aggregator` — `rk score` and `summary.json` now driven by the same per-query stratified reducer
+- `jp commit-small-artifacts-by-default` — SUPERSEDED (captain decision; structurally closed by x9+f1+z5)
+- `5f retire-v1-rename-v2-to-spacedock` — SUPERSEDED (ceded to t1 phase6 on origin)
+
+Together these close the goal1-resume-spacedock-first failure modes
+(experiment artifacts destroyed by worktree teardown; `rk score`
+producing a different number than `summary.json`).
 
 ---
 
