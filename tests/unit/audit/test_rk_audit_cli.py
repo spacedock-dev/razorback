@@ -104,6 +104,32 @@ def test_rk_audit_strict_taints_harbor_codex_txt_command(
     assert finding["source_path"] == "steps/main/agent/codex.txt"
 
 
+def test_rk_audit_strict_treats_guard_blocked_codex_txt_command_as_clean(
+    harbor_codex_guard_blocked_txt_run_dir,
+):
+    result = runner.invoke(
+        app,
+        ["audit", str(harbor_codex_guard_blocked_txt_run_dir), "--policy", "strict"],
+    )
+    assert result.exit_code == 0, result.stdout
+    payload = _parse_json_stdout(result)
+    assert payload["summary"] == {"clean": 1, "tainted": 0, "coverage_missing": 0}
+    assert payload["trials"][0]["findings"] == []
+
+
+def test_rk_audit_strict_treats_guard_blocked_codex_session_command_as_clean(
+    harbor_codex_guard_blocked_session_run_dir,
+):
+    result = runner.invoke(
+        app,
+        ["audit", str(harbor_codex_guard_blocked_session_run_dir), "--policy", "strict"],
+    )
+    assert result.exit_code == 0, result.stdout
+    payload = _parse_json_stdout(result)
+    assert payload["summary"] == {"clean": 1, "tainted": 0, "coverage_missing": 0}
+    assert payload["trials"][0]["findings"] == []
+
+
 def test_rk_audit_discovers_direct_harbor_codex_txt_trial(
     harbor_codex_direct_txt_run_dir,
 ):

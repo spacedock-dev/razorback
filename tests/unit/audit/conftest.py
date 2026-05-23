@@ -103,6 +103,41 @@ def _codex_item_completed_command(command):
     }) + "\n"
 
 
+def _codex_item_completed_blocked_command(command):
+    return json.dumps({
+        "type": "item.completed",
+        "thread_id": "parent-thread",
+        "item": {
+            "id": "cmd-1",
+            "type": "command_execution",
+            "command": command,
+            "aggregated_output": (
+                "blocked benchmark public lookup command before execution\n"
+            ),
+            "exit_code": 2,
+            "status": "failed",
+        },
+    }) + "\n"
+
+
+def _codex_function_call(command, call_id="call-1"):
+    return _codex_response_item({
+        "type": "function_call",
+        "call_id": call_id,
+        "name": "unified_exec.exec_command",
+        "arguments": json.dumps({"command": command}),
+        "status": "completed",
+    })
+
+
+def _codex_function_call_output(output, call_id="call-1"):
+    return _codex_response_item({
+        "type": "function_call_output",
+        "call_id": call_id,
+        "output": output,
+    })
+
+
 def _write_harbor_codex_trial(
     trial_dir,
     *,
@@ -185,6 +220,36 @@ def harbor_codex_tainted_txt_run_dir(tmp_path):
     _write_harbor_codex_trial(
         run_dir / "task-a" / "query-1" / "trial-0",
         codex_txt=_codex_item_completed_command("curl https://example.com/data.csv"),
+    )
+    return run_dir
+
+
+@pytest.fixture
+def harbor_codex_guard_blocked_txt_run_dir(tmp_path):
+    """Harbor-shaped Codex codex.txt where shell guard blocked a forbidden command."""
+    run_dir = tmp_path / "run"
+    _write_harbor_codex_trial(
+        run_dir / "task-a" / "query-1" / "trial-0",
+        codex_txt=_codex_item_completed_blocked_command(
+            "curl https://example.com/data.csv"
+        ),
+    )
+    return run_dir
+
+
+@pytest.fixture
+def harbor_codex_guard_blocked_session_run_dir(tmp_path):
+    """Codex session where function_call_output records a shell guard block."""
+    run_dir = tmp_path / "run"
+    _write_harbor_codex_trial(
+        run_dir / "task-a" / "query-1" / "trial-0",
+        codex_txt="",
+        session_jsonl=(
+            _codex_function_call("curl https://example.com/data.csv")
+            + _codex_function_call_output(
+                "blocked benchmark public lookup command before execution\n"
+            )
+        ),
     )
     return run_dir
 
