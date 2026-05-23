@@ -140,61 +140,96 @@ per-benchmark builders become unnecessary.
 
 ## Acceptance criteria
 
-**AC-1 — Design doc shipped.**
-A design doc lives at `docs/superpowers/specs/2026-05-23-generic-harbor-benchmark-surface.md`
-(or a captain-renamed slug) covering:
-- the current per-benchmark pattern + costs (per-new-benchmark wiring
-  burden, divergence from spec §1.3)
-- harbor's generic surface (DatasetManifest TOML + `harbor run -d`
-  CLI + PackageDatasetClient) with verbatim schema snippets
-- the proposed `HarborBenchmarkBlock(kind: harbor, dataset: <ref>,
-  ...)` collapse and the migration shape for `HarborDabBenchmarkBlock`
-  + `AdeBenchBenchmarkBlock` + `Spider2DbtBenchmarkBlock`
-- a per-cell-spec example for **dabstep** and **swe-bench-verified**
-  showing the YAML before/after
-- the backwards-compat story (kept-as-aliases? deprecation window?
-  hard cutover?) and what breaks
-- the legitimate razorback-side prep that DOESN'T collapse (e.g.,
-  DAB's `workspace_variant: spacedock|direct-minimal|direct-structured`
-  — that's a solver-side detail, not benchmark-specific) and how it
-  threads through the generic block
-- explicit recommendation: "do this refactor" / "don't do it because
-  X" / "do a partial — collapse harbor_dab+spider2+ade but keep local"
-Verified by: `test -f docs/superpowers/specs/2026-05-23-generic-harbor-benchmark-surface.md`;
-doc cites the harbor source files + spec sections + URLs above
-verbatim.
+> **AC-1 through AC-4 below are STALE.** Captain widened scope twice
+> during impl-stage (2026-05-23): first to "implement, not just
+> doc," then to "no backwards-compat required + user-experience
+> first." Original AC-1..AC-4 covered a design doc + decision tree;
+> the new scope covers two user-scenario narratives + derived
+> implementation design + production migration. The new ACs below
+> (AC-1'..AC-5') replace them. The originals are preserved for
+> provenance.
 
-**AC-2 — Grounded research recorded.**
-The design doc cites real evidence: the harbor CLI flag block
-(`jobs.py:800-895`), the DatasetManifest model
-(`models/dataset/manifest.py:152-218`), the PackageDatasetClient
-(`registry/client/package.py`), the dabstep hub URL with task count
-(450), the swe-bench-verified hub URL with task count (500), the
-SWE-bench parity table. No invented file paths or fabricated schema
-snippets.
-Verified by: every code-path citation in the doc resolves to a real
-line in `.venv/lib/python3.12/site-packages/harbor/...` at the
-current pinned harbor==0.6.6; every URL is fetchable.
+**AC-1' — Two user-scenario narratives shipped.**
+The design doc at `docs/superpowers/specs/2026-05-23-generic-harbor-benchmark-surface.md`
+opens with `## §1 User scenarios` containing two end-to-end
+narratives (Scenario A: dabstep with persona Aanya; Scenario B:
+swe-bench-verified with persona Ben). Each scenario walks the
+researcher from install through autoresearch-loop-live, with real
+paths, real YAML, real CLI output, and explicit "what had to be
+true for live" criteria.
+Verified by: `grep -c "^### §1\\." <doc>` returns 2; each scenario
+section is 40-80 lines; each step references concrete commands the
+researcher types (no abstract sentences like "they configure the
+benchmark").
 
-**AC-3 — Spec amendment evaluated.**
-The doc explicitly answers: "does the v2 spec at
-`docs/superpowers/specs/2026-05-19-razorback-on-harbor.md` need an
-update?" If yes, the doc proposes the diff (which §6.1 / §6.2 / §2
-sections change, what the new spec text reads). If the answer is "no
-spec change — the spec is already correct and the implementation
-just needs to follow it," the doc cites the spec sections that
-already prescribe the generic surface.
-Verified by: doc has a `## Spec amendment` section that either
-includes a diff or explicitly explains "no change required, the spec
-already says this at §X."
+**AC-2' — Implementation design derived from scenarios.**
+The design doc's `## §2 Implementation design` derives every
+internal-API decision backwards from the scenarios. Specific
+deliverables documented:
+- The post-migration `BenchmarkBlock` shape (`harbor`,
+  `harbor-local`, `local` — three kinds plus a plugin escape
+  valve under `kind: harbor`).
+- The `rk research new` command + the scaffold template tree at
+  `docs/templates/research-project/` + the
+  `docs/templates/benchmark-defaults.toml` table.
+- The `_build_harbor` translator (in-tree per cycle-2 commit
+  `f9f3143`) and the `_build_harbor_local` sibling.
+- The plugin escape valve (`kind: harbor` + `plugin:` +
+  `plugin_args:`) — one current consumer (`razorback-plugin-dab`).
+- The deletion list (`AdeBenchBenchmarkBlock`,
+  `HarborDabBenchmarkBlock`, `Spider2DbtBenchmarkBlock`,
+  `DabBenchmarkBlock`-legacy; their builders in `translate.py`).
+Verified by: doc has `## §2 Implementation design` with sub-sections
+§2.1-§2.12; each section names a concrete file path or symbol; the
+deletion list resolves to real symbols in `src/razorback/spec/schema.py`
+and `src/razorback/translate.py`.
 
-**AC-4 — Decision-ready output for captain.**
-The doc ends with a `## Recommendation` section that the captain can
-respond to as YES/NO/MODIFY without re-reading the body. The
-recommendation is concrete: file follow-on entity X to refactor
-(estimated effort), or kill the refactor (with reason), or partial
-(with scope).
-Verified by: section exists and is one decision point.
+**AC-3' — Spec amendment scope named.**
+The design doc's `## §2.10 Spec amendment scope` names exactly which
+v2 spec sections change (§5 extends with §5.4 + §5.5; §6.1 minor
+revision; §1.3 clarifying bullet) and what the new prose contains.
+The cycle-1 commit `fa0374a` 15-line addition at §6.1 needs revision
+to match (drop the `prep:` discriminator language; drop the
+collapse-partial framing).
+Verified by: doc has `## §2.10 Spec amendment scope` listing the
+specific §-numbers and the diff intent; cycle-1 amendment in
+`docs/superpowers/specs/2026-05-19-razorback-on-harbor.md` is either
+revised in this entity or flagged as PENDING-CAPTAIN-APPROVAL in the
+stage report.
+
+**AC-4' — Decision-ready captain gate.**
+The doc ends with a `## §3 Recommendation` section the captain can
+answer YES/NO/MODIFY per decision-point (a/b/c/d): scenarios as
+design driver / `rk research new` shape / post-migration
+`BenchmarkBlock` shape / v2 spec amendment scope.
+Verified by: section exists and lists four explicit decision points.
+
+**AC-5' — Production migration sequenced.**
+The doc's `## §2.11 Migration commits sequence` names five commits
+that ship the migration; commit 1 (`HarborBenchmarkBlock` +
+`_build_harbor`) is in-tree as of cycle 2; commits 2-5 sequence
+naturally on captain approval. Mechanical migration of the four
+existing per-benchmark blocks + their builders is enumerated.
+Verified by: each commit in §2.11 has concrete file lists; the cycle-2
+in-tree commits are cited by SHA (`6cbcaa8`, `f9f3143`); commits 2-5
+do NOT need to land in this entity (PENDING-CAPTAIN-APPROVAL).
+
+> **Originals (STALE — preserved for provenance):**
+>
+> AC-1 — Design doc shipped (per the original 12-section structure
+> with the consumer-surface inventory and 4-option decision tree).
+> Superseded by AC-1' + AC-2' which restructure the doc around user
+> scenarios.
+>
+> AC-2 — Grounded research recorded. Still satisfied — the spike
+> findings + harbor-version-pinned line citations are preserved in
+> `## §4 Spike findings (preserved from cycle 2)` of the design doc.
+>
+> AC-3 — Spec amendment evaluated. Superseded by AC-3' which
+> names the §5/§6.1/§1.3 scope concretely.
+>
+> AC-4 — Decision-ready output for captain. Superseded by AC-4'
+> which names four explicit decision points.
 
 ## Test plan
 
@@ -217,17 +252,19 @@ Verified by: section exists and is one decision point.
 
 ## Out of scope
 
-- **Actually implementing the refactor.** This entity ships the
-  design doc + spec amendment proposal only. The implementation
-  entity is sibling work the captain greenlights based on this doc's
-  recommendation.
-- **Building a `razorback-plugin-dabstep` package.** If the design
-  recommends "no plugin needed, just config," this is a no-op. If it
-  recommends "minimal plugin for dabstep-specific verifier hooks,"
+- **Building a `razorback-plugin-dabstep` package.** Per the design
+  doc §1.1, dabstep is pure pass-through — no plugin needed. If a
+  future dabstep-specific verifier hook becomes load-bearing,
   that's a sibling entity.
-- **Refactoring `LocalBenchmarkBlock`.** Local-path benchmarks have
-  a genuinely different invocation shape (no Harbor registry). They
-  may legitimately stay separate.
+- **Refactoring `LocalBenchmarkBlock`.** Raw `task_paths: list[Path]`
+  is genuinely not a harbor concept; `kind: local` stays as the dev
+  fixture surface (design doc §2.2).
+- **`rk diff` implementation.** Deferred per v2 spec §3.2; both
+  scenarios assume it exists at autoresearch-loop-live time. Ships
+  when paired-test demand exists. Design doc §2.12.
+- **Authentication for private Harbor datasets.** Both example
+  benchmarks (dabstep + swe-bench-verified) are anonymous; auth
+  ships when a consumer needs it. Design doc §2.12.
 - **Codex/Pi runtime adapters.** Same as `ne`'s scope discipline.
 
 ## Depends on
@@ -734,3 +771,124 @@ This stage report covers cycle 2 (cycle 1 ended with the original doc + 15-line 
 ### Summary
 
 Validated the design's central hypothesis end-to-end against live `adyen/dabstep@latest`: a single `kind: harbor` block + `_build_harbor` translator runs the captain's "simple config" path with zero per-benchmark code. The spike surfaced one unknown unknown (`PackageTaskId.name` conventions vary across datasets — ADE's prefix-stripping heuristic is not portable) and that decision is documented in surface §A. Production schema + builder + tests landed on the worktree branch with full TDD; 20 tests added (14 schema + 6 translator unit + 1 integration), all green. **Captain veto-gate is open**: 7 consumer surfaces enumerated in the design doc, awaiting ack-or-veto before the worktree branch advances to e2e smoke + spec-amendment revision and the entity AC expands. The production code lives on the unmerged worktree branch and can be revised, partially reverted, or fully reverted per captain direction without disturbing main.
+
+## Stage Report: implementation (cycle 3)
+
+### Scope revision
+
+Captain reframed scope a third time on 2026-05-23: "no backwards
+compat required + user experience first. Internal design (schema
+fields, translate plumbing, validate rules) is downstream of the
+user-scenario narrative." Drop the cycle-2 consumer-surface
+inventory (S1-S7) and the cycle-1 decision trees (D1-D4) and the
+collapse-partial vs collapse-all framing. Replace with two
+end-to-end user scenarios; derive the implementation design
+backwards from them. FO authorized editing the entity AC section
+to reflect the widened scope.
+
+Cycle-2 production code (commits `6cbcaa8`, `f9f3143`) stays on
+the worktree branch as cycle-3-design-validated infrastructure —
+the `HarborBenchmarkBlock` schema and `_build_harbor` translator
+match the design doc §2.1 + §2.4 exactly, so they need no rewrite
+to land under the new direction. The cycle-1 15-line v2 spec
+amendment in commit `fa0374a` needs revision (drop `prep:`
+language, drop collapse-partial framing); flagged
+PENDING-CAPTAIN-APPROVAL.
+
+- DONE: Survey existing UX surfaces (v2 spec §5 "Autoresearch
+  workflow templates", §3.2 `rk` subcommand surface, §7 run-dir
+  contract, existing example specs, `examples/drivers/` shape,
+  `claude-benchmark-solver` solver-workflow README).
+  Found: `docs/templates/` does NOT exist yet (spec §5 says
+  templates ship there). `rk research` does NOT exist. `rk score
+  --against-constant <name>=<value>` IS the autoresearch-loop
+  "live" criterion already. `claude-benchmark-solver` README is
+  minimal/generic — usable as the scaffold's baseline. The
+  `dab-paper-matrix.sh` driver is DAB-specific; per the design
+  the scaffold drops a generic template rather than razorback
+  shipping a generic matrix runner.
+
+- DONE: Write Scenario A (dabstep new researcher).
+  Lives in design doc §1.1, ~80 lines. Persona Aanya (data
+  analyst). End-to-end: `pipx install razorback` → `rk research
+  new dabstep --from adyen/dabstep@latest` → scaffolded
+  `~/dabstep-research/` tree → `rk freeze` → `rk run --n-tasks 5`
+  smoke → `rk score` reads implicit `experiment_meta.paper_baseline`
+  → full 450-task baseline → first hypothesis via solver-workflow
+  README edit → paired test via `rk diff`. Includes "what had to
+  be true for live" criteria (a/b/c/d/e).
+
+- DONE: Write Scenario B (swe-bench-verified new researcher).
+  Lives in design doc §1.2, ~70 lines. Persona Ben (code-agent
+  researcher). Same scaffold/freeze/run/score/diff loop;
+  highlights the three differences from Scenario A
+  (wallclock+cost, verifier shape, paper baseline source). Spec
+  block shape identical to Scenario A — proves the design
+  generalizes across benchmark types (db-query vs git-clone+tests).
+
+- DONE: Derive implementation design from scenarios (design doc
+  §2.1-§2.12).
+  Three post-migration `BenchmarkBlock` kinds (`harbor`,
+  `harbor-local`, `local`) plus one plugin escape valve under
+  `kind: harbor` (`razorback-plugin-dab` is the one current
+  consumer). New `rk research new` command + template tree at
+  `docs/templates/research-project/` + `benchmark-defaults.toml`.
+  Five-commit migration sequence (commit 1 in-tree as
+  `6cbcaa8`+`f9f3143`; commits 2-5 PENDING-CAPTAIN-APPROVAL).
+
+- DONE: Revise design doc to put scenarios first.
+  Full rewrite at
+  `docs/superpowers/specs/2026-05-23-generic-harbor-benchmark-surface.md`.
+  Cycle-2 cruft removed: the `## Status & captain gate` /
+  `## Ideation spike findings` (as a top-level section) /
+  `## Consumer surfaces (captain approval pending)` blocks all
+  retired. The cycle-1 §1-§11 internal-API tour also retired.
+  Spike findings preserved as `## §4 Spike findings (preserved
+  from cycle 2)` at the doc's tail — they inform the design but
+  don't drive it. Length: scenarios §1 ~200 lines; design §2
+  ~350 lines; recommendation §3 ~30 lines; spike-findings §4
+  ~40 lines.
+
+- DONE: Update entity body AC + Out-of-scope per FO authorization.
+  AC-1..AC-4 marked STALE with the original text preserved for
+  provenance under a "STALE — preserved for provenance" note.
+  New AC-1'..AC-5' replace them, naming the two-scenario +
+  derived-design + migration-sequence scope. Out-of-scope drops
+  "Actually implementing the refactor" and the cycle-1
+  per-benchmark-class implementation discussion; gains explicit
+  callouts for `rk diff` (deferred per spec §3.2), Harbor auth
+  (anonymous datasets only), and the unchanged Codex/Pi runtime
+  scope.
+
+- PENDING-CAPTAIN-APPROVAL: Commits 2-5 of the migration sequence
+  (`rk research new` + scaffold tree; example-spec migration to
+  the new kinds; deletion of per-benchmark Pydantic classes +
+  builders; v2 spec amendment per §2.10). The design doc §3
+  Recommendation lists four decision points (a/b/c/d) for the
+  captain to ack or veto. On full approval, cycle-3 production
+  work resumes; on partial veto, the doc rewrites with an alias
+  layer per the captain's revised framing.
+
+- PENDING-CAPTAIN-APPROVAL: End-to-end live dabstep cell smoke.
+  Frozen spec staged at `/tmp/dabstep-spike.frozen.yaml` from
+  cycle 2; `rk freeze` succeeded with full provenance pinning;
+  `rk run` blocked by harness sandbox on `~/.cache/razorback`
+  write (same path ADE-bench's dataset-ref builder uses — production
+  code correct, only this environment restrictive). Captain or FO
+  can complete from an unsandboxed shell.
+
+### Summary
+
+Captain reframed scope toward UX-first design. The cycle-3 design
+doc opens with two end-to-end user scenarios (dabstep + swe-bench-
+verified, ~70-80 lines each) walking a researcher from
+`pipx install` through autoresearch-loop-live. The internal API
+design (post-migration `BenchmarkBlock` shape, `rk research new`
+scaffold, `_build_harbor` translator routing) derives backwards
+from the scenarios. Cycle-2 production code (`HarborBenchmarkBlock`
++ `_build_harbor`) matches the new design exactly and stays. A
+five-commit migration sequence is documented; commit 1 is in-tree;
+commits 2-5 are PENDING-CAPTAIN-APPROVAL pending ack of the
+four decision points in design doc §3 Recommendation. Original
+AC-1..AC-4 marked STALE; new AC-1'..AC-5' reflect the widened
+scope.
