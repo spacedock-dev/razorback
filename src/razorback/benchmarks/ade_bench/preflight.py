@@ -30,7 +30,7 @@ class AdeWorkspacePreflightError(RuntimeError):
 
 
 _FAMILY_SENTINELS: dict[str, frozenset[str]] = {
-    "airbnb": frozenset({"calendar", "listings", "reviews"}),
+    "airbnb": frozenset({"raw_hosts", "raw_listings", "raw_reviews"}),
     "f1": frozenset({"circuits", "drivers", "races", "results", "status"}),
     "quickbooks": frozenset(
         {"account_data", "bill_data", "invoice_data", "sales_receipt_data"}
@@ -99,11 +99,17 @@ def preflight_ade_workspace(
         if db_path is not None
         else Path(workspace) / f"{resolved_db_name}.duckdb"
     )
+    required_tables, required_tables_source = _required_tables_for_workspace(
+        workspace=Path(workspace),
+        contract=contract,
+    )
     payload = _base_payload(
         task_id=task_id,
         contract=contract,
         db_name=resolved_db_name,
         db_path=resolved_db_path,
+        required_tables=required_tables,
+        required_tables_source=required_tables_source,
     )
 
     if resolved_db_name != contract.expected_db_name:
@@ -124,7 +130,7 @@ def preflight_ade_workspace(
         payload["reason"] = "duckdb inspection failed"
         payload["error"] = repr(exc)
         raise AdeWorkspacePreflightError(payload) from exc
-    missing_tables = sorted(contract.required_tables - observed_tables)
+    missing_tables = sorted(required_tables - observed_tables)
     forbidden_tables_observed = sorted(contract.forbidden_tables & observed_tables)
     payload.update(
         {
@@ -160,6 +166,8 @@ def _base_payload(
     contract: AdeTaskDataContract,
     db_name: str,
     db_path: Path,
+    required_tables: frozenset[str],
+    required_tables_source: str,
 ) -> dict[str, Any]:
     return {
         "status": "checking",
@@ -168,12 +176,74 @@ def _base_payload(
         "expected_db_name": contract.expected_db_name,
         "db_name": db_name,
         "db_path": str(db_path),
-        "required_tables": sorted(contract.required_tables),
+        "required_tables": sorted(required_tables),
+        "required_tables_source": required_tables_source,
         "forbidden_tables": sorted(contract.forbidden_tables),
         "observed_tables": [],
-        "missing_tables": sorted(contract.required_tables),
+        "missing_tables": sorted(required_tables),
         "forbidden_tables_observed": [],
     }
+
+
+def _required_tables_for_workspace(
+    *,
+    workspace: Path,
+    contract: AdeTaskDataContract,
+) -> tuple[frozenset[str], str]:
+    metadata_tables = _read_dbt_source_tables(workspace)
+    if metadata_tables:
+        return frozenset(metadata_tables), "dbt_source_metadata"
+    return contract.required_tables, "static_family_contract"
+
+
+def _read_dbt_source_tables(workspace: Path) -> set[str]:
+    """Read dbt `sources:` table names when the task ships source metadata."""
+    try:
+        import yaml
+    except Exception:
+        return set()
+
+    tables: set[str] = set()
+    for yaml_path in _iter_candidate_dbt_yaml_files(workspace):
+        try:
+            document = yaml.safe_load(yaml_path.read_text())
+        except Exception:
+            continue
+        for source in _iter_dicts(_as_list(_as_dict(document).get("sources"))):
+            for table in _iter_dicts(_as_list(source.get("tables"))):
+                name = table.get("identifier") or table.get("name")
+                if isinstance(name, str) and name.strip():
+                    tables.add(name.strip().lower())
+    return tables
+
+
+def _iter_candidate_dbt_yaml_files(workspace: Path):
+    if not workspace.is_dir():
+        return
+    excluded_parts = {".git", ".venv", "dbt_packages", "logs", "target"}
+    for pattern in ("*.yml", "*.yaml"):
+        for path in sorted(workspace.rglob(pattern)):
+            if excluded_parts & set(path.relative_to(workspace).parts):
+                continue
+            yield path
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    return {}
+
+
+def _as_list(value: Any) -> list[Any]:
+    if isinstance(value, list):
+        return value
+    return []
+
+
+def _iter_dicts(values: list[Any]):
+    for value in values:
+        if isinstance(value, dict):
+            yield value
 
 
 def _read_duckdb_tables(db_path: Path) -> set[str]:

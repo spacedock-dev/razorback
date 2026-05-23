@@ -217,3 +217,21 @@ would fail before Codex on valid task data. Dockerfile injection and runtime
 preflight ordering are otherwise proven runnable/fail-closed; the remaining
 full-suite collection error is pre-existing stale `razorback.score.load` test
 debt outside this branch.
+
+## Stage Report: implementation (feedback cycle 1)
+
+- DONE: valid canonical ADE task-view preflight passes for `airbnb001`, `f1001`, and `quickbooks001` or a clearly justified replacement set, with tests/smoke evidence.
+  Evidence: `uv run --frozen pytest tests/unit/test_ade_bench_workspace_preflight.py tests/unit/test_ade_bench_harbor_view.py tests/unit/test_spacedock_solver_ade_preflight.py -q` -> `13 passed`; `docker run --rm -i <image> sh -lc 'cat >/tmp/razorback_ade_preflight.py && python /tmp/razorback_ade_preflight.py --task-id <task> --workspace /app --db-name <db>' < src/razorback/benchmarks/ade_bench/preflight.py` passes on `ade-bench-airbnb001__r5gm9ed-main:latest`, `ade-bench-f1001__zzpr6tl-main:latest`, and `ade-bench-quickbooks001__uxdbzqr-main:latest`.
+- DONE: mismatched cross-family workspace data still fails closed before any Codex install/exec path, with test evidence.
+  Evidence: runtime test `test_ade_preflight_failure_blocks_inner_codex_setup_as_infra_failure` remains in the 13-pass suite; synthetic `runs/ade-preflight-feedback-cycle-1/f1001-with-quickbooks-data` exits `rc=2` with missing F1 tables and forbidden QuickBooks tables.
+- DONE: the stage report records exact commands/results and the run or fixture paths needed for fresh validation to reproduce the fix.
+  Evidence: `uv run --frozen python - <<'PY' ...` fixture smoke writes `runs/ade-preflight-feedback-cycle-1/{airbnb001,f1001,quickbooks001,f1001-with-quickbooks-data}` and prints pass/pass/pass/fail; Docker command above records the real-image tags needed for rerun.
+
+### Summary
+
+Feedback cycle 1 fixes the rejected Airbnb contract by using canonical raw
+workspace tables (`raw_hosts`, `raw_listings`, `raw_reviews`) instead of
+transformed model names. The preflight now prefers dbt `sources:` metadata when
+available, using a table `identifier` before logical `name`; this matches real
+ADE Airbnb source metadata while retaining static family contracts for minimal
+fixtures and QuickBooks.
