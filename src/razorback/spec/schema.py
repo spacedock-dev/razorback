@@ -176,20 +176,33 @@ class AdeBenchTaskEntry(BaseModel):
 
 _ADE_BENCH_DATASET_REF_SHAPE = "<org>/<name>@<ref>"
 _ADE_BENCH_DATASET_REF_EXAMPLE = "dbt-labs/ade-bench@latest"
-_ADE_BENCH_DATASET_REF_RE = re.compile(
-    r"^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*@[A-Za-z0-9][A-Za-z0-9_.+-]*$"
-)
 
 
 class AdeBenchBenchmarkBlock(BaseModel):
     """ADE-Bench benchmark block.
 
     Source selection is exclusive: either `dataset` (Harbor published dataset
-    ref, fully qualified as `<org>/<name>@<ref>`, e.g. `dbt-labs/ade-bench@latest`)
-    or `tasks_root` (local Harbor-shaped directory, the dev/fixture escape hatch).
-    `tasks` is the spec-side task subset; on the dataset-ref path each entry is
-    matched against per-task package names with the dataset prefix stripped
-    (e.g. spec `tasks: [airbnb001]` matches the resolved `ade-bench-airbnb001`).
+    ref, fully qualified as `<org>/<name>@<ref>`) or `tasks_root` (local
+    Harbor-shaped directory, the dev/fixture escape hatch).
+
+    Three Harbor ref tiers are accepted (all three round-trip through
+    `harbor.models.package.reference.PackageReference.parse`):
+
+    - `@<tag>` (e.g. `@latest`): dev/smoke convenience; re-resolves on each
+      `rk run`.
+    - `@<rev_number>` (e.g. `@1`): stable-ish citation; a published revision
+      number does not change once Harbor assigns it.
+    - `@sha256:<digest>` (e.g. `@sha256:2c1f9e69...`): paper-grade pin; the
+      resolver itself refuses mismatched content, not just a downstream
+      manifest check.
+
+    The canonical example spec demonstrates the digest tier (paper-grade pin).
+    `@latest` stays valid for daily smoke runs.
+
+    `tasks` is the spec-side task subset; on the dataset-ref path each entry
+    is matched against per-task package names with the dataset prefix
+    stripped (e.g. spec `tasks: [airbnb001]` matches the resolved
+    `ade-bench-airbnb001`).
     """
     model_config = ConfigDict(extra="forbid")
     kind: Literal["ade-bench"]
@@ -216,7 +229,26 @@ class AdeBenchBenchmarkBlock(BaseModel):
                 "neither was provided"
             )
         if self.dataset is not None:
-            if not _ADE_BENCH_DATASET_REF_RE.match(self.dataset):
+            from harbor.models.package.reference import PackageReference
+
+            try:
+                parsed = PackageReference.parse(self.dataset)
+            except Exception as exc:
+                raise ValueError(
+                    f"invalid Harbor dataset ref {self.dataset!r}: "
+                    f"required shape is {_ADE_BENCH_DATASET_REF_SHAPE} "
+                    f"(e.g. {_ADE_BENCH_DATASET_REF_EXAMPLE!r}); "
+                    f"Harbor parser rejected it: {exc}"
+                ) from exc
+            # PackageReference.parse accepts bare names (no org, no ref); the
+            # captain's AC-1 guardrail still requires fully-qualified refs.
+            if "/" not in self.dataset or "@" not in self.dataset:
+                raise ValueError(
+                    f"invalid Harbor dataset ref {self.dataset!r}: "
+                    f"required shape is {_ADE_BENCH_DATASET_REF_SHAPE} "
+                    f"(e.g. {_ADE_BENCH_DATASET_REF_EXAMPLE!r})"
+                )
+            if not parsed.org or not parsed.short_name or not parsed.ref:
                 raise ValueError(
                     f"invalid Harbor dataset ref {self.dataset!r}: "
                     f"required shape is {_ADE_BENCH_DATASET_REF_SHAPE} "

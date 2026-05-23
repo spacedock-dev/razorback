@@ -3,10 +3,10 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from harbor.models.package.reference import PackageReference
 from harbor.registry.client import PackageDatasetClient
 
 from razorback.benchmarks.ade_bench.tasks import _run_async
@@ -15,7 +15,6 @@ from razorback.errors import SpecError
 
 _CANONICAL_EXAMPLE = "dbt-labs/ade-bench@latest"
 _REF_SHAPE = "<org>/<name>@<ref>"
-_REF_RE = re.compile(r"^(?P<org>[A-Za-z0-9][A-Za-z0-9_.-]*)/(?P<name>[A-Za-z0-9][A-Za-z0-9_.-]*)@(?P<ref>[A-Za-z0-9][A-Za-z0-9_.+-]*)$")
 
 
 @dataclass(frozen=True)
@@ -41,19 +40,39 @@ class ResolvedDatasetTask:
 def parse_dataset_ref(ref: str) -> tuple[str, str, str]:
     """Parse a Harbor dataset ref `<org>/<name>@<ref>` into its components.
 
-    Bare names (e.g. `ade-bench@1.0`), missing refs, or missing orgs raise
-    `SpecError` whose message names BOTH the required shape AND a working
-    canonical example (captain's AC-1 guardrail: bad input -> good guidance).
+    Validation delegates to `harbor.models.package.reference.PackageReference.parse`,
+    accepting all three ref tiers Harbor supports:
+
+    - `@<tag>` (mutable label, e.g. `latest`)
+    - `@<rev_number>` (immutable revision, e.g. `1`)
+    - `@sha256:<digest>` (content-addressed paper-grade pin)
+
+    Bare names (no `<org>/` or no `@<ref>`), or anything `PackageReference.parse`
+    rejects, raise `SpecError` whose message names BOTH the required shape AND
+    a working canonical example (captain's AC-1 guardrail: bad input -> good guidance).
     """
-    if not isinstance(ref, str) or not _REF_RE.match(ref):
+    if not isinstance(ref, str) or "/" not in ref or "@" not in ref:
         raise SpecError(
             f"invalid Harbor dataset ref {ref!r}: "
             f"required shape is {_REF_SHAPE} "
             f"(e.g. {_CANONICAL_EXAMPLE!r})"
         )
-    m = _REF_RE.match(ref)
-    assert m is not None
-    return m.group("org"), m.group("name"), m.group("ref")
+    try:
+        parsed = PackageReference.parse(ref)
+    except Exception as exc:
+        raise SpecError(
+            f"invalid Harbor dataset ref {ref!r}: "
+            f"required shape is {_REF_SHAPE} "
+            f"(e.g. {_CANONICAL_EXAMPLE!r}); "
+            f"Harbor parser rejected it: {exc}"
+        ) from exc
+    if not parsed.org or not parsed.short_name or not parsed.ref:
+        raise SpecError(
+            f"invalid Harbor dataset ref {ref!r}: "
+            f"required shape is {_REF_SHAPE} "
+            f"(e.g. {_CANONICAL_EXAMPLE!r})"
+        )
+    return parsed.org, parsed.short_name, parsed.ref
 
 
 def _strip_dataset_prefix(task_slug: str, dataset_name: str) -> str:

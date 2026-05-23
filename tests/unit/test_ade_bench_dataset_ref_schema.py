@@ -103,3 +103,61 @@ def test_spec_dispatches_to_ade_bench_dataset_via_discriminator():
     )
     assert isinstance(spec.benchmark, AdeBenchBenchmarkBlock)
     assert spec.benchmark.dataset == "dbt-labs/ade-bench@latest"
+
+
+def test_schema_accepts_tag_ref():
+    """AC-1 tri-acceptance: `@<tag>` (mutable label, e.g. `latest`)."""
+    block = AdeBenchBenchmarkBlock(
+        kind="ade-bench",
+        dataset="dbt-labs/ade-bench@latest",
+    )
+    assert block.dataset == "dbt-labs/ade-bench@latest"
+
+
+def test_schema_accepts_revision_ref():
+    """AC-1 tri-acceptance: `@<rev_number>` (immutable revision number)."""
+    block = AdeBenchBenchmarkBlock(
+        kind="ade-bench",
+        dataset="dbt-labs/ade-bench@1",
+    )
+    assert block.dataset == "dbt-labs/ade-bench@1"
+
+
+def test_schema_accepts_digest_ref_canonical_pin():
+    """AC-1 tri-acceptance: `@sha256:<digest>` (paper-grade content-addressed pin).
+
+    This is the captain-designated canonical example tier; the schema must
+    accept the `sha256:` form even though it contains a `:` (which the prior
+    regex character class did not allow).
+    """
+    digest_ref = (
+        "dbt-labs/ade-bench@sha256:"
+        "2c1f9e6966d01b0a5de2235d1a0b64089c7eead42c85c3b7b61d0929405c2bd5"
+    )
+    block = AdeBenchBenchmarkBlock(
+        kind="ade-bench",
+        dataset=digest_ref,
+    )
+    assert block.dataset == digest_ref
+
+
+def test_schema_validation_uses_harbor_package_reference_parser():
+    """AC-1 round-trip: every form the schema accepts must round-trip through
+    `harbor.models.package.reference.PackageReference.parse` with non-empty
+    `org`, `short_name`, and `ref`.
+
+    This pins the validator to Harbor's own ref grammar rather than a
+    parallel regex that can drift (the prior `[A-Za-z0-9_.+-]*` regex did).
+    """
+    from harbor.models.package.reference import PackageReference
+
+    for ref in (
+        "dbt-labs/ade-bench@latest",
+        "dbt-labs/ade-bench@1",
+        "dbt-labs/ade-bench@sha256:"
+        "2c1f9e6966d01b0a5de2235d1a0b64089c7eead42c85c3b7b61d0929405c2bd5",
+    ):
+        parsed = PackageReference.parse(ref)
+        assert parsed.org and parsed.short_name and parsed.ref
+        block = AdeBenchBenchmarkBlock(kind="ade-bench", dataset=ref)
+        assert block.dataset == ref
