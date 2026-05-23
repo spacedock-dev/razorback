@@ -1,13 +1,13 @@
 ---
 id: f1g6189n5zq8pdg0j4ebvzpv
 title: freeze tree content-addressable store for halt/resume independence
-status: plan
+status: implementation
 source: spacedock_solver_v2's freeze design + goal1-resume-spacedock-first 2026-05-22 — sealed-hash freeze trees lived under the gitignored worktree-relative runs/ path and were destroyed by worktree teardown. The halt/resume design CANNOT actually halt/resume in this regime.
 started: 2026-05-22T23:55:01Z
 completed:
 verdict:
 score: 0.95
-worktree:
+worktree: .worktrees/spacedock-ensign-freeze-tree-content-addressable-store
 issue:
 pr:
 mod-block:
