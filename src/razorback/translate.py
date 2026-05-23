@@ -20,7 +20,6 @@ from razorback.spec.agent_kwargs import build_v2_harbor_agent_kwargs
 from razorback.spec.schema import (
     AdeBenchBenchmarkBlock,
     ClaudeCliAgentBlock,
-    DabBenchmarkBlock,
     HarborDabBenchmarkBlock,
     LocalBenchmarkBlock,
     NopAgentBlock,
@@ -58,7 +57,7 @@ def spec_to_job_config(
     Returns (JobConfig, trial_name_map). The map is empty for non-DAB benchmarks.
     Phase 1 emits `AgentConfig.import_path` for spacedock_solver per AC-6.
     """
-    agent_cfg, task_env = _build_agent_config(
+    agent_cfg, _task_env = _build_agent_config(
         spec,
         project_root=project_root,
         home=home,
@@ -69,17 +68,6 @@ def spec_to_job_config(
         return _build_local(
             spec=spec, job_name=job_name, jobs_dir=jobs_dir, agent_cfg=agent_cfg
         ), {}
-    if isinstance(spec.benchmark, DabBenchmarkBlock):
-        if tasks_root is None:
-            raise SpecError("DAB specs require tasks_root.")
-        return _build_dab(
-            spec=spec,
-            job_name=job_name,
-            jobs_dir=jobs_dir,
-            tasks_root=Path(tasks_root),
-            agent_cfg=agent_cfg,
-            task_env=task_env,
-        )
     if isinstance(spec.benchmark, HarborDabBenchmarkBlock):
         if tasks_root is None:
             raise SpecError(
@@ -231,10 +219,10 @@ def _build_ade_bench(
         materialize_ade_harbor_task_view,
     )
     from razorback.benchmarks.ade_bench.tasks import (
+        DEFAULT_ADE_BENCH_DOCKER_IMAGE,
         materialize_git_task,
         resolve_task_dirs,
     )
-    from razorback.benchmarks.dab.prepare import _DEFAULT_DOCKER_IMAGE
 
     assert isinstance(spec.benchmark, AdeBenchBenchmarkBlock)
     if spec.benchmark.batch_mode == "shared-context":
@@ -247,7 +235,7 @@ def _build_ade_bench(
         tasks=spec.benchmark.tasks,
     )
     docker_image = (
-        spec.benchmark.docker_image_override or _DEFAULT_DOCKER_IMAGE
+        spec.benchmark.docker_image_override or DEFAULT_ADE_BENCH_DOCKER_IMAGE
     )
     home_dir = Path(home) if home is not None else Path.home()
     cache_root = home_dir / ".cache" / "razorback" / "ade-bench"
@@ -285,49 +273,6 @@ def _build_ade_bench(
         retry=RetryConfig(max_retries=0),
         environment=_environment_config(agent_cfg, run_dir),
     )
-
-
-def _build_dab(
-    *,
-    spec: Spec,
-    job_name: str,
-    jobs_dir: Path,
-    tasks_root: Path,
-    agent_cfg: AgentConfig,
-    task_env: dict[str, str],
-) -> tuple[JobConfig, dict[str, tuple[str, int]]]:
-    # Phase 1 keeps the in-tree DAB prepare path until Phase 2's port-out.
-    from razorback.benchmarks.dab.prepare import prepare_dataset_tasks
-
-    assert isinstance(spec.benchmark, DabBenchmarkBlock)
-    manifest_all: list[dict] = []
-    for dataset in spec.benchmark.datasets:
-        manifest_all.extend(
-            prepare_dataset_tasks(
-                data_root=Path(spec.benchmark.data_root),
-                dataset=dataset,
-                tasks_root=tasks_root / dataset,
-                task_env=task_env,
-            )
-    )
-    tasks = [TaskConfig(path=entry["task_dir"]) for entry in manifest_all]
-    trial_name_map = {
-        entry["task_name"]: (entry["dataset"], entry["query_id"])
-        for entry in manifest_all
-    }
-    run_dir = jobs_dir / job_name
-    cfg = JobConfig(
-        job_name=job_name,
-        jobs_dir=jobs_dir,
-        n_concurrent_trials=spec.concurrency.trials,
-        n_attempts=spec.trials,
-        agents=[agent_cfg],
-        tasks=tasks,
-        verifier=VerifierConfig(disable=False),
-        retry=RetryConfig(max_retries=0),
-        environment=_environment_config(agent_cfg, run_dir),
-    )
-    return cfg, trial_name_map
 
 
 def _build_harbor_dab(
