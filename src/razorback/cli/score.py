@@ -1,5 +1,5 @@
 # ABOUTME: `rk score <run-dir>` Typer subcommand — single-run statistical readout.
-# ABOUTME: Spec §3.2 surface; wires loader → reducer → optional verdict → renderer.
+# ABOUTME: Spec §3.2 surface; delegates to runs/aggregate.py for the headline number.
 
 from __future__ import annotations
 
@@ -8,8 +8,7 @@ from pathlib import Path
 import typer
 
 from razorback.errors import ExitCode, RazorbackError
-from razorback.score.load import ScoreInputError, load_run_dir
-from razorback.score.reduce import reduce_trials
+from razorback.runs.aggregate import read_trial_outcomes, reduce_per_query_stratified
 from razorback.score.render import render_json, render_markdown
 from razorback.score.verdict import AgainstConstantReport, against_constant
 
@@ -24,7 +23,7 @@ def score_command(
         help="name=value paper-reproduction comparison (e.g. paper=0.577)",
     ),
 ) -> None:
-    """rk score <run-dir>: per-stratum Wilson CIs + stratified pass@1 mean. §3.2."""
+    """rk score <run-dir>: per-query Wilson CIs + stratified pass@1 mean. §3.2."""
     if fmt not in {"json", "markdown"}:
         raise typer.BadParameter(
             f"--format must be 'json' or 'markdown', got '{fmt}'"
@@ -46,11 +45,8 @@ def score_command(
             ) from exc
 
     try:
-        records = load_run_dir(run_dir)
-        report = reduce_trials(records, alpha=alpha)
-    except ScoreInputError as exc:
-        typer.echo(f"score input error: {exc}", err=True)
-        raise typer.Exit(int(exc.exit_code))
+        outcomes = read_trial_outcomes(run_dir)
+        report = reduce_per_query_stratified(outcomes, alpha=alpha)
     except RazorbackError as exc:
         typer.echo(f"score error: {exc}", err=True)
         raise typer.Exit(int(exc.exit_code))
