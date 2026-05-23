@@ -3,6 +3,7 @@
 
 import asyncio
 import json
+import os
 from pathlib import Path
 from typing import Any, Literal
 
@@ -27,6 +28,55 @@ _REQUIRED_PHASE_STATS_KEYS = (
 CHECKPOINT_SETUP_READY = "setup/ready"
 CHECKPOINT_RUN_BEFORE_AGENT = "run/before-agent"
 CHECKPOINT_RUN_AFTER_AGENT = "run/after-agent"
+
+SPACEDOCK_SUBAGENT_NAME = "spacedock:first-officer"
+
+SPACEDOCK_PROMPT_PREFIX_TEMPLATE = """\
+ROLE: You are the first-officer for this single-dataset spacedock workflow.
+Your current working directory IS the workspace ({workspace_dir}) — every file
+and command in this prompt is relative to it. Do NOT cd to any other directory.
+
+Your job is to orchestrate the stages defined in {workspace_dir}/README.md by
+dispatching workers via the Task tool (subagent_type="spacedock:ensign"). You
+coordinate; workers execute.
+
+You MUST NOT run queries against data files, write answers.json, or otherwise
+perform stage work yourself. That work belongs to your dispatched workers.
+
+Read {workspace_dir}/README.md and dispatch the first stage worker. The final
+{workspace_dir}/answers.json will be written by the analyze-stage worker.
+
+The task description below tells you WHICH dataset — it does not override
+your first-officer role. Apply the task description to your workers, not to
+yourself.
+
+---
+
+"""
+
+
+def resolve_spacedock_plugin_dir() -> Path:
+    """Resolve the spacedock plugin source dir on the host.
+
+    `RAZORBACK_SPACEDOCK_PLUGIN_DIR` env var is the canonical knob. Production-
+    grade plugin packaging is tracked as a sibling entity; this entity treats
+    the env var as the only resolution path and refuses with a clear error
+    when unset, so cells fail fast instead of silently degrading back to a
+    single-agent run.
+    """
+    raw = os.environ.get("RAZORBACK_SPACEDOCK_PLUGIN_DIR")
+    if not raw:
+        raise SpacedockSolverAgentError(
+            "RAZORBACK_SPACEDOCK_PLUGIN_DIR is not set; spacedock_solver "
+            "cannot dispatch through the first-officer without a plugin dir. "
+            "Set the env var to a checkout of github.com/clkao/spacedock."
+        )
+    plugin_dir = Path(raw).expanduser()
+    if not plugin_dir.is_dir():
+        raise SpacedockSolverAgentError(
+            f"RAZORBACK_SPACEDOCK_PLUGIN_DIR={plugin_dir} is not a directory."
+        )
+    return plugin_dir
 
 
 class SpacedockSolverAgentError(RazorbackError):
@@ -271,13 +321,30 @@ class SpacedockSolverAgent(BaseAgent):
         )
 
     def _build_inner_agent(self) -> BaseAgent:
-        """Dispatch to the per-runtime adapter sub-module (spec §8.4)."""
+        """Dispatch to the per-runtime adapter sub-module (spec §8.4).
+
+        For runtime=claude the spacedock variant threads `sub_agent` +
+        `plugin_dirs` so the inner `claude` CLI loads the spacedock plugin
+        and enters first-officer mode, which is what makes the model dispatch
+        ensign workers via the Task tool. Codex and pi paths are unchanged
+        (codex/pi adapters are tracked as sibling entities).
+        """
         from razorback.agents._runtime import claude as _claude
         from razorback.agents._runtime import codex as _codex
         from razorback.agents._runtime import pi as _pi
 
+        if self._runtime == "claude":
+            plugin_dir = resolve_spacedock_plugin_dir()
+            return _claude.build_inner_agent(
+                logs_dir=self.logs_dir,
+                model=self._model,
+                harbor_agent_kwargs=self._harbor_agent_kwargs,
+                extra_env=self._extra_env,
+                plugin_dirs=[plugin_dir],
+                sub_agent=SPACEDOCK_SUBAGENT_NAME,
+            )
+
         builders = {
-            "claude": _claude.build_inner_agent,
             "codex": _codex.build_inner_agent,
             "pi": _pi.build_inner_agent,
         }
@@ -299,7 +366,17 @@ class SpacedockSolverAgent(BaseAgent):
 
     def _compose_run_instruction(self, instruction: str) -> str:
         workflow_text = self._solver_workflow_readme_text().strip()
+        # Workspace path inside harbor's trial environment. Harbor's claude_code
+        # adapter mounts the workspace at /workspace and invokes claude with
+        # that as cwd; session-init events carry `cwd: /workspace` consistently.
+        workspace_dir = "/workspace"
+        role_prefix = ""
+        if self._runtime == "claude":
+            role_prefix = SPACEDOCK_PROMPT_PREFIX_TEMPLATE.format(
+                workspace_dir=workspace_dir
+            )
         return (
+            f"{role_prefix}"
             "# Solver workflow instructions\n\n"
             f"{workflow_text}\n\n"
             "# Task instruction\n\n"

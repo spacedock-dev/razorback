@@ -35,6 +35,8 @@ class RazorbackClaudeCode(ClaudeCode):
         tools_allowed: list[str] | None = None,
         sampling_temperature: float | None = None,
         extra_env: dict[str, str] | None = None,
+        plugin_dirs: list[Path | str] | None = None,
+        sub_agent: str | None = None,
         **kwargs: Any,
     ) -> None:
         env = dict(extra_env or {})
@@ -47,6 +49,8 @@ class RazorbackClaudeCode(ClaudeCode):
             list(tools_allowed) if tools_allowed else list(DEFAULT_ALLOWED_TOOLS)
         )
         self._sampling_temperature = sampling_temperature
+        self._plugin_dirs = [str(p) for p in (plugin_dirs or [])]
+        self._sub_agent = sub_agent
 
         kwargs.setdefault("allowed_tools", ",".join(self._tools_allowed))
         # Harbor's build_cli_flags emits CLI flag values UNQUOTED. The razorback
@@ -68,6 +72,17 @@ class RazorbackClaudeCode(ClaudeCode):
 
         self._razorback_extra_env = env
         self._exec_env: dict[str, str] = {}
+
+    def build_cli_flags(self) -> str:
+        base = super().build_cli_flags()
+        extras: list[str] = []
+        for path in self._plugin_dirs:
+            extras.append(f"--plugin-dir {path}")
+        if self._sub_agent:
+            extras.append(f"--agent {self._sub_agent}")
+        if not extras:
+            return base
+        return f"{base} {' '.join(extras)}" if base else " ".join(extras)
 
     @staticmethod
     def name() -> str:
@@ -143,6 +158,8 @@ def build_inner_agent(
     model: str,
     harbor_agent_kwargs: dict[str, Any],
     extra_env: dict[str, str],
+    plugin_dirs: list[Path | str] | None = None,
+    sub_agent: str | None = None,
 ) -> RazorbackClaudeCode:
     """Construct razorback's ClaudeCode runtime helper for spacedock_solver.
 
@@ -174,6 +191,10 @@ def build_inner_agent(
             kw["disallowed_tools"] = ",".join(value)
             continue
         kw[name] = value
+    if plugin_dirs:
+        kw["plugin_dirs"] = list(plugin_dirs)
+    if sub_agent:
+        kw["sub_agent"] = sub_agent
     return RazorbackClaudeCode(
         logs_dir=Path(logs_dir),
         model_name=model,
