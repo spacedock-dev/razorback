@@ -145,7 +145,7 @@ def _solver_workflow_path(spec) -> Path | None:
 def _agent_cli_bin(spec) -> str:
     if spec.agent.kind == "claude-cli":
         return "claude"
-    if spec.agent.kind == "spacedock_solver_v2":
+    if spec.agent.kind == "spacedock_solver":
         return "codex" if spec.agent.runtime == "codex" else spec.agent.runtime
     return spec.agent.kind
 
@@ -156,7 +156,7 @@ def _stamp_v2_sealed_fields(
     solver_workflow_hash: str | None,
 ) -> None:
     agent = frozen_body.get("agent") or {}
-    if agent.get("kind") != "spacedock_solver_v2":
+    if agent.get("kind") != "spacedock_solver":
         return
     if solver_workflow_hash is not None:
         agent["solver_workflow_content_hash"] = solver_workflow_hash

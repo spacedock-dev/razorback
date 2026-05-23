@@ -90,7 +90,7 @@ class SpacedockSolverV2AgentBlock(BaseModel):
     frozen spec. `sealed_hash` is populated by freeze.
     """
     model_config = ConfigDict(extra="forbid")
-    kind: Literal["spacedock_solver_v2"]
+    kind: Literal["spacedock_solver"]
     runtime: Literal["claude", "codex", "pi"] = "claude"
     model: str = "claude-opus-4-5"
     sampling: SamplingBlock = Field(default_factory=SamplingBlock)
@@ -113,7 +113,6 @@ AgentBlock = Annotated[
     Union[
         NopAgentBlock,
         ClaudeCliAgentBlock,
-        SpacedockSolverAgentBlock,
         SpacedockSolverV2AgentBlock,
     ],
     Field(discriminator="kind"),

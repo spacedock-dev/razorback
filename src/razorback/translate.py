@@ -25,16 +25,12 @@ from razorback.spec.schema import (
     LocalBenchmarkBlock,
     NopAgentBlock,
     Spider2DbtBenchmarkBlock,
-    SpacedockSolverAgentBlock,
     SpacedockSolverV2AgentBlock,
     Spec,
 )
 
 
 SPACEDOCK_SOLVER_IMPORT_PATH = (
-    "razorback.agents.spacedock_solver:SpacedockSolverAgent"
-)
-SPACEDOCK_SOLVER_V2_IMPORT_PATH = (
     "razorback.agents.spacedock_solver_v2:SpacedockSolverAgent"
 )
 SPACEDOCK_SOLVER_V2_ENVIRONMENT_IMPORT_PATH = (
@@ -125,53 +121,14 @@ def _build_agent_config(
     if isinstance(spec.agent, NopAgentBlock):
         return AgentConfig(name=AgentName.NOP.value), {}
 
-    if isinstance(spec.agent, SpacedockSolverAgentBlock):
-        if project_root is None:
-            raise SpecError(
-                "spacedock-solver requires project_root for .env auth discovery."
-            )
-        if spec.agent.sealed_hash is None:
-            raise SpecError(
-                "spacedock-solver spec must be frozen (agent.sealed_hash missing)."
-            )
-        if spec.agent.prompt_contents is None:
-            raise SpecError(
-                "spacedock-solver spec must be frozen (agent.prompt_contents missing)."
-            )
-        resolution = resolve_claude_auth(project_root=project_root, home=home)
-        kwargs: dict[str, Any] = {
-            "model": spec.agent.model,
-            "sampling": {
-                "temperature": spec.agent.sampling.temperature,
-                "top_p": spec.agent.sampling.top_p,
-                "seed": spec.agent.sampling.seed,
-            },
-            "stages": list(spec.agent.stages),
-            "tools_allowed": list(spec.agent.tools_allowed),
-            "prompts": dict(spec.agent.prompts),
-            "prompt_contents": dict(spec.agent.prompt_contents),
-            "sealed_hash": spec.agent.sealed_hash,
-            "prior_frozen_spec_path": (
-                str(prior_frozen_spec_path) if prior_frozen_spec_path else None
-            ),
-        }
-        agent_cfg = AgentConfig(
-            import_path=SPACEDOCK_SOLVER_IMPORT_PATH,
-            model_name=spec.agent.model,
-            kwargs=kwargs,
-            env=dict(resolution.env),
-        )
-        task_env = dict(PROXY_BLOCK_ENV)
-        return agent_cfg, task_env
-
     if isinstance(spec.agent, SpacedockSolverV2AgentBlock):
         if project_root is None:
             raise SpecError(
-                "spacedock_solver_v2 requires project_root for .env auth discovery."
+                "spacedock_solver requires project_root for .env auth discovery."
             )
         if spec.agent.sealed_hash is None:
             raise SpecError(
-                "spacedock_solver_v2 spec must be frozen (agent.sealed_hash missing)."
+                "spacedock_solver spec must be frozen (agent.sealed_hash missing)."
             )
         if spec.agent.runtime == "codex":
             resolution = resolve_codex_auth(project_root=project_root, home=home)
@@ -208,7 +165,7 @@ def _build_agent_config(
             ),
         }
         agent_cfg = AgentConfig(
-            import_path=SPACEDOCK_SOLVER_V2_IMPORT_PATH,
+            import_path=SPACEDOCK_SOLVER_IMPORT_PATH,
             model_name=spec.agent.model,
             kwargs=kwargs,
             env=dict(resolution.env),
@@ -517,7 +474,7 @@ def _build_spider2_dbt(
 
 
 def _environment_config(agent_cfg: AgentConfig, run_dir: Path) -> EnvironmentConfig:
-    if agent_cfg.import_path != SPACEDOCK_SOLVER_V2_IMPORT_PATH:
+    if agent_cfg.import_path != SPACEDOCK_SOLVER_IMPORT_PATH:
         return EnvironmentConfig(delete=False)
 
     host_freeze_root = run_dir / "_razorback" / "freeze"

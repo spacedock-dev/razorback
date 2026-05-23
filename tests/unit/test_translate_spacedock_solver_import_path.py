@@ -1,40 +1,19 @@
-# ABOUTME: AC-6: spec.agent.kind: spacedock-solver translates to AgentConfig.import_path.
+# ABOUTME: Phase 6: spec.agent.kind: spacedock_solver translates to v2 AgentConfig.import_path.
 # ABOUTME: Verifies the import_path literal per harbor entry-point probe (AC-0.2).
 
 from pathlib import Path
 
 import pytest
 
-from razorback.spec.freeze import freeze_spec
 from razorback.spec.parse import parse_spec_text
 from razorback.translate import spec_to_job_config
 
 
 SPACEDOCK_SPEC_YAML = """\
 version: 1
-experiment: phase1-translate-test
+experiment: phase6-translate-canonical-test
 agent:
-  kind: spacedock-solver
-  model: claude-opus-4-5
-  sampling:
-    temperature: 0.0
-  stages: ["model", "analyze", "verify"]
-  tools_allowed: []
-  prompts:
-    model: tests/fixtures/translate/model.md
-    analyze: tests/fixtures/translate/analyze.md
-    verify: tests/fixtures/translate/verify.md
-benchmark:
-  kind: local
-  task_paths: []
-trials: 1
-"""
-
-SPACEDOCK_V2_SPEC_YAML = """\
-version: 1
-experiment: pkg37-translate-v2-test
-agent:
-  kind: spacedock_solver_v2
+  kind: spacedock_solver
   runtime: codex
   model: gpt-5.1-codex
   solver_workflow: {solver_workflow}
@@ -66,29 +45,45 @@ def test_spacedock_solver_emits_import_path(
     project_root: Path, monkeypatch: pytest.MonkeyPatch
 ):
     monkeypatch.chdir(project_root)
-    spec = parse_spec_text(SPACEDOCK_SPEC_YAML)
-    frozen_text = freeze_spec(spec)
-    frozen_spec = parse_spec_text(frozen_text)
+    (project_root / ".env").write_text("OPENAI_API_KEY=sk-test-fixture\n")
+    workflow = project_root / "solver"
+    workflow.mkdir()
+    (workflow / "README.md").write_text("## Stages\n- model\n")
+    spec = parse_spec_text(
+        SPACEDOCK_SPEC_YAML.format(
+            solver_workflow=workflow,
+            workflow_hash="a" * 64,
+            sealed_hash="0123456789abcdef0123456789abcdef",
+        )
+    )
 
     jc, _ = spec_to_job_config(
-        frozen_spec,
+        spec,
         job_name="job-test",
-        jobs_dir=project_root / "_runs" / "phase1-translate-test",
+        jobs_dir=project_root / "_runs" / "phase6-translate-canonical-test",
         project_root=project_root,
     )
 
     assert len(jc.agents) == 1
     agent_cfg = jc.agents[0]
-    assert agent_cfg.import_path == "razorback.agents.spacedock_solver:SpacedockSolverAgent"
-    assert agent_cfg.model_name == "claude-opus-4-5"
+    assert agent_cfg.import_path == "razorback.agents.spacedock_solver_v2:SpacedockSolverAgent"
+    assert agent_cfg.model_name == "gpt-5.1-codex"
     # AC-6 cross-cut: per harbor source probe (AC-0.4), auth lands on AgentConfig.env,
     # NOT kwargs. The FU-1 AC-1 invariant survives in v2.
-    assert "ANTHROPIC_API_KEY" in agent_cfg.env
-    assert "ANTHROPIC_API_KEY" not in agent_cfg.kwargs
-    assert agent_cfg.kwargs.get("sealed_hash") is not None
+    assert "OPENAI_API_KEY" in agent_cfg.env
+    assert "OPENAI_API_KEY" not in agent_cfg.kwargs
+    assert agent_cfg.kwargs["runtime"] == "codex"
+    assert agent_cfg.kwargs["solver_workflow"] == str(workflow)
+    assert agent_cfg.kwargs["solver_workflow_content_hash"] == "sha256:" + "a" * 64
+    assert agent_cfg.kwargs["harbor_agent_kwargs"] == {
+        "max_turns": 200,
+        "tools_allowed": [],
+        "tools_denied": [],
+    }
+    assert agent_cfg.kwargs["tools_denied"] == []
 
 
-def test_spacedock_solver_v2_uses_proxy_separated_environment(
+def test_spacedock_solver_uses_proxy_separated_environment(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     monkeypatch.chdir(tmp_path)
@@ -97,7 +92,7 @@ def test_spacedock_solver_v2_uses_proxy_separated_environment(
     workflow.mkdir()
     (workflow / "README.md").write_text("## Stages\n- model\n")
     spec = parse_spec_text(
-        SPACEDOCK_V2_SPEC_YAML.format(
+        SPACEDOCK_SPEC_YAML.format(
             solver_workflow=workflow,
             workflow_hash="a" * 64,
             sealed_hash="0123456789abcdef0123456789abcdef",

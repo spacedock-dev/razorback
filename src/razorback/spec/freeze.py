@@ -8,7 +8,6 @@ import yaml
 
 from razorback.agents.seal import compute_sealed_hash, prompt_sha256
 from razorback.spec.schema import (
-    SpacedockSolverAgentBlock,
     SpacedockSolverV2AgentBlock,
     Spec,
 )
@@ -22,15 +21,6 @@ def freeze_spec(spec: Spec) -> str:
     is pinned (§6.2, §6.4).
     """
     payload = spec.model_dump(mode="json")
-
-    if isinstance(spec.agent, SpacedockSolverAgentBlock):
-        _freeze_spacedock_prompts(payload["agent"])
-        payload["agent"]["sealed_hash"] = compute_sealed_hash(
-            model=payload["agent"]["model"],
-            sampling=payload["agent"]["sampling"],
-            stages=payload["agent"]["stages"],
-            prompt_hashes=payload["agent"]["prompts"],
-        )
 
     if isinstance(spec.agent, SpacedockSolverV2AgentBlock):
         _freeze_spacedock_v2(payload["agent"], spec.agent.solver_workflow)
