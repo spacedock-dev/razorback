@@ -104,16 +104,24 @@ def main() -> int:
 
     definition = load_default_definition()
     out_root = Path(args.out_root)
+
+    def _display(p: Path) -> str:
+        resolved = p.resolve()
+        try:
+            return str(resolved.relative_to(REPO_ROOT))
+        except ValueError:
+            return str(resolved)
+
     emitted: list[Path] = []
     for variant in definition.workspace_variants:
         for ds_entry in definition.datasets:
             spec_path = emit_spec(out_root / variant, variant, ds_entry.name, definition.ref)
             emitted.append(spec_path)
-            print(f"wrote {spec_path.relative_to(REPO_ROOT)}")
+            print(f"wrote {_display(spec_path)}")
 
     if args.freeze:
         for spec_path in emitted:
-            print(f"freezing {spec_path.relative_to(REPO_ROOT)}")
+            print(f"freezing {_display(spec_path)}")
             freeze_spec(spec_path)
 
     expected = len(definition.workspace_variants) * len(definition.datasets)
