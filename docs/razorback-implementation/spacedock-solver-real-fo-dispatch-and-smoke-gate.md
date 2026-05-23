@@ -1,7 +1,7 @@
 ---
 id: ne9e1dpbwxs3rp11j07epa81
 title: SpacedockSolverAgent — real FO subagent dispatch + smoke gate enforcing subagent jsonl trace
-status: implementation
+status: validation
 source: Captain directive 2026-05-23 — "the spacedock solver run pilot should validate the jsonl log actually has dispatch and emits subagent jsonl. see also the dataagentbench's smoke validation." — surfaced after FO investigation of `an goal1-rerun` / `d8` trace shape revealed that `SpacedockSolverAgent.run()` is a prompt-prefixing wrapper around a single `claude` CLI invocation (no `--agent spacedock:first-officer`, no `--plugin-dir spacedock`), so the cycle ran as one flat claude session with workflow README as system-prompt prose and zero `Task` tool calls. The "spacedock variant" label was misleading because the runtime did not dispatch subagents.
 started: 2026-05-23T21:20:41Z
 completed:
