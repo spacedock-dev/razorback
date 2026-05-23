@@ -1,16 +1,17 @@
 ---
 id: zbg2fm28xjke5zg955mazvz5
 title: rk score delegates to benchmark-native aggregator (drop binary pass@1 reducer)
-status: validation
+status: done
 source: 2026-05-23 session — debrief at _debriefs/2026-05-22-01.md flagged the "two metrics from the same data" problem but no entity addressed the reducer itself. Filed after confirming `summary.json` already emits paper-faithful per-query pass@1 while `rk score` still emits binary.
 started: 2026-05-23T04:11:11Z
-completed:
-verdict:
+completed: 2026-05-23T04:49:10Z
+verdict: PASSED
 score: 0.8
-worktree: .worktrees/spacedock-ensign-rk-score-uses-benchmark-aggregator
+worktree: 
 issue:
 pr:
 mod-block: 
+archived: 2026-05-23T04:49:10Z
 ---
 
 ## Problem
