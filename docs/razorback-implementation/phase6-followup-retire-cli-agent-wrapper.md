@@ -1,7 +1,7 @@
 ---
 id: yhb5ej5g3gnr71sbgr2cv5jz
 title: Phase 6 follow-up — retire standalone CLI agent wrapper
-status: implementation
+status: validation
 source: phase6-promote-v2-canonical validation — deferred AC-4 standalone CLI sideline
 started: 2026-05-23T05:27:15Z
 completed:
