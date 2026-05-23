@@ -85,3 +85,34 @@ When this lands, the spacedock workflow can no longer be cheated by an agent tha
 ### Summary
 
 Wrote separate plan doc at `docs/razorback-implementation/plans/dab-verify-stage-external-oracle-audit.md` per the 5-AC multi-subsystem flex (workflow README + module + hook + tests + cross-cell smoke). Mechanism gate (T0) is sequenced first: prototype scan against the real on-disk agnews trace must emit findings at the line numbers confirmed by plan-stage probe (26/30/38/40/45/48/53) and bookreview must emit zero before T1 begins. Design mirrors the `ne` templates exactly — `_find_claude_code_txt` shape, 0/2/3 exit-code contract, sidecar manifest writer, dispatcher-hook block between rk-run and rk-audit — with the load-bearing difference that the audit hook is NOT variant-gated (fires for all 3 variants, not just spacedock). Out-of-scope boundary explicit: generic-lib `pip install` (music_brainz_20k case) is sibling-entity `8y`'s taint-scanner concern, not this audit's.
+
+## Stage Report: implementation
+
+- DONE: T0 mechanism gate — throwaway scratch_scan.py emitted 12 findings against real agnews trace covering all 7 expected lines (26/30/38/40/45/48/53), 0 against bookreview. Scratch deleted; git status clean.
+- DONE: T1+T2 — AC-2 + AC-5. tests/unit/test_external_oracle_audit.py (7 fixtures: A load_dataset+fancyzhx, B clean Bash-only, C requests.get to raw.githubusercontent.com, D from-datasets-import heredoc, E WebSearch tool_use, F missing-trace, plus tool_result-echo defense). src/razorback/agents/external_oracle_audit.py module with 0/2/3 exit contract and razorback-external-oracle-audit-v1 sidecar schema.
+  commit caeb7d6. uv run pytest tests/unit/test_external_oracle_audit.py: 7/7 PASS. Live AC-2 check: real agnews cell → exit 2 with `fancyzhx/ag_news` snippet + load_dataset pattern_id; real bookreview cell → exit 0.
+- DONE: T3 — AC-4. examples/drivers/dab-paper-matrix.sh per-cell hook between rk-run and rk-audit (NOT variant-gated; fires for all 3 variants). rc==2 → status=external-oracle-cheating, decrement ok_cells, increment failed_cells, append to FAILURES_LOG, skip rk-audit/rk-score. rc==3 → status=external-oracle-audit-error. tests/integration/test_dab_paper_matrix_external_oracle_gate.py (5 tests: hook ordering, distinct statuses, FAILURES_LOG contract, synthetic cheating cell e2e, synthetic clean cell e2e). Aggregator passthrough: aggregate-goal1-scores.py reads result.json not ledger, so no aggregator edit needed — ledger is the captain's surface.
+  commit 107401c. uv run pytest tests/integration/test_dab_paper_matrix_external_oracle_gate.py + tests/unit/test_dab_paper_matrix_driver_shape.py: 7/7 PASS. bash -n dispatcher: OK. dry-run still emits 36 cells.
+- DONE: T4 — AC-1 + AC-3. examples/solver_workflows/dab_paper_matrix/README.md verify-stage section gained an External-oracle audit block naming the upstream forbidden patterns verbatim (huggingface, datasets.load_dataset, hf://, from datasets import, requests.get to 6 named public hosts, WebSearch/WebFetch, openai/anthropic/google.generativeai LLM oracles) and tied to the harness invocation `python -m razorback.agents.external_oracle_audit <cell-run-dir>` with the 0/2/3 exit-code contract.
+  commit 54ef9f1. AC-1/AC-3 grep verification: all 9 required literals matched (External-oracle audit:1, datasets.load_dataset:1, huggingface:3, hf:///1, from datasets import:2, requests.get:1, web-search:1, LLM-call:1, python -m razorback.agents.external_oracle_audit:1).
+- DONE: T5 — cross-cell smoke against all 12 7q direct-structured cells under .worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/goal1-direct-structured-opus47-xhigh/direct-structured/. Result table:
+
+      cell             exit  confirmed  suspected
+      agnews           2     12         0
+      bookreview       0     0          0
+      crmarenapro      0     0          0
+      DEPS_DEV_V1      0     0          0
+      GITHUB_REPOS     0     0          0
+      googlelocal      0     0          0
+      music_brainz_20k 0     0          0
+      PANCANCER_ATLAS  0     0          0
+      PATENTS          0     0          0
+      stockindex       0     0          0
+      stockmarket      0     0          0
+      yelp             0     0          0
+
+  agnews REJECTed exactly as the 7q validation report documented; music_brainz_20k stayed clean (pip install of generic-lib is OUT OF SCOPE per plan §Risk register — sibling entity 8y's taint scanner concern); all 10 remaining cells clean. No previously-undetected cheating surfaced. Full pytest: 647 passed, 12 skipped, 9 pre-existing failures (confirmed identical on sibling k3 worktree at same base 2abdd05; failures pre-date this work and are not caused by it). Pre-existing import error in tests/unit/test_task_identity_scoring.py (`razorback.score.load` missing) deselected.
+
+### Summary
+
+Shipped the verify-stage External-oracle audit contract in three layers — Python module (src/razorback/agents/external_oracle_audit.py with 0/2/3 exit codes + razorback-external-oracle-audit-v1 sidecar), dispatcher hook (dab-paper-matrix.sh, non-variant-gated, fires for all 3 variants between rk-run and rk-audit), and workflow README prose (mirrors DAB upstream verbatim + ties to the harness invocation). Cross-cell smoke verified the audit's calibration: agnews emits 12 confirmed findings across the 7 expected line numbers, all 11 other cells stay clean including music_brainz_20k's pip-install events (out-of-scope generic-lib install per plan). The ne smoke-gate templates (subagent_traces.py / subagent_smoke.py) referenced in the plan were design templates only — they have not merged to my branch's base (2abdd05), so the external-oracle audit ships standalone without depending on the smoke gate's presence in the dispatcher.
