@@ -81,3 +81,16 @@ fields.
 Installed Harbor has no built-in wallclock or priority scheduling hook.
 The implementation should reorder Razorback's task list before handing
 the job to Harbor rather than patching Harbor internals.
+
+## Stage Report: plan
+
+- DONE: Plan maps AC-1 through AC-5 to concrete implementation tasks, tests, and verification commands.
+  Evidence: `plans/job-ordering-from-run-wallclock-hints.md` has an AC-to-task map and Tasks 1-8 with targeted `uv run pytest` commands.
+- DONE: Plan identifies exact likely code surfaces for ordering before Harbor `JobConfig`, historical wallclock extraction, and provenance/manifest recording.
+  Evidence: the plan names `src/razorback/run_ordering.py`, `src/razorback/cli/run.py`, `src/razorback/runs/aggregate.py`, `src/razorback/provenance/provenance_yaml.py`, and `src/razorback/translate.py`.
+- DONE: Plan calls out risks around default-order compatibility, task identity/scoring invariance, and partial/missing historical timing data.
+  Evidence: the plan's Risks and Guardrails section covers all three risks explicitly.
+
+### Summary
+
+Wrote the standard separate implementation plan at `docs/razorback-implementation/plans/job-ordering-from-run-wallclock-hints.md`. The plan keeps the riskiest contract first by parsing historical timing and validating the `rk run -> spec_to_job_config -> ordered JobConfig.tasks -> _job_config.yaml` path before broader regression checks.
