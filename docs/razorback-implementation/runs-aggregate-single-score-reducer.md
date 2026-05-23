@@ -95,6 +95,14 @@ mean, not the composite-binary mean.
 
 Plan doc: `docs/razorback-implementation/plans/runs-aggregate-single-score-reducer.md`.
 
+### Feedback Cycles
+
+**Cycle 1 — 2026-05-23 validation REJECT, routed back to implementation.**
+
+Validator finding (commit `582987b`, blocking): `_load_reward_per_query`'s docstring at `src/razorback/runs/aggregate.py:197` contains the literal substring `benchmarks/dab` (inside the reference `_legacy/benchmarks/dab/aggregate.py:_load_per_query_rewards`), which is matched by the `forbidden` needle in `tests/unit/test_dab_retirement.py::test_active_code_does_not_import_in_tree_dab_adapter`. The branch introduces this as a new test failure; all four ACs otherwise pass functionally.
+
+Routed back to implementation for a one-line docstring rewrite that drops the literal `benchmarks/dab` path token while preserving the design pointer (e.g. "mirrors the legacy DAB aggregator's per-query rewards loader" without the path). Re-run `uv run pytest tests/unit/test_dab_retirement.py` to confirm green, then signal complete for re-validation. Cycle count: 1 of 3.
+
 ## Stage Report: plan
 
 - DONE: Expand AC-1 / AC-3 in the entity body to cover the binarization fix
