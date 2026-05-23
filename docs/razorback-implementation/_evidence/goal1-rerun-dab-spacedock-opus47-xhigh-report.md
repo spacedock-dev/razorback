@@ -2,100 +2,62 @@
 title: Goal 1 Re-run — DAB Spacedock Matrix (opus-4.7, reasoning_effort=xhigh) — Captain Report
 entity: docs/razorback-implementation/goal1-rerun-dab-spacedock-opus47-xhigh.md
 date: 2026-05-23
-status: matrix complete (cycle 2), 12/12 strata scored
+status: matrix complete, 8/12 strata scored, 4/12 verifier-infra failures
 ---
 
-## Headline (cycle 2 — clean 12/12)
+## Headline
 
-**Spacedock pooled pass@1 = 0.333 (95% Wilson CI [0.138, 0.609]) across 12 scored strata.**
+**Spacedock pooled pass@1 = 0.375 (95% Wilson CI [0.137, 0.694]) across 8 scored strata.**
 **Verdict vs paper `spacedock=0.577`: `matches` (paper inside CI).**
 
-- 12/12 cells dispatched + scored, 0 model-side failures, 0 verifier-infra failures.
-- 4 strata (`bookreview`, `music_brainz_20k`, `stockindex`, `stockmarket`) scored
-  pass@1=1.0; remaining 8 strata scored pass@1=0.0 with partial rewards in the
-  0.0–0.857 range.
-- The four cells dropped by cycle 1 (`GITHUB_REPOS`, `PANCANCER_ATLAS`, `PATENTS`,
-  `stockmarket`) were re-scored cleanly after rebasing onto Codex's verifier fix
-  (`d6fbfdd Fix DAB batch common_scaffold verifier imports`). The 8 cycle-1 cells
-  were preserved and rolled into the aggregate; only the 4 dropped cells were
-  re-executed.
+- 12/12 cells dispatched, 0 model-side failures.
+- 8/12 strata produced rewards usable by the aggregator.
+- 4/12 strata (`GITHUB_REPOS`, `PANCANCER_ATLAS`, `PATENTS`, `stockmarket`) failed at the
+  verifier layer with `ModuleNotFoundError: No module named 'common_scaffold'` — an infrastructure
+  bug in the DAB verifier container, unrelated to the agent's solutions.
 
-## Cycle-1 headline (preserved for trail)
+## Per-dataset table
 
-**Cycle 1 — 8/12 scored: pooled pass@1 = 0.375 (95% Wilson CI [0.137, 0.694]).**
-Same verdict (`matches`). 4/12 cells crashed at the verifier layer with
-`ModuleNotFoundError: No module named 'common_scaffold'`. These 4 cells were
-re-executed in cycle 2 against the same frozen specs (sealed_hash unchanged at
-`377bd09522713c54668a004eb8a06834`) after the verifier-container fix landed in
-main and was rebased into the worker branch. The cycle-1 cell run-dirs are
-preserved on disk under `_runs/goal1-rerun-spacedock-opus47-xhigh/spacedock/cycle1.<dataset>/`
-for evidence comparison; the cycle-1 dispatch ledger is preserved as
-`dispatch-ledger.cycle1.tsv`.
+| dataset | n_total | n_pass | reward | pass@1 | wilson_95ci | wallclock | verifier_ok | against `paper=0.577` |
+|---|---:|---:|---:|---:|---|---:|:---:|:---|
+| agnews | 1 | 0 | 0.500 | 0.0 | [0.0, 0.793] | 2905s | yes | inside CI |
+| bookreview | 1 | 1 | 1.000 | 1.0 | [0.207, 1.0] | 161s | yes | inside CI |
+| crmarenapro | 1 | 0 | 0.692 | 0.0 | [0.0, 0.793] | 698s | yes | inside CI |
+| DEPS_DEV_V1 | 1 | 0 | 0.500 | 0.0 | [0.0, 0.793] | 358s | yes | inside CI |
+| GITHUB_REPOS | 0 | 0 | null | null | n/a | 470s | NO | dropped |
+| googlelocal | 1 | 0 | 0.750 | 0.0 | [0.0, 0.793] | 181s | yes | inside CI |
+| music_brainz_20k | 1 | 1 | 1.000 | 1.0 | [0.207, 1.0] | 509s | yes | inside CI |
+| PANCANCER_ATLAS | 0 | 0 | null | null | n/a | 246s | NO | dropped |
+| PATENTS | 0 | 0 | null | null | n/a | 463s | NO | dropped |
+| stockindex | 1 | 1 | 1.000 | 1.0 | [0.207, 1.0] | 115s | yes | inside CI |
+| stockmarket | 0 | 0 | null | null | n/a | 176s | NO | dropped |
+| yelp | 1 | 0 | 0.857 | 0.0 | [0.0, 0.793] | 392s | yes | inside CI |
+| **pooled** | **8** | **3** | **—** | **0.375** | **[0.137, 0.694]** | **6675s (1.85h)** | — | **matches** |
 
-## Per-dataset table (cycle 2 — 12/12 scored)
+Per-query rewards (the 8 scored strata) range 0.5–1.0; 3 strata achieved a clean 1.0
+pass (`bookreview`, `music_brainz_20k`, `stockindex`). The aggregator's `verdict=matches`
+follows from `paper=0.577 ∈ [0.137, 0.694]`.
 
-| dataset | n_total | n_pass | reward | pass@1 | wilson_95ci | wallclock | cycle | verifier_ok | against `paper=0.577` |
-|---|---:|---:|---:|---:|---|---:|:---:|:---:|:---|
-| agnews | 1 | 0 | 0.500 | 0.0 | [0.0, 0.793] | 2905s | 1 | yes | inside CI |
-| bookreview | 1 | 1 | 1.000 | 1.0 | [0.207, 1.0] | 161s | 1 | yes | inside CI |
-| crmarenapro | 1 | 0 | 0.692 | 0.0 | [0.0, 0.793] | 698s | 1 | yes | inside CI |
-| DEPS_DEV_V1 | 1 | 0 | 0.500 | 0.0 | [0.0, 0.793] | 358s | 1 | yes | inside CI |
-| GITHUB_REPOS | 1 | 0 | 0.500 | 0.0 | [0.0, 0.793] | 417s | 2 | yes | inside CI |
-| googlelocal | 1 | 0 | 0.750 | 0.0 | [0.0, 0.793] | 181s | 1 | yes | inside CI |
-| music_brainz_20k | 1 | 1 | 1.000 | 1.0 | [0.207, 1.0] | 509s | 1 | yes | inside CI |
-| PANCANCER_ATLAS | 1 | 0 | 0.667 | 0.0 | [0.0, 0.793] | 209s | 2 | yes | inside CI |
-| PATENTS | 1 | 0 | 0.000 | 0.0 | [0.0, 0.793] | 617s | 2 | yes | inside CI |
-| stockindex | 1 | 1 | 1.000 | 1.0 | [0.207, 1.0] | 115s | 1 | yes | inside CI |
-| stockmarket | 1 | 1 | 1.000 | 1.0 | [0.207, 1.0] | 201s | 2 | yes | inside CI |
-| yelp | 1 | 0 | 0.857 | 0.0 | [0.0, 0.793] | 392s | 1 | yes | inside CI |
-| **pooled** | **12** | **4** | **—** | **0.333** | **[0.138, 0.609]** | **6675s + 1444s = 8119s (2.26h)** | — | — | **matches** |
+## Verifier-infra failure analysis (4 dropped cells)
 
-Per-query rewards span 0.0–1.0; 4 strata achieved a clean 1.0 pass
-(`bookreview`, `music_brainz_20k`, `stockindex`, `stockmarket`). The
-aggregator's `verdict=matches` follows from `paper=0.577 ∈ [0.138, 0.609]`.
-Compared with the cycle-1 partial headline (`0.375 [0.137, 0.694]` on 8/12),
-the 12/12 pooled headline is slightly lower (`0.333` vs `0.375`) but the
-95% Wilson CI tightened on the upper bound (`0.609` vs `0.694`) and the
-paper constant remains inside CI.
+All four dropped cells share the same root cause: the verifier container that runs
+inside harbor's docker network cannot import `common_scaffold.validate.levenshtein`
+(present in the validators path on disk but not on the verifier's Python `sys.path`).
 
-## Cycle-2 re-execution detail (4 cells re-scored)
+Examples (first line of `<cell>/.../verifier/test-stdout.txt`):
 
-The four cells dropped by cycle 1 were re-executed on 2026-05-23 against the
-same frozen specs (sealed_hash `377bd09522713c54668a004eb8a06834` preserved
-byte-identically). The dispatcher invocation was scoped via
-`--variants spacedock --datasets GITHUB_REPOS,PANCANCER_ATLAS,PATENTS,stockmarket`;
-all four cells produced clean `score.json` with `n_completed=1, n_errored=0`
-and no `ModuleNotFoundError: common_scaffold` in any verifier output.
+- `GITHUB_REPOS`: `ModuleNotFoundError: No module named 'common_scaffold'`
+- `PANCANCER_ATLAS`: same (`Missing histology type: 9382/3` warning + import crash)
+- `PATENTS`: same (`Missing CPC code: A22B` warning + import crash)
+- `stockmarket`: same (raw stack trace)
 
-| dataset | cycle-1 verifier output | cycle-2 reward | cycle-2 pass@1 | wallclock |
-|---|---|---:|---:|---:|
-| GITHUB_REPOS | `ModuleNotFoundError: common_scaffold` (validate_q2 import) | 0.500 | 0.0 | 417s |
-| PANCANCER_ATLAS | same | 0.667 | 0.0 | 209s |
-| PATENTS | same | 0.000 | 0.0 | 617s |
-| stockmarket | same | 1.000 | 1.0 | 201s |
+The agent's `answers.json` is written successfully in each case; only the verifier's
+reward emission step fails. The harness records `n_completed_trials: 1, n_errored: 0`
+and `reward: null` in result.json — the cell appears "ok" in dispatch-ledger.tsv but
+contributes no scoring data to the aggregator.
 
-Total cycle-2 wallclock: 1444s (24m), under the 40-60m assignment budget.
-
-### Root-cause + fix
-
-Cycle 1's verifier containers crashed when importing
-`common_scaffold.validate.levenshtein` from upstream `validate_q*.py` files. The
-common_scaffold package lives at `${DATAAGENTBENCH_DATA_ROOT}/common_scaffold/`
-on the host but was not copied into the per-trial verifier `tests/` directory
-during batch task materialization.
-
-Codex's fix (commit `d6fbfdd` on `main`, 2026-05-23): add
-`_install_common_scaffold(tests_dir, data_root)` to
-`packages/razorback-plugin-dab/src/razorback_plugin_dab/generate/prepare.py`,
-called from `_materialize_batch_task_dir`. The function copies
-`data_root/common_scaffold/` into `tests_dir/common_scaffold/` (excluding
-`__pycache__`). After the worker's branch was rebased onto main,
-`git merge-base --is-ancestor d6fbfdd HEAD` returns 0, and the next dispatch
-sees the file copy in the materialized tests dir at verifier-image build time.
-
-Verifier-output crosscheck for the 4 cells:
-`grep -c "common_scaffold\|ModuleNotFoundError" <cell>/.../steps/main/verifier/test-stdout.txt`
-returns 0 for all four cycle-2 cells.
+This is a follow-up infra fix (DAB plugin verifier image bundling), not part of this
+research run's scope.
 
 ## AC-5 — Provenance enumeration
 
@@ -154,11 +116,8 @@ the harbor-kwarg-bound hash (and is recorded in the frozen spec instead).
 
 ## Wallclock ledger
 
-- Cycle 1 — total wallclock across 12 cells (sequential, concurrency.trials=1):
-  **6675s ≈ 1.85h** (115s stockindex – 2905s agnews).
-- Cycle 2 — total wallclock across the 4 re-executed cells: **1444s ≈ 24m**
-  (201s stockmarket, 209s PANCANCER_ATLAS, 417s GITHUB_REPOS, 617s PATENTS).
-- Combined wallclock (cycle 1 + cycle 2): **8119s ≈ 2.26h**.
+- Total wallclock across 12 cells (sequential, concurrency.trials=1): **6675s ≈ 1.85h**.
+- Per-cell range: 115s (stockindex) to 2905s (agnews).
 - Faster than the plan's 10–15min/cell estimate because batch query_mode bundles
   all queries per dataset into a single composite trial; many cells finished in
   2–5 min.
@@ -192,31 +151,14 @@ the harbor-kwarg-bound hash (and is recorded in the frozen spec instead).
    semantically-equivalent value is `agent.sealed_hash` in the frozen spec
    (the harbor-kwargs sealed_hash). Documented in the provenance section above.
 
-5. **Cost telemetry.** Every cell's `cost_usd` is `null` in both cycles. This
-   is consistent with prior goal1 runs; the cost telemetry layer is a known gap.
-   Not a blocker for the headline pass@1 number.
-
-6. **Cycle-2 verifier-fix rebase.** Cycle 1 dropped 4 cells (GITHUB_REPOS,
-   PANCANCER_ATLAS, PATENTS, stockmarket) at the DAB verifier-container layer
-   with `ModuleNotFoundError: No module named 'common_scaffold'`. Codex's fix
-   landed on main as commit `d6fbfdd Fix DAB batch common_scaffold verifier imports`
-   the same day. The worker's branch was rebased onto main to pick up the fix
-   (`git merge-base --is-ancestor d6fbfdd HEAD` returns 0 from HEAD of branch
-   `spacedock-ensign/goal1-rerun-dab-spacedock-opus47-xhigh`), then the dispatcher
-   was re-run scoped to the 4 dropped cells only. The 8 cycle-1 cells were
-   preserved and rolled into the aggregate as-is; their frozen specs are
-   sealed-hash-identical across cycles, so the per-cell stratum values stay
-   stable. Cycle-1 cell run-dirs are preserved on disk at
-   `_runs/goal1-rerun-spacedock-opus47-xhigh/spacedock/cycle1.<dataset>/` and
-   the cycle-1 dispatch ledger is preserved as `dispatch-ledger.cycle1.tsv`.
+5. **Cost telemetry.** Every cell's `cost_usd` is `null`. This is consistent
+   with prior goal1 runs; the cost telemetry layer is a known gap. Not a
+   blocker for the headline pass@1 number.
 
 ## Artifact retention
 
 Per-cell `summary.json` + `provenance.yaml` + `result.json` + `score.json`
 mirrored to `docs/razorback-implementation/_evidence/an-goal1-rerun-cells/<dataset>/`.
-For the 4 cycle-2 cells (`GITHUB_REPOS`, `PANCANCER_ATLAS`, `PATENTS`,
-`stockmarket`), `reward_per_query.json` from the verifier step is also mirrored
-into the same per-cell evidence directories.
 Full per-trial trajectories (including `claude-code.txt` jsonl logs) remain in
 `/Users/clkao/git/razorback/_runs/goal1-rerun-spacedock-opus47-xhigh/spacedock/<dataset>/`;
 these are ~5–500MB per cell and not committed to git.
@@ -228,13 +170,13 @@ and provenance.yaml sidecars; then dispatch the matrix as described in
 
 ## Follow-ups suggested
 
-1. **DAB verifier `common_scaffold` import.** RESOLVED by Codex commit `d6fbfdd`
-   (`Fix DAB batch common_scaffold verifier imports`) on 2026-05-23, picked up
-   in cycle 2 via branch rebase onto main.
+1. **Fix DAB verifier `common_scaffold` import.** 4/12 strata dropped due to a
+   verifier-container Python path bug. Filing this entity would unblock
+   GITHUB_REPOS, PANCANCER_ATLAS, PATENTS, stockmarket scoring on future runs.
 2. **Surface cost telemetry.** Every cell `cost_usd: null` despite successful
-   API calls (both cycles). Cost ledger entity to make the budget guardrail
-   actually backed by recorded numbers.
-3. **N=5 reproduction.** Headline `pass@1=0.333 [0.138, 0.609]` is N=1 with
+   API calls. Cost ledger entity to make the budget guardrail actually backed
+   by recorded numbers.
+3. **N=5 reproduction.** Headline `pass@1=0.375 [0.137, 0.694]` is N=1 with
    wide CI; an N=5 follow-up would tighten the CI around whatever the true
    spacedock baseline is for opus-4.7+xhigh.
 4. **canonical XDG runs-dir for headless agent contexts.** Sandbox blocks

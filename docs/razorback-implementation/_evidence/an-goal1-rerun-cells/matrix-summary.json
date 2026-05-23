@@ -37,16 +37,16 @@
         "verdict": "matches"
       },
       "aggregate_json_path": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-rerun-dab-spacedock-opus47-xhigh/docs/razorback-implementation/_evidence/an-goal1-rerun-cells/spacedock/aggregate-score.json",
-      "n_strata_scored": 12,
+      "n_strata_scored": 8,
       "n_strata_total": 12,
-      "pooled_n_pass": 4,
-      "pooled_n_total": 12,
-      "pooled_pass_at_1": 0.3333333333333333,
+      "pooled_n_pass": 3,
+      "pooled_n_total": 8,
+      "pooled_pass_at_1": 0.375,
       "pooled_wilson_95ci": [
-        0.13812009109121315,
-        0.6093779111272004
+        0.13684428582359737,
+        0.6942576053973728
       ],
-      "stratified_mean_over_strata": 0.3333333333333333
+      "stratified_mean_over_strata": 0.375
     }
   }
 }

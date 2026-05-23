@@ -4,14 +4,14 @@
     "value": 0.577,
     "verdict": "matches"
   },
-  "n_strata_scored": 12,
+  "n_strata_scored": 8,
   "n_strata_total": 12,
-  "pooled_n_pass": 4,
-  "pooled_n_total": 12,
-  "pooled_pass_at_1": 0.3333333333333333,
+  "pooled_n_pass": 3,
+  "pooled_n_total": 8,
+  "pooled_pass_at_1": 0.375,
   "pooled_wilson_95ci": [
-    0.13812009109121315,
-    0.6093779111272004
+    0.13684428582359737,
+    0.6942576053973728
   ],
   "strata": {
     "DEPS_DEV_V1": {
@@ -32,55 +32,34 @@
       ]
     },
     "GITHUB_REPOS": {
-      "error_reason": null,
+      "error_reason": "no_completed_trials_with_reward",
       "n_errored": 0,
       "n_pass": 0,
-      "n_total": 1,
-      "pass_at_1": 0.0,
+      "n_total": 0,
+      "pass_at_1": null,
       "result_json": "/Users/clkao/git/razorback/_runs/goal1-rerun-spacedock-opus47-xhigh/spacedock/GITHUB_REPOS/goal1-spacedock-github_repos/657c0bb151af1451/result.json",
-      "rewards": {
-        "0.5": [
-          "GITHUB_REPOS__PyCMP7y"
-        ]
-      },
-      "wilson_ci": [
-        0.0,
-        0.7934506856227626
-      ]
+      "rewards": {},
+      "wilson_ci": null
     },
     "PANCANCER_ATLAS": {
-      "error_reason": null,
+      "error_reason": "no_completed_trials_with_reward",
       "n_errored": 0,
       "n_pass": 0,
-      "n_total": 1,
-      "pass_at_1": 0.0,
+      "n_total": 0,
+      "pass_at_1": null,
       "result_json": "/Users/clkao/git/razorback/_runs/goal1-rerun-spacedock-opus47-xhigh/spacedock/PANCANCER_ATLAS/goal1-spacedock-pancancer_atlas/3405a7d598b417b5/result.json",
-      "rewards": {
-        "0.6666666666666666": [
-          "PANCANCER_ATLAS__vXNVdks"
-        ]
-      },
-      "wilson_ci": [
-        0.0,
-        0.7934506856227626
-      ]
+      "rewards": {},
+      "wilson_ci": null
     },
     "PATENTS": {
-      "error_reason": null,
+      "error_reason": "no_completed_trials_with_reward",
       "n_errored": 0,
       "n_pass": 0,
-      "n_total": 1,
-      "pass_at_1": 0.0,
+      "n_total": 0,
+      "pass_at_1": null,
       "result_json": "/Users/clkao/git/razorback/_runs/goal1-rerun-spacedock-opus47-xhigh/spacedock/PATENTS/goal1-spacedock-patents/13a5f7dc122d89ed/result.json",
-      "rewards": {
-        "0.0": [
-          "PATENTS__vSYaYfV"
-        ]
-      },
-      "wilson_ci": [
-        0.0,
-        0.7934506856227626
-      ]
+      "rewards": {},
+      "wilson_ci": null
     },
     "agnews": {
       "error_reason": null,
@@ -185,21 +164,14 @@
       ]
     },
     "stockmarket": {
-      "error_reason": null,
+      "error_reason": "no_completed_trials_with_reward",
       "n_errored": 0,
-      "n_pass": 1,
-      "n_total": 1,
-      "pass_at_1": 1.0,
+      "n_pass": 0,
+      "n_total": 0,
+      "pass_at_1": null,
       "result_json": "/Users/clkao/git/razorback/_runs/goal1-rerun-spacedock-opus47-xhigh/spacedock/stockmarket/goal1-spacedock-stockmarket/b5a77e3d776ccde7/result.json",
-      "rewards": {
-        "1.0": [
-          "stockmarket__7Bk2xCJ"
-        ]
-      },
-      "wilson_ci": [
-        0.20654931437723745,
-        1.0
-      ]
+      "rewards": {},
+      "wilson_ci": null
     },
     "yelp": {
       "error_reason": null,
@@ -219,6 +191,6 @@
       ]
     }
   },
-  "stratified_pass_at_1_mean_over_strata": 0.3333333333333333,
+  "stratified_pass_at_1_mean_over_strata": 0.375,
   "variant": "spacedock"
 }
