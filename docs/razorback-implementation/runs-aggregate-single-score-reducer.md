@@ -1,7 +1,7 @@
 ---
 id: 1svqbefxg8fd12cy2ssp2jes
 title: Make run aggregation and rk score use one score reducer
-status: implementation
+status: validation
 source: 2026-05-23 staff audit + rk-score validator follow-up - duplicate stratified reducers
 started: 2026-05-23T17:24:54Z
 completed:
