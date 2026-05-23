@@ -105,3 +105,16 @@ tree without fighting pkg40's solver_v2 touches. E4
 (rk-score-uses-benchmark-aggregator) can dispatch against the unified
 score loader (origin's stratum-resolution + local's freeze CAS
 integration).
+
+## Stage Report: implementation
+
+- DONE: Merge origin/main into the worktree branch. Resolve the 3 known conflicts (README.md, src/razorback/agents/spacedock_solver_v2.py, tests/unit/test_spacedock_solver_v2_lifecycle.py) preserving x9+f1 semantics where they touch (runs_dir_default, freeze_dir_default, CAS path) and integrating pkg40's solver_v2 touches as additive. Commit the merge.
+  Merge commit 6111769 has both parents (ecf0280 local-pre-merge + 7d78c11 origin/main HEAD). README: origin prose + folded-in "Where do runs go?" section from x9. solver_v2.py: f1's CAS resolve_freeze_dir kept; pkg40's _resolve_run_dir_from_logs_dir kept (still used by _discover_task_identity_from_manifest). tests file: f1 RAZORBACK_FREEZE_DIR env-override pattern kept; obsolete test_freeze_dir_resolves_from_harbor_direct_trial_layout removed (incompatible with CAS); pkg40's _git_commit_subjects + CHECKPOINT test preserved with monkeypatch added. uv.lock exclude-newer churn restored to merge-base per entity body. Additional adjustment in tests/integration/test_freeze_cas_resume_no_agent_invocation.py: strict-equality assertion relaxed to specifically forbid init/seed (the AC-5 anti-patterns) while allowing pkg40's orthogonal CHECKPOINT_SETUP_READY commit on the resume branch.
+- DONE: Run the 10-test target bundle from the entity body's AC-2 verbatim. Report exit code + N/N pass count.
+  Exit 0; 41/41 passed.
+- DONE: Run `uv run pytest -m 'not integration' --timeout=60 -q` for full-suite regression. List failures.
+  580 passed, 3 failed: test_rk_run_bookreview_claude_produces_nonzero_score, test_rk_run_nop_end_to_end, test_seed_run_then_resume_run_against_matching_sealed_hash. All 3 reproduce identically on origin/main HEAD pre-merge (verified via /tmp/razorback-origin-main-check scratch worktree at origin/main: same 3 failures, none new). bookreview_claude and bookreview_spacedock_halt_resume fail on the same Colima/docker-volume-mounting / runs-dir-not-visible issue; test_rk_run_nop fails on empty events.jsonl. None introduced by the merge.
+
+### Summary
+
+Merged origin/main into the ergonomics-sprint worktree. The 3 named conflicts plus one additional test interaction (pkg40's CHECKPOINT_SETUP_READY commit fires after both init and resume branches in setup(), interacting with f1's strict resume-branch assertion) all resolved. AC-2 bundle 41/41 green. AC-3 full-suite shows only pre-existing failures already documented in the entity body. The merge commit's first parent is the local pre-merge tip (ecf0280) — captain's "local-merge-no-ff authority" requirement for the FO's main-side merge is satisfied.
