@@ -58,11 +58,17 @@ dispatch. It is a sealed, checkpointed, README-structured solver wrapper.
 
 ## Current Implementation Map
 
-Razorback currently has two implemented agent entry shapes:
+Razorback currently has three implemented agent entry shapes:
 
 - `agent.kind: claude-cli`
   - translates directly to `RazorbackClaudeCode`
   - this is the direct non-Spacedock path for Claude
+
+- `agent.kind: codex`
+  - translates directly to `RazorbackCodex`
+  - this is the direct minimal path for Codex
+  - it does not carry `solver_workflow`, `sealed_hash`, workflow README
+    prompting, or freeze/checkpoint behavior
 
 - `agent.kind: spacedock_solver`
   - translates to `SpacedockSolverAgent`
@@ -72,8 +78,8 @@ Razorback currently has two implemented agent entry shapes:
   - this is currently README-structured and checkpointed, not first-officer
     dispatch
 
-There is no direct `agent.kind: codex` schema path today. Current Codex example
-specs use `agent.kind: spacedock_solver` with `runtime: codex`, so they are
+Current Codex minimal specs should use `agent.kind: codex`. Codex specs that
+use `agent.kind: spacedock_solver` with `runtime: codex` are
 `structured+freeze` unless the solver prompt is changed to boot a true
 first-officer workflow.
 
@@ -97,9 +103,14 @@ workflow README, no Spacedock dispatch.
 Implemented today:
 
 - Claude minimal exists through `agent.kind: claude-cli`.
-- Codex minimal would need a direct Codex agent schema/translator path, or a
-  `spacedock_solver` bypass mode that delegates directly without prepending a
-  workflow README or sealing checkpoints.
+- Codex minimal exists through `agent.kind: codex`.
+
+Current gaps:
+
+- The direct Codex path intentionally supports only Codex controls that Harbor
+  exposes directly, such as `reasoning_effort` and `reasoning_summary`.
+- It does not implement tool allow/deny policy fields; those fail closed at
+  schema validation instead of being silently dropped.
 
 ### Structured
 
@@ -131,6 +142,19 @@ Harbor trial
 
 That should be understood as `structured+freeze`, not true Spacedock dispatch.
 
+Desired state:
+
+- Structured-only runs should be expressible without sealed/checkpoint
+  semantics when the experiment only needs README prompting.
+- `spacedock_solver` should either remain explicitly named as
+  `structured+freeze` behavior or be replaced by clearer agent kinds that
+  separate README prompting from sealed provenance.
+
+Current gap:
+
+- There is no first-class `structured` agent kind that prepends a workflow
+  README without freeze/checkpoint behavior.
+
 ### Structured + Freeze
 
 `structured+freeze` is useful for provenance and resume experiments, but it is
@@ -161,6 +185,18 @@ This is the only variant that should be called `spacedock-workflow`.
 This is not implemented in the benchmark solver today. The current
 `spacedock_solver` name is therefore overloaded: it provides structured prompt
 and checkpoint behavior, but not first-officer dispatch.
+
+Desired state:
+
+- A `spacedock-workflow` variant should invoke first-officer/ensign dispatch
+  explicitly and use real workflow stage boundaries as the unit of gate,
+  rejection, reuse, and checkpoint evidence.
+
+Current gap:
+
+- True first-officer dispatch is not implemented in this task. Until that lands,
+  benchmark specs should not describe `spacedock_solver` runs as
+  `spacedock-workflow` runs.
 
 ## Benchmark-Specific Artifacts
 

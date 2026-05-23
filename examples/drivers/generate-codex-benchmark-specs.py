@@ -19,6 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SOLVER_WORKFLOW = "./examples/solver_workflows/codex-benchmark-solver"
 CODEX_MODEL = "gpt-5.5"
 WORKSPACE_VARIANTS = ("direct-minimal", "direct-structured", "spacedock")
+AGENT_KINDS = ("codex", "spacedock_solver")
 
 
 class DabSpecRow(NamedTuple):
@@ -72,7 +73,8 @@ def emit_ade_bench_dataset_spec(
     out_dir: Path,
     model: str = CODEX_MODEL,
     reasoning_effort: str | None = None,
-    solver_workflow: str = DEFAULT_SOLVER_WORKFLOW,
+    agent_kind: str = "codex",
+    solver_workflow: str | None = None,
     docker_image_override: str | None = None,
 ) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -93,6 +95,7 @@ def emit_ade_bench_dataset_spec(
         trials=row.trials,
         model=model,
         reasoning_effort=reasoning_effort,
+        agent_kind=agent_kind,
         solver_workflow=solver_workflow,
     )
     _write_yaml(
@@ -137,7 +140,8 @@ def emit_dab_spec(
     out_dir: Path,
     model: str = CODEX_MODEL,
     reasoning_effort: str | None = None,
-    solver_workflow: str = DEFAULT_SOLVER_WORKFLOW,
+    agent_kind: str | None = None,
+    solver_workflow: str | None = None,
     workspace_variant: str = "direct-structured",
     hints: bool = False,
 ) -> Path:
@@ -157,6 +161,7 @@ def emit_dab_spec(
         trials=row.trials,
         model=model,
         reasoning_effort=reasoning_effort,
+        agent_kind=agent_kind or _default_agent_kind_for_workspace(workspace_variant),
         solver_workflow=solver_workflow,
     )
     _write_yaml(spec_path, payload, about=f"Codex DAB N=1 cell for dataset={row.dataset}.")
@@ -169,7 +174,8 @@ def emit_ade_bench_spec(
     out_dir: Path,
     model: str = CODEX_MODEL,
     reasoning_effort: str | None = None,
-    solver_workflow: str = DEFAULT_SOLVER_WORKFLOW,
+    agent_kind: str = "codex",
+    solver_workflow: str | None = None,
 ) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     spec_path = out_dir / f"{_slug_for_filename(row.task_slug)}.yaml"
@@ -185,6 +191,7 @@ def emit_ade_bench_spec(
         trials=row.trials,
         model=model,
         reasoning_effort=reasoning_effort,
+        agent_kind=agent_kind,
         solver_workflow=solver_workflow,
     )
     _write_yaml(spec_path, payload, about=f"Codex ade-bench N=1 cell for task={row.task_slug}.")
@@ -198,19 +205,29 @@ def _base_spec(
     trials: int,
     model: str,
     reasoning_effort: str | None = None,
-    solver_workflow: str = DEFAULT_SOLVER_WORKFLOW,
+    agent_kind: str = "codex",
+    solver_workflow: str | None = None,
 ) -> dict:
-    agent = {
-        "kind": "spacedock_solver",
-        "runtime": "codex",
-        "model": model,
-        "sampling": {"temperature": 0.0, "top_p": None, "seed": 1},
-        "solver_workflow": solver_workflow,
-        "spacedock_skill_version": "1.0.0",
-        "max_turns": 200,
-        "tools_allowed": [],
-        "tools_denied": [],
-    }
+    if agent_kind not in AGENT_KINDS:
+        raise ValueError(f"agent_kind must be one of {', '.join(AGENT_KINDS)}")
+    if agent_kind == "codex":
+        agent = {
+            "kind": "codex",
+            "model": model,
+            "sampling": {"temperature": 0.0, "top_p": None, "seed": None},
+        }
+    else:
+        agent = {
+            "kind": "spacedock_solver",
+            "runtime": "codex",
+            "model": model,
+            "sampling": {"temperature": 0.0, "top_p": None, "seed": 1},
+            "solver_workflow": solver_workflow or DEFAULT_SOLVER_WORKFLOW,
+            "spacedock_skill_version": "1.0.0",
+            "max_turns": 200,
+            "tools_allowed": [],
+            "tools_denied": [],
+        }
     if reasoning_effort is not None:
         agent["reasoning_effort"] = reasoning_effort
     return {
@@ -236,6 +253,10 @@ def _write_yaml(path: Path, payload: dict, *, about: str) -> None:
 
 def _slug_for_filename(value: str) -> str:
     return value.lower().replace("_", "-")
+
+
+def _default_agent_kind_for_workspace(workspace_variant: str) -> str:
+    return "spacedock_solver" if workspace_variant == "spacedock" else "codex"
 
 
 def _freeze(spec_path: Path) -> None:
@@ -318,9 +339,21 @@ def main() -> int:
         help="Optional Codex reasoning effort to emit under the agent block.",
     )
     parser.add_argument(
+        "--agent-kind",
+        choices=AGENT_KINDS,
+        default=None,
+        help=(
+            "Agent path for emitted specs. Defaults to codex for direct DAB "
+            "workspaces and spacedock_solver for DAB workspace_variant=spacedock."
+        ),
+    )
+    parser.add_argument(
         "--solver-workflow",
         default=DEFAULT_SOLVER_WORKFLOW,
-        help=f"Solver workflow directory for emitted specs. Default: {DEFAULT_SOLVER_WORKFLOW}.",
+        help=(
+            "Solver workflow directory for spacedock_solver specs. Ignored for "
+            f"agent.kind=codex. Default: {DEFAULT_SOLVER_WORKFLOW}."
+        ),
     )
     parser.add_argument(
         "--workspace-variant",
@@ -350,6 +383,7 @@ def main() -> int:
                         out_dir=args.out_root / "dab",
                         model=args.model,
                         reasoning_effort=args.reasoning_effort,
+                        agent_kind=args.agent_kind,
                         solver_workflow=args.solver_workflow,
                         workspace_variant=args.workspace_variant,
                         hints=args.hints,
@@ -383,6 +417,7 @@ def main() -> int:
                             out_dir=args.out_root / "ade-bench",
                             model=args.model,
                             reasoning_effort=args.reasoning_effort,
+                            agent_kind=args.agent_kind or "codex",
                             solver_workflow=args.solver_workflow,
                             docker_image_override=args.ade_docker_image_override,
                         )
@@ -404,6 +439,7 @@ def main() -> int:
                             out_dir=args.out_root / "ade-bench",
                             model=args.model,
                             reasoning_effort=args.reasoning_effort,
+                            agent_kind=args.agent_kind or "codex",
                             solver_workflow=args.solver_workflow,
                         )
                     )
