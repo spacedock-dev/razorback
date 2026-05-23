@@ -407,6 +407,7 @@ def _materialize_batch_task_dir(
     tests_dir.mkdir()
     from razorback_plugin_dab.verify import verify_batch as verify_batch_module
     shutil.copy2(Path(verify_batch_module.__file__), tests_dir / "verify_batch.py")
+    _install_common_scaffold(tests_dir=tests_dir, data_root=dataset_dir.parent)
     for query_id, query_dir in ordered_queries:
         upstream_validate = query_dir / "validate.py"
         if upstream_validate.exists():
@@ -588,6 +589,17 @@ def _install_batch_validator(
         '"_upstream_validate"', f'"_upstream_validate_q{query_id}"'
     )
     (tests_dir / f"validate_q{query_id}.py").write_text(body)
+
+
+def _install_common_scaffold(*, tests_dir: Path, data_root: Path) -> None:
+    upstream = data_root / "common_scaffold"
+    if not upstream.exists():
+        return
+    shutil.copytree(
+        upstream,
+        tests_dir / "common_scaffold",
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
 
 
 def _batch_test_sh(*, container_workdir: str) -> str:
