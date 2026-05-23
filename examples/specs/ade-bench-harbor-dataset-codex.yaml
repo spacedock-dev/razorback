@@ -1,9 +1,9 @@
-# ABOUTME: FIXTURE/DEV PKG-40 ADE-Bench task-view Codex smoke — uses in-repo Harbor task fixture.
-# ABOUTME: Canonical score path is examples/specs/ade-bench-harbor-dataset-codex.yaml (Harbor dataset ref).
+# ABOUTME: Canonical ade-bench score spec — Harbor published dataset ref (no local task root).
+# ABOUTME: Reproducibility is pinned by view_manifest.json's dataset_content_hash + task_content_hash, not the human-readable `@latest`.
 version: 1
-experiment: pkg40-ade-harbor-task-view-codex
+experiment: ade-bench-harbor-dataset-codex
 agent:
-  kind: spacedock_solver
+  kind: spacedock_solver_v2
   runtime: codex
   model: gpt-5.5
   sampling:
@@ -17,10 +17,10 @@ agent:
   tools_denied: []
 benchmark:
   kind: ade-bench
-  tasks_root: ./tests/fixtures/ade_bench/tasks
+  dataset: dbt-labs/ade-bench@latest
   tasks:
-    - adebench-fixture-001
-  docker_image_override: python:3.12
+    - airbnb001
+  docker_image_override: shared-dbt-duckdb:latest
   batch_mode: per-task
 trials: 1
 concurrency:
