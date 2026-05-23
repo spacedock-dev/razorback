@@ -13,7 +13,9 @@ from dotenv import dotenv_values
 
 REPO = Path(__file__).resolve().parents[2]
 SEED_SPEC = REPO / "examples" / "specs" / "bookreview-spacedock-seed.yaml"
-DAB_DATA = Path("/Users/clkao/git/dataagentbench/data/query_bookreview")
+DAB_DATA = Path(
+    os.environ.get("DATAAGENTBENCH_DATA_ROOT", "~/dataagentbench/data")
+).expanduser() / "query_bookreview"
 HAS_AUTH = bool(
     dotenv_values(REPO / ".env").get("ANTHROPIC_API_KEY")
     or dotenv_values(REPO / ".env").get("CLAUDE_CODE_OAUTH_TOKEN")

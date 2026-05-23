@@ -45,7 +45,7 @@ def prepare_dataset_tasks(
 ) -> list[TaskManifestEntry]:
     """Materialize harbor task dirs for every query in `dataset`.
 
-    data_root: the DAB data root (e.g. `/Users/clkao/git/dataagentbench/data`).
+    data_root: the DAB data root (e.g. `/path/to/dataagentbench/data`).
     dataset:   short name, e.g. "bookreview" (resolved as `data_root / f"query_{dataset}"`).
     tasks_root: razorback-owned dir (must live under /Users/... for Colima); deleted and re-created.
     task_env: optional environment variables to stamp into task.toml's

@@ -11,7 +11,9 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 SPEC = REPO / "examples" / "specs" / "bookreview-nop.yaml"
-DAB_DATA = Path("/Users/clkao/git/dataagentbench/data/query_bookreview")
+DAB_DATA = Path(
+    os.environ.get("DATAAGENTBENCH_DATA_ROOT", "~/dataagentbench/data")
+).expanduser() / "query_bookreview"
 
 
 @pytest.fixture

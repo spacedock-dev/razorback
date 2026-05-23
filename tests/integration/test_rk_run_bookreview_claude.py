@@ -13,7 +13,9 @@ from dotenv import dotenv_values
 
 REPO = Path(__file__).resolve().parents[2]
 SPEC = REPO / "examples" / "specs" / "bookreview-claude.yaml"
-DAB_DATA = Path("/Users/clkao/git/dataagentbench/data/query_bookreview")
+DAB_DATA = Path(
+    os.environ.get("DATAAGENTBENCH_DATA_ROOT", "~/dataagentbench/data")
+).expanduser() / "query_bookreview"
 DOTENV_API_KEY = dotenv_values(REPO / ".env").get("ANTHROPIC_API_KEY") if (REPO / ".env").exists() else None
 _TOKEN_PATH = Path.home() / ".claude" / "benchmark-token"
 HAS_AUTH = bool(DOTENV_API_KEY or _TOKEN_PATH.exists())

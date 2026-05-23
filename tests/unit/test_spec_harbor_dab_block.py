@@ -36,6 +36,17 @@ def test_harbor_dab_block_parses_with_defaults(tmp_path: Path) -> None:
     assert spec.benchmark.datasets == ["bookreview"]
 
 
+def test_harbor_dab_data_root_expands_env_default(monkeypatch) -> None:
+    monkeypatch.delenv("DATAAGENTBENCH_DATA_ROOT", raising=False)
+    spec = parse_spec_text(_spec(
+        "  kind: harbor_dab\n"
+        '  data_root: "${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}"\n'
+        "  datasets: [bookreview]\n"
+    ))
+    assert isinstance(spec.benchmark, HarborDabBenchmarkBlock)
+    assert spec.benchmark.data_root == Path.home() / "dataagentbench" / "data"
+
+
 def test_harbor_dab_block_accepts_overrides(tmp_path: Path) -> None:
     spec = parse_spec_text(_spec(
         "  kind: harbor_dab\n"

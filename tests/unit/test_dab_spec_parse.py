@@ -1,6 +1,8 @@
 # ABOUTME: Unit tests for the DAB extension of the spec schema.
 # ABOUTME: AC-7 input shape: kind: dab, data_root: Path, datasets: list[str].
 
+from pathlib import Path
+
 import pytest
 
 from razorback.errors import SpecError
@@ -30,6 +32,29 @@ def test_parses_dab_benchmark_block():
     assert spec.benchmark.kind == "dab"
     assert str(spec.benchmark.data_root) == "/Users/clkao/git/dataagentbench/data"
     assert spec.benchmark.datasets == ["bookreview"]
+
+
+def test_dab_data_root_expands_env_default(monkeypatch):
+    monkeypatch.delenv("DATAAGENTBENCH_DATA_ROOT", raising=False)
+    spec = parse_spec_text(
+        VALID_DAB_SPEC.replace(
+            "/Users/clkao/git/dataagentbench/data",
+            '"${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}"',
+        )
+    )
+    assert spec.benchmark.data_root == Path.home() / "dataagentbench" / "data"
+
+
+def test_dab_data_root_expands_env_override(tmp_path, monkeypatch):
+    data_root = tmp_path / "dab-data"
+    monkeypatch.setenv("DATAAGENTBENCH_DATA_ROOT", str(data_root))
+    spec = parse_spec_text(
+        VALID_DAB_SPEC.replace(
+            "/Users/clkao/git/dataagentbench/data",
+            '"${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}"',
+        )
+    )
+    assert spec.benchmark.data_root == data_root
 
 
 def test_dab_rejects_unknown_subkey():

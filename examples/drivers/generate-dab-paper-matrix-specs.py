@@ -16,7 +16,7 @@ from razorback_plugin_dab.generate.workspace_readme import WORKSPACE_VARIANTS
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DATA_ROOT = "/Users/clkao/git/dataagentbench/data"
+DATA_ROOT = "${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}"
 
 
 SOLVER_WORKFLOW_PATH = "./examples/solver_workflows/dab_paper_matrix"
