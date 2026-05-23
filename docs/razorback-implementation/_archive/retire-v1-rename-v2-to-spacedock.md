@@ -1,16 +1,17 @@
 ---
 id: 5f192b62951w0v5wx45fw8qm
 title: retire v1 SpacedockSolverAgent + rename v2 to spacedock (clean cut, no rollback alias)
-status: plan
+status: done
 source: 2026-05-23 session — captain decision after auditing v1 callers (zero production specs use kind `spacedock-solver`; all callers are test-only). The `_v2` suffix on the canonical agent leaks rewrite history into every spec. Captain directive: "i don't care about old runs, as long as new fresh run works." Supersedes `t1 phase6-promote-v2-canonical` and `sd phase7-delete-legacy` from the original reconciliation plan.
 started: 2026-05-23T04:11:11Z
-completed:
-verdict:
+completed: 2026-05-23T04:57:55Z
+verdict: REJECTED
 score: 0.85
-worktree:
+worktree: 
 issue:
 pr:
 mod-block:
+archived: 2026-05-23T04:57:55Z
 ---
 
 ## Problem
@@ -182,3 +183,25 @@ suffix and never wonder which solver to use.
 ### Summary
 
 Plan written to `docs/razorback-implementation/plans/retire-v1-rename-v2-to-spacedock.md` (no commits yet — plan-stage convention is to write the doc and let the captain review before commit, but the checklist did not explicitly require a commit at this stage; flagging for FO direction). Key sequencing decision: the schema-literal rename is atomic with the file/class/YAML rename (T7) because partial application breaks the discriminated union; v1 deletion (T1) is hoisted first because it strictly reduces the rename surface. Two notes for validation-time scrutiny: (a) AC-3's wording implies a `resolve_agent_kind()` dispatch refactor in translate.py, but `claude-cli` doesn't currently use that pattern either — the plan honors AC-3's normative gates (registry entry + no `SPACEDOCK_SOLVER*` constants in translate.py) without expanding to a wider dispatch refactor; (b) the entity's `--in-place` freeze invocation is a placeholder; the implementer is instructed to check `rk freeze --help` because the exact flag name wasn't verified against main HEAD.
+
+## Supersession (2026-05-23)
+
+Archived as SUPERSEDED without advancing to implementation. Captain
+decision: `t1 phase6-promote-v2-canonical` was started in parallel
+by codex on a separate machine (visible on origin/main at status=
+implementation when local merged origin on 2026-05-23T04:50Z). Both
+entities target the same code surface — v1 retirement + v2 promotion
+— and shipping both would duplicate work and risk a merge collision
+on the same files (spacedock_solver*.py, schema.py, registry.py,
+translate.py, the v1 test bundle).
+
+`t1`'s shape differs from `5f`'s in two ways:
+- Canonical kind name: `spacedock_solver` (vs `5f`'s `spacedock`)
+- Rollback alias: `spacedock_solver_legacy` retained for emergency
+  rollback (vs `5f`'s clean cut)
+
+If the captain still wants the cleaner end-state (`kind: spacedock`
+with no `_solver` suffix; no legacy holding tank) once `t1` ships,
+that's a small follow-up entity. The plan doc at
+`plans/retire-v1-rename-v2-to-spacedock.md` is preserved in git
+history as the cited design alternative; not deleted.
