@@ -34,6 +34,78 @@ class AdeBenchSpecRow(NamedTuple):
     trials: int = 1
 
 
+class AdeBenchDatasetSpecRow(NamedTuple):
+    """Canonical ADE-Bench source: a Harbor published dataset ref.
+
+    `dataset_ref` is the fully-qualified `<org>/<name>@<ref>` string fed to
+    `PackageDatasetClient.download_dataset`. `task_slug` is the spec-side
+    identifier (post dataset-prefix strip, e.g. `airbnb001`).
+    """
+    task_slug: str
+    dataset_ref: str
+    trials: int = 1
+
+
+def plan_ade_bench_dataset_specs(
+    *, dataset_ref: str, task_slugs: list[str]
+) -> list[AdeBenchDatasetSpecRow]:
+    """Plan one Codex N=1 cell per requested task slug against a Harbor dataset.
+
+    Caller passes the spec-side slugs (e.g. `airbnb001`). The resolver in the
+    translator strips the `<dataset_name>-` prefix when matching against
+    per-task package names like `ade-bench-airbnb001` at run time.
+    """
+    if not task_slugs:
+        raise ValueError(
+            "plan_ade_bench_dataset_specs requires at least one task slug; "
+            "pass `--ade-task-slug airbnb001` (repeatable) on the CLI"
+        )
+    return [
+        AdeBenchDatasetSpecRow(task_slug=slug, dataset_ref=dataset_ref, trials=1)
+        for slug in task_slugs
+    ]
+
+
+def emit_ade_bench_dataset_spec(
+    row: AdeBenchDatasetSpecRow,
+    *,
+    out_dir: Path,
+    model: str = CODEX_MODEL,
+    reasoning_effort: str | None = None,
+    solver_workflow: str = DEFAULT_SOLVER_WORKFLOW,
+    docker_image_override: str | None = None,
+) -> Path:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    spec_path = out_dir / f"{_slug_for_filename(row.task_slug)}.yaml"
+    benchmark = {
+        "kind": "ade-bench",
+        "dataset": row.dataset_ref,
+        "tasks": [row.task_slug],
+        "batch_mode": "per-task",
+    }
+    if docker_image_override is not None:
+        benchmark["docker_image_override"] = docker_image_override
+    payload = _base_spec(
+        experiment=(
+            f"codex-ade-bench-dataset-{_slug_for_filename(row.task_slug)}"
+        ),
+        benchmark=benchmark,
+        trials=row.trials,
+        model=model,
+        reasoning_effort=reasoning_effort,
+        solver_workflow=solver_workflow,
+    )
+    _write_yaml(
+        spec_path,
+        payload,
+        about=(
+            f"Codex ade-bench N=1 cell for task={row.task_slug} via "
+            f"dataset={row.dataset_ref}."
+        ),
+    )
+    return spec_path
+
+
 def plan_dab_specs(*, data_root: Path) -> list[DabSpecRow]:
     return [DabSpecRow(dataset=d.name, data_root=data_root, trials=1) for d in DAB_DATASETS]
 
@@ -198,7 +270,36 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--benchmark", choices=("dab", "ade-bench"), required=True)
     parser.add_argument("--dab-data-root", type=Path, help="Local DataAgentBench data root.")
-    parser.add_argument("--ade-bench-root", type=Path, help="Local ade-bench checkout root.")
+    parser.add_argument(
+        "--ade-bench-root",
+        type=Path,
+        help=(
+            "Local ade-bench checkout root (dev/fixture path). "
+            "Prefer --ade-dataset-ref for canonical Harbor-published-dataset runs."
+        ),
+    )
+    parser.add_argument(
+        "--ade-dataset-ref",
+        type=str,
+        help=(
+            "Harbor published dataset ref (e.g. 'dbt-labs/ade-bench@latest'). "
+            "Canonical ade-bench source per AC-4."
+        ),
+    )
+    parser.add_argument(
+        "--ade-task-slug",
+        action="append",
+        default=[],
+        help=(
+            "Spec-side task slug (e.g. 'airbnb001'). Repeat to emit multiple "
+            "cells. Used only with --ade-dataset-ref."
+        ),
+    )
+    parser.add_argument(
+        "--ade-docker-image-override",
+        type=str,
+        help="docker_image_override for emitted ade-bench dataset-ref specs.",
+    )
     parser.add_argument(
         "--out-root",
         type=Path,
@@ -255,21 +356,57 @@ def main() -> int:
                     )
                 )
     else:
-        if args.ade_bench_root is None:
-            parser.error("--ade-bench-root is required for --benchmark ade-bench")
-        rows = plan_ade_bench_specs(ade_bench_root=args.ade_bench_root)
-        _print_ade_bench_dry_run(rows, ade_bench_root=args.ade_bench_root)
-        if args.write:
-            for row in rows:
-                emitted.append(
-                    emit_ade_bench_spec(
-                        row,
-                        out_dir=args.out_root / "ade-bench",
-                        model=args.model,
-                        reasoning_effort=args.reasoning_effort,
-                        solver_workflow=args.solver_workflow,
-                    )
+        if args.ade_dataset_ref is not None and args.ade_bench_root is not None:
+            parser.error(
+                "pass exactly one of --ade-dataset-ref (canonical Harbor "
+                "dataset ref) or --ade-bench-root (dev/fixture local root)"
+            )
+        if args.ade_dataset_ref is not None:
+            dataset_rows = plan_ade_bench_dataset_specs(
+                dataset_ref=args.ade_dataset_ref,
+                task_slugs=list(args.ade_task_slug),
+            )
+            print(
+                f"ade-bench Codex dry-run: N=1, tasks={len(dataset_rows)}, "
+                f"dataset_ref={args.ade_dataset_ref}"
+            )
+            for row in dataset_rows:
+                print(
+                    f"- task={row.task_slug} trials={row.trials} "
+                    f"dataset_ref={row.dataset_ref}"
                 )
+            if args.write:
+                for row in dataset_rows:
+                    emitted.append(
+                        emit_ade_bench_dataset_spec(
+                            row,
+                            out_dir=args.out_root / "ade-bench",
+                            model=args.model,
+                            reasoning_effort=args.reasoning_effort,
+                            solver_workflow=args.solver_workflow,
+                            docker_image_override=args.ade_docker_image_override,
+                        )
+                    )
+        else:
+            if args.ade_bench_root is None:
+                parser.error(
+                    "pass either --ade-dataset-ref (canonical Harbor dataset "
+                    "ref) or --ade-bench-root (dev/fixture local root) for "
+                    "--benchmark ade-bench"
+                )
+            rows = plan_ade_bench_specs(ade_bench_root=args.ade_bench_root)
+            _print_ade_bench_dry_run(rows, ade_bench_root=args.ade_bench_root)
+            if args.write:
+                for row in rows:
+                    emitted.append(
+                        emit_ade_bench_spec(
+                            row,
+                            out_dir=args.out_root / "ade-bench",
+                            model=args.model,
+                            reasoning_effort=args.reasoning_effort,
+                            solver_workflow=args.solver_workflow,
+                        )
+                    )
 
     for spec_path in emitted:
         print(f"wrote {_display_path(spec_path)}")

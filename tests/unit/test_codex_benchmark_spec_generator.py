@@ -401,3 +401,117 @@ def test_emit_dab_codex_spec_allows_workspace_and_hints_variants(tmp_path: Path)
 
     assert payload["benchmark"]["workspace_variant"] == "spacedock"
     assert payload["benchmark"]["hints"] is True
+
+
+def test_plan_ade_bench_dataset_specs_emits_one_row_per_slug() -> None:
+    generator = _load_generator()
+    rows = generator.plan_ade_bench_dataset_specs(
+        dataset_ref="dbt-labs/ade-bench@latest",
+        task_slugs=["airbnb001", "airbnb002"],
+    )
+    assert [r.task_slug for r in rows] == ["airbnb001", "airbnb002"]
+    assert all(r.dataset_ref == "dbt-labs/ade-bench@latest" for r in rows)
+
+
+def test_plan_ade_bench_dataset_specs_rejects_empty_slug_list() -> None:
+    generator = _load_generator()
+    try:
+        generator.plan_ade_bench_dataset_specs(
+            dataset_ref="dbt-labs/ade-bench@latest", task_slugs=[]
+        )
+    except ValueError as exc:
+        assert "task slug" in str(exc).lower()
+    else:
+        raise AssertionError("expected ValueError for empty slug list")
+
+
+def test_emit_ade_bench_dataset_codex_spec_uses_dataset_field(tmp_path: Path) -> None:
+    generator = _load_generator()
+    row = generator.AdeBenchDatasetSpecRow(
+        task_slug="airbnb001",
+        dataset_ref="dbt-labs/ade-bench@latest",
+        trials=1,
+    )
+
+    spec_path = generator.emit_ade_bench_dataset_spec(
+        row,
+        out_dir=tmp_path / "out",
+        docker_image_override="shared-dbt-duckdb:latest",
+    )
+    payload = yaml.safe_load(spec_path.read_text())
+
+    assert payload["agent"]["kind"] == "spacedock_solver_v2"
+    assert payload["agent"]["runtime"] == "codex"
+    assert payload["benchmark"]["kind"] == "ade-bench"
+    assert payload["benchmark"]["dataset"] == "dbt-labs/ade-bench@latest"
+    assert payload["benchmark"]["tasks"] == ["airbnb001"]
+    assert payload["benchmark"]["docker_image_override"] == "shared-dbt-duckdb:latest"
+    assert "tasks_root" not in payload["benchmark"]
+
+
+def test_cli_dataset_ref_emits_canonical_ade_spec(tmp_path: Path, monkeypatch) -> None:
+    generator = _load_generator()
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            str(GENERATOR),
+            "--benchmark",
+            "ade-bench",
+            "--ade-dataset-ref",
+            "dbt-labs/ade-bench@latest",
+            "--ade-task-slug",
+            "airbnb001",
+            "--out-root",
+            str(tmp_path / "specs"),
+            "--write",
+        ],
+    )
+
+    assert generator.main() == 0
+
+    payload = yaml.safe_load(
+        (tmp_path / "specs" / "ade-bench" / "airbnb001.yaml").read_text()
+    )
+    assert payload["benchmark"]["kind"] == "ade-bench"
+    assert payload["benchmark"]["dataset"] == "dbt-labs/ade-bench@latest"
+    assert payload["benchmark"]["tasks"] == ["airbnb001"]
+    assert "tasks_root" not in payload["benchmark"]
+
+
+def test_cli_rejects_both_dataset_ref_and_local_root(tmp_path: Path, monkeypatch) -> None:
+    generator = _load_generator()
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            str(GENERATOR),
+            "--benchmark",
+            "ade-bench",
+            "--ade-dataset-ref",
+            "dbt-labs/ade-bench@latest",
+            "--ade-task-slug",
+            "airbnb001",
+            "--ade-bench-root",
+            str(tmp_path / "fixture"),
+            "--out-root",
+            str(tmp_path / "specs"),
+        ],
+    )
+    try:
+        generator.main()
+    except SystemExit as exc:
+        assert exc.code != 0
+    else:
+        raise AssertionError("expected SystemExit from --ade-dataset-ref + --ade-bench-root conflict")
+
+
+def test_canonical_dataset_ref_spec_is_checked_in() -> None:
+    spec_path = REPO_ROOT / "examples" / "specs" / "ade-bench-harbor-dataset-codex.yaml"
+    payload = yaml.safe_load(spec_path.read_text())
+    assert payload["benchmark"]["kind"] == "ade-bench"
+    assert payload["benchmark"]["dataset"] == (
+        "dbt-labs/ade-bench@sha256:"
+        "2c1f9e6966d01b0a5de2235d1a0b64089c7eead42c85c3b7b61d0929405c2bd5"
+    )
+    assert "tasks_root" not in payload["benchmark"]

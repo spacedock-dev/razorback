@@ -9,7 +9,7 @@ from typing import Any, Literal
 
 
 TASK_VIEW_MANIFEST = "view_manifest.json"
-TASK_VIEW_MANIFEST_SCHEMA_VERSION = 1
+TASK_VIEW_MANIFEST_SCHEMA_VERSION = 2
 
 
 def utcnow_iso() -> str:
@@ -56,6 +56,9 @@ class TaskViewManifest:
     source_size_bytes: int | None = None
     view_size_bytes: int | None = None
     child_task_ids: list[str] = field(default_factory=list)
+    dataset_ref: str | None = None
+    dataset_content_hash: str | None = None
+    task_content_hash: str | None = None
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2, sort_keys=True) + "\n"
