@@ -1,7 +1,7 @@
 # Razorback data loading architecture
 
 **Status:** Living document (snapshot 2026-05-23)
-**Companion to:** [`2026-05-19-razorback-on-harbor.md`](2026-05-19-razorback-on-harbor.md)
+**Companion to:** [`./2026-05-19-razorback-on-harbor.md`](./2026-05-19-razorback-on-harbor.md)
 
 How a frozen razorback spec turns into a running benchmark task with its
 dependent services (Postgres, Mongo, ...) — and where the
@@ -281,7 +281,7 @@ emerges.
 ## 7. Reading order for new contributors
 
 1. Read this doc for the layered model.
-2. Read [`2026-05-19-razorback-on-harbor.md`](2026-05-19-razorback-on-harbor.md)
+2. Read [`./2026-05-19-razorback-on-harbor.md`](./2026-05-19-razorback-on-harbor.md)
    §6 (spec format) and §7 (run-dir contract) for the spec/runtime
    surfaces.
 3. Read `harbor/environments/docker/docker.py` for the compose-stack
