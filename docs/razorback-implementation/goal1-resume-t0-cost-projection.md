@@ -1,3 +1,18 @@
+---
+id: 1e92ygpkdwd296tw8xt9nvt1
+title: T0 cost-shape verification — Goal 1 RESUME (spacedock-first)
+status: done
+source: 2026-05-21 cost-shape probe note
+started: 2026-05-21
+completed: 2026-05-21
+verdict: PASSED
+score:
+worktree:
+issue:
+pr:
+mod-block:
+---
+
 # T0 cost-shape verification — Goal 1 RESUME (spacedock-first)
 
 Date: 2026-05-21
