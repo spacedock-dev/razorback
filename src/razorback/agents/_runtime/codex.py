@@ -1,4 +1,4 @@
-# ABOUTME: Codex runtime adapter for SpacedockSolverAgent v2 (spec §4.3.1, §8.4).
+# ABOUTME: Codex runtime adapter for SpacedockSolverAgent (spec §4.3.1, §8.4).
 # ABOUTME: Constructs harbor's Codex agent and fails closed on unsupported controls.
 
 import shlex
@@ -127,7 +127,7 @@ def _is_empty_noop(name: str, value: Any) -> bool:
         return True
     if name in {"tools_allowed", "tools_denied"} and value == []:
         return True
-    # Razorback's v2 schema default is not an active user restriction for Codex.
+    # Razorback's canonical schema default is not an active user restriction for Codex.
     if name == "max_turns" and value == 200:
         return True
     return False

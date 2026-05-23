@@ -1,4 +1,4 @@
-# ABOUTME: SpacedockSolverAgent v2 (spec §4 + §8.4), runtime adapter for claude|codex|pi.
+# ABOUTME: SpacedockSolverAgent canonical runtime adapter for claude|codex|pi.
 # ABOUTME: __init__ computes sealed_hash from six inputs; refuses on resume mismatch BEFORE harbor I/O.
 
 import asyncio
@@ -30,7 +30,7 @@ CHECKPOINT_RUN_AFTER_AGENT = "run/after-agent"
 
 
 class SpacedockSolverAgentError(RazorbackError):
-    """Raised on SpacedockSolverAgent v2 contract violations."""
+    """Raised on SpacedockSolverAgent contract violations."""
 
 
 def assert_phase_stats_schema(path: Path, *, stages: list[str]) -> None:
@@ -114,7 +114,7 @@ class SpacedockSolverAgent(BaseAgent):
             "child_task_ids_hash"
         )
 
-        # AC-2 + b5 contract point 1: compute sealed_hash from six inputs.
+        # AC-2 + b5 contract point 1: compute sealed_hash from canonical inputs.
         self.sealed_hash = compute_sealed_hash(
             model=self._model,
             sampling=self._sampling,

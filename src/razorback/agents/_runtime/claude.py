@@ -1,4 +1,4 @@
-# ABOUTME: Claude runtime adapter for SpacedockSolverAgent v2 (spec §4.3.1, §8.4).
+# ABOUTME: Claude runtime adapter for SpacedockSolverAgent (spec §4.3.1, §8.4).
 # ABOUTME: Builds RazorbackClaudeCode (a ClaudeCode subclass) so the inner agent
 # ABOUTME: emits cost_usd + claude-output.jsonl via PKG-26's surface.
 
@@ -144,7 +144,7 @@ def build_inner_agent(
     harbor_agent_kwargs: dict[str, Any],
     extra_env: dict[str, str],
 ) -> RazorbackClaudeCode:
-    """Construct razorback's ClaudeCode runtime helper for spacedock v2.
+    """Construct razorback's ClaudeCode runtime helper for spacedock_solver.
 
     Routing through RazorbackClaudeCode (rather than harbor's ClaudeCode directly)
     inherits PKG-26's cost-emit + claude-output.jsonl audit sentinel. The earlier
@@ -169,7 +169,7 @@ def build_inner_agent(
             kw["tools_allowed"] = list(value)
             continue
         if name == "tools_denied":
-            # RazorbackClaudeCode applies DISALLOWED_TOOLS by default; v2 callers
+            # RazorbackClaudeCode applies DISALLOWED_TOOLS by default; callers
             # that need a wider block list pass through harbor's disallowed_tools.
             kw["disallowed_tools"] = ",".join(value)
             continue

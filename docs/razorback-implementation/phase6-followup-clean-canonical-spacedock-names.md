@@ -48,3 +48,16 @@ Verified by: validation report includes grep output and rationale for each remai
 ### Summary
 
 Wrote a separate implementation plan at `docs/razorback-implementation/plans/phase6-followup-clean-canonical-spacedock-names.md` because the inventory crosses multiple active subsystems despite only three ACs. The plan keeps this stage doc-only, reserves production edits for implementation, and requires validation to report every remaining historical hit explicitly.
+
+## Stage Report: implementation
+
+- DONE: Active `V2` / `v2` / `spacedock_solver_v2` names are cleaned up from code/tests/examples except explicit historical rejection coverage.
+  Evidence: `rg -n "V2|v2|spacedock_solver_v2" src/razorback tests examples --glob '!**/_legacy/**'` returns only three `stale_kind = "spacedock_" + "solver_v2"` assertions with inline historical-rejection comments.
+- DONE: Focused behavior checks for schema, translate, runtime adapter, freeze, and generator paths pass after the rename cleanup.
+  Evidence: required AC-2 suite `36 passed`; supporting freeze/registry/generator suite `55 passed`; example/generator checkpoint `34 passed, 1 skipped`.
+- DONE: The entity body has a `## Stage Report: implementation` section accounting for this checklist with DONE/SKIPPED/FAILED entries and cites exact grep/test evidence.
+  Evidence: this section plus `docs/razorback-implementation/validation/phase6-followup-clean-canonical-spacedock-names.md` records the final grep/test commands and outputs.
+
+### Summary
+
+Renamed the canonical schema/helper/freeze/provenance symbols to `SpacedockSolverAgentBlock`, `build_spacedock_harbor_agent_kwargs`, `_freeze_spacedock_solver`, and `_stamp_spacedock_solver_sealed_fields`, and cleaned active comments, test names, example names, and actionable docs to `spacedock_solver`. The only remaining active code/test/example `v2` hits are explicit stale-discriminator rejection assertions; docs retain only historical/spec-label references, protected frontmatter, and this task's own grep pattern.

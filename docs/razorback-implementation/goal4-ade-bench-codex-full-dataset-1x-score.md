@@ -29,7 +29,7 @@ development work that belongs in PKG-23 or follow-ups.
 **AC-1 — All discovered ade-bench tasks dispatch at N=1 with Codex.**
 The matrix enumerates every task under the configured
 `ade_bench_root/tasks/` and emits one trial per task with
-`agent.kind: spacedock_solver_v2`, `runtime: codex`, and
+`agent.kind: spacedock_solver`, `runtime: codex`, and
 `trials: 1`.
 Verified by: matrix dry-run prints the discovered task count and
 one cell per slug.
@@ -69,4 +69,3 @@ the matrix budget ledger is at or below the declared cap.
 - `pkg27-codex-benchmark-solver-workflow`
 - `pkg23-harbor-shaped-compose-for-ade-bench` or an equivalent
   merged fix for the ade-bench `T_BENCH_*` compose env-var blocker.
-

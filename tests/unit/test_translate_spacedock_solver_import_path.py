@@ -1,4 +1,4 @@
-# ABOUTME: Phase 6: spec.agent.kind: spacedock_solver translates to v2 AgentConfig.import_path.
+# ABOUTME: Phase 6: spec.agent.kind: spacedock_solver translates to canonical AgentConfig.import_path.
 # ABOUTME: Verifies the import_path literal per harbor entry-point probe (AC-0.2).
 
 from pathlib import Path
@@ -69,7 +69,7 @@ def test_spacedock_solver_emits_import_path(
     assert agent_cfg.import_path == "razorback.agents.spacedock_solver:SpacedockSolverAgent"
     assert agent_cfg.model_name == "gpt-5.1-codex"
     # AC-6 cross-cut: per harbor source probe (AC-0.4), auth lands on AgentConfig.env,
-    # NOT kwargs. The FU-1 AC-1 invariant survives in v2.
+    # NOT kwargs. The FU-1 AC-1 invariant survives in the canonical route.
     assert "OPENAI_API_KEY" in agent_cfg.env
     assert "OPENAI_API_KEY" not in agent_cfg.kwargs
     assert agent_cfg.kwargs["runtime"] == "codex"
@@ -102,7 +102,7 @@ def test_spacedock_solver_uses_proxy_separated_environment(
     jc, _ = spec_to_job_config(
         spec,
         job_name="job-test",
-        jobs_dir=tmp_path / "_runs" / "pkg37-translate-v2-test",
+        jobs_dir=tmp_path / "_runs" / "pkg37-translate-test",
         project_root=tmp_path,
     )
 
@@ -120,7 +120,7 @@ def test_spacedock_solver_uses_proxy_separated_environment(
                 (
                     tmp_path
                     / "_runs"
-                    / "pkg37-translate-v2-test"
+                    / "pkg37-translate-test"
                     / "job-test"
                     / "_razorback"
                     / "freeze"

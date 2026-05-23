@@ -15,7 +15,7 @@ mod-block:
 
 ## Problem
 
-`spacedock_solver_v2` now resolves freeze trees through the global
+`spacedock_solver` now resolves freeze trees through the global
 `RAZORBACK_FREEZE_DIR` / XDG CAS so runs survive worktree teardown and can
 resume across worktrees. The translator still mounts `<run-dir>/_razorback/freeze`
 into the container as `/razorback-freeze`. Solver workflow docs tell agents to
@@ -27,10 +27,10 @@ container-visible checkpoint surface is empty or stale.
 ## Acceptance criteria
 
 **AC-1 — One freeze root contract.**
-For `spacedock_solver_v2`, the freeze directory that the solver writes is the
+For `spacedock_solver`, the freeze directory that the solver writes is the
 same tree exposed to the container as `/razorback-freeze`.
 Verified by: unit/integration test asserts `sealed_hash.txt` is visible at
-`/razorback-freeze/<sealed_hash>/sealed_hash.txt` for a v2 Harbor job.
+`/razorback-freeze/<sealed_hash>/sealed_hash.txt` for a canonical Harbor job.
 
 **AC-2 — Cross-worktree CAS survives.**
 The fix preserves the global CAS behavior: two worktrees with the same sealed

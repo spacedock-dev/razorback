@@ -12,7 +12,7 @@ from typer.testing import CliRunner
 from razorback.provenance.freeze_cmd import freeze_command
 
 
-# `rk spec freeze` is not yet wired into the v2 Typer surface (the legacy
+# `rk spec freeze` is not yet wired into the current Typer surface (the legacy
 # subcommand lives under _legacy/). For AC-5 we exercise the freeze_command
 # function directly through a minimal Typer app so the byte-identity assertions
 # still cover the real CLI body without depending on top-level command wiring.
@@ -23,7 +23,7 @@ runner = CliRunner()
 
 SPEC_TEXT = """\
 version: 1
-experiment: pkg8-v2-idempotency
+experiment: pkg8-idempotency
 agent:
   kind: claude-cli
   model: claude-opus-4-5

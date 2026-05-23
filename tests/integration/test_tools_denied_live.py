@@ -1,4 +1,4 @@
-# ABOUTME: PKG-9 v2 AC-3 — live runtime probe asserts PreToolUse denial event.
+# ABOUTME: PKG-9 AC-3 — live runtime probe asserts PreToolUse denial event.
 # ABOUTME: Cost-bearing; gated by RAZORBACK_RUN_TOOLS_DENIED_LIVE=1 + valid auth.
 
 from __future__ import annotations
@@ -89,7 +89,7 @@ def test_tools_denied_live_pip_install_datasets_is_blocked(tmp_path: Path):
     runs_root = tmp_path / "_runs"
     runs_root.mkdir()
 
-    # Freeze the fixture spec so rk run sees a v2 frozen spec (sealed_hash pinned).
+    # Freeze the fixture spec so rk run sees a spacedock_solver frozen spec (sealed_hash pinned).
     # The CLI surface for `rk spec freeze` is not wired; call the freeze_cmd
     # Typer command directly via typer.testing to materialize the frozen spec.
     frozen_path = tmp_path / "tools_denied_live.frozen.yaml"
@@ -125,7 +125,7 @@ def test_tools_denied_live_pip_install_datasets_is_blocked(tmp_path: Path):
         f"stdout={run.stdout}\nstderr={run.stderr}"
     )
 
-    experiment_dir = runs_root / "pkg9-v2-tools-denied-live"
+    experiment_dir = runs_root / "pkg9-tools-denied-live"
     run_dirs = [p for p in experiment_dir.iterdir() if p.is_dir()]
     assert len(run_dirs) == 1, run_dirs
     run_dir = run_dirs[0]
@@ -133,7 +133,7 @@ def test_tools_denied_live_pip_install_datasets_is_blocked(tmp_path: Path):
     # AC-3 evidence: at least one transcript record mentions a denial event
     # referencing `pip install datasets`. The harbor publisher's event stream
     # (events.jsonl, per spec §6.3 observer translation) is the canonical
-    # surface; until that lands in v2, scan harbor's session transcripts which
+    # surface; until that lands in the canonical route, scan harbor's session transcripts which
     # carry the same payload.
     denial_records = [
         (path, rec)

@@ -28,7 +28,7 @@ from razorback.provenance.resolvers import (
     resolve_prompt_hashes,
     resolve_solver_workflow_hash,
 )
-from razorback.spec.agent_kwargs import build_v2_harbor_agent_kwargs
+from razorback.spec.agent_kwargs import build_spacedock_harbor_agent_kwargs
 from razorback.spec.parse import parse_spec_file
 
 
@@ -68,7 +68,7 @@ def freeze_command(
     harbor_version = resolve_harbor_version()
     prompt_paths = _collect_prompt_paths(spec)
     prompt_hashes = resolve_prompt_hashes(prompt_paths)
-    # PKG-8 v2 (§3.2 + §8.2): plugin inventory + solver_workflow content hash.
+    # PKG-8 freeze provenance (§3.2 + §8.2): plugin inventory + solver_workflow content hash.
     plugin_inventory = resolve_plugin_inventory()
     plugins = plugin_inventory["plugins"] if plugin_inventory is not None else None
     sw_path = _solver_workflow_path(spec)
@@ -96,7 +96,7 @@ def freeze_command(
 
     frozen_path = out or spec_path.with_suffix(".frozen.yaml")
     frozen_body = spec.model_dump(mode="json")
-    _stamp_v2_sealed_fields(
+    _stamp_spacedock_solver_sealed_fields(
         frozen_body,
         solver_workflow_hash=solver_workflow_hash,
     )
@@ -150,7 +150,7 @@ def _agent_cli_bin(spec) -> str:
     return spec.agent.kind
 
 
-def _stamp_v2_sealed_fields(
+def _stamp_spacedock_solver_sealed_fields(
     frozen_body: dict[str, Any],
     *,
     solver_workflow_hash: str | None,
@@ -162,7 +162,7 @@ def _stamp_v2_sealed_fields(
         agent["solver_workflow_content_hash"] = solver_workflow_hash
     if agent.get("spacedock_skill_version") is None:
         agent["spacedock_skill_version"] = "1.0.0"
-    harbor_agent_kwargs = build_v2_harbor_agent_kwargs(
+    harbor_agent_kwargs = build_spacedock_harbor_agent_kwargs(
         max_turns=agent.get("max_turns"),
         tools_allowed=agent.get("tools_allowed"),
         tools_denied=agent.get("tools_denied"),

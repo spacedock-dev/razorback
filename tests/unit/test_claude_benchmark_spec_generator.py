@@ -1,5 +1,5 @@
 # ABOUTME: PKG-38 generator checks for Goal 1 Claude DAB matrix specs.
-# ABOUTME: Direct variants use claude-cli; spacedock variant uses solver v2.
+# ABOUTME: Direct variants use claude-cli; spacedock variant uses canonical solver.
 
 from __future__ import annotations
 

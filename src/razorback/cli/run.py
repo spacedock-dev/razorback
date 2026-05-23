@@ -1,4 +1,4 @@
-# ABOUTME: `rk run` Typer command (Phase 1 v2). Parse, pre-check, translate, delegate to harbor.
+# ABOUTME: `rk run` Typer command (Phase 1). Parse, pre-check, translate, delegate to harbor.
 # ABOUTME: Maps razorback typed errors to documented exit codes (§3.4).
 
 import os
@@ -182,7 +182,7 @@ def run_command(
         help="Previous run directory or result artifact used as wallclock ordering hint.",
     ),
 ) -> None:
-    """Execute a frozen spec against harbor and write the v2 run-dir artifacts."""
+    """Execute a frozen spec against harbor and write the run-dir artifacts."""
     try:
         spec = parse_spec_file(spec_path)
     except SpecError as exc:
@@ -220,7 +220,7 @@ def run_command(
             typer.echo(f"AliasDriftError: {exc}", err=True)
             raise typer.Exit(ExitCode.ALIAS_DRIFT)
 
-    # PKG-8 v2 AC-3 / AC-4: plugin-drift fires AFTER alias-drift so that when
+    # PKG-8 AC-3 / AC-4: plugin-drift fires AFTER alias-drift so that when
     # both inputs drift, alias-drift (exit 21) surfaces in the exit code.
     frozen_plugins = frozen_provenance.get("plugins")
     try:

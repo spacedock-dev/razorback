@@ -29,7 +29,7 @@ prompt at smoke/full, analyze prompt calls `rk score
 Phase 5 ships AFTER Phase 6 because Phase 6 promotes v2 to canonical
 `agent.kind: spacedock_solver`; Phase 5's templates reference the
 canonical name, so they must come after the rename or they dangle on
-`spacedock_solver_v2`. The end-to-end hypothesis smoke (AC-5.4) is
+`spacedock_solver`. The end-to-end hypothesis smoke (AC-5.4) is
 the strongest single demonstration of v2 razorback's integration
 shape working as a unit.
 

@@ -65,7 +65,7 @@ def patched_dataset_client(monkeypatch):
 
 def _parse_canonical_dataset_spec():
     payload = yaml.safe_load(CANONICAL_SPEC.read_text())
-    # The canonical spec uses spacedock_solver_v2 + solver_workflow that may not
+    # The canonical spec uses spacedock_solver + solver_workflow that may not
     # exist on every checkout; swap to nop-agent so the freeze smoke is hermetic.
     payload["agent"] = {"kind": "nop"}
     return payload

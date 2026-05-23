@@ -1,4 +1,4 @@
-# ABOUTME: AC-1 walking skeleton for v2: rk run examples/specs/_deterministic-smoke-v2.frozen.yaml.
+# ABOUTME: AC-1 walking skeleton for rk run examples/specs/_deterministic-smoke.frozen.yaml.
 # ABOUTME: Live-API gated; mechanism covered by the canonical freeze-dir test.
 
 import json
@@ -11,21 +11,21 @@ import pytest
 
 
 REPO = Path(__file__).resolve().parents[2]
-SPEC = REPO / "examples" / "specs" / "_deterministic-smoke-v2.frozen.yaml"
+SPEC = REPO / "examples" / "specs" / "_deterministic-smoke.frozen.yaml"
 
 
 @pytest.mark.skipif(
     not os.environ.get("RAZORBACK_RUN_DOCKER_TESTS"),
-    reason="v2 deterministic smoke requires RAZORBACK_RUN_DOCKER_TESTS=1",
+    reason="canonical deterministic smoke requires RAZORBACK_RUN_DOCKER_TESTS=1",
 )
 @pytest.mark.skipif(
     not (
         os.environ.get("ANTHROPIC_API_KEY")
         or os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
     ),
-    reason="v2 deterministic smoke requires ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN",
+    reason="canonical deterministic smoke requires ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN",
 )
-def test_v2_deterministic_smoke_runs_end_to_end(tmp_path: Path):
+def test_canonical_deterministic_smoke_runs_end_to_end(tmp_path: Path):
     """AC-1: canonical agent.kind: spacedock_solver exits 0
     and writes <cas-root>/<sealed_hash>/sealed_hash.txt (CAS lives outside the run-dir)."""
     runs_root = tmp_path / "_runs"
@@ -49,7 +49,7 @@ def test_v2_deterministic_smoke_runs_end_to_end(tmp_path: Path):
         f"stdout={result.stdout}\nstderr={result.stderr}"
     )
 
-    experiment_dir = runs_root / "_deterministic-smoke-v2"
+    experiment_dir = runs_root / "_deterministic-smoke"
     run_dirs = [p for p in experiment_dir.iterdir() if p.is_dir()]
     assert len(run_dirs) == 1, run_dirs
     run_dir = run_dirs[0]
@@ -71,5 +71,5 @@ def test_v2_deterministic_smoke_runs_end_to_end(tmp_path: Path):
         harbor_result = json.loads(result_path.read_text())
         stats = harbor_result.get("stats", {})
         assert stats.get("n_errored_trials", 0) == 0, (
-            f"v2 smoke reported {stats.get('n_errored_trials')} errored trials"
+            f"canonical smoke reported {stats.get('n_errored_trials')} errored trials"
         )

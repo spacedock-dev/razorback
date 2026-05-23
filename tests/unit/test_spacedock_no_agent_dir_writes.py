@@ -40,7 +40,7 @@ def test_no_agent_dir_writes_in_razorback_agents():
 
 
 def test_freeze_cas_is_the_only_razorback_checkpoint_surface_name():
-    """Positive twin: v2 references the sealed-hash freeze CAS."""
+    """Positive twin: spacedock_solver references the sealed-hash freeze CAS."""
     result = subprocess.run(
         ["grep", "-rln", "resolve_freeze_dir", str(REPO / "src" / "razorback" / "agents")],
         capture_output=True, text=True,

@@ -1,4 +1,4 @@
-# Tools-denied live-probe solver workflow (PKG-9 v2 AC-3)
+# Tools-denied live-probe solver workflow (PKG-9 AC-3)
 
 Minimal solver_workflow used by the AC-3 integration test. The agent
 is instructed to attempt `pip install datasets` on its first action.

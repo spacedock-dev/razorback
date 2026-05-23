@@ -31,7 +31,7 @@ The matrix covers exactly the 12 catalog datasets from
 DEPS_DEV_V1, GITHUB_REPOS, googlelocal, music_brainz_20k,
 PANCANCER_ATLAS, PATENTS, stockindex, stockmarket, and yelp.
 Verified by: matrix dry-run prints 12 cells and each cell's spec
-uses `agent.kind: spacedock_solver_v2`, `runtime: codex`, and
+uses `agent.kind: spacedock_solver`, `runtime: codex`, and
 `trials: 1`.
 
 **AC-2 — Runs complete or classify infrastructure failures.**

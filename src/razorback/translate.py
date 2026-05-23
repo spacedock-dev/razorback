@@ -16,14 +16,14 @@ from harbor.models.trial.config import (
 from razorback.agents.auth import resolve_claude_auth, resolve_codex_auth
 from razorback.agents.proxy import PROXY_BLOCK_ENV
 from razorback.errors import SpecError
-from razorback.spec.agent_kwargs import build_v2_harbor_agent_kwargs
+from razorback.spec.agent_kwargs import build_spacedock_harbor_agent_kwargs
 from razorback.spec.schema import (
     AdeBenchBenchmarkBlock,
     HarborDabBenchmarkBlock,
     LocalBenchmarkBlock,
     NopAgentBlock,
     Spider2DbtBenchmarkBlock,
-    SpacedockSolverV2AgentBlock,
+    SpacedockSolverAgentBlock,
     Spec,
 )
 
@@ -108,7 +108,7 @@ def _build_agent_config(
     if isinstance(spec.agent, NopAgentBlock):
         return AgentConfig(name=AgentName.NOP.value), {}
 
-    if isinstance(spec.agent, SpacedockSolverV2AgentBlock):
+    if isinstance(spec.agent, SpacedockSolverAgentBlock):
         if project_root is None:
             raise SpecError(
                 "spacedock_solver requires project_root for .env auth discovery."
@@ -121,7 +121,7 @@ def _build_agent_config(
             resolution = resolve_codex_auth(project_root=project_root, home=home)
         else:
             resolution = resolve_claude_auth(project_root=project_root, home=home)
-        harbor_agent_kwargs = build_v2_harbor_agent_kwargs(
+        harbor_agent_kwargs = build_spacedock_harbor_agent_kwargs(
             max_turns=spec.agent.max_turns,
             tools_allowed=spec.agent.tools_allowed,
             tools_denied=spec.agent.tools_denied,

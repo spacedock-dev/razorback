@@ -1,4 +1,4 @@
-# ABOUTME: AC-2 + AC-4, SpacedockSolverAgent v2 class: sealed_hash, refusal, KEEP-VERBATIM extractions.
+# ABOUTME: AC-2 + AC-4, SpacedockSolverAgent class: sealed_hash, refusal, KEEP-VERBATIM extractions.
 # ABOUTME: Per spec §4.3 + §8.4. Constructs with valid kwargs; refuses on resume mismatch (exit 20).
 
 from pathlib import Path
@@ -51,7 +51,7 @@ def test_constructor_validates_and_computes_sealed_hash(tmp_path):
     assert agent.sealed_hash == expected
 
 
-def test_known_v2_sealed_hash_value_is_stable(tmp_path):
+def test_known_canonical_sealed_hash_value_is_stable(tmp_path):
     kw = _valid_kwargs(tmp_path)
 
     sealed_hash = compute_sealed_hash(

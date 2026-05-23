@@ -1,4 +1,4 @@
-# ABOUTME: Shared spec-to-Harbor agent kwarg builders for sealed v2 inputs.
+# ABOUTME: Shared spec-to-Harbor agent kwarg builders for sealed spacedock_solver inputs.
 # ABOUTME: Keeps freeze-time sealed hashes aligned with runtime translation kwargs.
 
 from __future__ import annotations
@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import Any
 
 
-def build_v2_harbor_agent_kwargs(
+def build_spacedock_harbor_agent_kwargs(
     *,
     max_turns: int | None,
     tools_allowed: list[str] | None,

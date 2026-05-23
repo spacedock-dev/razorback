@@ -30,30 +30,30 @@ def compute_sealed_hash(
     batch_mode: str | None = None,
     child_task_ids_hash: str | None = None,
 ) -> str:
-    """Compute the sealed_hash from the v1 four-input or v2 six-input shape.
+    """Compute the sealed_hash from the legacy four-input or canonical six-input shape.
 
     Deterministic over a canonical JSON encoding (keys sorted at every level,
     null seed pinned not dropped). Returns the first 32 hex chars of sha256.
 
-    v1 payload (stages + prompt_hashes) keeps the v1 SpacedockSolverAgent
-    routing intact (AC-8); v2 payload (solver_workflow_content_hash +
+    Legacy payload (stages + prompt_hashes) keeps the old SpacedockSolverAgent
+    routing intact (AC-8); canonical payload (solver_workflow_content_hash +
     prompt_content_hashes + spacedock_skill_version + harbor_agent_kwargs)
-    is the v2 contract from spec §4.3.5 + §8.4.
+    is the current contract from spec §4.3.5 + §8.4.
     """
-    v1_shape = stages is not None or prompt_hashes is not None
-    v2_shape = (
+    legacy_shape = stages is not None or prompt_hashes is not None
+    canonical_shape = (
         solver_workflow_content_hash is not None
         or prompt_content_hashes is not None
         or spacedock_skill_version is not None
         or harbor_agent_kwargs is not None
     )
-    if v1_shape and v2_shape:
+    if legacy_shape and canonical_shape:
         raise TypeError(
-            "compute_sealed_hash: v1 (stages/prompt_hashes) and v2 "
+            "compute_sealed_hash: legacy (stages/prompt_hashes) and canonical "
             "(solver_workflow_content_hash/prompt_content_hashes/"
             "spacedock_skill_version/harbor_agent_kwargs) inputs are exclusive."
         )
-    if v2_shape:
+    if canonical_shape:
         payload = {
             "model": model,
             "sampling": _canonicalize_sampling(sampling),

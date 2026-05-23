@@ -40,7 +40,7 @@ def _common_kwargs(workflow: Path) -> dict:
 
 
 def test_codex_runtime_dispatch_constructs_inner_agent(tmp_path):
-    """PKG-26: runtime=codex dispatches through the v2 adapter to Harbor Codex."""
+    """PKG-26: runtime=codex dispatches through the canonical adapter to Harbor Codex."""
     logs_dir = _make_harbor_run_dir(tmp_path, "codex-smoke__abc1234")
     workflow = tmp_path / "solver"
     workflow.mkdir()
@@ -131,7 +131,7 @@ async def test_harbor_jobs_resume_round_trip_with_new_trial_name(
 
 
 def test_translator_emits_spacedock_solver_import_path(tmp_path):
-    """AC-7: spec.agent.kind: spacedock_solver -> import_path of v2 class."""
+    """AC-7: spec.agent.kind: spacedock_solver -> import_path of canonical class."""
     workflow = tmp_path / "solver"
     workflow.mkdir()
     (workflow / "README.md").write_text("## Stages\n- model\n")
@@ -178,8 +178,8 @@ trials: 1
     assert "ANTHROPIC_API_KEY" in (agent_cfg.env or {})
 
 
-def test_translator_mounts_v2_freeze_root_into_container(tmp_path):
-    """PKG-29: v2 external freeze root is mounted for in-container git commands."""
+def test_translator_mounts_canonical_freeze_root_into_container(tmp_path):
+    """PKG-29: canonical external freeze root is mounted for in-container git commands."""
     workflow = tmp_path / "solver"
     workflow.mkdir()
     (workflow / "README.md").write_text("## Stages\n- model\n")
@@ -312,7 +312,7 @@ def test_freeze_dir_discovers_benchmark_task_identity_from_view_manifest(tmp_pat
     assert with_identity.resolve_freeze_dir() != without_identity.resolve_freeze_dir()
 
 
-def test_translator_includes_codex_reasoning_kwargs_for_v2_agent(tmp_path):
+def test_translator_includes_codex_reasoning_kwargs_for_canonical_agent(tmp_path):
     workflow = tmp_path / "solver"
     workflow.mkdir()
     (workflow / "README.md").write_text("## Stages\n- model\n")

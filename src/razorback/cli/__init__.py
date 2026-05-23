@@ -1,5 +1,5 @@
 # ABOUTME: Typer application root for the `rk` binary.
-# ABOUTME: Subcommands attach here; v2 wires up `rk run` only at Phase 1.
+# ABOUTME: Subcommands attach here; initially wires up `rk run` only at Phase 1.
 
 import typer
 

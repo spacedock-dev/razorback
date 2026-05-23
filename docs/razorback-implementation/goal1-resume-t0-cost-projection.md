@@ -47,7 +47,7 @@ for `agent.kind=claude-cli` (the matrix's chosen agent kind):
 - `src/razorback/runs/aggregate.py:133-149` (`_trial_cost`) reads
   `step_results[*].agent_result.cost_usd`. The claude-cli agent
   (`src/razorback/agents/claude_cli.py`, 118 lines, no `cost_usd` write site)
-  never populates this. Only `spacedock_solver` / `spacedock_solver_v2`
+  never populates this. Only `spacedock_solver`
   surface per-stage `cost_usd`, and those are different agent kinds.
 - The auth resolution at `src/razorback/agents/auth.py:23-67` successfully
   loaded ANTHROPIC_API_KEY from `.env` (mode=`api-key`, verified by the trial
@@ -80,7 +80,7 @@ B. **Patch `claude_cli.py` to emit `cost_usd`.** Out of scope per the entity
    §Out of scope ("no new code surfaces; no new ACs beyond the ordering and
    budget changes"). Would be a PKG-style entity.
 
-C. **Switch the matrix variant agent_kind to spacedock_solver_v2 for
+C. **Switch the matrix variant agent_kind to spacedock_solver for
    spacedock**, accepting that direct-minimal/direct-structured stay on
    claude-cli with no cost data. Mixed-shape result doc.
 
