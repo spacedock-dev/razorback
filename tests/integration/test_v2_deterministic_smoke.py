@@ -27,11 +27,12 @@ SPEC = REPO / "examples" / "specs" / "_deterministic-smoke-v2.frozen.yaml"
 )
 def test_v2_deterministic_smoke_runs_end_to_end(tmp_path: Path):
     """AC-1: agent.kind: spacedock_solver_v2 against in-tree DAB adapter exits 0
-    and writes <run-dir>/_razorback/freeze/<sealed_hash>/sealed_hash.txt."""
+    and writes <cas-root>/<sealed_hash>/sealed_hash.txt (CAS lives outside the run-dir)."""
     runs_root = tmp_path / "_runs"
     runs_root.mkdir()
+    cas_root = tmp_path / "freeze-cas"
 
-    env = {**os.environ}
+    env = {**os.environ, "RAZORBACK_FREEZE_DIR": str(cas_root)}
     result = subprocess.run(
         [
             sys.executable, "-m", "razorback.cli", "run",
@@ -53,13 +54,13 @@ def test_v2_deterministic_smoke_runs_end_to_end(tmp_path: Path):
     assert len(run_dirs) == 1, run_dirs
     run_dir = run_dirs[0]
 
-    # AC-5 mechanism: sealed_hash.txt at <run-dir>/_razorback/freeze/<sealed_hash>/.
+    # AC-1 mechanism: sealed_hash.txt at <cas-root>/<sealed_hash>/.
     sealed_hash = "afc50cb618884495c9063958f532b9a1"
-    freeze_dir = run_dir / "_razorback" / "freeze" / sealed_hash
+    freeze_dir = cas_root / sealed_hash
     sealed_file = freeze_dir / "sealed_hash.txt"
     assert sealed_file.exists(), (
         f"freeze tree missing at {freeze_dir}; "
-        f"run_dir contents: {list(run_dir.iterdir())}"
+        f"cas_root contents: {list(cas_root.iterdir()) if cas_root.exists() else 'missing'}"
     )
     assert sealed_file.read_text().strip() == sealed_hash
 
