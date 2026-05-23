@@ -328,3 +328,26 @@ Evidence for cycle-3 reviewer:
 - agent claude argv carries `--plugin-dir /tmp/razorback-plugins/spacedock --agent spacedock:first-officer` (from `job.log`)
 
 Cycle count: 2 of 3.
+
+## Stage Report: implementation (cycle 3)
+
+- DONE: Move the manifest-write call from `populate_context_post_run()` into `SpacedockSolverAgent.run()` after `await self._inner.run(...)` and `_commit_stage(..., CHECKPOINT_RUN_AFTER_AGENT)`. Keep `cleanup()` + `populate_context_post_run()` as pure inner-agent delegates; document the dead-code observation in code comments.
+  `src/razorback/agents/spacedock_solver.py:422-441` (run gate to runtime=claude after freeze-tree commit), `:442-448` (cleanup comment), `:462-475` (populate_context_post_run comment + harbor cite). Commit `cycle3(ne): write subagent-trace-manifest from run() post-inner-call`.
+- DONE: Update integration test to exercise the same lifecycle hook harbor invokes.
+  `tests/integration/test_spacedock_cleanup_writes_trace_manifest.py` rewritten: `_FakeInnerAgent` stub writes a synthetic claude-code.txt during its `run()` call; test then asserts `await agent.run(...)` produces the manifest. Both tests pass (2/2); all 22 owned tests still green.
+- DONE: Re-run the live bookreview pilot. AC-2 MUST pass: `subagent-trace-manifest.json` next to the trial's `provenance.yaml` with `captured >= 1`.
+  First cycle-3 pilot wrote the manifest but at the wrong path — the prior `logs_dir.parents[3]` calculation assumed the post-relocation layout `<cell-run-dir>/<trial>/steps/main/agent/`, but harbor's trial runner only relocates content into `steps/<step>/agent/` AFTER our `run()` hook returns (harbor/trial/trial.py:673). During `run()`, `self.logs_dir` is `<trials-job-dir>/<trial>/agent/`, so the trials-job dir is `logs_dir.parents[1]`, not `parents[3]`. Fix committed as `cycle3(ne): fix manifest cell-run-dir to parents[1]`. Second pilot (`spacedock-fo-cycle3b`) GREEN end-to-end: manifest at `…/703817880c73e047/subagent-trace-manifest.json` with `captured: 3` (three `spacedock:ensign` dispatches); `jq -e '.captured >= 1 and (.dispatches | length) == .captured'` returns true; matrix dispatcher reports `ok=1 failed=0`; no `manifest-missing` in `subagent-smoke.log`.
+
+### BaseAgent lifecycle finding
+
+Harbor's `_maybe_populate_agent_context` (`harbor/trial/trial.py:466-471`) gates `populate_context_post_run` on `isinstance(self._agent, BaseInstalledAgent)`. `SpacedockSolverAgent` extends `BaseAgent` directly, so neither `cleanup()` nor `populate_context_post_run()` is invoked by the trial runner on the outer agent — both are dead code for this agent's lifecycle.
+
+The only outer-agent hooks harbor fires for plain `BaseAgent` subclasses are `setup` and `run`. The AC-2 manifest write therefore lives at the end of `run()`, after the inner agent returns and after the existing freeze-tree commit, gated to `runtime == "claude"` per the established pattern. Both `cleanup()` and `populate_context_post_run()` carry inline comments naming the harbor gate so future maintainers don't re-introduce the dead-code mistake.
+
+There is also a relocation-timing wrinkle: harbor's trial runner relocates `<trial>/agent/` into `<trial>/steps/<step>/agent/` AFTER our `run()` returns (`harbor/trial/trial.py:673`). During the hook window, `self.logs_dir` is the pre-relocation path `<trials-job-dir>/<trial>/agent/`, so the trials-job dir (where `provenance.yaml` lives and where the matrix dispatcher's smoke validator expects the manifest) is `logs_dir.parents[1]` — NOT `parents[3]` as the cycle-2 code assumed.
+
+Follow-up investigation `m2 spacedock-solver-base-installed-agent-feasibility` (filed by FO) may relocate the AC-2 hook once `SpacedockSolverAgent` graduates to `BaseInstalledAgent`, which would re-enable the standard post-run hook surface.
+
+### Summary
+
+Cycle-3 lands AC-2 on the live bookreview pilot end-to-end. The manifest write moved into `run()` itself (after the inner agent returns and the freeze-tree commit, gated to `runtime == "claude"`); `cleanup()` and `populate_context_post_run()` are now pure inner-agent delegates documenting the harbor `BaseInstalledAgent` gate at `trial.py:466-471` so future maintainers don't re-attach side effects to those dead hooks. A second pilot was needed to catch a relocation-timing bug: the prior `parents[3]` cell-run-dir calculation assumed the post-relocation layout, but harbor only relocates into `steps/<step>/agent/` AFTER our hook returns — the correct hook-window path is `parents[1]`. Final pilot `spacedock-fo-cycle3b` GREEN: `captured: 3`, manifest at `…/703817880c73e047/subagent-trace-manifest.json`, matrix dispatcher reports `ok=1 failed=0`, smoke log clean. 22 owned tests green; integration test fixture updated to mirror the pre-relocation layout that harbor actually exposes during `run()`.
