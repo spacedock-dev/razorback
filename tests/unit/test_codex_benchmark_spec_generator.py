@@ -440,7 +440,7 @@ def test_emit_ade_bench_dataset_codex_spec_uses_dataset_field(tmp_path: Path) ->
     )
     payload = yaml.safe_load(spec_path.read_text())
 
-    assert payload["agent"]["kind"] == "spacedock_solver_v2"
+    assert payload["agent"]["kind"] == "spacedock_solver"
     assert payload["agent"]["runtime"] == "codex"
     assert payload["benchmark"]["kind"] == "ade-bench"
     assert payload["benchmark"]["dataset"] == "dbt-labs/ade-bench@latest"
