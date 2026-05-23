@@ -244,3 +244,138 @@ one line. Estimated effort to ship the rejection feedback: under 30 minutes.
 
 After those changes, re-run the 93-bundle + the 4 tri-acceptance tests and
 the full unit suite to confirm no regressions.
+
+## Cycle 2 re-validation
+
+**Range reviewed:** `bf32ae1..HEAD` (cycle-2 commits: `1cd97e7`, `f18618f`, `fef3dfc`)
+**Validator runs:** clean HEAD of the worktree at `fef3dfc`. No stashing required this cycle — the implementation worker committed all 5 fixes.
+
+### Cycle-1 fix → cycle-2 landing (per-fix citation)
+
+1. **Fix 1 — `PackageReference.parse` round-trip in `spec/schema.py`.** LANDED at
+   commit `1cd97e7`, `src/razorback/spec/schema.py:230-255`. The regex
+   `_ADE_BENCH_DATASET_REF_RE` is deleted; `_validate_source_selection` now
+   calls `PackageReference.parse(self.dataset)` and requires `parsed.org`,
+   `parsed.short_name`, `parsed.ref` non-empty. Bare-name guard (no `/` or no
+   `@`) precedes the parser to preserve the original error wording.
+   Error message preserves both clauses: `<org>/<name>@<ref>` rule AND
+   `dbt-labs/ade-bench@latest` canonical example.
+
+2. **Fix 2 — same swap in `dataset_ref.py:parse_dataset_ref`.** LANDED at
+   commit `1cd97e7`,
+   `src/razorback/benchmarks/ade_bench/dataset_ref.py:40-75`. `_REF_RE` is
+   deleted; `parse_dataset_ref` returns
+   `(parsed.org, parsed.short_name, parsed.ref)` after the same belt-and-
+   suspenders guard. `import re` removed; `from harbor.models.package.reference
+   import PackageReference` added at module top.
+
+3. **Fix 3 — canonical example uses `@sha256:` digest pin.** LANDED at commit
+   `f18618f`, `examples/specs/ade-bench-harbor-dataset-codex.yaml:20`:
+   `dataset: dbt-labs/ade-bench@sha256:2c1f9e6966d01b0a5de2235d1a0b64089c7eead42c85c3b7b61d0929405c2bd5`.
+   ABOUTME header (lines 1-2) reframed to "paper-grade digest pin" with note
+   that `view_manifest.json`'s `dataset_content_hash + task_content_hash`
+   codify the same hash for freeze provenance.
+
+4. **Fix 4 — probe note leads with the digest tier.** LANDED at commit
+   `f18618f`,
+   `docs/razorback-implementation/notes/ade-bench-harbor-dataset-ref-probe.md:88-94`.
+   "Closing status" paragraph now reads "The canonical example shipped in
+   `examples/specs/...` is the digest tier `dbt-labs/ade-bench@sha256:2c1f9e69...`
+   (paper-grade pin...). `@latest` remains a valid ref form for daily smoke
+   runs but is documentation-only."
+
+5. **Fix 5 — 4 tri-acceptance tests landed.** LANDED at commit `1cd97e7`,
+   `tests/unit/test_ade_bench_dataset_ref_schema.py`:
+   - `test_schema_accepts_tag_ref` (line 108)
+   - `test_schema_accepts_revision_ref` (line 117)
+   - `test_schema_accepts_digest_ref_canonical_pin` (line 126)
+   - `test_schema_validation_uses_harbor_package_reference_parser` (line 144)
+
+   The downstream assertions that referenced the old `@latest` canonical
+   shape (`test_canonical_dataset_ref_spec_is_checked_in`,
+   `test_canonical_dataset_ref_spec_translates_with_pinned_hashes`,
+   `test_freeze_command_writes_provenance_for_dataset_ref_spec`,
+   `test_cli_dataset_ref_emits_canonical_ade_spec`) were updated in commit
+   `f18618f` to match the new digest pin.
+
+### Test runs (independent, on clean HEAD at `fef3dfc`)
+
+- `uv run --frozen pytest tests/unit/test_ade_bench_dataset_ref_schema.py` →
+  **12 passed in 0.09s. Exit 0.**
+- Focused 17-file bundle (cycle-1's 93 + 4 new schema tests = 97):
+  `uv run --frozen pytest <17 files>` → **97 passed in 1.59s. Exit 0.**
+- Full unit suite minus pre-existing failure:
+  `uv run --frozen pytest tests/unit/ -q --ignore=tests/unit/test_task_identity_scoring.py`
+  → **563 passed, 16 warnings in 9.05s. Exit 0.**
+
+### AC-1 tri-acceptance direct verification
+
+`uv run python -c "..."` against the committed schema:
+
+- `dbt-labs/ade-bench@latest` → accepted, dataset round-trips to itself.
+- `dbt-labs/ade-bench@1` → accepted, dataset round-trips to itself.
+- `dbt-labs/ade-bench@sha256:2c1f9e6966d01b0a5de2235d1a0b64089c7eead42c85c3b7b61d0929405c2bd5`
+  → accepted, dataset round-trips to itself.
+- Bare-name `ade-bench@1.0` → rejected with error containing BOTH
+  `<org>/<name>@<ref>` (rule) AND `dbt-labs/ade-bench@latest` (canonical
+  example). AC-1 guardrail intact.
+
+### AC-2..AC-5 re-verification (briefly)
+
+AC-2/AC-3/AC-4/AC-5 PASSed at cycle 1 and the cycle-2 diff
+(`git diff bf32ae1..HEAD --name-only`) shows the only non-test, non-docs,
+non-examples files touched are `src/razorback/spec/schema.py` and
+`src/razorback/benchmarks/ade_bench/dataset_ref.py` — both AC-1 surfaces.
+AC-2 (manifest schema v2, translator hash passthrough), AC-3 (translator
+guardrail), AC-4 (`rg "tasks_root: .*ade"` returns only 3 fixture paths under
+`./tests/fixtures/`), and AC-5 (in-test `git submodule status` assertion +
+live empty) all remain PASS — confirmed live: `rg` matches the cycle-1
+finding and `git submodule status` returns empty.
+
+### Code review (cycle-2 diff `bf32ae1..HEAD`)
+
+**Strengths**
+
+- Mechanical, minimal swap; no call-shape changes downstream of the validator
+  surface.
+- Belt-and-suspenders ordering (cheap string check → parser → parsed-fields
+  check) is correct: `PackageReference.parse` is permissive about bare names,
+  so the explicit `/` + `@` precheck is the AC-1 guardrail's enforcement
+  point.
+- Error messages preserve both AC-1 guardrail clauses (rule + canonical
+  example) across all four raise sites (two each in schema.py and
+  dataset_ref.py).
+- Test additions are tight (58 LOC for 4 tests); one is a parser-delegation
+  behavioral test (`test_schema_validation_uses_harbor_package_reference_parser`)
+  which is the right kind of contract test for "the regex was the wrong
+  validator".
+- Canonical example digest is a real 32-byte sha256 consistent with the
+  probe-note evidence.
+
+**Issues (Non-blocking)**
+
+- Import-site inconsistency: `PackageReference` is imported lazily inside the
+  validator function in `schema.py` (presumably to keep module import cost
+  low for non-ADE specs) but eagerly at module top in `dataset_ref.py`.
+  Minor; either pattern is defensible.
+- The belt-and-suspenders block is duplicated across the two files (~15 lines
+  of near-identical guard logic). The cycle-1 reviewer flagged this as a
+  future-factoring concern ("free-form `@<ref>` regex" recurring shape).
+  Acceptable to leave for a follow-up entity since only two call sites exist.
+
+**No blocking issues.** All 5 cycle-1 fixes landed with correct content.
+
+### Gate decision
+
+**APPROVE → done.**
+
+Cycle-2 closes the AC-1 PARTIAL FAIL cleanly. The schema accepts all three
+Harbor ref tiers via `PackageReference.parse` round-trip; the canonical
+example demonstrates the paper-grade digest pin; the bare-name guardrail is
+preserved. 97/97 focused tests + 563/563 full unit suite pass on a clean
+HEAD with no in-flight uncommitted work. AC-2..AC-5 are unchanged from their
+cycle-1 PASS verdict (no relevant source touched in cycle 2).
+
+The two non-blocking issues (lazy-vs-eager import inconsistency; duplicated
+belt-and-suspenders block) are stylistic and do not block the entity from
+reaching `done`.
