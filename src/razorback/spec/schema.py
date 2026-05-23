@@ -339,12 +339,100 @@ class Spider2DbtBenchmarkBlock(BaseModel):
     batch_mode: Literal["per-task", "shared-context"] = "per-task"
 
 
+_HARBOR_DATASET_REF_SHAPE = "<org>/<name>@<ref>"
+_HARBOR_DATASET_REF_EXAMPLE = "adyen/dabstep@latest"
+
+
+class HarborBenchmarkBlock(BaseModel):
+    """Generic Harbor-resolved benchmark block.
+
+    Any harbor-published dataset is addressable through this single block:
+    `dataset:` resolves via `harbor.registry.client.PackageDatasetClient`;
+    optional `tasks` / `exclude_tasks` / `n_tasks` selectors apply spec-side
+    with the same semantics as harbor's `-i` / `-x` / `-l` flags. The
+    `tasks_root:` escape hatch points at a local Harbor-shaped directory
+    (same task layout the resolver emits) for dev/fixture use.
+
+    Source selection is exclusive: exactly one of `dataset` or `tasks_root`.
+    Spec-side `tasks:` entries match `PackageTaskId.name` verbatim — no
+    per-dataset prefix stripping (which would not generalize: dabstep names
+    are bare integers, swe-bench-verified are project-prefixed, ade-bench
+    are dataset-prefixed).
+
+    Per-dataset razorback-side prep (currently only DAB, via the
+    `razorback-plugin-dab generate` subprocess) keeps its own
+    `kind: harbor_dab` block; this generic block covers the pure
+    pass-through case (dabstep, swe-bench-verified, terminal-bench-2,
+    lawbench, replicationbench, medagentbench, swe-bench-pro, ...).
+    """
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["harbor"]
+    dataset: str | None = None
+    tasks_root: Path | None = None
+    tasks: list[str] | None = None
+    exclude_tasks: list[str] | None = None
+    n_tasks: int | None = None
+
+    @field_validator("tasks_root", mode="before")
+    @classmethod
+    def _expand_tasks_root(cls, value: object) -> object:
+        if value is None:
+            return None
+        return _expand_path(value)
+
+    @model_validator(mode="after")
+    def _validate_source_and_ref(self) -> "HarborBenchmarkBlock":
+        if self.dataset is not None and self.tasks_root is not None:
+            raise ValueError(
+                "exactly one of `dataset` (Harbor dataset ref) or `tasks_root` "
+                "(local Harbor-shaped task directory) may be set; both were provided"
+            )
+        if self.dataset is None and self.tasks_root is None:
+            raise ValueError(
+                "harbor benchmark requires exactly one of `dataset` "
+                f"(Harbor dataset ref, e.g. {_HARBOR_DATASET_REF_EXAMPLE!r}) "
+                "or `tasks_root` (local Harbor-shaped task directory); "
+                "neither was provided"
+            )
+        if self.dataset is not None:
+            from harbor.models.package.reference import PackageReference
+
+            try:
+                parsed = PackageReference.parse(self.dataset)
+            except Exception as exc:
+                raise ValueError(
+                    f"invalid Harbor dataset ref {self.dataset!r}: "
+                    f"required shape is {_HARBOR_DATASET_REF_SHAPE} "
+                    f"(e.g. {_HARBOR_DATASET_REF_EXAMPLE!r}); "
+                    f"Harbor parser rejected it: {exc}"
+                ) from exc
+            if "/" not in self.dataset or "@" not in self.dataset:
+                raise ValueError(
+                    f"invalid Harbor dataset ref {self.dataset!r}: "
+                    f"required shape is {_HARBOR_DATASET_REF_SHAPE} "
+                    f"(e.g. {_HARBOR_DATASET_REF_EXAMPLE!r})"
+                )
+            if not parsed.org or not parsed.short_name or not parsed.ref:
+                raise ValueError(
+                    f"invalid Harbor dataset ref {self.dataset!r}: "
+                    f"required shape is {_HARBOR_DATASET_REF_SHAPE} "
+                    f"(e.g. {_HARBOR_DATASET_REF_EXAMPLE!r})"
+                )
+        if self.tasks_root is not None and not self.tasks:
+            raise ValueError(
+                "`tasks_root` (local task directory) requires a non-empty "
+                "`tasks` list naming task subdirectories"
+            )
+        return self
+
+
 BenchmarkBlock = Annotated[
     Union[
         LocalBenchmarkBlock,
         HarborDabBenchmarkBlock,
         AdeBenchBenchmarkBlock,
         Spider2DbtBenchmarkBlock,
+        HarborBenchmarkBlock,
     ],
     Field(discriminator="kind"),
 ]
