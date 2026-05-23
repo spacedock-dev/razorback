@@ -73,7 +73,7 @@ def test_emit_dab_codex_spec_uses_solver_v2_codex_and_harbor_dab(tmp_path: Path)
     spec_path = generator.emit_dab_spec(row, out_dir=tmp_path / "out")
     payload = yaml.safe_load(spec_path.read_text())
 
-    assert payload["agent"]["kind"] == "spacedock_solver_v2"
+    assert payload["agent"]["kind"] == "spacedock_solver"
     assert payload["agent"]["runtime"] == "codex"
     assert payload["agent"]["model"] == "gpt-5.5"
     assert payload["agent"]["solver_workflow"] == "./examples/solver_workflows/codex-benchmark-solver"
@@ -336,7 +336,7 @@ def test_emit_ade_bench_codex_spec_never_uses_local_task_entry(tmp_path: Path) -
     spec_path = generator.emit_ade_bench_spec(row, out_dir=tmp_path / "out")
     payload = yaml.safe_load(spec_path.read_text())
 
-    assert payload["agent"]["kind"] == "spacedock_solver_v2"
+    assert payload["agent"]["kind"] == "spacedock_solver"
     assert payload["agent"]["runtime"] == "codex"
     assert payload["agent"]["model"] == "gpt-5.5"
     assert payload["benchmark"]["kind"] == "ade-bench"

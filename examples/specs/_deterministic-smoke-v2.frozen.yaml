@@ -1,9 +1,9 @@
 # ABOUTME: Phase 3 v2 deterministic-smoke micro-spec, walking-skeleton anchor for AC-1.
-# ABOUTME: agent.kind: spacedock_solver_v2 against the in-tree DAB adapter. Real-API gated.
+# ABOUTME: agent.kind: spacedock_solver against the in-tree DAB adapter. Real-API gated.
 version: 1
 experiment: _deterministic-smoke-v2
 agent:
-  kind: spacedock_solver_v2
+  kind: spacedock_solver
   runtime: claude
   model: claude-opus-4-5
   sampling:
@@ -20,7 +20,7 @@ agent:
   tools_allowed: [Bash, Read, Write, Edit, Glob, Grep]
   tools_denied: []
 benchmark:
-  kind: dab
+  kind: harbor_dab
   data_root: "${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}"
   datasets:
     - bookreview

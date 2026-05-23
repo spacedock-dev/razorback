@@ -25,7 +25,7 @@ def _spec_with(agent_extra: dict[str, Any]) -> str:
         "version": 1,
         "experiment": "pkg9-v2-parse-test",
         "agent": {
-            "kind": "spacedock_solver_v2",
+            "kind": "spacedock_solver",
             "runtime": "claude",
             "model": "claude-opus-4-5",
             "solver_workflow": ".",

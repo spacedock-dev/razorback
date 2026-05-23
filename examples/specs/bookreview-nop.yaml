@@ -3,7 +3,7 @@ experiment: m2-bookreview-nop
 agent:
   kind: nop
 benchmark:
-  kind: dab
+  kind: harbor_dab
   data_root: "${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}"
   datasets:
     - bookreview

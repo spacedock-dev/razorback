@@ -21,7 +21,10 @@ def runs_root(colima_safe_tmp_path):
     return colima_safe_tmp_path / "_runs"
 
 
-@pytest.mark.skipif(not DAB_DATA.exists(), reason="DAB bookreview dataset not present")
+@pytest.mark.skipif(
+    not os.environ.get("RAZORBACK_RUN_DOCKER_TESTS") or not DAB_DATA.exists(),
+    reason="DAB bookreview Docker smoke requires RAZORBACK_RUN_DOCKER_TESTS=1 and data",
+)
 def test_rk_run_bookreview_nop_writes_stratified_summary(runs_root):
     env = {**os.environ}
     result = subprocess.run(
@@ -54,7 +57,10 @@ def test_rk_run_bookreview_nop_writes_stratified_summary(runs_root):
         assert q["pass_at_1"] == 0.0
 
 
-@pytest.mark.skipif(not DAB_DATA.exists(), reason="DAB bookreview dataset not present")
+@pytest.mark.skipif(
+    not os.environ.get("RAZORBACK_RUN_DOCKER_TESTS") or not DAB_DATA.exists(),
+    reason="DAB bookreview Docker smoke requires RAZORBACK_RUN_DOCKER_TESTS=1 and data",
+)
 def test_rk_run_bookreview_nop_preserves_run_dir_layout(runs_root):
     env = {**os.environ}
     result = subprocess.run(

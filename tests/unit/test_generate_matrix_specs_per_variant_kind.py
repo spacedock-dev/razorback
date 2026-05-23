@@ -1,5 +1,5 @@
 # ABOUTME: PKG-26 AC-3 — generate-dab-paper-matrix-specs.py emits per-variant agent.kind:
-# ABOUTME: spacedock → spacedock_solver_v2 (runtime: claude); direct-* → claude-cli (subclassed).
+# ABOUTME: spacedock → spacedock_solver (runtime: claude); direct-* → claude-cli (subclassed).
 
 import importlib.util
 import sys
@@ -23,11 +23,11 @@ def _import_generator():
     return mod
 
 
-def test_spacedock_variant_emits_spacedock_solver_v2_kind():
-    """AC-3: spacedock cell → kind=spacedock_solver_v2 with runtime=claude."""
+def test_spacedock_variant_emits_spacedock_solver_kind():
+    """AC-3: spacedock cell → kind=spacedock_solver with runtime=claude."""
     gen = _import_generator()
     spec = gen.build_spec("spacedock", "bookreview")
-    assert spec["agent"]["kind"] == "spacedock_solver_v2"
+    assert spec["agent"]["kind"] == "spacedock_solver"
     assert spec["agent"]["runtime"] == "claude"
     assert "solver_workflow" in spec["agent"]
     assert Path(spec["agent"]["solver_workflow"]).name == "dab_paper_matrix"
@@ -60,7 +60,7 @@ def test_spacedock_solver_workflow_path_exists():
 
 
 def test_spacedock_block_does_not_carry_tools_allowed_default_csv():
-    """spacedock_solver_v2's tools_allowed defaults to []; tools should be empty
+    """spacedock_solver's tools_allowed defaults to []; tools should be empty
     list (passes through to harbor agent kwargs) rather than the direct variants'
     explicit list. We assert it's a list so the schema accepts it.
     """

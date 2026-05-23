@@ -9,7 +9,7 @@ import yaml
 
 from razorback.agents.auth import AuthDiscoveryError
 from razorback.agents.proxy import PROXY_BLOCK_ENV
-from razorback.agents.spacedock_solver_v2 import SpacedockSolverAgent
+from razorback.agents.spacedock_solver import SpacedockSolverAgent
 from razorback.spec.schema import Spec
 from razorback.translate import spec_to_job_config
 
@@ -130,8 +130,8 @@ async def test_harbor_jobs_resume_round_trip_with_new_trial_name(
     assert not (tmp_path / "run" / "trials" / "bookreview-0001__abc1234").exists()
 
 
-def test_translator_emits_spacedock_solver_v2_import_path(tmp_path):
-    """AC-7: spec.agent.kind: spacedock_solver_v2 -> import_path of v2 class."""
+def test_translator_emits_spacedock_solver_import_path(tmp_path):
+    """AC-7: spec.agent.kind: spacedock_solver -> import_path of v2 class."""
     workflow = tmp_path / "solver"
     workflow.mkdir()
     (workflow / "README.md").write_text("## Stages\n- model\n")
@@ -140,7 +140,7 @@ def test_translator_emits_spacedock_solver_v2_import_path(tmp_path):
 version: 1
 experiment: phase3-translate-test
 agent:
-  kind: spacedock_solver_v2
+  kind: spacedock_solver
   runtime: claude
   model: claude-opus-4-5
   solver_workflow: {workflow}
@@ -169,7 +169,7 @@ trials: 1
     )
     agent_cfg = cfg.agents[0]
     assert agent_cfg.import_path == (
-        "razorback.agents.spacedock_solver_v2:SpacedockSolverAgent"
+        "razorback.agents.spacedock_solver:SpacedockSolverAgent"
     )
     assert agent_cfg.kwargs["runtime"] == "claude"
     assert agent_cfg.kwargs["solver_workflow_content_hash"] == "sha256:" + "a" * 64
@@ -188,7 +188,7 @@ def test_translator_mounts_v2_freeze_root_into_container(tmp_path):
 version: 1
 experiment: phase3-translate-test
 agent:
-  kind: spacedock_solver_v2
+  kind: spacedock_solver
   runtime: claude
   model: claude-opus-4-5
   solver_workflow: {workflow}
@@ -236,7 +236,7 @@ def test_translator_uses_codex_auth_for_codex_runtime(tmp_path):
 version: 1
 experiment: phase3-translate-codex-test
 agent:
-  kind: spacedock_solver_v2
+  kind: spacedock_solver
   runtime: codex
   model: gpt-5.1-codex
   solver_workflow: {workflow}
@@ -321,7 +321,7 @@ def test_translator_includes_codex_reasoning_kwargs_for_v2_agent(tmp_path):
 version: 1
 experiment: pkg35-translate-codex-reasoning-test
 agent:
-  kind: spacedock_solver_v2
+  kind: spacedock_solver
   runtime: codex
   model: gpt-5.5
   reasoning_effort: xhigh
@@ -364,7 +364,7 @@ def test_translator_uses_codex_auth_json_for_codex_runtime(tmp_path):
 version: 1
 experiment: phase3-translate-codex-auth-json-test
 agent:
-  kind: spacedock_solver_v2
+  kind: spacedock_solver
   runtime: codex
   model: gpt-5.1-codex
   solver_workflow: {workflow}
@@ -408,7 +408,7 @@ def test_translator_codex_runtime_fails_without_credentials(tmp_path):
 version: 1
 experiment: phase3-translate-codex-missing-auth-test
 agent:
-  kind: spacedock_solver_v2
+  kind: spacedock_solver
   runtime: codex
   model: gpt-5.1-codex
   solver_workflow: {workflow}

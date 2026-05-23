@@ -129,7 +129,7 @@ def _base_spec(
     solver_workflow: str = DEFAULT_SOLVER_WORKFLOW,
 ) -> dict:
     agent = {
-        "kind": "spacedock_solver_v2",
+        "kind": "spacedock_solver",
         "runtime": "codex",
         "model": model,
         "sampling": {"temperature": 0.0, "top_p": None, "seed": 1},

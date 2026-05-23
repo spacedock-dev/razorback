@@ -1,10 +1,10 @@
-# ABOUTME: Agent-kind registry (§6.2) — maps agent.kind to (config schema, import path).
-# ABOUTME: The spec parser validates kwargs against the schema before harbor sees them.
+# ABOUTME: Agent-kind registry (§6.2) — canonical Spacedock solver schema helper.
+# ABOUTME: Runtime dispatch itself flows through spec/schema.py and translate.py.
 
 from pathlib import Path
 from typing import Literal, Type
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from razorback.errors import RazorbackError
 
@@ -13,55 +13,32 @@ class AgentKindError(RazorbackError):
     """Raised when agent.kind is not registered."""
 
 
-class NopAgentConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class ClaudeCliAgentConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    model: str = Field(default="claude-opus-4-5")
-    tools_allowed: list[str] = Field(default_factory=list)
-    prompt_file: Path | None = None
-
-
-_VALID_STAGES = ("model", "analyze", "verify")
-
-
 class _SamplingKwargs(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    temperature: float
+    temperature: float = 0.0
     top_p: float | None = None
     seed: int | None = None
 
 
 class SpacedockSolverAgentConfig(BaseModel):
-    """Registry-level kwargs validated BEFORE harbor.AgentConfig is constructed."""
+    """Registry-level v2 kwargs for canonical agent.kind: spacedock_solver."""
     model_config = ConfigDict(extra="forbid")
-    model: str = Field(min_length=1)
-    sampling: _SamplingKwargs
-    stages: list[str]
+    runtime: Literal["claude", "codex", "pi"] = "claude"
+    model: str = Field(default="claude-opus-4-5", min_length=1)
+    sampling: _SamplingKwargs = Field(default_factory=_SamplingKwargs)
+    solver_workflow: Path
+    solver_workflow_content_hash: str | None = None
+    max_turns: int = 200
+    max_budget_usd: float | None = None
     tools_allowed: list[str] = Field(default_factory=list)
-    prompts: dict[str, str]
-    sealed_hash: str = Field(min_length=32, max_length=32, pattern=r"^[0-9a-f]{32}$")
-
-    @field_validator("stages")
-    @classmethod
-    def _stages_must_be_exact_order(cls, v: list[str]) -> list[str]:
-        if v != list(_VALID_STAGES):
-            raise ValueError(
-                f"stages must be exactly {list(_VALID_STAGES)!r}; got {v!r}"
-            )
-        return v
-
-    @model_validator(mode="after")
-    def _prompts_cover_every_stage(self) -> "SpacedockSolverAgentConfig":
-        missing = set(self.stages) - set(self.prompts.keys())
-        if missing:
-            raise ValueError(f"prompts missing for stages: {sorted(missing)}")
-        extra = set(self.prompts.keys()) - set(self.stages)
-        if extra:
-            raise ValueError(f"prompts has keys not in stages: {sorted(extra)}")
-        return self
+    tools_denied: list[str] = Field(default_factory=list)
+    append_system_prompt: str | None = None
+    reasoning_effort: str | None = None
+    reasoning_summary: str | None = None
+    resume_from_freeze: Path | None = None
+    sealed_hash: str | None = None
+    spacedock_skill_version: str | None = None
+    prompt_content_hashes: dict[str, str] = Field(default_factory=dict)
 
 
 class AgentKindEntry:
@@ -73,12 +50,7 @@ class AgentKindEntry:
 
 
 _REGISTRY: dict[str, AgentKindEntry] = {
-    "nop": AgentKindEntry(NopAgentConfig, None),
-    "claude-cli": AgentKindEntry(
-        ClaudeCliAgentConfig,
-        "razorback.agents._runtime.claude:RazorbackClaudeCode",
-    ),
-    "spacedock-solver": AgentKindEntry(
+    "spacedock_solver": AgentKindEntry(
         SpacedockSolverAgentConfig,
         "razorback.agents.spacedock_solver:SpacedockSolverAgent",
     ),

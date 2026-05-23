@@ -1,5 +1,5 @@
 # ABOUTME: AC-1 walking skeleton for v2: rk run examples/specs/_deterministic-smoke-v2.frozen.yaml.
-# ABOUTME: Live-API gated; mechanism contract is covered by test_v2_freeze_dir_mechanism.py.
+# ABOUTME: Live-API gated; mechanism covered by the canonical freeze-dir test.
 
 import json
 import os
@@ -26,7 +26,7 @@ SPEC = REPO / "examples" / "specs" / "_deterministic-smoke-v2.frozen.yaml"
     reason="v2 deterministic smoke requires ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN",
 )
 def test_v2_deterministic_smoke_runs_end_to_end(tmp_path: Path):
-    """AC-1: agent.kind: spacedock_solver_v2 against in-tree DAB adapter exits 0
+    """AC-1: canonical agent.kind: spacedock_solver exits 0
     and writes <cas-root>/<sealed_hash>/sealed_hash.txt (CAS lives outside the run-dir)."""
     runs_root = tmp_path / "_runs"
     runs_root.mkdir()

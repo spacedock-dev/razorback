@@ -34,13 +34,15 @@ def _has_dab_agent_image() -> bool:
 
 
 @pytest.mark.skipif(
+    not os.environ.get("RAZORBACK_RUN_DOCKER_TESTS")
+    or
     not DAB_DATA.exists()
     or shutil.which("claude") is None
     or not HAS_AUTH
     or not _has_dab_agent_image(),
     reason=(
         "AC-6 needs bookreview dataset, host `claude` CLI, an auth token, "
-        "and dab-agent:latest image."
+        "dab-agent:latest image, and RAZORBACK_RUN_DOCKER_TESTS=1."
     ),
 )
 @pytest.mark.timeout(1800)

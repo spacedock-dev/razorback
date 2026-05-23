@@ -23,7 +23,7 @@ REQUIRED_FIELDS = (
 
 # Optional fields: written when non-None, never appear in REQUIRED_FIELDS or in
 # the `unresolved:` list. solver_workflow_hash is conditional on the spec
-# carrying an agent.solver_workflow path (spec §8.2; only spacedock-solver
+# carrying an agent.solver_workflow path (spec §8.2; only spacedock_solver
 # specs do today).
 OPTIONAL_FIELDS = ("solver_workflow_hash",)
 

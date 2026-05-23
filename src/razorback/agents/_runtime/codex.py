@@ -9,7 +9,7 @@ from harbor.agents.installed.codex import Codex
 from harbor.environments.base import BaseEnvironment
 
 from razorback.agents.proxy import PROXY_BLOCK_ENV
-from razorback.agents.spacedock_solver_v2 import SpacedockSolverAgentError
+from razorback.agents.spacedock_solver import SpacedockSolverAgentError
 
 
 _CODEX_SUPPORTED_KWARGS = {

@@ -1,4 +1,4 @@
-# ABOUTME: spacedock_solver_v2 freeze-repo git executes on host, not via environment.exec.
+# ABOUTME: spacedock_solver freeze-repo git executes on host, not via environment.exec.
 # ABOUTME: Reproduces rc=128 host/container mount mismatch surfaced by PKG-26 T4 live `rk run`.
 
 import subprocess
@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from razorback.agents.spacedock_solver_v2 import SpacedockSolverAgent
+from razorback.agents.spacedock_solver import SpacedockSolverAgent
 
 
 def _kw(tmp_path, **overrides):

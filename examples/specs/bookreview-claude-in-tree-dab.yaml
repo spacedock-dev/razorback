@@ -7,7 +7,7 @@ agent:
     temperature: 0.0
   tools_allowed: [Bash, Read, Write, Edit, Glob, Grep]
 benchmark:
-  kind: in_tree_dab
+  kind: harbor_dab
   data_root: "${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}"
   datasets:
     - bookreview

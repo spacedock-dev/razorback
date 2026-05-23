@@ -8,7 +8,7 @@ from typing import Any
 from harbor.agents.installed.claude_code import ClaudeCode
 
 from razorback.agents.claude_cli import ClaudeCliAgent
-from razorback.agents.spacedock_solver_v2 import SpacedockSolverAgentError
+from razorback.agents.spacedock_solver import SpacedockSolverAgentError
 
 
 _CLAUDE_SUPPORTED_KWARGS = {

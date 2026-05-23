@@ -3,7 +3,7 @@
 version: 1
 experiment: goal1-spacedock-github_repos
 agent:
-  kind: spacedock_solver_v2
+  kind: spacedock_solver
   runtime: claude
   model: claude-opus-4-7
   sampling:
