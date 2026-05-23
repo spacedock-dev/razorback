@@ -181,3 +181,115 @@ The inline plan keeps this as a tiny plan-stage task and does not create a
 separate plan document. It scopes implementation to ADE workspace-data
 preflight and validation, with the smallest multi-family smoke before any
 full Goal 4 restart.
+
+## Stage Report: implementation
+
+- DONE: Add tests and implementation that verify sampled ADE task views preserve task-specific dbt project/data identity across at least `airbnb001`, `f1001`, and `quickbooks001` or a defensible equivalent available from the dataset ref.
+  Evidence: `52ae716` added DuckDB family contract tests for `airbnb001`, `f1001`, and `quickbooks001`; `c02e80c` added `src/razorback/benchmarks/ade_bench/preflight.py` plus task-view Dockerfile preflight injection.
+- DONE: Add a fail-closed ADE workspace preflight wired into the run path before `codex exec`, with a test proving mismatched/missing source data is reported as infrastructure failure.
+  Evidence: `tests/unit/test_spacedock_solver_ade_preflight.py` proves `SpacedockSolverAgent.setup()` runs ADE preflight before inner Codex setup and blocks mismatched F1/QuickBooks data with `SpacedockSolverAgentError`.
+- DONE: Run focused tests and any cheap smoke/preflight commands needed to prove the mechanism, then commit all implementation-stage changes and append `## Stage Report: implementation` with exact evidence.
+  Evidence: `12 passed` for the new ADE preflight suite, `21 passed` for adjacent translator/lifecycle suites, and a standalone `f1001` preflight smoke emitted `RAZORBACK_ADE_PREFLIGHT ... "status": "passed"` before this report.
+
+### Summary
+
+The implementation adds a reusable ADE DuckDB table-family preflight for
+`airbnb`, `f1`, and `quickbooks`, injects it into ADE Harbor task views, and
+runs it again in `SpacedockSolverAgent.setup()` before the inner Codex runtime
+can install or execute. The host `duckdb` dependency and lockfile update are
+intentional because the checker and tests inspect real DuckDB table metadata;
+no full 48-task matrix was run.
+
+## Stage Report: validation
+
+- FAILED: Independently verify AC-1 with sampled ADE task-view/data identity across `airbnb001`, `f1001`, and `quickbooks001` or report a concrete blocker.
+  Evidence: `docs/razorback-implementation/validation/ade-task-view-data-isolation.md` shows real-image preflight rejects `airbnb001` with missing `calendar/listings/reviews` while observing `raw_hosts/raw_listings/raw_reviews`; `f1001` and `quickbooks001` pass.
+- DONE: Independently verify AC-2 that ADE workspace mismatch fails before `codex exec` and classify any Dockerfile/runtime preflight gaps as blocking or non-blocking.
+  Evidence: focused tests pass `12 passed`; Docker build smoke exits 1 with `RAZORBACK_ADE_PREFLIGHT` F1/QuickBooks diagnostics before `CMD`; runtime tests prove inner Codex setup is not awaited on preflight failure.
+- DONE: Run focused tests plus the smallest useful smoke/score/audit command for AC-3, then write a validation report with PASS/REJECT gate recommendation and commit only validation artifacts.
+  Evidence: focused tests pass, task-view preflight-only smoke exposes the AC-1 blocker, score/audit fixture commands exit 0, and the validation report recommends REJECT.
+
+### Summary
+
+Validation rejects the implementation because the Airbnb preflight contract does
+not match real `airbnb001` workspace tables, so a canonical multi-family smoke
+would fail before Codex on valid task data. Dockerfile injection and runtime
+preflight ordering are otherwise proven runnable/fail-closed; the remaining
+full-suite collection error is pre-existing stale `razorback.score.load` test
+debt outside this branch.
+
+## Stage Report: implementation (feedback cycle 1)
+
+- DONE: valid canonical ADE task-view preflight passes for `airbnb001`, `f1001`, and `quickbooks001` or a clearly justified replacement set, with tests/smoke evidence.
+  Evidence: `uv run --frozen pytest tests/unit/test_ade_bench_workspace_preflight.py tests/unit/test_ade_bench_harbor_view.py tests/unit/test_spacedock_solver_ade_preflight.py -q` -> `13 passed`; `docker run --rm -i <image> sh -lc 'cat >/tmp/razorback_ade_preflight.py && python /tmp/razorback_ade_preflight.py --task-id <task> --workspace /app --db-name <db>' < src/razorback/benchmarks/ade_bench/preflight.py` passes on `ade-bench-airbnb001__r5gm9ed-main:latest`, `ade-bench-f1001__zzpr6tl-main:latest`, and `ade-bench-quickbooks001__uxdbzqr-main:latest`.
+- DONE: mismatched cross-family workspace data still fails closed before any Codex install/exec path, with test evidence.
+  Evidence: runtime test `test_ade_preflight_failure_blocks_inner_codex_setup_as_infra_failure` remains in the 13-pass suite; synthetic `runs/ade-preflight-feedback-cycle-1/f1001-with-quickbooks-data` exits `rc=2` with missing F1 tables and forbidden QuickBooks tables.
+- DONE: the stage report records exact commands/results and the run or fixture paths needed for fresh validation to reproduce the fix.
+  Evidence: `uv run --frozen python - <<'PY' ...` fixture smoke writes `runs/ade-preflight-feedback-cycle-1/{airbnb001,f1001,quickbooks001,f1001-with-quickbooks-data}` and prints pass/pass/pass/fail; Docker command above records the real-image tags needed for rerun.
+
+### Summary
+
+Feedback cycle 1 fixes the rejected Airbnb contract by using canonical raw
+workspace tables (`raw_hosts`, `raw_listings`, `raw_reviews`) instead of
+transformed model names. The preflight now prefers dbt `sources:` metadata when
+available, using a table `identifier` before logical `name`; this matches real
+ADE Airbnb source metadata while retaining static family contracts for minimal
+fixtures and QuickBooks.
+
+## Stage Report: validation (cycle 2)
+
+- FAILED: independently verify AC-1: valid canonical preflight passes for `airbnb001`, `f1001`, and `quickbooks001` task views/images, including the Airbnb raw-table/source-metadata contract.
+  Evidence: `uv run --frozen pytest tests/unit/test_ade_bench_workspace_preflight.py tests/unit/test_ade_bench_harbor_view.py tests/unit/test_spacedock_solver_ade_preflight.py -q` -> `13 passed`; fresh `docker build --no-cache -t rb-validation-c2-airbnb001 runs/ade-preflight-validation-cycle-2/task_views/ade-bench-airbnb001/environment` passed with `required_tables_source=dbt_source_metadata` and `raw_hosts/raw_listings/raw_reviews`, but `docker build --no-cache -t rb-validation-c2-f1001 runs/ade-preflight-validation-cycle-2/task_views/ade-bench-f1001/environment` failed preflight after Docker read Airbnb Drive ID `1a26...` for `db_name=f1`.
+- DONE: independently verify AC-2: mismatched/cross-family data still fails before Codex setup/exec, with diagnostic evidence and focused test results.
+  Evidence: the same 13-test suite includes `test_ade_preflight_failure_blocks_inner_codex_setup_as_infra_failure`; the F1 image build failed before `CMD`/Codex with `RAZORBACK_ADE_PREFLIGHT` showing missing F1 source tables and forbidden observed Airbnb raw tables.
+- FAILED: independently verify AC-3: run the smallest practical ADE direct-Codex smoke or preflight-to-normal-score path needed to justify restarting the full ADE 1x run; include score/audit status if a live agent smoke is feasible, or explicitly name any blocker.
+  Evidence: blocker is unresolved Docker build-context data isolation for same-size `db_file_id.txt` files copied with `1970-01-01` mtimes; `uv run --frozen rk score tests/fixtures/score/ade_bench_run_dir --format json` reports `stratified_pass_at_1=1.0`, `stratified_n_completed=3`, `stratified_n_errored=0`, and strict audit reports zero clean/tainted/coverage-missing trials.
+
+### Summary
+
+Cycle 2 confirms the Airbnb raw-table/source-metadata fix itself works, but the
+task-view image path still fails AC-1 for F1: host files and tar output show the
+correct F1 Drive ID, while Docker receives stale same-size content until the
+validation copy is touched. Recommendation: REJECT, because a canonical
+multi-family ADE restart can still build or fail from cross-family database
+content before any live Codex smoke is meaningful.
+
+## Stage Report: implementation (feedback cycle 2)
+
+- DONE: `airbnb001`, `f1001`, and `quickbooks001` build/preflight with correct task-specific data after the fix, including a fresh/no-cache or cache-stress scenario that previously failed.
+  Evidence: fresh task views in `runs/ade-preflight-feedback-cycle-2/task_views/` materialized with `copy_db_file_id=False literal=True`; `docker build --no-cache -t rb-feedback-c2-{airbnb001,f1001,quickbooks001} .../environment` passed and emitted `RAZORBACK_ADE_PREFLIGHT` status `passed` in `runs/ade-preflight-feedback-cycle-2/logs/docker-build-no-cache-*.log`.
+- DONE: same-size/stale-mtime cross-task metadata cannot cause stale database selection; add a focused regression test or smoke reproducing the condition.
+  Evidence: `test_same_size_epoch_mtime_db_metadata_gets_content_specific_build_steps` covers same-size Airbnb/F1 Drive IDs with epoch mtimes; cache-stress context `runs/ade-preflight-feedback-cycle-2/cache-stress/f1001-stale-context/environment` overwrote `db_file_id.txt` with same-size Airbnb ID at `1970-01-01`, then `docker build -t rb-feedback-c2-f1001-stale-context ...` plus `docker run ... preflight` still passed with F1 tables.
+- DONE: mismatched cross-family data still fails closed before Codex; focused ADE preflight tests remain passing.
+  Evidence: `uv run --frozen pytest tests/unit/test_ade_bench_workspace_preflight.py tests/unit/test_ade_bench_harbor_view.py tests/unit/test_spacedock_solver_ade_preflight.py tests/unit/test_ade_bench_dataset_ref_translator.py tests/unit/test_translate_harbor_task_batches.py tests/integration/test_ade_bench_dataset_ref_freeze_smoke.py -q` -> `28 passed`; `uv run --frozen python -m razorback.benchmarks.ade_bench.preflight --task-id f1001 --workspace runs/ade-preflight-feedback-cycle-1/f1001-with-quickbooks-data --db-name f1` exited `rc=2` with forbidden QuickBooks tables.
+
+### Summary
+
+The ADE task-view Dockerfile rewrite now replaces fragile `COPY db_file_id.txt`
+and `COPY db_name.txt` steps with content-specific literal writes plus a
+checksum guard before the existing database download step. This removes Docker
+build-context mtime/size ambiguity for database selection while preserving the
+disk metadata files for manifests and diagnostics; `ruff check` on the touched
+files also passes.
+
+## Stage Report: validation (cycle 3)
+
+- DONE: independently verify AC-1: `airbnb001`, `f1001`, and `quickbooks001` task views/images build/preflight with correct data after the cache-isolation fix, including F1.
+  Evidence: fresh `uv run --frozen python - <<'PY' ... resolve_dataset_tasks/materialize_ade_harbor_task_view ... PY` wrote `runs/ade-preflight-validation-cycle-3/materialize-summary.json` with literal metadata, no `COPY db_file_id.txt`, and checksum guards; `docker build --no-cache -t rb-validation-c3-{airbnb001,f1001,quickbooks001} .../environment` exited 0 and emitted passed `RAZORBACK_ADE_PREFLIGHT` for Airbnb raw tables, F1 tables, and QuickBooks tables.
+- DONE: independently verify the cache-stress regression: same-size/stale-mtime cross-task metadata cannot select a stale database file id, and mismatched data still fails closed before Codex.
+  Evidence: `uv run --frozen pytest tests/unit/test_ade_bench_workspace_preflight.py tests/unit/test_ade_bench_harbor_view.py tests/unit/test_spacedock_solver_ade_preflight.py tests/unit/test_ade_bench_dataset_ref_translator.py tests/unit/test_translate_harbor_task_batches.py tests/integration/test_ade_bench_dataset_ref_freeze_smoke.py -q` -> `28 passed`; stale-context `docker build -t rb-validation-c3-f1001-stale-context .../environment` reused the F1 literal layer despite an Airbnb same-size epoch-mtime `db_file_id.txt`, and `docker run --rm rb-validation-c3-f1001-stale-context python /tmp/razorback_ade_preflight.py --task-id f1001 --workspace /app --db-name f1` exited 0 with F1 tables.
+- DONE: independently verify AC-3 enough to unblock full ADE restart: run the smallest practical canonical multi-family ADE direct-Codex smoke or preflight-to-normal-score path; include score/audit if feasible, or explain any remaining blocker precisely.
+  Evidence: `uv run --frozen rk freeze runs/ade-preflight-validation-cycle-3/specs/ade-codex-multifamily-smoke.yaml --out runs/ade-preflight-validation-cycle-3/specs/ade-codex-multifamily-smoke.frozen.yaml --allow-missing` exited 0 for canonical digest tasks `airbnb001,f1001,quickbooks001`; `uv run --frozen rk score tests/fixtures/score/ade_bench_run_dir --format json` exited 0 with `stratified_pass_at_1=1.0`, `stratified_n_completed=3`, `stratified_n_errored=0`, and strict audit exited 0 with zero tainted/coverage-missing trials.
+
+### Summary
+
+PASS gate decision. Cycle 3 validation independently reproduced the prior
+same-size/stale-mtime Docker ambiguity and confirmed the Dockerfile literal
+metadata/checksum rewrite prevents stale database selection; valid data passes
+and mismatched F1/QuickBooks data still fails closed before Codex setup.
+
+No implementation blocker remains for the ADE data-isolation issue. I did not
+launch a live multi-family Codex solver run because this VM is at `98%` root
+filesystem usage (`1.8G` free) after removing validation-owned Docker images,
+and validation already hit ENOSPC while writing a build log; run the full ADE
+restart on a host with sufficient Docker capacity.

@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+import hashlib
+import shlex
 from pathlib import Path
 from typing import Literal
 
+from razorback.benchmarks.ade_bench.preflight import (
+    contract_for_task_id,
+    preflight_script_text,
+)
 from razorback.harbor_tasks.leakage import DEFAULT_SOLUTION_DENY_GLOBS
 from razorback.harbor_tasks.materialize import materialize_harbor_task_view
 
@@ -16,6 +22,12 @@ _DBT_DEPS_LAYER_MARKER = (
 )
 _DBT_DEPS_TEST_SETUP_MARKER = (
     "# Razorback: reuse image-installed dbt packages when available."
+)
+_ADE_WORKSPACE_PREFLIGHT_MARKER = (
+    "# Razorback: validate ADE task-specific DuckDB before agent runtime."
+)
+_ADE_METADATA_LITERAL_MARKER = (
+    "# Razorback: materialize ADE task metadata from content-specific literals."
 )
 
 
@@ -48,6 +60,8 @@ def materialize_ade_harbor_task_view(
         task_content_hash=task_content_hash,
     )
     _ensure_dbt_deps_image_layer(view)
+    _ensure_task_metadata_build_context_isolation(view, task_slug=task_slug)
+    _ensure_workspace_preflight_image_layer(view, task_slug=task_slug)
     _ensure_dbt_deps_test_setup_uses_preinstalled_packages(view)
     return view
 
@@ -97,6 +111,136 @@ def _ensure_dbt_deps_test_setup_uses_preinstalled_packages(view_dir: Path) -> No
     patched = _replace_standalone_dbt_deps(text)
     if patched != text:
         test_setup.write_text(patched)
+
+
+def _ensure_workspace_preflight_image_layer(view_dir: Path, *, task_slug: str) -> None:
+    contract = contract_for_task_id(task_slug)
+    if contract is None:
+        return
+
+    environment_dir = view_dir / "environment"
+    dockerfile = environment_dir / "Dockerfile"
+    if not dockerfile.is_file():
+        return
+
+    script_path = environment_dir / "razorback_ade_preflight.py"
+    script_path.write_text(preflight_script_text())
+
+    text = dockerfile.read_text()
+    if _ADE_WORKSPACE_PREFLIGHT_MARKER in text:
+        return
+
+    db_name = _read_db_name(environment_dir) or contract.expected_db_name
+    command = " ".join(
+        [
+            "python",
+            "/tmp/razorback_ade_preflight.py",
+            "--task-id",
+            shlex.quote(task_slug),
+            "--workspace",
+            "/app",
+            "--db-name",
+            shlex.quote(db_name),
+        ]
+    )
+    block = "\n".join(
+        [
+            _ADE_WORKSPACE_PREFLIGHT_MARKER,
+            "COPY razorback_ade_preflight.py /tmp/razorback_ade_preflight.py",
+            f"RUN {command}",
+        ]
+    )
+    dockerfile.write_text(_insert_before_final_cmd(text, block))
+
+
+def _ensure_task_metadata_build_context_isolation(
+    view_dir: Path, *, task_slug: str
+) -> None:
+    contract = contract_for_task_id(task_slug)
+    if contract is None:
+        return
+
+    environment_dir = view_dir / "environment"
+    dockerfile = environment_dir / "Dockerfile"
+    if not dockerfile.is_file():
+        return
+
+    db_file_id = _read_required_text(environment_dir / "db_file_id.txt")
+    db_name = _read_db_name(environment_dir) or contract.expected_db_name
+    if not db_file_id:
+        return
+
+    text = dockerfile.read_text()
+    if _ADE_METADATA_LITERAL_MARKER in text:
+        return
+
+    patched = _replace_ade_metadata_copy_with_literals(
+        text,
+        db_file_id=db_file_id,
+        db_name=db_name,
+    )
+    if patched != text:
+        dockerfile.write_text(patched)
+
+
+def _replace_ade_metadata_copy_with_literals(
+    text: str, *, db_file_id: str, db_name: str
+) -> str:
+    lines = text.splitlines()
+    output: list[str] = []
+    changed = False
+    idx = 0
+    while idx < len(lines):
+        stripped = lines[idx].strip()
+        if stripped == "COPY db_file_id.txt /tmp/db_file_id.txt":
+            next_idx = idx + 1
+            if (
+                next_idx < len(lines)
+                and lines[next_idx].strip() == "COPY db_name.txt /tmp/db_name.txt"
+            ):
+                output.extend(
+                    _ade_metadata_literal_block(
+                        db_file_id=db_file_id,
+                        db_name=db_name,
+                    )
+                )
+                idx += 2
+                changed = True
+                continue
+        output.append(lines[idx])
+        idx += 1
+
+    if not changed:
+        return text
+    return "\n".join(output) + ("\n" if text.endswith("\n") else "")
+
+
+def _ade_metadata_literal_block(*, db_file_id: str, db_name: str) -> list[str]:
+    db_file_id_sha256 = hashlib.sha256((db_file_id + "\n").encode()).hexdigest()
+    return [
+        _ADE_METADATA_LITERAL_MARKER,
+        "RUN set -eux; \\",
+        (
+            f"    printf '%s\\n' {shlex.quote(db_file_id)} "
+            "> /tmp/db_file_id.txt; \\"
+        ),
+        f"    printf '%s\\n' {shlex.quote(db_name)} > /tmp/db_name.txt; \\",
+        (
+            '    test "$(sha256sum /tmp/db_file_id.txt | cut -d \' \' -f 1)" '
+            f"= {shlex.quote(db_file_id_sha256)}"
+        ),
+    ]
+
+
+def _read_db_name(environment_dir: Path) -> str | None:
+    return _read_required_text(environment_dir / "db_name.txt")
+
+
+def _read_required_text(path: Path) -> str | None:
+    if not path.is_file():
+        return None
+    value = path.read_text().strip()
+    return value or None
 
 
 def _replace_standalone_dbt_deps(text: str) -> str:
