@@ -24,6 +24,10 @@ _REQUIRED_PHASE_STATS_KEYS = (
     "wallclock_s",
 )
 
+CHECKPOINT_SETUP_READY = "setup/ready"
+CHECKPOINT_RUN_BEFORE_AGENT = "run/before-agent"
+CHECKPOINT_RUN_AFTER_AGENT = "run/after-agent"
+
 
 class SpacedockSolverAgentError(RazorbackError):
     """Raised on SpacedockSolverAgent v2 contract violations."""
@@ -62,6 +66,10 @@ class SpacedockSolverAgent(BaseAgent):
         max_turns: int = 200,
         tools_allowed: list[str] | None = None,
         tools_denied: list[str] | None = None,
+        benchmark_kind: str | None = None,
+        benchmark_task_id: str | None = None,
+        batch_mode: str | None = None,
+        child_task_ids_hash: str | None = None,
         resume_from_freeze: Path | str | None = None,
         extra_env: dict[str, str] | None = None,
         **kwargs: Any,
@@ -96,6 +104,15 @@ class SpacedockSolverAgent(BaseAgent):
         self._max_turns = max_turns
         self._tools_allowed = list(tools_allowed or [])
         self._tools_denied = list(tools_denied or [])
+        discovered_identity = self._discover_task_identity_from_manifest()
+        self._benchmark_kind = benchmark_kind or discovered_identity.get("benchmark_kind")
+        self._benchmark_task_id = benchmark_task_id or discovered_identity.get(
+            "benchmark_task_id"
+        )
+        self._batch_mode = batch_mode or discovered_identity.get("batch_mode")
+        self._child_task_ids_hash = child_task_ids_hash or discovered_identity.get(
+            "child_task_ids_hash"
+        )
 
         # AC-2 + b5 contract point 1: compute sealed_hash from six inputs.
         self.sealed_hash = compute_sealed_hash(
@@ -105,6 +122,10 @@ class SpacedockSolverAgent(BaseAgent):
             prompt_content_hashes=self._prompt_content_hashes,
             spacedock_skill_version=self._spacedock_skill_version,
             harbor_agent_kwargs=self._harbor_agent_kwargs,
+            benchmark_kind=self._benchmark_kind,
+            benchmark_task_id=self._benchmark_task_id,
+            batch_mode=self._batch_mode,
+            child_task_ids_hash=self._child_task_ids_hash,
         )
 
         # AC-2 + b5 contract point 4: refuse on cross-job resume mismatch
@@ -117,6 +138,7 @@ class SpacedockSolverAgent(BaseAgent):
             self._refuse_on_resume_mismatch(self._resume_from_freeze)
 
         self._inner: BaseAgent | None = None
+        self._freeze_checkpointing_ready = False
 
     def __repr__(self) -> str:
         # FU-1: never surface secrets in repr.
@@ -174,6 +196,54 @@ class SpacedockSolverAgent(BaseAgent):
         """
         return resolve_default_freeze_dir() / self.sealed_hash
 
+    @staticmethod
+    def _resolve_run_dir_from_logs_dir(logs_dir: Path) -> Path:
+        """Back out from harbor's per-trial logs_dir to the run-dir root."""
+        p = logs_dir.resolve()
+        for _ in range(6):
+            p = p.parent
+            if (
+                (p / "_job_config.yaml").exists()
+                or (p / "trials").exists()
+                or (p / "spec.frozen.yaml").exists()
+            ):
+                return p
+        # Fallback to b5 line 61's stated default (three .parent calls).
+        return logs_dir.resolve().parent.parent.parent
+
+    def _discover_task_identity_from_manifest(self) -> dict[str, str]:
+        try:
+            run_dir = self._resolve_run_dir_from_logs_dir(Path(self.logs_dir))
+            rel = Path(self.logs_dir).resolve().relative_to(run_dir.resolve())
+        except Exception:
+            return {}
+        if not rel.parts:
+            return {}
+        if rel.parts[0] == "trials" and len(rel.parts) >= 2:
+            trial_name = rel.parts[1]
+        else:
+            trial_name = rel.parts[0]
+        trial_prefix = trial_name.split("__", 1)[0]
+        views_root = run_dir / "_razorback" / "task_views"
+        if not views_root.is_dir():
+            return {}
+        for manifest_path in sorted(views_root.glob("*/view_manifest.json")):
+            view_prefix = manifest_path.parent.name[:32].rstrip("_-")
+            if view_prefix != trial_prefix:
+                continue
+            try:
+                payload = json.loads(manifest_path.read_text())
+            except (OSError, json.JSONDecodeError):
+                return {}
+            out: dict[str, str] = {}
+            for key in ("benchmark_kind", "benchmark_task_id", "child_task_ids_hash"):
+                value = payload.get(key)
+                if value is not None:
+                    out[key] = str(value)
+            out.setdefault("batch_mode", str(payload.get("batch_mode") or "per-task"))
+            return out
+        return {}
+
     async def _host_git(self, *args: str) -> None:
         # freeze tree is host-side bookkeeping; git runs on host
         freeze_dir = self.resolve_freeze_dir()
@@ -219,6 +289,23 @@ class SpacedockSolverAgent(BaseAgent):
             extra_env=self._extra_env,
         )
 
+    def _solver_workflow_readme_text(self) -> str:
+        readme = self._solver_workflow / "README.md"
+        if not readme.is_file():
+            raise SpacedockSolverAgentError(
+                f"solver workflow README.md not found: {readme}"
+            )
+        return readme.read_text()
+
+    def _compose_run_instruction(self, instruction: str) -> str:
+        workflow_text = self._solver_workflow_readme_text().strip()
+        return (
+            "# Solver workflow instructions\n\n"
+            f"{workflow_text}\n\n"
+            "# Task instruction\n\n"
+            f"{instruction}"
+        )
+
     async def setup(self, environment: BaseEnvironment) -> None:
         """Per spec §8.4: bootstrap workspace; write sealed_hash.txt; delegate to inner.
 
@@ -248,6 +335,9 @@ class SpacedockSolverAgent(BaseAgent):
             await self._host_git("add", "-A")
             await self._host_git("commit", "-q", "--allow-empty", "-m", "seed")
 
+        self._freeze_checkpointing_ready = True
+        await self._commit_stage(environment, CHECKPOINT_SETUP_READY)
+
         if self._inner is None:
             self._inner = self._build_inner_agent()
         await self._inner.setup(environment)
@@ -255,7 +345,13 @@ class SpacedockSolverAgent(BaseAgent):
     async def run(self, instruction, environment, context):
         if self._inner is None:
             raise SpacedockSolverAgentError("run() called before setup()")
-        await self._inner.run(instruction, environment, context)
+        if self._freeze_checkpointing_ready:
+            await self._commit_stage(environment, CHECKPOINT_RUN_BEFORE_AGENT)
+        await self._inner.run(
+            self._compose_run_instruction(instruction), environment, context
+        )
+        if self._freeze_checkpointing_ready:
+            await self._commit_stage(environment, CHECKPOINT_RUN_AFTER_AGENT)
 
     async def cleanup(self, environment):
         if self._inner is not None and hasattr(self._inner, "cleanup"):

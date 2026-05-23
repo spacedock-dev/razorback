@@ -25,7 +25,11 @@ def validate_command(
     warnings: list[dict[str, Any]] = []
 
     if isinstance(spec.benchmark, AdeBenchBenchmarkBlock):
-        from razorback.benchmarks.ade_bench import per_trial_state_reset as ade_reset
+        ade_reset = {
+            "agent_container": True,
+            "compose_services": False,
+            "host_workspace": True,
+        }
 
         # AC-4 — warn whenever any reset surface is False.
         for surface, ok in ade_reset.items():

@@ -4,13 +4,17 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from typing import Any, TypedDict
+from typing import Any, NotRequired, TypedDict
 
 from razorback.diff.stats import wilson_ci
 from razorback.score.load import TrialRecord
 
 
 class StratumStats(TypedDict):
+    dataset: NotRequired[str | None]
+    query_id: NotRequired[str | int | float | bool | None]
+    benchmark_kind: NotRequired[str | None]
+    benchmark_task_id: NotRequired[str | int | float | bool | None]
     n_total: int
     n_completed: int
     n_errored: int
@@ -44,7 +48,9 @@ def reduce_trials(records: list[TrialRecord], *, alpha: float) -> ScoreReport:
 
     strata: dict[str, StratumStats] = {}
     for stratum_name in sorted(by_stratum.keys()):
-        strata[stratum_name] = _reduce_stratum(by_stratum[stratum_name], alpha=alpha)
+        strata[stratum_name] = _reduce_stratum(
+            by_stratum[stratum_name], alpha=alpha
+        )
 
     per_stratum_means = [s["pass_at_1"] for s in strata.values() if s["pass_at_1"] is not None]
     if per_stratum_means:
@@ -80,6 +86,7 @@ def _reduce_stratum(records: list[TrialRecord], *, alpha: float) -> StratumStats
 
     if n_completed == 0:
         return StratumStats(
+            **_common_stratum_metadata(records),
             n_total=n_total,
             n_completed=0,
             n_errored=n_errored,
@@ -92,6 +99,7 @@ def _reduce_stratum(records: list[TrialRecord], *, alpha: float) -> StratumStats
     pass_at_1 = n_pass / n_completed
     ci = wilson_ci(k=n_pass, n=n_completed, alpha=alpha)
     return StratumStats(
+        **_common_stratum_metadata(records),
         n_total=n_total,
         n_completed=n_completed,
         n_errored=n_errored,
@@ -99,6 +107,26 @@ def _reduce_stratum(records: list[TrialRecord], *, alpha: float) -> StratumStats
         pass_at_1=pass_at_1,
         wilson_ci=ci,
         error_reason=None,
+    )
+
+
+def _common_stratum_metadata(records: list[TrialRecord]) -> dict[str, Any]:
+    payloads = [r.stratum_payload or {} for r in records]
+    metadata: dict[str, Any] = {}
+    for key in ("dataset", "query_id", "benchmark_kind", "benchmark_task_id"):
+        values = {
+            payload.get(key)
+            for payload in payloads
+            if _metadata_scalar(payload.get(key))
+        }
+        if len(values) == 1:
+            metadata[key] = next(iter(values))
+    return metadata
+
+
+def _metadata_scalar(value: Any) -> bool:
+    return isinstance(value, (str, int, float, bool)) and not isinstance(
+        value, (list, dict)
     )
 
 

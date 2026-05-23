@@ -25,6 +25,10 @@ def compute_sealed_hash(
     prompt_content_hashes: dict[str, str] | None = None,
     spacedock_skill_version: str | None = None,
     harbor_agent_kwargs: dict[str, Any] | None = None,
+    benchmark_kind: str | None = None,
+    benchmark_task_id: str | None = None,
+    batch_mode: str | None = None,
+    child_task_ids_hash: str | None = None,
 ) -> str:
     """Compute the sealed_hash from the v1 four-input or v2 six-input shape.
 
@@ -61,6 +65,21 @@ def compute_sealed_hash(
             "spacedock_skill_version": spacedock_skill_version,
             "harbor_agent_kwargs": _canonicalize_kwargs(harbor_agent_kwargs or {}),
         }
+        if any(
+            value is not None
+            for value in (
+                benchmark_kind,
+                benchmark_task_id,
+                batch_mode,
+                child_task_ids_hash,
+            )
+        ):
+            payload["task_identity"] = {
+                "benchmark_kind": benchmark_kind,
+                "benchmark_task_id": benchmark_task_id,
+                "batch_mode": batch_mode,
+                "child_task_ids_hash": child_task_ids_hash,
+            }
     else:
         payload = {
             "model": model,

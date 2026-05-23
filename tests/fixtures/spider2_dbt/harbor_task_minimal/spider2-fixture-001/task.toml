@@ -1,0 +1,11 @@
+schema_version = "1.2"
+
+[task]
+name = "spider2-dbt/spider2-fixture-001"
+description = "Synthetic Spider2-DBT Harbor-shaped task fixture."
+
+[environment]
+docker_image = "spider2-source:latest"
+os = "linux"
+cpus = 1
+memory_mb = 512

@@ -102,4 +102,7 @@ def test_unknown_kind_raises_agent_kind_error():
 def test_existing_kinds_still_resolve():
     """M3's nop + claude-cli kinds keep resolving — M4 only adds, never removes."""
     assert resolve_agent_kind("nop").import_path is None
-    assert resolve_agent_kind("claude-cli").import_path == "razorback.agents.claude_cli:ClaudeCliAgent"
+    assert (
+        resolve_agent_kind("claude-cli").import_path
+        == "razorback.agents._runtime.claude:RazorbackClaudeCode"
+    )

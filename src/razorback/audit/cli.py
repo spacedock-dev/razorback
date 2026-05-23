@@ -6,6 +6,7 @@ from pathlib import Path
 
 import typer
 
+from razorback.audit import harbor_codex
 from razorback.audit import taint
 from razorback.errors import ExitCode
 
@@ -33,6 +34,11 @@ def _discover_trial_roots(run_dir: Path) -> list[Path]:
                 continue
             seen.add(candidate)
             roots.append(candidate)
+    for candidate in harbor_codex.discover_trial_roots(run_dir):
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        roots.append(candidate)
     return roots
 
 
@@ -65,13 +71,14 @@ def _audit_run_dir(run_dir: Path, policy: str) -> dict:
     summary = {"clean": 0, "tainted": 0, "coverage_missing": 0}
     for trial_root in _discover_trial_roots(run_dir):
         report = taint.scan_attempt(trial_root, taint_policy="audit")
-        status = _reduce_trial_status(report["findings"])
+        findings = [*report["findings"], *harbor_codex.scan_trial(trial_root)]
+        status = _reduce_trial_status(findings)
         summary[status] += 1
         trials.append({
             "trial_id": _trial_id(trial_root, run_dir),
             "trial_path": str(trial_root),
             "taint_status": status,
-            "findings": report["findings"],
+            "findings": findings,
         })
     return {
         "schema_version": "rk-audit-v1",

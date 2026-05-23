@@ -12,6 +12,7 @@ from typing import Any
 import typer
 import yaml
 
+from razorback.agents.seal import compute_sealed_hash
 from razorback.errors import RazorbackError
 from razorback.provenance.provenance_yaml import (
     refuse_if_any_unresolved,
@@ -27,9 +28,8 @@ from razorback.provenance.resolvers import (
     resolve_prompt_hashes,
     resolve_solver_workflow_hash,
 )
-from razorback.agents.seal import compute_sealed_hash
+from razorback.spec.agent_kwargs import build_v2_harbor_agent_kwargs
 from razorback.spec.parse import parse_spec_file
-from razorback.spec.schema import SpacedockSolverV2AgentBlock
 
 
 def freeze_command(
@@ -58,7 +58,7 @@ def freeze_command(
     image_digest = (
         resolve_image_digest(image_ref) if spec.provenance.pin_image_digest else None
     )
-    cli_bin = "claude" if spec.agent.kind == "claude-cli" else spec.agent.kind
+    cli_bin = _agent_cli_bin(spec)
     agent_cli_hash = (
         resolve_agent_cli_hash(cli_bin) if spec.provenance.pin_agent_cli_hash else None
     )
@@ -96,6 +96,10 @@ def freeze_command(
 
     frozen_path = out or spec_path.with_suffix(".frozen.yaml")
     frozen_body = spec.model_dump(mode="json")
+    _stamp_v2_sealed_fields(
+        frozen_body,
+        solver_workflow_hash=solver_workflow_hash,
+    )
     frozen_provenance_block: dict[str, Any] = {
         **frozen_body.get("provenance", {}),
         "model_resolved_version": model_id,
@@ -111,39 +115,11 @@ def freeze_command(
         frozen_provenance_block["solver_workflow_hash"] = solver_workflow_hash
     frozen_body["provenance"] = frozen_provenance_block
 
-    if isinstance(spec.agent, SpacedockSolverV2AgentBlock):
-        _seal_v2_agent_block(frozen_body["agent"], solver_workflow_hash)
-
     frozen_path.write_text(yaml.safe_dump(frozen_body, sort_keys=False))
 
     write_provenance_yaml(spec_path.parent / "provenance.yaml", resolved)
     typer.echo(f"wrote {frozen_path}")
     typer.echo(f"wrote {spec_path.parent / 'provenance.yaml'}")
-
-
-def _seal_v2_agent_block(agent_block: dict, solver_workflow_hash: str | None) -> None:
-    """Populate solver_workflow_content_hash + spacedock_skill_version + sealed_hash
-    on a spacedock_solver_v2 frozen-spec agent block (spec §4.3.5 + §8.4).
-    """
-    if agent_block.get("solver_workflow_content_hash") is None:
-        agent_block["solver_workflow_content_hash"] = solver_workflow_hash
-    if agent_block.get("spacedock_skill_version") is None:
-        agent_block["spacedock_skill_version"] = "1.0.0"
-    harbor_agent_kwargs: dict[str, Any] = {
-        "max_turns": agent_block.get("max_turns"),
-        "tools_allowed": list(agent_block.get("tools_allowed") or []),
-        "tools_denied": list(agent_block.get("tools_denied") or []),
-    }
-    if agent_block.get("append_system_prompt") is not None:
-        harbor_agent_kwargs["append_system_prompt"] = agent_block["append_system_prompt"]
-    agent_block["sealed_hash"] = compute_sealed_hash(
-        model=agent_block["model"],
-        sampling=agent_block["sampling"],
-        solver_workflow_content_hash=agent_block["solver_workflow_content_hash"],
-        prompt_content_hashes=dict(agent_block.get("prompt_content_hashes") or {}),
-        spacedock_skill_version=agent_block["spacedock_skill_version"],
-        harbor_agent_kwargs=harbor_agent_kwargs,
-    )
 
 
 def _collect_prompt_paths(spec) -> list[Path]:
@@ -164,3 +140,41 @@ def _solver_workflow_path(spec) -> Path | None:
     """
     raw = getattr(spec.agent, "solver_workflow", None)
     return Path(raw) if raw else None
+
+
+def _agent_cli_bin(spec) -> str:
+    if spec.agent.kind == "claude-cli":
+        return "claude"
+    if spec.agent.kind == "spacedock_solver_v2":
+        return "codex" if spec.agent.runtime == "codex" else spec.agent.runtime
+    return spec.agent.kind
+
+
+def _stamp_v2_sealed_fields(
+    frozen_body: dict[str, Any],
+    *,
+    solver_workflow_hash: str | None,
+) -> None:
+    agent = frozen_body.get("agent") or {}
+    if agent.get("kind") != "spacedock_solver_v2":
+        return
+    if solver_workflow_hash is not None:
+        agent["solver_workflow_content_hash"] = solver_workflow_hash
+    if agent.get("spacedock_skill_version") is None:
+        agent["spacedock_skill_version"] = "1.0.0"
+    harbor_agent_kwargs = build_v2_harbor_agent_kwargs(
+        max_turns=agent.get("max_turns"),
+        tools_allowed=agent.get("tools_allowed"),
+        tools_denied=agent.get("tools_denied"),
+        append_system_prompt=agent.get("append_system_prompt"),
+        reasoning_effort=agent.get("reasoning_effort"),
+        reasoning_summary=agent.get("reasoning_summary"),
+    )
+    agent["sealed_hash"] = compute_sealed_hash(
+        model=agent["model"],
+        sampling=agent["sampling"],
+        solver_workflow_content_hash=agent.get("solver_workflow_content_hash"),
+        prompt_content_hashes=dict(agent.get("prompt_content_hashes") or {}),
+        spacedock_skill_version=agent.get("spacedock_skill_version"),
+        harbor_agent_kwargs=harbor_agent_kwargs,
+    )

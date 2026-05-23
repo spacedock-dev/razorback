@@ -1,0 +1,31 @@
+# ABOUTME: PKG-40 ade-bench Codex smoke spec using Harbor-shaped task directories.
+# ABOUTME: Does not use the retired local upstream adapter path.
+version: 1
+experiment: codex-ade-bench-example001-smoke
+agent:
+  kind: spacedock_solver_v2
+  runtime: codex
+  model: gpt-5.5
+  sampling:
+    temperature: 0.0
+    top_p: null
+    seed: 1
+  solver_workflow: ./examples/solver_workflows/codex-benchmark-solver
+  spacedock_skill_version: "1.0.0"
+  max_turns: 200
+  tools_allowed: []
+  tools_denied: []
+benchmark:
+  kind: ade-bench
+  tasks_root: ./tests/fixtures/ade_bench/tasks
+  tasks:
+    - adebench-fixture-001
+  docker_image_override: python:3.12
+  batch_mode: per-task
+trials: 1
+concurrency:
+  trials: 1
+observers:
+  - kind: jsonl
+    path: events.jsonl
+  - kind: stdout

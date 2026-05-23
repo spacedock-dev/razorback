@@ -8,7 +8,10 @@ from razorback.agents.registry import AgentKindError, resolve_agent_kind
 
 def test_claude_cli_kind_resolves_to_a_schema_and_import_path():
     entry = resolve_agent_kind("claude-cli")
-    assert entry.import_path == "razorback.agents.claude_cli:ClaudeCliAgent"
+    assert (
+        entry.import_path
+        == "razorback.agents._runtime.claude:RazorbackClaudeCode"
+    )
     cfg = entry.config_schema(model="claude-opus-4-5", tools_allowed=[], prompt_file=None)
     assert cfg.model == "claude-opus-4-5"
     assert cfg.tools_allowed == []

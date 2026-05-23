@@ -16,7 +16,7 @@ class AuthDiscoveryError(RazorbackError):
 
 @dataclass(frozen=True)
 class AuthResolution:
-    mode: Literal["api-key", "oauth"]
+    mode: Literal["api-key", "oauth", "auth-json"]
     env: dict[str, str] = field(default_factory=dict)
 
 
@@ -35,6 +35,17 @@ def _load_env_api_key(project_root: Path) -> str | None:
     return value
 
 
+def _load_dotenv_value(project_root: Path, name: str) -> str | None:
+    env_path = Path(project_root) / ".env"
+    if not env_path.exists():
+        return None
+    values = dotenv_values(env_path)
+    value = values.get(name)
+    if value is None or value == "":
+        return None
+    return value
+
+
 def _read_claude_token(home: Path) -> str | None:
     """Mirror run_experiment.py:1897-1902 — ~/.claude/benchmark-token, stripped."""
     token_path = Path(home) / ".claude" / "benchmark-token"
@@ -42,6 +53,17 @@ def _read_claude_token(home: Path) -> str | None:
         return None
     contents = token_path.read_text().strip()
     return contents or None
+
+
+def _readable_file(path: Path) -> Path | None:
+    if not path.is_file():
+        return None
+    try:
+        with path.open("rb"):
+            pass
+    except OSError:
+        return None
+    return path
 
 
 def resolve_claude_auth(*, project_root: Path, home: Path | None = None) -> AuthResolution:
@@ -64,4 +86,54 @@ def resolve_claude_auth(*, project_root: Path, home: Path | None = None) -> Auth
         "no claude credentials found. Add ANTHROPIC_API_KEY to "
         f"{Path(project_root) / '.env'} or write a token to "
         f"{home_path / '.claude' / 'benchmark-token'}."
+    )
+
+
+def resolve_codex_auth(
+    *, project_root: Path, home: Path | None = None
+) -> AuthResolution:
+    """Resolve Codex credentials from .env or the standard Codex auth file.
+
+    Precedence:
+      1. OPENAI_API_KEY from <project_root>/.env.
+      2. CODEX_AUTH_JSON_PATH from <project_root>/.env, pointing at a readable file.
+      3. <home>/.codex/auth.json, when readable.
+
+    Harbor's Codex agent consumes OPENAI_API_KEY or CODEX_AUTH_JSON_PATH through
+    AgentConfig.env and optionally honors OPENAI_BASE_URL for proxy-compatible
+    endpoints.
+    """
+    project_root_path = Path(project_root)
+    api_key = _load_dotenv_value(project_root, "OPENAI_API_KEY")
+    base_url = _load_dotenv_value(project_root, "OPENAI_BASE_URL")
+    if api_key is not None:
+        env = {"OPENAI_API_KEY": api_key}
+        if base_url is not None:
+            env["OPENAI_BASE_URL"] = base_url
+        return AuthResolution(mode="api-key", env=env)
+
+    explicit_auth_path = _load_dotenv_value(project_root, "CODEX_AUTH_JSON_PATH")
+    if explicit_auth_path is not None:
+        auth_path = Path(explicit_auth_path).expanduser()
+        if not auth_path.is_absolute():
+            auth_path = project_root_path / auth_path
+        readable_auth_path = _readable_file(auth_path)
+        if readable_auth_path is not None:
+            env = {"CODEX_AUTH_JSON_PATH": str(readable_auth_path)}
+            if base_url is not None:
+                env["OPENAI_BASE_URL"] = base_url
+            return AuthResolution(mode="auth-json", env=env)
+
+    home_path = Path.home() if home is None else Path(home)
+    default_auth_path = _readable_file(home_path / ".codex" / "auth.json")
+    if default_auth_path is not None:
+        env = {"CODEX_AUTH_JSON_PATH": str(default_auth_path)}
+        if base_url is not None:
+            env["OPENAI_BASE_URL"] = base_url
+        return AuthResolution(mode="auth-json", env=env)
+
+    raise AuthDiscoveryError(
+        "no codex credentials found. Add OPENAI_API_KEY to the project .env, "
+        "set CODEX_AUTH_JSON_PATH in the project .env to a readable auth file, "
+        "or create ~/.codex/auth.json."
     )

@@ -68,10 +68,18 @@ async def test_second_setup_takes_resume_branch_without_reinit(
     agent_b._host_git = recording_host_git  # type: ignore[assignment]
     await agent_b.setup(fake_env)
 
-    # Resume branch fires `checkout -- .` exactly once and nothing else.
-    assert host_git_calls == [("checkout", "--", ".")], (
+    # Resume branch starts with `checkout -- .` and does NOT re-init or re-seed
+    # (pkg40 adds an orthogonal CHECKPOINT_SETUP_READY commit after the
+    # init/resume fork; that's allowed — what's banned is `init` / `seed`).
+    assert host_git_calls[0] == ("checkout", "--", "."), (
         f"AC-5 violated: second setup did not take the resume branch. "
         f"host_git argv list: {host_git_calls}"
+    )
+    forbidden = [c for c in host_git_calls if c[0] == "init" or (
+        len(c) >= 5 and c[0] == "commit" and c[-1] == "seed"
+    )]
+    assert forbidden == [], (
+        f"AC-5 violated: resume branch re-initialized or re-seeded the freeze tree: {forbidden}"
     )
     # Inner setup was called once on the resumed agent: the freeze tree could
     # be re-replayed (the inner agent is wired) but no re-init / re-seed git

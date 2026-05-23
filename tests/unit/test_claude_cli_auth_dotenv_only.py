@@ -3,7 +3,12 @@
 
 import pytest
 
-from razorback.agents.auth import AuthResolution, resolve_claude_auth
+from razorback.agents.auth import (
+    AuthDiscoveryError,
+    AuthResolution,
+    resolve_claude_auth,
+    resolve_codex_auth,
+)
 
 
 def test_anthropic_api_key_from_dotenv_wins(tmp_path):
@@ -73,3 +78,76 @@ def test_anthropic_api_key_in_dotenv_with_empty_value_is_treated_as_missing(tmp_
 
     resolution = resolve_claude_auth(project_root=tmp_path, home=home)
     assert resolution.mode == "oauth"
+
+
+def test_codex_openai_api_key_from_dotenv(tmp_path):
+    (tmp_path / ".env").write_text("OPENAI_API_KEY=sk-openai\n")
+    home = tmp_path / "home"
+    (home / ".codex").mkdir(parents=True)
+    (home / ".codex" / "auth.json").write_text('{"tokens": "ignored"}\n')
+
+    resolution = resolve_codex_auth(project_root=tmp_path, home=home)
+
+    assert resolution == AuthResolution(
+        mode="api-key",
+        env={"OPENAI_API_KEY": "sk-openai"},
+    )
+
+
+def test_codex_auth_carries_openai_base_url_when_present(tmp_path):
+    (tmp_path / ".env").write_text(
+        "OPENAI_API_KEY=sk-openai\nOPENAI_BASE_URL=https://proxy.example/v1\n"
+    )
+
+    resolution = resolve_codex_auth(project_root=tmp_path, home=tmp_path / "home")
+
+    assert resolution.env == {
+        "OPENAI_API_KEY": "sk-openai",
+        "OPENAI_BASE_URL": "https://proxy.example/v1",
+    }
+
+
+def test_codex_auth_does_not_read_os_environ(tmp_path, monkeypatch):
+    (tmp_path / ".env").write_text("# empty\n")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-from-os-environ")
+
+    with pytest.raises(Exception):
+        resolve_codex_auth(project_root=tmp_path, home=tmp_path / "home")
+
+
+def test_codex_auth_uses_explicit_auth_json_path_from_dotenv(tmp_path):
+    auth_path = tmp_path / "codex-auth.json"
+    auth_path.write_text('{"tokens": "fake"}\n')
+    (tmp_path / ".env").write_text(f"CODEX_AUTH_JSON_PATH={auth_path}\n")
+
+    resolution = resolve_codex_auth(project_root=tmp_path, home=tmp_path / "home")
+
+    assert resolution == AuthResolution(
+        mode="auth-json",
+        env={"CODEX_AUTH_JSON_PATH": str(auth_path)},
+    )
+
+
+def test_codex_auth_falls_back_to_default_home_auth_json(tmp_path):
+    home = tmp_path / "home"
+    auth_path = home / ".codex" / "auth.json"
+    auth_path.parent.mkdir(parents=True)
+    auth_path.write_text('{"tokens": "fake"}\n')
+    (tmp_path / ".env").write_text("# no codex api key or explicit auth path\n")
+
+    resolution = resolve_codex_auth(project_root=tmp_path, home=home)
+
+    assert resolution == AuthResolution(
+        mode="auth-json",
+        env={"CODEX_AUTH_JSON_PATH": str(auth_path)},
+    )
+
+
+def test_codex_auth_missing_credentials_message_names_supported_options(tmp_path):
+    with pytest.raises(AuthDiscoveryError) as exc_info:
+        resolve_codex_auth(project_root=tmp_path, home=tmp_path / "home")
+
+    message = str(exc_info.value)
+    assert "OPENAI_API_KEY" in message
+    assert "CODEX_AUTH_JSON_PATH" in message
+    assert ".codex/auth.json" in message

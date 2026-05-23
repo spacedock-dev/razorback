@@ -2,6 +2,7 @@
 # ABOUTME: Per spec §4.3 + §8.4. Constructs with valid kwargs; refuses on resume mismatch (exit 20).
 
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -48,6 +49,45 @@ def test_constructor_validates_and_computes_sealed_hash(tmp_path):
         harbor_agent_kwargs=kw["harbor_agent_kwargs"],
     )
     assert agent.sealed_hash == expected
+
+
+def test_known_v2_sealed_hash_value_is_stable(tmp_path):
+    kw = _valid_kwargs(tmp_path)
+
+    sealed_hash = compute_sealed_hash(
+        model=kw["model"],
+        sampling=kw["sampling"],
+        solver_workflow_content_hash=kw["solver_workflow_content_hash"],
+        prompt_content_hashes=kw["prompt_content_hashes"],
+        spacedock_skill_version=kw["spacedock_skill_version"],
+        harbor_agent_kwargs=kw["harbor_agent_kwargs"],
+    )
+
+    assert sealed_hash == "cfcb9927177d50b777fa17d0e7a36b98"
+
+
+@pytest.mark.asyncio
+async def test_run_sends_solver_workflow_readme_before_task_instruction(tmp_path):
+    kw = _valid_kwargs(tmp_path)
+    readme = Path(kw["solver_workflow"]) / "README.md"
+    readme.write_text("# Solver Workflow\n\nRead task-local instructions first.\n")
+    agent = SpacedockSolverAgent(**kw)
+    agent._inner = MagicMock()
+    agent._inner.run = AsyncMock()
+    environment = MagicMock()
+    context = MagicMock()
+
+    await agent.run("task instruction", environment, context)
+
+    environment.exec.assert_not_called()
+    agent._inner.run.assert_awaited_once()
+    delegated_instruction = agent._inner.run.await_args.args[0]
+    assert "# Solver Workflow" in delegated_instruction
+    assert "task instruction" in delegated_instruction
+    assert delegated_instruction.index("# Solver Workflow") < delegated_instruction.index(
+        "task instruction"
+    )
+    assert agent._inner.run.await_args.args[1:] == (environment, context)
 
 
 def test_co_mingled_auth_refused(tmp_path):
