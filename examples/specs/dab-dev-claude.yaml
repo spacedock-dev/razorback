@@ -10,7 +10,7 @@ agent:
 
 benchmark:
   kind: dab
-  data_root: /Users/clkao/git/dataagentbench/data
+  data_root: "${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}"
   datasets:
     - agnews
     - bookreview

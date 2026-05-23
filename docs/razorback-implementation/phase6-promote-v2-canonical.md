@@ -1,13 +1,13 @@
 ---
 id: t1qhefvs93x72m9dbvzw11gn
 title: Phase 6 — promote v2 canonical, sideline v1 to _legacy/
-status: backlog
+status: implementation
 source: plan Phase 6 (v2 reconciliation plan at docs/superpowers/plans/2026-05-19-razorback-reconciliation-plan.md)
-started:
+started: 2026-05-23T03:52:58Z
 completed:
 verdict:
 score: 0.7
-worktree:
+worktree: .worktrees/spacedock-ensign-phase6-promote-v2-canonical
 issue:
 pr:
 mod-block:
@@ -152,3 +152,16 @@ Per plan AC-6.9.
 - `phase2-dab-harbor-adapter` (provides the harbor-DAB adapter the
   canonical surface references)
 - `phase1-rk-run-v2-wrapper` (provides the rk run base)
+
+## Stage Report: plan
+
+- DONE: DONE if the plan maps every Phase 6 AC (AC-1..AC-9) to concrete implementation and validation tasks, including the current canonical target `agent.kind: spacedock_solver` and retired `spacedock_solver_v2` route.
+  Evidence: `docs/razorback-implementation/plans/phase6-promote-v2-canonical.md` has an AC-to-task map and Tasks 1-13 covering canonical `spacedock_solver` routing plus `spacedock_solver_v2` rejection.
+- DONE: DONE if the plan identifies the live routing/code surfaces to touch and explicitly separates v1 solver retirement from later optional `_legacy/` deletion, ADE/DAB adapter retirement, and unrelated dirty work currently in the main worktree.
+  Evidence: the plan's Current committed routing surface and Scope Boundaries sections name `schema.py`, `translate.py`, solver modules, registry, examples, DAB/ADE adapter retirement, Phase 7 `_legacy/` deletion, and dirty-work exclusion.
+- DONE: DONE if the plan gives a diligent validation path: focused TDD tests first, grep/inventory checks, then the feasible smoke/score fallback for AC-1/AC-7/AC-9, with clear commit boundaries.
+  Evidence: Risk-First Order, Tasks 1-13, Commit Boundary Summary, and Final Validation Checklist define focused tests, grep/inventory, AC-1 smoke fallback, AC-7 `rk diff`/`rk score` fallback, and `uv run pytest`.
+
+### Summary
+
+Wrote the standard separate Phase 6 plan at `docs/razorback-implementation/plans/phase6-promote-v2-canonical.md` because the entity has nine ACs and spans multiple subsystems. The plan is based on committed `HEAD` context, treats the current dirty main-worktree edits as contamination, and records the backlog -> plan gate as auto-approved rather than human-gated.

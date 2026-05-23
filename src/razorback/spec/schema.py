@@ -1,10 +1,27 @@
 # ABOUTME: Pydantic schema for the razorback spec.
 # ABOUTME: Top-level forbids unknown keys; agent and benchmark are discriminated unions.
 
+import os
+import re
 from pathlib import Path
 from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+_ENV_DEFAULT_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*):-([^}]*)\}")
+
+
+def _expand_path(value: object) -> object:
+    """Expand local path conveniences accepted by benchmark data-root fields."""
+    if isinstance(value, (str, Path)):
+        text = str(value)
+        text = _ENV_DEFAULT_RE.sub(
+            lambda match: os.environ.get(match.group(1)) or match.group(2),
+            text,
+        )
+        return Path(os.path.expandvars(text)).expanduser()
+    return value
 
 
 class SamplingBlock(BaseModel):
@@ -115,6 +132,11 @@ class DabBenchmarkBlock(BaseModel):
     data_root: Path
     datasets: list[str] = Field(min_length=1)
 
+    @field_validator("data_root", mode="before")
+    @classmethod
+    def _expand_data_root(cls, value: object) -> object:
+        return _expand_path(value)
+
 
 class HarborDabBenchmarkBlock(BaseModel):
     """Phase 2 — DAB harbor adapter (sibling-package task generator).
@@ -131,6 +153,11 @@ class HarborDabBenchmarkBlock(BaseModel):
     workspace_variant: Literal["direct-minimal", "direct-structured", "spacedock"] = "direct-minimal"
     hints: bool = False
     query_mode: Literal["batch", "per-query"] = "per-query"
+
+    @field_validator("data_root", mode="before")
+    @classmethod
+    def _expand_data_root(cls, value: object) -> object:
+        return _expand_path(value)
 
 
 class AdeBenchTaskEntry(BaseModel):

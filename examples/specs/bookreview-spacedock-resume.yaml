@@ -14,7 +14,7 @@ agent:
     verify: ./examples/specs/prompts/spacedock-verify.md
 benchmark:
   kind: dab
-  data_root: /Users/clkao/git/dataagentbench/data
+  data_root: "${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}"
   datasets: [bookreview]
 trials: 1
 observers:

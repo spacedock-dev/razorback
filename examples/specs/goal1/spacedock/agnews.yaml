@@ -22,7 +22,7 @@ agent:
   tools_denied: []
 benchmark:
   kind: harbor_dab
-  data_root: /Users/clkao/git/dataagentbench/data
+  data_root: "${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}"
   datasets:
   - agnews
   workspace_variant: spacedock

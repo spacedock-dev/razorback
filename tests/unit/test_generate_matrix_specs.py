@@ -27,6 +27,10 @@ def test_matrix_specs_carry_query_mode_batch() -> None:
     module = _load_generator()
     spec = module.build_spec("spacedock", "bookreview")
     assert spec["benchmark"]["query_mode"] == "batch"
+    assert (
+        spec["benchmark"]["data_root"]
+        == "${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}"
+    )
 
 
 def test_matrix_specs_query_mode_batch_for_all_variants() -> None:

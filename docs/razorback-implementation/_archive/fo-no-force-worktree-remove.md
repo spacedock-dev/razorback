@@ -7,10 +7,10 @@ started: 2026-05-22T23:11:16Z
 completed: 2026-05-22T23:23:49Z
 verdict: PASSED
 score: 0.85
-worktree: 
+worktree:
 issue:
 pr:
-mod-block: 
+mod-block:
 archived: 2026-05-22T23:23:52Z
 ---
 
