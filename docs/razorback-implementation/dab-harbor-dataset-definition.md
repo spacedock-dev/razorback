@@ -92,3 +92,24 @@ Plan covers AC-1..AC-5 across 11 TDD tasks. Key design call: AC-1's source of tr
 ### Summary
 
 Implemented all 11 plan tasks TDD-first across 9 commits (3ee909b..fdad412), one commit per task per the plan's "small atomic commits" rule. The riskiest contract (dataset.toml shape + loader + schema) landed in T1..T3 before any generator/aggregator work; the integration mechanism check (Goal 1 generator smoke-run) ran at T6 step 6.2 and emitted 36 specs against the real `dab@1.0` definition before T7's round-trip test piled on. Key deviation from the plan: AC-1 verified-by count is 54 queries (upstream ground truth), not 53 (paper-cite stale number) — flagged to team-lead and documented in the test with the per-dataset breakdown. AC-5 honored the captain directive ("reduce, not remove"): in-tree `kind: dab` keeps working but now emits `DeprecationWarning` pointing at `harbor_dab + dataset: dab@1.0`; canonical Goal 1 specs use the dataset ref. `query_mode` stays on `HarborDabBenchmarkBlock` (grep-verified) — dataset identity (the `dataset.toml`) is orthogonal to behavior knobs (the spec block).
+
+## Stage Report: validation
+
+- DONE: Re-run the implementation's bundle independently: `uv run pytest tests/unit/test_harbor_dab_dataset_ref.py tests/unit/test_spec_harbor_dab_block.py tests/unit/test_translator_harbor_dab.py tests/unit/test_generate_dab_paper_matrix_from_definition.py tests/unit/test_aggregate_goal1_from_definition.py tests/unit/test_in_tree_dab_deprecation.py tests/unit/test_dab_spec_parse.py packages/razorback-plugin-dab/tests/unit/test_dataset_definition.py packages/razorback-plugin-dab/tests/unit/test_datasets_catalog.py packages/razorback-plugin-dab/tests/unit/test_stratum_tagging.py`. Report exit code + N/N (expecting 47/47). Then full-suite regression `uv run pytest -m 'not integration' --timeout=60 -q` and report.
+  Bundle 47/47 PASS (32 core + 15 plugin); plugin slice must be invoked from `packages/razorback-plugin-dab/` to avoid a `tests.unit` namespace collision (flagged in validation report §1). Regression: 10 failed / 566 passed; all 10 failures classified as branch-drift from phase6-promote-v2-canonical or pre-existing on main, none qh-introduced — see validation report §3.
+- DONE: Verify the AC-1 query count correction (53 → 54). Inspect packages/razorback-plugin-dab/src/razorback_plugin_dab/dataset.toml — confirm the per-dataset query counts sum to 54 and match the breakdown the worker cited (4+3+13+2+4+4+3+3+3+3+5+7). Independently cross-check against /Users/clkao/git/dataagentbench/data/query_*/query*/ directory listings if accessible. Verify AC-2 compat: a legacy harbor_dab spec without `dataset:` still parses and translates. Verify AC-5: a legacy `kind: dab` spec emits the DeprecationWarning pointing at the canonical replacement.
+  Sum verified = 54 (`python3 -c "print(4+3+13+2+4+4+3+3+3+3+5+7)"`); per-dataset directory counts under `/Users/clkao/git/dataagentbench/data/query_*/query[0-9]*/` match the dataset.toml entries exactly. AC-2 compat verified via test_harbor_dab_legacy_shape_still_parses + test_translator_legacy_shape_still_works (both PASS). AC-5 verified via test_in_tree_dab_emits_deprecation_warning (PASS); message points at `harbor_dab + dataset: dab@1.0`.
+- DONE: Run superpowers:requesting-code-review against the worktree branch. Write validation report at docs/razorback-implementation/validation/dab-harbor-dataset-definition.md with PASS/FAIL per AC + gate decision. Specifically scrutinize: (a) the dataset.toml schema shape is what AC-1 asked for (Harbor-style, not razorback-internal); (b) query_mode + ordering hints stay on the spec block as designed; (c) the in-tree kind: dab deprecation message is informative.
+  Validation report committed at docs/razorback-implementation/validation/dab-harbor-dataset-definition.md with PASS per AC-1..AC-5 and gate decision APPROVE. (a) Harbor-shape confirmed (name/version/description/workspace_variants + inventory list); (b) grep `query_mode` returns only `src/razorback/spec/schema.py:161` — dataset identity is orthogonal to spec-block behavior knobs; (c) deprecation message names the canonical replacement explicitly.
+
+### Summary
+
+All 5 ACs PASS with reproducible evidence on a fresh checkout. Bundle 47/47;
+full regression has 10 failures, all branch-drift from phase6-promote-v2 or
+pre-existing on main — none qh-introduced (verified via
+`git diff 0cb8751..HEAD | grep ^+ | grep spacedock_solver` → zero hits).
+Gate decision: APPROVE → `done` / `verdict: PASSED`. One non-blocking note
+in the validation report: T6's `build_spec` signature change makes a
+pre-phase6 test (`test_generate_matrix_specs_per_variant_kind.py`) throw
+TypeError on this branch; the post-phase6 version on main replaces that
+test so the conflict won't survive a merge.
