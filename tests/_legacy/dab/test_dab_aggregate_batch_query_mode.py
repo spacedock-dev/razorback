@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from razorback.benchmarks.dab.aggregate import aggregate_job_result
+from razorback._legacy.benchmarks.dab.aggregate import aggregate_job_result
 
 
 class _StubVerifier:

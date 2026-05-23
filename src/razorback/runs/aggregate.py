@@ -221,7 +221,7 @@ def _read_trial(trial_dir: Path) -> dict:
 def _stratified_pass_at_1(trials: list[dict]) -> tuple[dict, float | None]:
     """Group completed trials by stratum.dataset; pass@1 = mean over datasets of dataset mean.
 
-    Mirrors benchmarks/dab/aggregate.py:_build_summary. Returns
+    Mirrors the legacy DAB aggregate summary math. Returns
     (datasets_block, stratified_pass_at_1_or_None).
     """
     completed = [t for t in trials if t["error_reason"] is None and t["reward"] is not None]
@@ -340,7 +340,7 @@ def write_per_trial_outcomes(run_dir: Path) -> None:
     """AC-4: write <run_dir>/per_trial_outcomes.json for rk runs diff.
 
     Errored trials enter the outcomes table with reward=0.0 (parity with
-    benchmarks/dab/aggregate.py:104 — `if verifier_result is None: reward = 0.0`).
+    the legacy DAB aggregate rule for missing verifier results).
     rk runs diff is a pairwise comparison and needs every key on both arms.
     """
     counter: dict[tuple[str, int | None], int] = {}

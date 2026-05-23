@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from razorback.benchmarks.dab.prepare import prepare_dataset_tasks
+from razorback._legacy.benchmarks.dab.prepare import prepare_dataset_tasks
 
 
 def _make_fixture_dataset(root: Path) -> Path:

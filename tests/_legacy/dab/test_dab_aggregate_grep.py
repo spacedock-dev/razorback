@@ -4,7 +4,7 @@
 import re
 from pathlib import Path
 
-import razorback.benchmarks.dab.aggregate as aggregate_module
+import razorback._legacy.benchmarks.dab.aggregate as aggregate_module
 
 
 def test_aggregate_does_not_reference_stats_evals():
