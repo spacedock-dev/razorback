@@ -35,10 +35,11 @@ def _environment(tmp_path: Path) -> ProxySeparatedDockerEnvironment:
     )
 
 
-@pytest.mark.asyncio
-async def test_build_compose_command_removes_proxy_block_env(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def _capture_compose_env(
+    env: ProxySeparatedDockerEnvironment,
+    command: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> dict[str, str]:
     captured: dict[str, str] = {}
 
     async def fake_create_subprocess_exec(*args, **kwargs):
@@ -49,15 +50,40 @@ async def test_build_compose_command_removes_proxy_block_env(
         "asyncio.create_subprocess_exec", fake_create_subprocess_exec
     )
 
-    env = _environment(tmp_path)
-    await env._run_docker_compose_command(["build"])
+    await env._run_docker_compose_command(command)
+    return captured
 
+
+def _assert_proxy_block_removed(captured: dict[str, str]) -> None:
     assert "HTTP_PROXY" not in captured
     assert "HTTPS_PROXY" not in captured
     assert "http_proxy" not in captured
     assert "https_proxy" not in captured
     assert "NO_PROXY" not in captured
     assert "no_proxy" not in captured
+
+
+@pytest.mark.asyncio
+async def test_build_compose_command_removes_proxy_block_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env = _environment(tmp_path)
+    captured = await _capture_compose_env(env, ["build"], monkeypatch)
+
+    _assert_proxy_block_removed(captured)
+    assert captured["HF_HUB_OFFLINE"] == "1"
+
+
+@pytest.mark.asyncio
+async def test_up_compose_command_removes_proxy_block_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env = _environment(tmp_path)
+    captured = await _capture_compose_env(
+        env, ["up", "--detach", "--wait"], monkeypatch
+    )
+
+    _assert_proxy_block_removed(captured)
     assert captured["HF_HUB_OFFLINE"] == "1"
 
 
