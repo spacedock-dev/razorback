@@ -2,7 +2,7 @@
 id: ddwx0c1t0g6amrpje2mw3wcm
 title: Preserve ADE main/client Harbor environment split on dataset-ref path
 status: backlog
-source: Goal 4 probe 2026-05-23 - dataset-ref task view used single prebuilt main image instead of known-working ADE main/client setup
+source: Goal 4 probe 2026-05-23 - superseded blocker classification from stale docker_image_override probe
 started:
 completed:
 verdict:
@@ -15,12 +15,19 @@ mod-block:
 
 ## Problem
 
-Goal 4's canonical ADE-Bench source is the Harbor published dataset ref, but the
-current dataset-ref task-view path does not preserve the known-working ADE
-Harbor runtime shape. The 2026-05-23 `airbnb001` probe materialized the dataset
-task view, then patched `[environment].docker_image =
+Goal 4's canonical ADE-Bench source is the Harbor published dataset ref. This
+follow-up was filed after a 2026-05-23 `airbnb001` probe materialized the
+dataset task view, then patched `[environment].docker_image =
 "shared-dbt-duckdb:latest"`. Harbor therefore used its prebuilt single-`main`
 path and failed while pulling that image before any Codex solve.
+
+Stale conclusion note, 2026-05-23: a later no-override probe succeeded for the
+same task with reward `1.0`, no exceptions, and about 3m50s total runtime:
+`/home/exedev/.local/share/razorback/runs/goal4-ade-codex-no-override-probe-20260523172345/runs/ade-bench-harbor-dataset-codex/c95422940e5b34c2`.
+The immediate blocker was the stale `docker_image_override`, not a demonstrated
+requirement to port the older main/client split before the published ADE
+dataset-ref path can run. Treat this task as optional hardening unless future
+full-dataset evidence shows a split-specific failure.
 
 Earlier ADE Harbor smokes worked through a split environment: Harbor's `main`
 service runs the Razorback/DAB-style agent image with Claude/Codex tooling,
@@ -28,8 +35,9 @@ while ADE's canonical `client` service carries the dbt project, DuckDB state,
 and upstream verifier. PKG-23 wired the `T_BENCH_*` env vars for that client,
 and PKG-27 added the verifier bridge from `main` into `client`.
 
-This task ports that known-working main/client setup to the Harbor dataset-ref
-task-view path.
+This task preserves the older main/client setup as a possible hardening path
+for future split-specific failures; it is no longer the immediate Goal 4
+unblocker.
 
 ## Acceptance criteria
 

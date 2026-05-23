@@ -109,8 +109,12 @@ def _write_harbor_codex_trial(
     codex_txt="",
     session_jsonl="",
     job_log=None,
+    agent_layout="steps",
 ):
-    agent_dir = trial_dir / "steps" / "main" / "agent"
+    if agent_layout == "direct":
+        agent_dir = trial_dir / "agent"
+    else:
+        agent_dir = trial_dir / "steps" / "main" / "agent"
     agent_dir.mkdir(parents=True, exist_ok=True)
     if codex_txt is not None:
         (agent_dir / "codex.txt").write_text(codex_txt)
@@ -181,6 +185,18 @@ def harbor_codex_tainted_txt_run_dir(tmp_path):
     _write_harbor_codex_trial(
         run_dir / "task-a" / "query-1" / "trial-0",
         codex_txt=_codex_item_completed_command("curl https://example.com/data.csv"),
+    )
+    return run_dir
+
+
+@pytest.fixture
+def harbor_codex_direct_txt_run_dir(tmp_path):
+    """Current Harbor Codex run-dir with codex.txt directly under trial/agent."""
+    run_dir = tmp_path / "run"
+    _write_harbor_codex_trial(
+        run_dir / "ade-bench-airbnb001__R5gM9eD",
+        codex_txt=_codex_custom_tool_call("pwd"),
+        agent_layout="direct",
     )
     return run_dir
 

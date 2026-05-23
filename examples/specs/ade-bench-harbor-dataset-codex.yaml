@@ -10,9 +10,10 @@ agent:
     temperature: 0.0
     top_p: null
     seed: 1
-  solver_workflow: ./examples/solver_workflows/codex-benchmark-solver
+  solver_workflow: ./examples/solver_workflows/codex-ade-dbt-minimal
   spacedock_skill_version: "1.0.0"
   max_turns: 200
+  reasoning_effort: xhigh
   tools_allowed: []
   tools_denied: []
 benchmark:
@@ -20,7 +21,6 @@ benchmark:
   dataset: dbt-labs/ade-bench@sha256:2c1f9e6966d01b0a5de2235d1a0b64089c7eead42c85c3b7b61d0929405c2bd5
   tasks:
     - airbnb001
-  docker_image_override: shared-dbt-duckdb:latest
   batch_mode: per-task
 trials: 1
 concurrency:

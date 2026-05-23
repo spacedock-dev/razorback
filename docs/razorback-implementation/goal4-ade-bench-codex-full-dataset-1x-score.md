@@ -24,12 +24,12 @@ generic task-view materializer, which preserves Razorback's dbt image
 override, leakage deny-globs, run-dir manifests, and per-task identity
 metadata.
 
-The known-working ADE Harbor setup is not a single image. It has two
-roles: Harbor's `main` service runs the Razorback/DAB-style agent image
-with Codex or Claude tooling, while ADE's canonical `client` service
-contains the dbt project, DuckDB state, and upstream test runner. The
-dataset-ref path must preserve that split, or an explicitly equivalent
-shape, before this entity can produce a meaningful Codex score.
+The 2026-05-23 no-override probe proved the published ADE dataset-ref path can
+run a single `airbnb001` Codex trial successfully when the spec lets Harbor use
+the ADE task's published Dockerfile instead of forcing Razorback's stale
+`shared-dbt-duckdb:latest` override. The immediate stale blocker was the
+canonical spec's image override, not a demonstrated requirement to port the
+older main/client split before any dataset-ref score can run.
 
 This is a score-run entity. It must not silently absorb adapter
 development work. If the smoke probe finds a missing image, dataset
@@ -106,7 +106,7 @@ before `1s` lands, the result document must explicitly include a
 temporary paired check that `rk score` and each completed run's
 `summary.json` agree.
 
-## Probe: 2026-05-23 airbnb001 Codex xhigh
+## Probe: 2026-05-23 airbnb001 Codex xhigh, stale override
 
 Probe spec:
 `/tmp/razorback-goal4-ade-probe-20260523170602/specs/ade-bench/airbnb001.frozen.yaml`.
@@ -138,13 +138,44 @@ Observed result:
   `stratified_pass_at_1: null`, `stratified_n_completed: 0`,
   `stratified_n_errored: 1`, and `error_reason: RuntimeError`.
 
-Conclusion: `1s` is not the next blocker for running Goal 4. The next
-required pre-run condition is to make the Harbor dataset-ref path preserve
-the known-working ADE Harbor setup. The probe's task view patched
-`[environment].docker_image = "shared-dbt-duckdb:latest"`, so Harbor used
-the prebuilt single-`main` path and tried to pull that image before any
-Codex solve. That is not the prior working setup where our agent image
-runs alongside ADE's canonical `client` service and verifier bridge.
+Updated conclusion: `1s` was not the next blocker, but the immediate blocker
+was narrower than originally classified. The probe's task view patched
+`[environment].docker_image = "shared-dbt-duckdb:latest"`, so Harbor treated
+the task as a prebuilt single-`main` image and tried to pull an unpublished
+local tag before any Codex solve.
+
+## Probe: 2026-05-23 airbnb001 Codex xhigh, no override
+
+Run dir:
+`/home/exedev/.local/share/razorback/runs/goal4-ade-codex-no-override-probe-20260523172345/runs/ade-bench-harbor-dataset-codex/c95422940e5b34c2`.
+
+Probe spec:
+`/home/exedev/.local/share/razorback/runs/goal4-ade-codex-no-override-probe-20260523172345/specs/airbnb001.frozen.yaml`.
+
+Successful shape:
+
+- `agent.solver_workflow: examples/solver_workflows/codex-ade-dbt-minimal`
+- `agent.reasoning_effort: xhigh`
+- `benchmark.dataset: dbt-labs/ade-bench@sha256:2c1f9e6966d01b0a5de2235d1a0b64089c7eead42c85c3b7b61d0929405c2bd5`
+- `benchmark.tasks: [airbnb001]`
+- `benchmark.docker_image_override: null`
+
+Observed result:
+
+- The run completed one trial with no exceptions.
+- `result.json` finished at `2026-05-23T17:28:04.011205` after starting at
+  `2026-05-23T17:24:13.990941`, about 3m50s total runtime.
+- `summary.json` reported `n_trials_completed: 1`, `n_trials_errored: 0`,
+  `stratified_pass_at_1: 1.0`, and reward `1.0` for
+  `ade-bench-airbnb001__R5gM9eD`.
+- The verifier wrote `verifier/reward.txt` containing `1`.
+- Current `rk audit` discovery returned zero trials before the direct
+  `<trial>/agent/codex.txt` layout was added to the audit scanner.
+
+Conclusion: the canonical ADE Codex score path should use the no-override
+shape above. Any future main/client split work is a separate hardening or
+compatibility question, not the next immediate blocker for the published
+ADE dataset-ref path.
 
 ## Depends on
 
@@ -155,8 +186,6 @@ runs alongside ADE's canonical `client` service and verifier bridge.
 - `ade-bench-harbor-dataset-ref`
 - `pkg23-harbor-shaped-compose-for-ade-bench`
 - `pkg27-harbor-verifier-ade-bench-sql-tests-gap`
-- A follow-up that ports the PKG-23/PKG-27 ADE `main` + `client`
-  environment split to the Harbor dataset-ref task-view path.
 - `runs-aggregate-single-score-reducer` for publication-grade scoring,
   or a documented temporary `rk score` versus `summary.json` agreement
   check for provisional scoring.

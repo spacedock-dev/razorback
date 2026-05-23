@@ -43,15 +43,20 @@ def _trial_root_for_source(path: Path) -> Path | None:
     for parent in path.parents:
         if parent.name == "steps":
             return parent.parent
+    for parent in path.parents:
+        if parent.name == "agent":
+            return parent.parent
     return None
 
 
 def discover_trial_roots(run_dir: Path) -> list[Path]:
-    """Return Harbor trial roots with Codex traces under steps/*/agent."""
+    """Return Harbor trial roots with Codex traces under agent directories."""
     run_dir = Path(run_dir)
     seen: set[Path] = set()
     roots: list[Path] = []
     for pattern in (
+        "**/agent/codex.txt",
+        "**/agent/sessions/**/*.jsonl",
         "**/steps/*/agent/codex.txt",
         "**/steps/*/agent/sessions/**/*.jsonl",
     ):
@@ -66,7 +71,12 @@ def discover_trial_roots(run_dir: Path) -> list[Path]:
 
 def _trace_sources(trial_root: Path) -> list[tuple[str, Path]]:
     sources: list[tuple[str, Path]] = []
-    for agent_dir in sorted(trial_root.glob("steps/*/agent")):
+    agent_dirs: list[Path] = []
+    direct_agent_dir = trial_root / "agent"
+    if direct_agent_dir.is_dir():
+        agent_dirs.append(direct_agent_dir)
+    agent_dirs.extend(sorted(trial_root.glob("steps/*/agent")))
+    for agent_dir in agent_dirs:
         codex_txt = agent_dir / "codex.txt"
         if codex_txt.is_file():
             sources.append(("harbor_codex_text", codex_txt))

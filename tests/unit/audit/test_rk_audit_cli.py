@@ -104,6 +104,18 @@ def test_rk_audit_strict_taints_harbor_codex_txt_command(
     assert finding["source_path"] == "steps/main/agent/codex.txt"
 
 
+def test_rk_audit_discovers_direct_harbor_codex_txt_trial(
+    harbor_codex_direct_txt_run_dir,
+):
+    result = runner.invoke(app, ["audit", str(harbor_codex_direct_txt_run_dir)])
+    assert result.exit_code == 0, result.stdout
+    payload = _parse_json_stdout(result)
+    assert len(payload["trials"]) == 1
+    assert payload["trials"][0]["trial_id"] == "ade-bench-airbnb001__R5gM9eD"
+    assert payload["trials"][0]["taint_status"] == "clean"
+    assert payload["summary"] == {"clean": 1, "tainted": 0, "coverage_missing": 0}
+
+
 def test_rk_audit_strict_ignores_job_log_setup_install(
     harbor_codex_setup_install_only_run_dir,
 ):
