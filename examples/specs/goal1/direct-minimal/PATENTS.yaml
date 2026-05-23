@@ -14,9 +14,10 @@ agent:
   - Edit
   - Glob
   - Grep
+  reasoning_effort: xhigh
 benchmark:
   kind: harbor_dab
-  data_root: "${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}"
+  dataset: dab@1.0
   datasets:
   - PATENTS
   workspace_variant: direct-minimal
