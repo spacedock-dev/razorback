@@ -4,6 +4,7 @@
 import importlib
 import inspect
 import json
+import shlex
 import subprocess
 import sys
 import tomllib
@@ -16,7 +17,10 @@ from harbor.agents.installed.codex import Codex
 from razorback.agents._runtime import claude as claude_adapter
 from razorback.agents._runtime import codex as codex_adapter
 from razorback.agents._runtime import pi as pi_adapter
-from razorback.agents.public_lookup_guard import codex_pretooluse_guard_script
+from razorback.agents.public_lookup_guard import (
+    codex_pretooluse_guard_script,
+    codex_shell_wrapper_script,
+)
 from razorback.agents.spacedock_solver import SpacedockSolverAgentError
 
 
@@ -27,6 +31,10 @@ def _descriptor_kwargs(descriptors):
 def _appended_codex_config_toml(command: str) -> str:
     marker = 'cat >>"$CODEX_HOME/config.toml" <<TOML\n'
     return command.split(marker, 1)[1].rsplit("\nTOML", 1)[0]
+
+
+def shlex_quote_path(path) -> str:
+    return shlex.quote(str(path))
 
 
 def test_harbor_installed_agent_descriptor_shapes_are_available():
@@ -215,6 +223,10 @@ async def test_codex_runtime_setup_installs_pretooluse_lookup_guard(
     delegated = calls[0]
     assert setup_command in delegated
     assert "razorback-public-lookup-guard.py" in delegated
+    assert "razorback-shell-guard.sh" in delegated
+    assert "razorback-bin" in delegated
+    for tool in ("curl", "wget", "git", "pip", "pip3", "npm", "python", "python3"):
+        assert tool in delegated
     appended_config = tomllib.loads(_appended_codex_config_toml(delegated))
     pre_tool_use = appended_config["hooks"]["PreToolUse"]
     assert len(pre_tool_use) == 1
@@ -231,6 +243,40 @@ async def test_codex_runtime_setup_installs_pretooluse_lookup_guard(
     assert "_RAZORBACK_LOOKUP_GUARD" not in hook["command"]
     assert "[[hooks.PreToolUse.hooks]]" in delegated
     assert "blocked benchmark public lookup command before execution" in delegated
+
+
+@pytest.mark.asyncio
+async def test_codex_outer_exec_launches_with_shell_lookup_guard(tmp_path, monkeypatch):
+    calls = []
+
+    async def fake_exec_as_agent(self, environment, command, **kwargs):
+        calls.append(command)
+        return SimpleNamespace(return_code=0, stdout="", stderr="")
+
+    monkeypatch.setattr(Codex, "exec_as_agent", fake_exec_as_agent)
+    inner = codex_adapter.build_inner_agent(
+        logs_dir=tmp_path,
+        model="gpt-5.1-codex",
+        harbor_agent_kwargs={},
+        extra_env={"OPENAI_API_KEY": "sk-fake"},
+    )
+    outer_command = (
+        "if [ -s ~/.nvm/nvm.sh ]; then . ~/.nvm/nvm.sh; fi; "
+        "codex exec --enable unified_exec --json 'solve it'"
+    )
+
+    await inner.exec_as_agent(SimpleNamespace(), command=outer_command)
+
+    delegated = calls[0]
+    assert delegated.startswith("if [ -s ~/.nvm/nvm.sh ]; then . ~/.nvm/nvm.sh; fi; ")
+    assert (
+        'BASH_ENV="$CODEX_HOME/razorback-shell-guard.sh" '
+        'RAZORBACK_ORIGINAL_PATH="$PATH" '
+        'PATH="$CODEX_HOME/razorback-bin:$PATH" '
+        "codex exec --enable unified_exec"
+    ) in delegated
+    assert "fi; BASH_ENV=" in delegated
+    assert delegated.count("BASH_ENV=") == 1
 
 
 def test_codex_pretooluse_lookup_guard_script_blocks_public_lookup_payload(tmp_path):
@@ -251,6 +297,126 @@ def test_codex_pretooluse_lookup_guard_script_blocks_public_lookup_payload(tmp_p
 
     assert result.returncode == 2
     assert "blocked benchmark public lookup command" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("tool", "args"),
+    [
+        ("wget", ["https://example.com/data.csv"]),
+        ("git", ["clone", "https://github.com/example/project"]),
+        ("git", ["ls-remote", "https://github.com/example/project"]),
+        ("pip", ["install", "datasets"]),
+        ("pip3", ["install", "datasets"]),
+        ("npm", ["install", "left-pad"]),
+        ("python", ["-m", "pip", "install", "datasets"]),
+        (
+            "python3",
+            [
+                "-c",
+                "import requests; requests.get('https://example.com/data.json')",
+            ],
+        ),
+    ],
+)
+def test_codex_shell_guard_blocks_public_lookup_patterns(tmp_path, tool, args):
+    guard_path = tmp_path / "guard.py"
+    guard_path.write_text(codex_pretooluse_guard_script())
+
+    result = subprocess.run(
+        [sys.executable, str(guard_path), "--shell-guard", tool, *args],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "blocked benchmark public lookup command" in result.stderr
+
+
+def _install_shell_wrapper_fixture(tmp_path, tool, real_command):
+    codex_home = tmp_path / "codex-home"
+    bin_dir = codex_home / "razorback-bin"
+    bin_dir.mkdir(parents=True)
+    guard_path = codex_home / "razorback-public-lookup-guard.py"
+    guard_path.write_text(codex_pretooluse_guard_script())
+    guard_path.chmod(0o700)
+    wrapper_path = bin_dir / tool
+    wrapper_path.write_text(codex_shell_wrapper_script())
+    wrapper_path.chmod(0o700)
+    env = {
+        "CODEX_HOME": str(codex_home),
+        "RAZORBACK_GUARD_PYTHON": sys.executable,
+        f"RAZORBACK_REAL_{tool.upper()}": str(real_command),
+    }
+    return wrapper_path, env
+
+
+def test_codex_shell_wrapper_blocks_curl_before_real_command(tmp_path):
+    marker = tmp_path / "curl-called"
+    real_curl = tmp_path / "real-curl"
+    real_curl.write_text(f"#!/bin/sh\n: > {shlex_quote_path(marker)}\n")
+    real_curl.chmod(0o700)
+    wrapper_path, env = _install_shell_wrapper_fixture(tmp_path, "curl", real_curl)
+
+    result = subprocess.run(
+        [str(wrapper_path), "https://example.com"],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "blocked benchmark public lookup command" in result.stderr
+    assert not marker.exists()
+
+
+def test_codex_shell_wrapper_allows_local_python_source(tmp_path):
+    marker = tmp_path / "python-called"
+    real_python = tmp_path / "real-python"
+    real_python.write_text(f"#!/bin/sh\n: > {shlex_quote_path(marker)}\n")
+    real_python.chmod(0o700)
+    wrapper_path, env = _install_shell_wrapper_fixture(tmp_path, "python", real_python)
+
+    result = subprocess.run(
+        [
+            str(wrapper_path),
+            "-c",
+            "import duckdb; duckdb.sql('select 1').fetchall()",
+        ],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert result.stderr == ""
+    assert marker.exists()
+
+
+def test_codex_shell_wrapper_blocks_python_stdin_public_lookup(tmp_path):
+    marker = tmp_path / "python-called"
+    real_python = tmp_path / "real-python"
+    real_python.write_text(f"#!/bin/sh\n: > {shlex_quote_path(marker)}\n")
+    real_python.chmod(0o700)
+    wrapper_path, env = _install_shell_wrapper_fixture(tmp_path, "python3", real_python)
+
+    result = subprocess.run(
+        [str(wrapper_path)],
+        input=(
+            "import urllib.request\n"
+            "urllib.request.urlopen('https://example.com').read()\n"
+        ),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "blocked benchmark public lookup command" in result.stderr
+    assert not marker.exists()
 
 
 @pytest.mark.parametrize(

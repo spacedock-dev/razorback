@@ -23,6 +23,16 @@ _PYTHON_PUBLIC_LOOKUP_PATTERNS = [
     re.compile(r"\baiohttp\.ClientSession\s*\("),
 ]
 _PUBLIC_URL = re.compile(r"\bhttps?://")
+CODEX_SHELL_GUARD_COMMANDS = (
+    "curl",
+    "wget",
+    "git",
+    "pip",
+    "pip3",
+    "npm",
+    "python",
+    "python3",
+)
 
 
 def is_forbidden_public_lookup_command(command: str) -> bool:
@@ -166,6 +176,37 @@ def codex_pretooluse_guard_script() -> str:
                         return True
             return False
 
+        def shell_command_blocked(tool_name, args, stdin_source):
+            tool = os.path.basename(tool_name)
+            if tool in {"curl", "wget"}:
+                return True
+            if tool == "git":
+                return len(args) >= 2 and args[0] in {"clone", "ls-remote"} and any(PUBLIC_URL.search(arg) for arg in args[1:])
+            if tool in {"pip", "pip3"}:
+                return bool(args) and args[0] == "install"
+            if tool == "npm":
+                return bool(args) and args[0] == "install"
+            if tool in {"python", "python3"}:
+                if len(args) >= 3 and args[0] == "-m" and args[1] == "pip" and args[2] == "install":
+                    return True
+                sources = []
+                for index, arg in enumerate(args):
+                    if arg == "-c" and index + 1 < len(args):
+                        sources.append(args[index + 1])
+                        break
+                    if arg.startswith("-c") and len(arg) > 2:
+                        sources.append(arg[2:])
+                        break
+                    if not arg.startswith("-"):
+                        break
+                if stdin_source:
+                    sources.append(stdin_source)
+                for source in sources:
+                    if any(pattern.search(source) for pattern in PYTHON_PATTERNS):
+                        if PUBLIC_URL.search(source) or "load_dataset" in source or "datasets" in source:
+                            return True
+            return False
+
         def walk_commands(value):
             if isinstance(value, dict):
                 for key, nested in value.items():
@@ -185,18 +226,113 @@ def codex_pretooluse_guard_script() -> str:
             except json.JSONDecodeError:
                 return value
 
-        payload = json.load(sys.stdin)
-        tool_name = payload.get("tool_name") or payload.get("tool") or payload.get("name") or ""
-        tool_input = loads_json(payload.get("tool_input") or payload.get("input") or payload.get("arguments") or {})
-        commands = list(walk_commands(tool_input))
-        if not commands and isinstance(tool_input, str) and os.path.basename(tool_name) in SHELL_TOOL_NAMES:
-            commands = [tool_input]
+        def run_hook_guard():
+            payload = json.load(sys.stdin)
+            tool_name = payload.get("tool_name") or payload.get("tool") or payload.get("name") or ""
+            tool_input = loads_json(payload.get("tool_input") or payload.get("input") or payload.get("arguments") or {})
+            commands = list(walk_commands(tool_input))
+            if not commands and isinstance(tool_input, str) and os.path.basename(tool_name) in SHELL_TOOL_NAMES:
+                commands = [tool_input]
 
-        if any(command_blocked(command) for command in commands):
-            print(
-                "blocked benchmark public lookup command before execution",
-                file=sys.stderr,
-            )
-            sys.exit(2)
+            if any(command_blocked(command) for command in commands):
+                print(
+                    "blocked benchmark public lookup command before execution",
+                    file=sys.stderr,
+                )
+                sys.exit(2)
+
+        def run_shell_guard(argv):
+            if len(argv) < 3:
+                print("razorback shell guard wrapper invoked without a tool name", file=sys.stderr)
+                sys.exit(127)
+            tool_name = argv[2]
+            args = argv[3:]
+            stdin_source = sys.stdin.read()
+            if shell_command_blocked(tool_name, args, stdin_source):
+                print(
+                    "blocked benchmark public lookup command before execution",
+                    file=sys.stderr,
+                )
+                sys.exit(2)
+
+        if len(sys.argv) >= 2 and sys.argv[1] == "--shell-guard":
+            run_shell_guard(sys.argv)
+        else:
+            run_hook_guard()
+        '''
+    ).strip() + "\n"
+
+
+def codex_shell_guard_script() -> str:
+    """Return a Bash startup script that exposes real command paths to wrappers."""
+    exports = "\n".join(
+        f': "${{RAZORBACK_REAL_{tool.upper()}:=$(PATH="$RAZORBACK_ORIGINAL_PATH" command -v {tool} 2>/dev/null || true)}}"\n'
+        f"export RAZORBACK_REAL_{tool.upper()}"
+        for tool in CODEX_SHELL_GUARD_COMMANDS
+    )
+    return textwrap.dedent(
+        f'''
+        # Razorback Codex shell guard. Sourced by bash through BASH_ENV.
+        : "${{CODEX_HOME:?}}"
+        : "${{RAZORBACK_ORIGINAL_PATH:=$PATH}}"
+        export RAZORBACK_ORIGINAL_PATH
+        : "${{RAZORBACK_GUARD_PYTHON:=$(PATH="$RAZORBACK_ORIGINAL_PATH" command -v python3 2>/dev/null || PATH="$RAZORBACK_ORIGINAL_PATH" command -v python 2>/dev/null || true)}}"
+        export RAZORBACK_GUARD_PYTHON
+        {exports}
+        case ":$PATH:" in
+            *":$CODEX_HOME/razorback-bin:"*) ;;
+            *) export PATH="$CODEX_HOME/razorback-bin:$PATH" ;;
+        esac
+        '''
+    ).strip() + "\n"
+
+
+def codex_shell_wrapper_script() -> str:
+    """Return the common shell wrapper installed under guarded command names."""
+    return textwrap.dedent(
+        r'''
+        #!/bin/sh
+        tool=$(basename "$0")
+        var="RAZORBACK_REAL_$(printf '%s' "$tool" | tr '[:lower:]' '[:upper:]')"
+        eval "real=\${$var:-}"
+        guard="$CODEX_HOME/razorback-public-lookup-guard.py"
+        guard_python="${RAZORBACK_GUARD_PYTHON:-}"
+
+        if [ -z "$guard_python" ] || [ ! -x "$guard_python" ]; then
+            echo "$tool: command not found" >&2
+            exit 127
+        fi
+
+        if [ -z "$real" ] || [ ! -x "$real" ]; then
+            "$guard_python" "$guard" --shell-guard "$tool" "$@" </dev/null
+            rc=$?
+            if [ "$rc" -ne 0 ]; then
+                exit "$rc"
+            fi
+            echo "$tool: command not found" >&2
+            exit 127
+        fi
+
+        if { [ "$tool" = "python" ] || [ "$tool" = "python3" ]; } && { [ "$#" -eq 0 ] || [ "${1:-}" = "-" ]; }; then
+            tmp=$(mktemp "${TMPDIR:-/tmp}/razorback-python-stdin.XXXXXX") || exit 1
+            cat >"$tmp"
+            "$guard_python" "$guard" --shell-guard "$tool" "$@" <"$tmp"
+            rc=$?
+            if [ "$rc" -ne 0 ]; then
+                rm -f "$tmp"
+                exit "$rc"
+            fi
+            "$real" "$@" <"$tmp"
+            rc=$?
+            rm -f "$tmp"
+            exit "$rc"
+        fi
+
+        "$guard_python" "$guard" --shell-guard "$tool" "$@" </dev/null
+        rc=$?
+        if [ "$rc" -ne 0 ]; then
+            exit "$rc"
+        fi
+        exec "$real" "$@"
         '''
     ).strip() + "\n"

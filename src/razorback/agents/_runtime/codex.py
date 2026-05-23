@@ -9,7 +9,10 @@ from harbor.agents.installed.codex import Codex
 from harbor.environments.base import BaseEnvironment
 
 from razorback.agents.public_lookup_guard import (
+    CODEX_SHELL_GUARD_COMMANDS,
     codex_pretooluse_guard_script,
+    codex_shell_guard_script,
+    codex_shell_wrapper_script,
     is_forbidden_public_lookup_command,
 )
 from razorback.agents.proxy import PROXY_BLOCK_ENV
@@ -82,7 +85,9 @@ class RazorbackCodex(Codex):
             env = _without_proxy_env(env)
         elif _is_codex_runtime_setup_command(command):
             command = _with_codex_lookup_guard_setup(command)
-        elif not _is_codex_outer_exec_command(command):
+        elif _is_codex_outer_exec_command(command):
+            command = _with_codex_shell_lookup_guard(command)
+        else:
             _raise_if_public_lookup(command)
         return await super().exec_as_agent(
             environment,
@@ -154,14 +159,32 @@ def _is_codex_outer_exec_command(command: str) -> bool:
 
 def _with_codex_lookup_guard_setup(command: str) -> str:
     script = codex_pretooluse_guard_script()
+    shell_guard = codex_shell_guard_script()
+    wrapper = codex_shell_wrapper_script()
+    wrapped_commands = " ".join(shlex.quote(command) for command in CODEX_SHELL_GUARD_COMMANDS)
     return (
         command
         + "\n\n"
         + "_RAZORBACK_LOOKUP_GUARD=\"$CODEX_HOME/razorback-public-lookup-guard.py\"\n"
+        + "_RAZORBACK_SHELL_GUARD=\"$CODEX_HOME/razorback-shell-guard.sh\"\n"
+        + "_RAZORBACK_BIN=\"$CODEX_HOME/razorback-bin\"\n"
+        + "mkdir -p \"$_RAZORBACK_BIN\"\n"
         + "cat >\"$_RAZORBACK_LOOKUP_GUARD\" <<'PY'\n"
         + script
         + "PY\n"
         + "chmod 700 \"$_RAZORBACK_LOOKUP_GUARD\"\n"
+        + "cat >\"$_RAZORBACK_SHELL_GUARD\" <<'SH'\n"
+        + shell_guard
+        + "SH\n"
+        + "chmod 700 \"$_RAZORBACK_SHELL_GUARD\"\n"
+        + "cat >\"$_RAZORBACK_BIN/.razorback-wrapper\" <<'SH'\n"
+        + wrapper
+        + "SH\n"
+        + "chmod 700 \"$_RAZORBACK_BIN/.razorback-wrapper\"\n"
+        + f"for _razorback_tool in {wrapped_commands}; do\n"
+        + '    cp "$_RAZORBACK_BIN/.razorback-wrapper" "$_RAZORBACK_BIN/$_razorback_tool"\n'
+        + '    chmod 700 "$_RAZORBACK_BIN/$_razorback_tool"\n'
+        + "done\n"
         + 'cat >>"$CODEX_HOME/config.toml" <<TOML\n'
         + "\n[[hooks.PreToolUse]]\n"
         + 'matcher = "*"\n'
@@ -171,6 +194,16 @@ def _with_codex_lookup_guard_setup(command: str) -> str:
         + "timeout = 10\n"
         + "TOML"
     )
+
+
+def _with_codex_shell_lookup_guard(command: str) -> str:
+    guarded_exec = (
+        'BASH_ENV="$CODEX_HOME/razorback-shell-guard.sh" '
+        'RAZORBACK_ORIGINAL_PATH="$PATH" '
+        'PATH="$CODEX_HOME/razorback-bin:$PATH" '
+        "codex exec "
+    )
+    return command.replace("codex exec ", guarded_exec, 1)
 
 
 def _is_empty_noop(name: str, value: Any) -> bool:
