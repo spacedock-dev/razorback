@@ -10,7 +10,7 @@ score: 0.9
 worktree: .worktrees/spacedock-ensign-goal1-rerun-headline-per-query-recompute
 issue:
 pr:
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 ## Problem
