@@ -1,13 +1,13 @@
 ---
 id: hcds9v8a9k8sgtzzkhn51cge
 title: Phase 6 follow-up — retire in-tree DAB adapter
-status: validation
+status: done
 source: phase6-promote-v2-canonical validation — deferred AC-4 DAB sideline
 started: 2026-05-23T05:27:23Z
-completed:
-verdict:
+completed: 2026-05-23T14:35:20Z
+verdict: PASSED
 score: 0.82
-worktree: .worktrees/spacedock-ensign-phase6-followup-retire-in-tree-dab-adapter
+worktree: 
 issue:
 pr:
 mod-block: 
