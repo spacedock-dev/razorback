@@ -1,9 +1,9 @@
 ---
 id: gbejh94n05b1096a6fhqeq0h
 title: ADE-Bench uses Harbor published dataset references
-status: backlog
+status: plan
 source: 2026-05-23 captain directive — consume canonical Harbor dataset refs instead of local ADE task roots
-started:
+started: 2026-05-23T04:58:35Z
 completed:
 verdict:
 score: 0.85

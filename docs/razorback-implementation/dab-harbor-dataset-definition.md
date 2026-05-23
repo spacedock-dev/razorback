@@ -1,9 +1,9 @@
 ---
 id: qhtser5qkf5b77pk43z4pnb9
 title: DAB consumes Harbor dataset definitions
-status: backlog
+status: plan
 source: 2026-05-23 captain directive — make wrapped DAB consume dataset definitions like Harbor-native datasets
-started:
+started: 2026-05-23T04:58:35Z
 completed:
 verdict:
 score: 0.8
