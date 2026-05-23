@@ -181,3 +181,21 @@ The inline plan keeps this as a tiny plan-stage task and does not create a
 separate plan document. It scopes implementation to ADE workspace-data
 preflight and validation, with the smallest multi-family smoke before any
 full Goal 4 restart.
+
+## Stage Report: implementation
+
+- DONE: Add tests and implementation that verify sampled ADE task views preserve task-specific dbt project/data identity across at least `airbnb001`, `f1001`, and `quickbooks001` or a defensible equivalent available from the dataset ref.
+  Evidence: `52ae716` added DuckDB family contract tests for `airbnb001`, `f1001`, and `quickbooks001`; `c02e80c` added `src/razorback/benchmarks/ade_bench/preflight.py` plus task-view Dockerfile preflight injection.
+- DONE: Add a fail-closed ADE workspace preflight wired into the run path before `codex exec`, with a test proving mismatched/missing source data is reported as infrastructure failure.
+  Evidence: `tests/unit/test_spacedock_solver_ade_preflight.py` proves `SpacedockSolverAgent.setup()` runs ADE preflight before inner Codex setup and blocks mismatched F1/QuickBooks data with `SpacedockSolverAgentError`.
+- DONE: Run focused tests and any cheap smoke/preflight commands needed to prove the mechanism, then commit all implementation-stage changes and append `## Stage Report: implementation` with exact evidence.
+  Evidence: `12 passed` for the new ADE preflight suite, `21 passed` for adjacent translator/lifecycle suites, and a standalone `f1001` preflight smoke emitted `RAZORBACK_ADE_PREFLIGHT ... "status": "passed"` before this report.
+
+### Summary
+
+The implementation adds a reusable ADE DuckDB table-family preflight for
+`airbnb`, `f1`, and `quickbooks`, injects it into ADE Harbor task views, and
+runs it again in `SpacedockSolverAgent.setup()` before the inner Codex runtime
+can install or execute. The host `duckdb` dependency and lockfile update are
+intentional because the checker and tests inspect real DuckDB table metadata;
+no full 48-task matrix was run.
