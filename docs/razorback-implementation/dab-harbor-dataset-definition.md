@@ -66,3 +66,16 @@ and shows examples/tests route through the canonical dataset-definition path.
 This task is about the benchmark identity and task inventory source of truth.
 It should not remove the need for local DAB data when materializing tasks; it
 should move that need out of score specs and into adapter setup/materialization.
+
+## Stage Report: plan
+
+- DONE: Separate plan doc at docs/razorback-implementation/plans/dab-harbor-dataset-definition.md per the README's 4+-AC rule. AC↔task map for AC-1..AC-5.
+  Plan committed alongside this report; AC↔task map table at the top covers AC-1..AC-5 across 11 tasks.
+- DONE: Probe + decide: does the DAB dataset definition live in Harbor's dataset registry (parallel to ade-bench@1.0)? Or as a dataset.toml shipped by the harbor-dab plugin alongside the existing in-tree adapter? Or both? Name the AC-1 source-of-truth file format (TOML/JSON/etc.) and where it lives in the repo or in Harbor.
+  Decision: TOML file shipped *inside* the razorback-plugin-dab package at packages/razorback-plugin-dab/src/razorback_plugin_dab/dataset.toml. Asymmetric with the sibling ade-bench entity (which consumes Harbor's actual Registry) because DAB tasks are *generated* per data_root, not source-controlled PackageTaskId entries — Harbor Registry's RegistryTaskId shape doesn't fit. Rationale + non-goal documented in the plan's File Structure → "Out of touch" section.
+- DONE: AC-3 + AC-5 interaction: The Goal 1 matrix generator at examples/drivers/generate-dab-paper-matrix-specs.py currently reads from an in-code catalog. AC-3 asks the generator to read the dataset definition. AC-5 asks for ONE canonical DAB path. Spec which path stays (in-tree dab vs harbor_dab plugin) and how the generator switches; if it's a clean cut, name the migration step.
+  Canonical = kind: harbor_dab + dataset: dab@<version> (plugin-backed; already runs Goal 1). Legacy = kind: dab (in-tree DabBenchmarkBlock + src/razorback/benchmarks/dab/prepare.py) marked dev-only via DeprecationWarning, NOT removed (captain directive: "don't remove the need for local DAB data when materializing"). Migration step: Task 6 in the plan swaps the generator from `data_root + datasets + workspace_variant` shape to `dataset: dab@1.0 + datasets:[<one>] + workspace_variant + query_mode: batch` — one mechanical edit; smoke-checked end-to-end at Step 6.2 before any later task piles on.
+
+### Summary
+
+Plan covers AC-1..AC-5 across 11 TDD tasks. Key design call: AC-1's source of truth is a `dataset.toml` shipped by the plugin (parallel to Harbor's Registry shape, not registered inside it — DAB tasks are generated, not packaged). Task ordering puts the riskiest contract (definition + schema + translator) first, with Task 6's generator smoke-run as the integration-level mechanism check before round-trip tests and aggregator work pile on. AC-5 is "reduce, not remove" — in-tree DAB stays as dev-only with a deprecation warning, harbor_dab + dataset ref becomes canonical.
