@@ -1,13 +1,13 @@
 ---
 id: yhb5ej5g3gnr71sbgr2cv5jz
 title: Phase 6 follow-up — retire standalone CLI agent wrapper
-status: validation
+status: done
 source: phase6-promote-v2-canonical validation — deferred AC-4 standalone CLI sideline
 started: 2026-05-23T05:27:15Z
-completed:
-verdict:
+completed: 2026-05-23T14:30:53Z
+verdict: PASSED
 score: 0.78
-worktree: .worktrees/spacedock-ensign-phase6-followup-retire-cli-agent-wrapper
+worktree: 
 issue:
 pr:
 mod-block: 
