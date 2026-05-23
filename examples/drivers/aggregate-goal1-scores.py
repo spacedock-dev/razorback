@@ -10,8 +10,10 @@ import math
 from pathlib import Path
 from typing import Any
 
-from razorback_plugin_dab.datasets import DAB_DATASETS
+from razorback_plugin_dab.dataset_def import load_default_definition
 from razorback_plugin_dab.generate.workspace_readme import WORKSPACE_VARIANTS
+
+_DEFINITION = load_default_definition()
 
 
 VARIANT_TARGETS = {
@@ -72,7 +74,7 @@ def extract_cell_stats(result_json: Path) -> dict[str, Any]:
 
 def aggregate_variant(matrix_root: Path, variant: str) -> dict[str, Any]:
     strata: dict[str, dict[str, Any]] = {}
-    for ds in DAB_DATASETS:
+    for ds in _DEFINITION.datasets:
         cell_dir = matrix_root / variant / ds.name
         rj = find_result_json(cell_dir)
         if rj is None:
@@ -126,7 +128,7 @@ def aggregate_variant(matrix_root: Path, variant: str) -> dict[str, Any]:
     return {
         "variant": variant,
         "n_strata_scored": len(scored_strata),
-        "n_strata_total": len(DAB_DATASETS),
+        "n_strata_total": len(_DEFINITION.datasets),
         "stratified_pass_at_1_mean_over_strata": stratified_mean,
         "pooled_pass_at_1": (total_pass / total_n) if total_n > 0 else None,
         "pooled_n_pass": total_pass,

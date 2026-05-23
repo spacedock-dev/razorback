@@ -1,0 +1,20 @@
+# 2-dataset fixture used by AC-3 generator round-trip tests.
+name = "dab-fixture"
+version = "0.1"
+description = "AC-3 fixture — 2 datasets, 2 variants."
+
+workspace_variants = ["direct-minimal", "spacedock"]
+
+[[datasets]]
+name = "tinyset"
+backends = ["sqlite"]
+query_count = 2
+query_ids = [1, 2]
+schema_version = "v1"
+
+[[datasets]]
+name = "smallset"
+backends = ["duckdb", "sqlite"]
+query_count = 1
+query_ids = [1]
+schema_version = "v1"

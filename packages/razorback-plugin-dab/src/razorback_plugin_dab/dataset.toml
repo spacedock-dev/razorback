@@ -1,0 +1,93 @@
+# DAB dataset definition — Harbor-style identity + inventory for the 12 upstream DAB tasks.
+# Source: /Users/clkao/git/dataagentbench/data/query_<name>/db_config.yaml.
+# Local data_root materializes these tasks; this file IS the benchmark identity.
+
+name = "dab"
+version = "1.0"
+description = "Data Agent Bench — 12 datasets, 12 backends, stratified pass@1 (paper baseline)."
+
+workspace_variants = ["direct-minimal", "direct-structured", "spacedock"]
+
+[[datasets]]
+name = "agnews"
+backends = ["mongo", "sqlite"]
+query_count = 4
+query_ids = [1, 2, 3, 4]
+schema_version = "v1"
+
+[[datasets]]
+name = "bookreview"
+backends = ["postgres", "sqlite"]
+query_count = 3
+query_ids = [1, 2, 3]
+schema_version = "v1"
+
+[[datasets]]
+name = "crmarenapro"
+backends = ["duckdb", "postgres", "sqlite"]
+query_count = 13
+query_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+schema_version = "v1"
+
+[[datasets]]
+name = "DEPS_DEV_V1"
+backends = ["duckdb", "sqlite"]
+query_count = 2
+query_ids = [1, 2]
+schema_version = "v1"
+
+[[datasets]]
+name = "GITHUB_REPOS"
+backends = ["duckdb", "sqlite"]
+query_count = 4
+query_ids = [1, 2, 3, 4]
+schema_version = "v1"
+
+[[datasets]]
+name = "googlelocal"
+backends = ["postgres", "sqlite"]
+query_count = 4
+query_ids = [1, 2, 3, 4]
+schema_version = "v1"
+
+[[datasets]]
+name = "music_brainz_20k"
+backends = ["duckdb", "sqlite"]
+query_count = 3
+query_ids = [1, 2, 3]
+schema_version = "v1"
+
+[[datasets]]
+name = "PANCANCER_ATLAS"
+backends = ["duckdb", "postgres"]
+query_count = 3
+query_ids = [1, 2, 3]
+schema_version = "v1"
+
+[[datasets]]
+name = "PATENTS"
+backends = ["postgres", "sqlite"]
+query_count = 3
+query_ids = [1, 2, 3]
+schema_version = "v1"
+
+[[datasets]]
+name = "stockindex"
+backends = ["duckdb", "sqlite"]
+query_count = 3
+query_ids = [1, 2, 3]
+schema_version = "v1"
+
+[[datasets]]
+name = "stockmarket"
+backends = ["duckdb", "sqlite"]
+query_count = 5
+query_ids = [1, 2, 3, 4, 5]
+schema_version = "v1"
+
+[[datasets]]
+name = "yelp"
+backends = ["duckdb", "mongo"]
+query_count = 7
+query_ids = [1, 2, 3, 4, 5, 6, 7]
+schema_version = "v1"
