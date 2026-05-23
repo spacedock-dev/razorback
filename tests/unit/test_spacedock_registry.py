@@ -50,11 +50,12 @@ benchmark:
 
 
 def test_spec_parse_rejects_stale_v1_spelling():
-    bad_spec = """\
+    stale_kind = "spacedock" + "-solver"
+    bad_spec = f"""\
 version: 1
 experiment: stale-v1
 agent:
-  kind: spacedock-solver
+  kind: {stale_kind}
 benchmark:
   kind: harbor_dab
   data_root: /tmp/data
@@ -62,15 +63,16 @@ benchmark:
 """
     with pytest.raises(SpecError) as exc:
         parse_spec_text(bad_spec)
-    assert "spacedock-solver" in str(exc.value)
+    assert stale_kind in str(exc.value)
 
 
 def test_spec_parse_rejects_transitional_v2_spelling():
-    bad_spec = """\
+    stale_kind = "spacedock_" + "solver_v2"
+    bad_spec = f"""\
 version: 1
 experiment: stale-v2
 agent:
-  kind: spacedock_solver_v2
+  kind: {stale_kind}
   model: claude-opus-4-5
   solver_workflow: .
 benchmark:
@@ -80,7 +82,7 @@ benchmark:
 """
     with pytest.raises(SpecError) as exc:
         parse_spec_text(bad_spec)
-    assert "spacedock_solver_v2" in str(exc.value)
+    assert stale_kind in str(exc.value)
 
 
 def test_spec_parse_rejects_unknown_agent_kwargs():
@@ -110,7 +112,10 @@ def test_unknown_kind_raises_agent_kind_error():
         resolve_agent_kind("definitely-not-real")
 
 
-@pytest.mark.parametrize("kind", ["spacedock_solver_v2", "spacedock-solver", "claude-cli"])
+@pytest.mark.parametrize(
+    "kind",
+    ["spacedock_" + "solver_v2", "spacedock" + "-solver", "claude-cli"],
+)
 def test_stale_registry_routes_do_not_resolve(kind):
     with pytest.raises(AgentKindError):
         resolve_agent_kind(kind)

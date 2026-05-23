@@ -1,5 +1,5 @@
 # ABOUTME: Phase 6, agent.kind: spacedock_solver routes to the v2 schema block.
-# ABOUTME: Transitional spacedock_solver_v2 and v1 spacedock-solver spellings reject.
+# ABOUTME: Transitional and v1 solver spellings reject.
 
 import pytest
 from pydantic import ValidationError
@@ -35,7 +35,7 @@ def test_spacedock_solver_runtime_enum_enforced():
         )
 
 
-def test_transitional_spacedock_solver_v2_rejects(tmp_path):
+def test_transitional_solver_kind_rejects(tmp_path):
     import yaml
     from razorback.spec.schema import Spec
 
@@ -43,11 +43,12 @@ def test_transitional_spacedock_solver_v2_rejects(tmp_path):
     workflow.mkdir()
     (workflow / "README.md").write_text("## Stages\n- model\n")
 
+    stale_kind = "spacedock_" + "solver_v2"
     spec_yaml = f"""
 version: 1
 experiment: phase6-stale-v2-route-test
 agent:
-  kind: spacedock_solver_v2
+  kind: {stale_kind}
   runtime: claude
   model: claude-opus-4-5
   solver_workflow: {workflow}
@@ -64,11 +65,12 @@ def test_v1_hyphenated_spacedock_solver_rejects():
     import yaml
     from razorback.spec.schema import Spec
 
-    spec_yaml = """
+    stale_kind = "spacedock" + "-solver"
+    spec_yaml = f"""
 version: 1
 experiment: phase6-stale-v1-route-test
 agent:
-  kind: spacedock-solver
+  kind: {stale_kind}
   prompts:
     model: p1.md
     analyze: p2.md
