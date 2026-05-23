@@ -1,13 +1,13 @@
 ---
 id: t1qhefvs93x72m9dbvzw11gn
 title: Phase 6 — promote v2 canonical, sideline v1 to _legacy/
-status: validation
+status: done
 source: plan Phase 6 (v2 reconciliation plan at docs/superpowers/plans/2026-05-19-razorback-reconciliation-plan.md)
 started: 2026-05-23T03:52:58Z
-completed:
-verdict:
+completed: 2026-05-23T05:17:29Z
+verdict: PASSED
 score: 0.7
-worktree: .worktrees/spacedock-ensign-phase6-promote-v2-canonical
+worktree: 
 issue:
 pr:
 mod-block:
