@@ -78,3 +78,25 @@ The plan needs adjustment before T1+ implementation lands:
 - Examples: ship `dataset: dbt-labs/ade-bench@latest` in `examples/specs/ade-bench-harbor-dataset-codex.yaml`. Mark every `tasks_root: .../ade-bench` example as fixture/dev only.
 
 These adjustments preserve AC-1..AC-5 — only the specific dataset-ref string and the API entry point change. The PKG-40 materializer call shape is untouched.
+
+## Closing status (2026-05-22 implementation stage)
+
+The captain approved the contract resolutions A-D and E1 (see entity body Stage
+Report). The implementation landed against the adjusted contracts:
+
+- Live Harbor download of `dbt-labs/ade-bench@latest` worked end-to-end during
+  T0 (48 task packages, ~49 MB). The runs scratch dir `runs/ade-bench-dataset-ref-probe/`
+  is gitignored and not committed; remove it with `rm -rf` for a clean checkout.
+- `dbt-labs/ade-bench@latest` is the canonical example shipped in
+  `examples/specs/ade-bench-harbor-dataset-codex.yaml`. Reproducibility is pinned
+  by `view_manifest.json`'s `dataset_content_hash` + `task_content_hash`, not the
+  human-readable `@latest`; the captain is filing a follow-up entity for
+  migrating to a pinned semver tag once `dbt-labs` publishes one.
+- Tests use a `tests/fixtures/ade_bench/fake_dataset/` shaped after the live
+  export (flat `<output_dir>/ade-bench-<slug>/task.toml`). The integration smoke
+  patches `PackageDatasetClient.download_dataset` so CI never touches the live
+  registry; an opt-in live smoke was NOT added in this stage (captain may add
+  one with a follow-up entity if a pinned tag becomes available).
+- `git submodule status` is empty before and after the implementation; an
+  in-test assertion in `tests/integration/test_ade_bench_dataset_ref_freeze_smoke.py`
+  enforces this as an AC-5 invariant on every CI run.
