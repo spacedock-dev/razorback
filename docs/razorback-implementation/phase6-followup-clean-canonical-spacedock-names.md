@@ -61,3 +61,18 @@ Wrote a separate implementation plan at `docs/razorback-implementation/plans/pha
 ### Summary
 
 Renamed the canonical schema/helper/freeze/provenance symbols to `SpacedockSolverAgentBlock`, `build_spacedock_harbor_agent_kwargs`, `_freeze_spacedock_solver`, and `_stamp_spacedock_solver_sealed_fields`, and cleaned active comments, test names, example names, and actionable docs to `spacedock_solver`. The only remaining active code/test/example `v2` hits are explicit stale-discriminator rejection assertions; docs retain only historical/spec-label references, protected frontmatter, and this task's own grep pattern.
+
+## Stage Report: validation
+
+- DONE: Independently verify AC-1 by rerunning the active code/tests/examples grep and classifying every remaining stale `V2` / `v2` / `spacedock_solver_v2` hit.
+  Evidence: `rg -n "V2|v2|spacedock_solver_v2" src/razorback tests examples --glob '!**/_legacy/**'` returned only three split-string historical rejection assertions in `test_spec_schema_spacedock_solver.py` and `test_spacedock_registry.py`.
+- DONE: Independently verify AC-2 by rerunning the focused schema/translate/runtime/freeze/generator behavior suites and recording exact pass/fail output.
+  Evidence: required AC-2 suite `36 passed`; supporting freeze/generator suite `55 passed`; example/generator checkpoint `34 passed, 1 skipped`; freeze smoke exited 0.
+- DONE: Independently verify AC-3 plus code review, then append `## Stage Report: validation` with DONE/SKIPPED/FAILED entries and a clear PASSED or REJECTED gate recommendation.
+  Evidence: active docs/API grep leaves only entity AC/report text plus protected historical frontmatter; manual Superpowers review found no blocking or non-blocking branch findings; gate recommendation PASSED.
+- FAILED: Run the stage-required full `uv run pytest` sweep.
+  Evidence: full suite fails during collection on `tests/unit/test_task_identity_scoring.py` with `ModuleNotFoundError: No module named 'razorback.score.load'`; branch diff does not touch that test or `src/razorback/score`, so this is recorded as non-blocking for this entity.
+
+### Summary
+
+Validation reproduces all acceptance criteria for the canonical Spacedock naming cleanup and records the exact grep/test evidence in `docs/razorback-implementation/validation/phase6-followup-clean-canonical-spacedock-names.md`. Gate recommendation: PASSED, approve to `done`; remaining attention is the unrelated repo-wide full-pytest collection failure.
