@@ -10,6 +10,11 @@ import math
 from pathlib import Path
 from typing import Any
 
+from razorback.runs.aggregate import (
+    count_trials,
+    read_trial_outcomes,
+    reduce_per_query_stratified,
+)
 from razorback_plugin_dab.dataset_def import load_default_definition
 from razorback_plugin_dab.generate.workspace_readme import WORKSPACE_VARIANTS
 
@@ -46,29 +51,57 @@ def find_result_json(cell_dir: Path) -> Path | None:
 
 
 def extract_cell_stats(result_json: Path) -> dict[str, Any]:
+    """Per-cell stats for the goal1 matrix aggregator.
+
+    Binary `n_total`/`n_pass` (cell-level reward >= 1.0) is preserved for audit
+    against the cycle-1/cycle-2 archived headlines. `per_query_pass_at_1`,
+    `n_query_trials`, `n_query_correct` are the canonical per-query numbers
+    from `runs/aggregate.py:reduce_per_query_stratified` — these are what the
+    post-1s captain-facing headline reads. Trial counts come from
+    `count_trials` so DAB-batch fan-out doesn't double-count the denominator.
+    """
     body = json.loads(result_json.read_text())
     stats = body.get("stats") or {}
     evals = stats.get("evals") or {}
-    if not evals:
-        return {"n_total": 0, "n_pass": 0, "n_errored": 0, "rewards": {}}
-    eval_block = next(iter(evals.values()))
-    rewards = eval_block.get("reward_stats", {}).get("reward", {})
-    n_pass = 0
-    n_total = 0
+    if evals:
+        eval_block = next(iter(evals.values()))
+        rewards = eval_block.get("reward_stats", {}).get("reward", {})
+    else:
+        rewards = {}
+    n_pass_binary = 0
+    n_total_binary = 0
     for reward_value, trial_ids in rewards.items():
         try:
             r = float(reward_value)
         except (TypeError, ValueError):
             continue
-        n_total += len(trial_ids)
+        n_total_binary += len(trial_ids)
         if r >= 1.0:
-            n_pass += len(trial_ids)
+            n_pass_binary += len(trial_ids)
+
+    run_dir = result_json.parent
+    outcomes = read_trial_outcomes(run_dir)
+    trial_counts = count_trials(run_dir)
+    report = reduce_per_query_stratified(outcomes, trial_counts=trial_counts)
+
+    per_query_pass = report["stratified_pass_at_1"]
+    n_query_trials = 0
+    n_query_correct = 0
+    for ds_entry in report["strata"].values():
+        for q in ds_entry["queries"]:
+            n_query_trials += q["n_trials"]
+            n_query_correct += q["n_correct"]
+
     return {
-        "n_total": n_total,
-        "n_pass": n_pass,
+        "n_total": n_total_binary,
+        "n_pass": n_pass_binary,
         "n_errored": stats.get("n_errored_trials", 0),
         "rewards": rewards,
         "result_json": str(result_json),
+        "per_query_pass_at_1": per_query_pass,
+        "n_query_trials": n_query_trials,
+        "n_query_correct": n_query_correct,
+        "per_query_strata": report["strata"],
     }
 
 
@@ -113,6 +146,33 @@ def aggregate_variant(matrix_root: Path, variant: str) -> dict[str, Any]:
         total_n = 0
         stratified_ci = None
 
+    per_query_scored = [
+        v for v in scored_strata if v.get("per_query_pass_at_1") is not None
+    ]
+    if per_query_scored:
+        per_query_mean_over_strata = (
+            sum(v["per_query_pass_at_1"] for v in per_query_scored)
+            / len(per_query_scored)
+        )
+        pooled_query_correct = sum(v["n_query_correct"] for v in per_query_scored)
+        pooled_query_trials = sum(v["n_query_trials"] for v in per_query_scored)
+        pooled_per_query_pass_at_1 = (
+            pooled_query_correct / pooled_query_trials
+            if pooled_query_trials > 0
+            else None
+        )
+        pooled_per_query_ci = (
+            wilson_ci(pooled_query_correct, pooled_query_trials)
+            if pooled_query_trials > 0
+            else None
+        )
+    else:
+        per_query_mean_over_strata = None
+        pooled_query_correct = 0
+        pooled_query_trials = 0
+        pooled_per_query_pass_at_1 = None
+        pooled_per_query_ci = None
+
     target_name, target_value = VARIANT_TARGETS[variant]
     if stratified_mean is None:
         verdict = "no_data"
@@ -134,6 +194,13 @@ def aggregate_variant(matrix_root: Path, variant: str) -> dict[str, Any]:
         "pooled_n_pass": total_pass,
         "pooled_n_total": total_n,
         "pooled_wilson_95ci": list(stratified_ci) if stratified_ci else None,
+        "per_query_pass_at_1_mean_over_strata": per_query_mean_over_strata,
+        "pooled_per_query_pass_at_1": pooled_per_query_pass_at_1,
+        "pooled_n_query_correct": pooled_query_correct,
+        "pooled_n_query_trials": pooled_query_trials,
+        "pooled_per_query_wilson_95ci": (
+            list(pooled_per_query_ci) if pooled_per_query_ci else None
+        ),
         "against_constant": {
             "name": target_name,
             "value": target_value,
@@ -166,7 +233,7 @@ def main() -> int:
         agg = aggregate_variant(matrix_root, variant)
         variant_out = out_dir / variant / "aggregate-score.json"
         variant_out.parent.mkdir(parents=True, exist_ok=True)
-        variant_out.write_text(json.dumps(agg, indent=2, sort_keys=True))
+        variant_out.write_text(json.dumps(agg, indent=2, sort_keys=True, default=list))
         summary["variants"][variant] = {
             "n_strata_scored": agg["n_strata_scored"],
             "n_strata_total": agg["n_strata_total"],
@@ -175,11 +242,21 @@ def main() -> int:
             "pooled_n_pass": agg["pooled_n_pass"],
             "pooled_n_total": agg["pooled_n_total"],
             "pooled_wilson_95ci": agg["pooled_wilson_95ci"],
+            "per_query_mean_over_strata": agg["per_query_pass_at_1_mean_over_strata"],
+            "pooled_per_query_pass_at_1": agg["pooled_per_query_pass_at_1"],
+            "pooled_n_query_correct": agg["pooled_n_query_correct"],
+            "pooled_n_query_trials": agg["pooled_n_query_trials"],
+            "pooled_per_query_wilson_95ci": agg["pooled_per_query_wilson_95ci"],
             "against_constant": agg["against_constant"],
             "aggregate_json_path": str(variant_out),
         }
-        print(f"{variant}: scored {agg['n_strata_scored']}/{agg['n_strata_total']} strata; "
-              f"pooled_pass@1={agg['pooled_pass_at_1']}; verdict={agg['against_constant']['verdict']}")
+        print(
+            f"{variant}: scored {agg['n_strata_scored']}/{agg['n_strata_total']} strata; "
+            f"pooled_pass@1={agg['pooled_pass_at_1']}; "
+            f"pooled_per_query_pass@1={agg['pooled_per_query_pass_at_1']} "
+            f"({agg['pooled_n_query_correct']}/{agg['pooled_n_query_trials']}); "
+            f"verdict={agg['against_constant']['verdict']}"
+        )
     (out_dir / "matrix-summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True))
     print(f"wrote {out_dir / 'matrix-summary.json'}")
     return 0
