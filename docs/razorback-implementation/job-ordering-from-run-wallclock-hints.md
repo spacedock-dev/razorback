@@ -1,7 +1,7 @@
 ---
 id: k05te9qfkv1at7qh3zay5naf
 title: Historical wallclock ordering hints for job dispatch
-status: validation
+status: implementation
 source: Captain directive 2026-05-23 - "optionally ordering the job based on a previous run result file as ordering hint"
 started: 2026-05-23T00:47:29Z
 completed:
@@ -120,3 +120,20 @@ Added `src/razorback/run_ordering.py` for historical wallclock extraction and de
 ### Summary
 
 Validation reproduced the focused AC evidence and found the feature-specific behavior passes those targeted checks. The gate is rejected because full `uv run pytest` fails, including two branch-local unit regressions from new `ordering_hint` keyword plumbing in existing test doubles; no production code was edited during validation.
+
+### Feedback Cycles
+
+#### Cycle 1 - validation rejected 2026-05-23
+
+Route back to implementation. Validation found focused AC suites passing, but
+full `uv run pytest` failed. The branch-local fixes are:
+
+- `tests/unit/test_cli_run_aggregator_wiring.py:43` - update the
+  `safe_aggregate_run_dir` test double/capture to accept the additive
+  `ordering_hint` keyword so the capture still records `benchmark_kind`.
+- `tests/unit/test_run_plugin_drift_wired.py:123` - update the patched
+  `_write_provenance_artifacts` capture to accept the additive
+  `ordering_hint` keyword.
+
+The remaining full-suite failures are environment/integration failures noted
+in the validation report and do not need production-code fixes for this cycle.
