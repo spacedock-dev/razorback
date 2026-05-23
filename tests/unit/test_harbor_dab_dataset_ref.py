@@ -124,3 +124,46 @@ def test_translator_uses_dataset_ref_to_enumerate_datasets(
         "GITHUB_REPOS", "googlelocal", "music_brainz_20k",
         "PANCANCER_ATLAS", "PATENTS", "stockindex", "stockmarket", "yelp",
     ])
+
+
+def test_translator_legacy_shape_still_works(tmp_path: Path, monkeypatch) -> None:
+    """AC-2 compat: old harbor_dab specs (no `dataset:`) still route through
+    the translator without consulting the dataset definition."""
+    from razorback.translate import spec_to_job_config
+
+    seen_data_root: list[str] = []
+
+    def fake_run(cmd, capture_output, text):
+        for i, arg in enumerate(cmd):
+            if arg == "--data-root":
+                seen_data_root.append(cmd[i + 1])
+        out_idx = cmd.index("--out") + 1
+        out_dir = Path(cmd[out_idx])
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "bookreview").mkdir(exist_ok=True)
+
+        class R:
+            returncode = 0
+            stderr = ""
+
+        return R()
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    fake_data = tmp_path / "fake-data"
+    fake_data.mkdir()
+    spec = parse_spec_text(
+        "version: 1\n"
+        "experiment: ac2-legacy\n"
+        "agent:\n  kind: nop\n"
+        "benchmark:\n"
+        "  kind: harbor_dab\n"
+        f"  data_root: {fake_data}\n"
+        "  datasets: [bookreview]\n"
+        "  query_mode: batch\n"
+        "trials: 1\n"
+    )
+    spec_to_job_config(
+        spec, job_name="j", jobs_dir=tmp_path / "jobs", tasks_root=tmp_path / "tr",
+    )
+    assert seen_data_root == [str(fake_data.resolve())]
