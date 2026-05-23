@@ -54,3 +54,16 @@ dataset-definition work.
 ### Summary
 
 Wrote the standard implementation plan at `docs/razorback-implementation/plans/phase6-followup-retire-in-tree-dab-adapter.md`. The plan maps work AC-by-AC, validates the plugin-backed path before moving the legacy adapter, and keeps dataset-definition and scoring redesigns out of this follow-up.
+
+## Stage Report: implementation
+
+- DONE: Active translator/schema routes DAB only through `harbor_dab` plugin path, with no active `razorback.benchmarks.dab` imports left.
+  Evidence: commits `183c29d` and `b58fe09`; final grep returns only `packages/razorback-plugin-dab/src/razorback_plugin_dab/verify/__init__.py` port-comment reference.
+- DONE: `src/razorback/benchmarks/dab/` is sidelined to `_legacy` or removed, and active tests are retargeted away from the in-tree adapter.
+  Evidence: commit `ccd05a9` moves the adapter to `src/razorback/_legacy/benchmarks/dab/`; `test -d src/razorback/benchmarks/dab` exits `1`.
+- DONE: Required DAB plugin/example validation commands pass, or any remaining blocker is isolated with exact command output and next fix.
+  Evidence: required command passed with `163 passed, 2 skipped`; focused guardrails passed with `19 passed`; full suite passed with `580 passed, 12 skipped`.
+
+### Summary
+
+Removed the active `DabBenchmarkBlock` translator branch, retired the old parse alias, kept `harbor_dab` on the plugin subprocess path, and replaced ADE's borrowed DAB image import with a local ADE default constant. The in-tree DAB adapter and historical adapter tests moved under `_legacy`, active run-dir sidecar tests now exercise `razorback.runs.aggregate`, and empty plugin test package markers were removed so the required combined pytest command can collect plugin and repo tests together. No dataset-definition or dataset-ref work was added; that remains with `dab-harbor-dataset-definition` per the coordination boundary.
