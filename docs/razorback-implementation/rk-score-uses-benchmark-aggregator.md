@@ -28,12 +28,14 @@ notice the headline numbers diverge. Goal 1's reproduction-target
 number IS computed correctly (via the post-harbor aggregator → `summary.json`),
 but any analyst who reaches for `rk score` reads a lower number.
 
-The fix is structural: `rk score` should delegate to the benchmark's
-native aggregator, not run its own reducer. Each benchmark already
-has one — `src/razorback/benchmarks/dab/aggregate.py:aggregate_job_result`
-for DAB and `src/razorback/benchmarks/ade_bench/aggregate.py:aggregate_job_result`
-for ADE-bench. Wilson CIs and `--against-constant` decorations stay; the
-underlying pass@1 number comes from the benchmark.
+The fix is structural: `rk score` should delegate to the same reducer
+the post-harbor aggregator uses, not run its own. The post-harbor
+aggregator (`src/razorback/runs/aggregate.py:_stratified_pass_at_1`)
+already drives the paper-faithful per-query stratified mean into
+`summary.json`, and it is benchmark-agnostic by way of stratum tags —
+DAB and ADE-bench both work on it today. Wilson CIs and
+`--against-constant` decorations stay; the underlying pass@1 number
+comes from that single shared reducer.
 
 ## Acceptance criteria
 
@@ -43,10 +45,13 @@ finishes. Verified by: round-trip test runs `rk run` on a fixture DAB
 spec, captures `summary.json`'s `stratified_pass_at_1`, runs `rk score`
 on the same run-dir, asserts the emitted score matches.
 
-**AC-2 — `rk score` for an ADE-bench benchmark emits ADE-bench's native
-pass@1.** Same shape — score command delegates to
-`benchmarks/ade_bench/aggregate.py`. Verified by: same round-trip test
-against an ADE-bench fixture.
+**AC-2 — `rk score` for an ADE-bench benchmark emits ADE-bench's
+pass@1 the same way it emits DAB's.** Same single-source path —
+`rk score` calls `runs/aggregate.py:reduce_per_query_stratified`,
+which is benchmark-agnostic via stratum tags. There is no per-benchmark
+dispatch; `benchmarks/ade_bench/aggregate.py` is not invoked (and
+does not exist). Verified by: same round-trip test against an ADE-bench
+fixture.
 
 **AC-3 — Wilson CI + `--against-constant` decorations preserved.** The
 existing CLI flags (`--alpha`, `--against-constant`) still work; the
