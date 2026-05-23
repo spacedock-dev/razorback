@@ -1,16 +1,17 @@
 ---
 id: gyxh2ghz2endckj4awbwgtpf
 title: merge origin/main after ergonomics sprint (resolve 3 conflicts)
-status: validation
+status: done
 source: 2026-05-23 session — local main is 42 ahead of origin/main (z5+x9+f1 ergonomics + jp archive), origin/main is 155 ahead of local (pkg40 task-view materializer + in-flight job-ordering-from-run-wallclock-hints + ADE dbt minimal workflow + misc). Pulling origin in is a prereq for E3 (retire v1) and E4 (rk score reducer) to avoid double-handling overlapping files.
 started: 2026-05-23T03:00:54Z
-completed:
-verdict:
+completed: 2026-05-23T04:10:37Z
+verdict: PASSED
 score: 0.95
-worktree: .worktrees/spacedock-ensign-merge-origin-main
+worktree: 
 issue:
 pr:
 mod-block: 
+archived: 2026-05-23T04:10:37Z
 ---
 
 ## Problem
