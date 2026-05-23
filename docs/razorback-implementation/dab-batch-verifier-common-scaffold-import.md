@@ -1,13 +1,13 @@
 ---
 id: 296yjetkwygm8es8fve7yqy3
 title: DAB batch verifier packages common_scaffold imports
-status: validation
+status: done
 source: DAB gpt-5.5/xhigh full batch run 2026-05-23 — common_scaffold verifier import failures
 started: 2026-05-23T13:57:50Z
-completed:
-verdict:
+completed: 2026-05-23T14:22:12Z
+verdict: PASSED
 score: 0.92
-worktree: .worktrees/spacedock-ensign-dab-batch-verifier-common-scaffold-import
+worktree: 
 issue:
 pr:
 mod-block: 
