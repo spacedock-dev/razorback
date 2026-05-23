@@ -253,3 +253,21 @@ correct F1 Drive ID, while Docker receives stale same-size content until the
 validation copy is touched. Recommendation: REJECT, because a canonical
 multi-family ADE restart can still build or fail from cross-family database
 content before any live Codex smoke is meaningful.
+
+## Stage Report: implementation (feedback cycle 2)
+
+- DONE: `airbnb001`, `f1001`, and `quickbooks001` build/preflight with correct task-specific data after the fix, including a fresh/no-cache or cache-stress scenario that previously failed.
+  Evidence: fresh task views in `runs/ade-preflight-feedback-cycle-2/task_views/` materialized with `copy_db_file_id=False literal=True`; `docker build --no-cache -t rb-feedback-c2-{airbnb001,f1001,quickbooks001} .../environment` passed and emitted `RAZORBACK_ADE_PREFLIGHT` status `passed` in `runs/ade-preflight-feedback-cycle-2/logs/docker-build-no-cache-*.log`.
+- DONE: same-size/stale-mtime cross-task metadata cannot cause stale database selection; add a focused regression test or smoke reproducing the condition.
+  Evidence: `test_same_size_epoch_mtime_db_metadata_gets_content_specific_build_steps` covers same-size Airbnb/F1 Drive IDs with epoch mtimes; cache-stress context `runs/ade-preflight-feedback-cycle-2/cache-stress/f1001-stale-context/environment` overwrote `db_file_id.txt` with same-size Airbnb ID at `1970-01-01`, then `docker build -t rb-feedback-c2-f1001-stale-context ...` plus `docker run ... preflight` still passed with F1 tables.
+- DONE: mismatched cross-family data still fails closed before Codex; focused ADE preflight tests remain passing.
+  Evidence: `uv run --frozen pytest tests/unit/test_ade_bench_workspace_preflight.py tests/unit/test_ade_bench_harbor_view.py tests/unit/test_spacedock_solver_ade_preflight.py tests/unit/test_ade_bench_dataset_ref_translator.py tests/unit/test_translate_harbor_task_batches.py tests/integration/test_ade_bench_dataset_ref_freeze_smoke.py -q` -> `28 passed`; `uv run --frozen python -m razorback.benchmarks.ade_bench.preflight --task-id f1001 --workspace runs/ade-preflight-feedback-cycle-1/f1001-with-quickbooks-data --db-name f1` exited `rc=2` with forbidden QuickBooks tables.
+
+### Summary
+
+The ADE task-view Dockerfile rewrite now replaces fragile `COPY db_file_id.txt`
+and `COPY db_name.txt` steps with content-specific literal writes plus a
+checksum guard before the existing database download step. This removes Docker
+build-context mtime/size ambiguity for database selection while preserving the
+disk metadata files for manifests and diagnostics; `ruff check` on the touched
+files also passes.
