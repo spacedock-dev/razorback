@@ -1,7 +1,7 @@
 ---
 id: njy7knzwtg7bwjrhcfxchxat
 title: Direct Codex minimal agent kind
-status: implementation
+status: validation
 source: Captain directive 2026-05-23 — solver variant separation
 started: 2026-05-23T21:43:32Z
 completed:
