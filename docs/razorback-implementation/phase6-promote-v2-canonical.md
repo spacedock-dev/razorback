@@ -217,3 +217,76 @@ Validation rejected the branch. The canonical `spacedock_solver` route itself is
      `uv run pytest` exits 0.
   4. Repair or archive malformed active workflow entity
      `goal1-resume-t0-cost-projection.md` so workflow status can render.
+
+## Stage Report: implementation follow-up
+
+- DONE: Feedback-cycle commits after `21f28bd`.
+  Evidence: `b4fdac5` repaired `goal1-resume-t0-cost-projection.md`
+  workflow metadata; `26b53c7` added the canonical
+  `examples/specs/bookreview-claude.frozen.yaml` smoke target;
+  `1fbb49c` retired stale v1/Phase-3 tests and gated live Docker/API
+  smokes; `8e0306b` refreshed nop run-dir smoke assertions; this report
+  commit records the follow-up status. The backlog -> plan and plan ->
+  implementation gates were first-officer auto-approved, not human-gated.
+- DONE: AC-1 literal smoke target exists at
+  `examples/specs/bookreview-claude.frozen.yaml` with canonical
+  `agent.kind: spacedock_solver` and `benchmark.kind: harbor_dab`.
+  Evidence: generated from `examples/specs/bookreview-claude.yaml` with
+  `uv run rk freeze examples/specs/bookreview-claude.yaml --out examples/specs/bookreview-claude.frozen.yaml --allow-missing`;
+  frozen parse check reported `spacedock_solver`, `harbor_dab`,
+  solver digest `sha256:a7dbdb88f0229b8b8f655283498d6d4cc603c03603505fb5e9fa5d0edaf559fd`,
+  and `allow_missing: True`. The exact smoke command
+  `uv run rk run examples/specs/bookreview-claude.frozen.yaml --runs-dir .runs/phase6-feedback-ac1`
+  was started but bounded-stopped before completion per follow-up
+  instruction; `.runs/phase6-feedback-ac1` was left intact.
+- DONE: AC-8 workflow status can render after the minimal metadata
+  repair.
+  Evidence: `python /home/exedev/.codex/skills/commission/bin/status --workflow-dir docs/razorback-implementation`
+  completed after `b4fdac5`.
+- DONE: AC-9 stale v1/Phase-3 test failures are resolved for the
+  current suite.
+  Evidence: `uv run pytest` returned
+  `574 passed, 12 skipped, 16 warnings in 34.61s`; focused checks also
+  returned `90 passed in 3.85s`,
+  `19 passed, 7 skipped`, and
+  `uv run pytest tests/integration/test_rk_run_nop.py -q` returned
+  `2 passed in 18.98s`.
+- DONE: Core route/schema/freeze/runtime and inventory checks remain
+  aligned with Phase 6.
+  Evidence: `rg -n "spacedock_solver_v2|spacedock-solver" src/razorback tests examples/specs examples/drivers packages`
+  reports only legacy-path references; `rg -n "kind: dab|kind: in_tree_dab" examples/specs examples/drivers tests/fixtures/specs`
+  reports no active stale benchmark-kind references.
+- SKIPPED: Broad AC-4 DAB/ADE/standalone-CLI/compat/observer sidelines.
+  Rationale: per first-officer route update and feedback-cycle bounds,
+  these are deferred rather than forced. Active blocker evidence remains
+  `src/razorback/agents/_runtime/claude.py` importing
+  `ClaudeCliAgent`, and `src/razorback/translate.py` importing
+  `razorback.benchmarks.dab.prepare` and
+  `razorback.benchmarks.ade_bench.*`. Split the broad sideline items
+  into follow-up entities so ADE/DAB task-view work is not blocked by a
+  crude move.
+- DONE: Worktree hygiene for the bounded stop.
+  Evidence: `uv.lock` only removed `[options] exclude-newer` values from
+  tooling churn and was reverted rather than committed.
+
+### Follow-up Checklist
+
+1. DONE: Canonical `agent.kind: spacedock_solver` routes to the v2
+   runtime-adapter solver, `spacedock_solver_v2` is retired from active
+   parsing/routing, v1 solver code is legacy-only, and focused route,
+   schema, freeze, and runtime tests pass.
+2. DONE: Active examples/generators use canonical `spacedock_solver`,
+   stale registry/v1 tests were removed or rehomed, and inventory checks
+   show no active `spacedock_solver_v2`/`spacedock-solver` references
+   outside legacy paths.
+3. DONE: Commit boundaries remain small and scoped; broad AC-4 adapter
+   sidelines are explicitly deferred with active-import evidence and
+   should be split into follow-up entities.
+
+### Readiness
+
+Ready for fresh validation of the core Phase 6 solver-retirement scope.
+Remaining validation work is to rerun the exact live AC-1 smoke if the
+environment has the required DAB/API/Docker prerequisites. Remaining
+product blocker is AC-4 broad adapter retirement, intentionally deferred
+to follow-up entities.
