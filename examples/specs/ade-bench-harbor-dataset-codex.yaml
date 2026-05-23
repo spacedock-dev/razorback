@@ -13,6 +13,8 @@ agent:
   solver_workflow: ./examples/solver_workflows/codex-ade-dbt-minimal
   spacedock_skill_version: "1.0.0"
   max_turns: 200
+  override_timeout_sec: 1200
+  max_timeout_sec: 1200
   reasoning_effort: xhigh
   tools_allowed: []
   tools_denied: []

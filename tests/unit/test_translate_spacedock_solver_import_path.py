@@ -21,6 +21,8 @@ agent:
   spacedock_skill_version: "1.0.0"
   sealed_hash: "{sealed_hash}"
   max_turns: 200
+  override_timeout_sec: 1200
+  max_timeout_sec: 1200
   tools_allowed: []
   tools_denied: []
 benchmark:
@@ -68,10 +70,15 @@ def test_spacedock_solver_emits_import_path(
     agent_cfg = jc.agents[0]
     assert agent_cfg.import_path == "razorback.agents.spacedock_solver:SpacedockSolverAgent"
     assert agent_cfg.model_name == "gpt-5.1-codex"
+    assert agent_cfg.override_timeout_sec == 1200
+    assert agent_cfg.max_timeout_sec == 1200
+    assert agent_cfg.override_setup_timeout_sec is None
     # AC-6 cross-cut: per harbor source probe (AC-0.4), auth lands on AgentConfig.env,
     # NOT kwargs. The FU-1 AC-1 invariant survives in the canonical route.
     assert "OPENAI_API_KEY" in agent_cfg.env
     assert "OPENAI_API_KEY" not in agent_cfg.kwargs
+    assert "override_timeout_sec" not in agent_cfg.kwargs
+    assert "max_timeout_sec" not in agent_cfg.kwargs
     assert agent_cfg.kwargs["runtime"] == "codex"
     assert agent_cfg.kwargs["solver_workflow"] == str(workflow)
     assert agent_cfg.kwargs["solver_workflow_content_hash"] == "sha256:" + "a" * 64

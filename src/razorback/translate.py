@@ -154,6 +154,9 @@ def _build_agent_config(
         agent_cfg = AgentConfig(
             import_path=SPACEDOCK_SOLVER_IMPORT_PATH,
             model_name=spec.agent.model,
+            override_timeout_sec=spec.agent.override_timeout_sec,
+            override_setup_timeout_sec=spec.agent.override_setup_timeout_sec,
+            max_timeout_sec=spec.agent.max_timeout_sec,
             kwargs=kwargs,
             env=dict(resolution.env),
         )
