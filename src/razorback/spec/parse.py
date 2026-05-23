@@ -13,7 +13,9 @@ from razorback.spec.schema import Spec
 _BENCHMARK_KIND_ALIASES = {
     # v2 spelling for the v1 in-tree DAB adapter. Both forms parse; the
     # internal model still uses kind="dab" so the existing translator path
-    # is unchanged. See plan §AC-7 (in-tree adapter unchanged).
+    # is unchanged. AC-5: in-tree DAB is dev-only; canonical DAB is
+    # kind: harbor_dab + dataset: dab@<version> (see entity
+    # dab-harbor-dataset-definition).
     "in_tree_dab": "dab",
 }
 

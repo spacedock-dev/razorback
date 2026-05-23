@@ -3,6 +3,7 @@
 
 import shutil
 import stat
+import warnings
 from pathlib import Path
 from typing import TypedDict
 
@@ -58,6 +59,12 @@ def prepare_dataset_tasks(
 
     Returns one entry per query directory found.
     """
+    warnings.warn(
+        "in-tree DAB adapter (kind: dab) is dev-only; "
+        "use kind: harbor_dab + dataset: dab@1.0 for canonical runs.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     data_root = Path(data_root)
     dataset_dir = data_root / f"query_{dataset}"
     if not dataset_dir.exists():
