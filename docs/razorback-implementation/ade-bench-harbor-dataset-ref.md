@@ -10,7 +10,7 @@ score: 0.85
 worktree: .worktrees/spacedock-ensign-ade-bench-harbor-dataset-ref
 issue:
 pr:
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 ## Problem
