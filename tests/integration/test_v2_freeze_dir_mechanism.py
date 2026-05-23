@@ -36,8 +36,11 @@ def _common_kwargs(workflow: Path) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_sealed_hash_txt_lands_at_keyed_external_path(tmp_path):
-    """AC-5 mechanism: sealed_hash.txt at <run-dir>/_razorback/freeze/<sealed_hash>/."""
+async def test_sealed_hash_txt_lands_at_keyed_external_path(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
+    """AC-1: sealed_hash.txt at <cas-root>/<sealed_hash>/ (env-override CAS)."""
+    monkeypatch.setenv("RAZORBACK_FREEZE_DIR", str(tmp_path / "freeze-cas"))
     logs_dir = _make_harbor_run_dir(tmp_path, "bookreview-0001__abc1234")
     workflow = tmp_path / "solver"
     workflow.mkdir()
@@ -52,17 +55,20 @@ async def test_sealed_hash_txt_lands_at_keyed_external_path(tmp_path):
 
     await agent.setup(fake_env)
 
-    expected = tmp_path / "run" / "_razorback" / "freeze" / agent.sealed_hash
+    expected = tmp_path / "freeze-cas" / agent.sealed_hash
     assert (expected / "sealed_hash.txt").exists()
     assert (expected / "sealed_hash.txt").read_text().strip() == agent.sealed_hash
-    # AC-5 mandate: NOT inside trials/.
-    rel = str(expected.relative_to(tmp_path / "run"))
-    assert "trials" not in rel
+    # AC-1 + AC-2 precursor: CAS root is outside the run-dir entirely.
+    assert "trials" not in str(expected)
+    assert (tmp_path / "run") not in expected.parents
 
 
 @pytest.mark.asyncio
-async def test_harbor_jobs_resume_round_trip_with_new_trial_name(tmp_path):
+async def test_harbor_jobs_resume_round_trip_with_new_trial_name(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
     """AC-6 mechanism: re-executed trial with a NEW trial_name reads the SAME freeze tree."""
+    monkeypatch.setenv("RAZORBACK_FREEZE_DIR", str(tmp_path / "freeze-cas"))
     logs_a = _make_harbor_run_dir(tmp_path, "bookreview-0001__abc1234")
     workflow = tmp_path / "solver"
     workflow.mkdir()

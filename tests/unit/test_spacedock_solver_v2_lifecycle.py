@@ -35,19 +35,25 @@ def _kw(tmp_path, **overrides):
     return base
 
 
-def test_freeze_dir_resolves_to_sealed_hash_keyed_external_path(tmp_path):
-    """b5 contract point 2: <run-dir>/_razorback/freeze/<sealed_hash>/."""
+def test_freeze_dir_resolves_to_sealed_hash_keyed_external_path(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
+    """AC-1: <cas-root>/<sealed_hash>/ (env-override CAS, outside any worktree)."""
+    monkeypatch.setenv("RAZORBACK_FREEZE_DIR", str(tmp_path / "freeze-cas"))
     agent = SpacedockSolverAgent(**_kw(tmp_path))
-    expected = tmp_path / "run" / "_razorback" / "freeze" / agent.sealed_hash
+    expected = (tmp_path / "freeze-cas").resolve() / agent.sealed_hash
     assert agent.resolve_freeze_dir() == expected
-    # The path lives OUTSIDE harbor's trials/ subtree.
-    parts_after_razorback = str(agent.resolve_freeze_dir()).split("_razorback", 1)[1]
-    assert "trials" not in parts_after_razorback
+    # The path lives OUTSIDE harbor's run-dir / trials/ subtree entirely.
+    assert "trials" not in str(expected)
+    assert (tmp_path / "run") not in expected.parents
 
 
 @pytest.mark.asyncio
-async def test_first_stage_writes_sealed_hash_txt(tmp_path):
+async def test_first_stage_writes_sealed_hash_txt(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
     """b5 contract point 4 + AC-5: sealed_hash.txt lands at the keyed path on first stage."""
+    monkeypatch.setenv("RAZORBACK_FREEZE_DIR", str(tmp_path / "freeze-cas"))
     agent = SpacedockSolverAgent(**_kw(tmp_path))
     fake_env = MagicMock()
     fake_env.exec = AsyncMock(return_value=MagicMock(return_code=0))
@@ -60,9 +66,12 @@ async def test_first_stage_writes_sealed_hash_txt(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_resume_restores_workspace_from_freeze_git(tmp_path):
+async def test_resume_restores_workspace_from_freeze_git(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
     """b5 contract point 5: on resume, restore from <freeze_dir>/.git/ on host."""
     import subprocess
+    monkeypatch.setenv("RAZORBACK_FREEZE_DIR", str(tmp_path / "freeze-cas"))
     agent = SpacedockSolverAgent(**_kw(tmp_path))
     freeze = agent.resolve_freeze_dir()
     freeze.mkdir(parents=True)
@@ -95,8 +104,11 @@ async def test_resume_restores_workspace_from_freeze_git(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_resume_with_mismatched_sealed_hash_in_freeze_dir_refuses(tmp_path):
+async def test_resume_with_mismatched_sealed_hash_in_freeze_dir_refuses(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
     """b5 contract point 4: sealed_hash.txt mismatch raises SeedMismatchError at setup."""
+    monkeypatch.setenv("RAZORBACK_FREEZE_DIR", str(tmp_path / "freeze-cas"))
     agent = SpacedockSolverAgent(**_kw(tmp_path))
     freeze = agent.resolve_freeze_dir()
     freeze.mkdir(parents=True)
@@ -110,8 +122,11 @@ async def test_resume_with_mismatched_sealed_hash_in_freeze_dir_refuses(tmp_path
 
 
 @pytest.mark.asyncio
-async def test_first_stage_runs_git_init(tmp_path):
+async def test_first_stage_runs_git_init(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
     """b5 contract point 3: create freeze dir + git init on first stage (on host)."""
+    monkeypatch.setenv("RAZORBACK_FREEZE_DIR", str(tmp_path / "freeze-cas"))
     agent = SpacedockSolverAgent(**_kw(tmp_path))
     fake_env = MagicMock()
     fake_env.exec = AsyncMock(return_value=MagicMock(return_code=0))
