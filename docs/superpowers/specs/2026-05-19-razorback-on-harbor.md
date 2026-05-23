@@ -1,7 +1,17 @@
 # Razorback: A Research-Stats Extension to Harbor
 
-**Status:** Draft
-**Date:** 2026-05-19
+**Status:** Draft (phases 0-6 shipped; identity layer `gb`/`qh` in validation)
+**Date:** 2026-05-19 (original) — 2026-05-23 (inline updates from shipped reality)
+
+> **Reading note for 2026-05-23 and later.** This document is the
+> architectural source of truth. Sections below have been edited inline
+> to reflect what actually shipped during phases 1-6 + the auxiliary
+> ergonomics sprint (entities `z5`, `x9`, `f1`, `zb`) + the identity
+> layer (`gb`, `qh`). Where reality moved past the spec, the prose is
+> updated and the original location is preserved as `**Historical:**`
+> notes adjacent to the new prose. The reconciliation plan at
+> [`2026-05-19-razorback-reconciliation-plan.md`](../plans/2026-05-19-razorback-reconciliation-plan.md)
+> carries the phase-completeness ledger.
 
 ---
 
@@ -187,14 +197,29 @@ Surface that ships first (sufficient for one-sided reproduction
 runs and establishing measurements):
 
 ```
-rk run <frozen-spec.yaml>
+rk run <frozen-spec.yaml> [--runs-dir <dir>] [--ordering-hints <prior-run-dir>]
 rk freeze <spec.yaml>
 rk score <run-dir> [--format markdown|json] [--alpha 0.05]
+                   [--against-constant <name=value>]
 rk audit <run-dir> [--policy audit|strict] [--format markdown|json]
 rk runs list [--root <dir>] [--experiment <name>]
 rk runs show <run-dir>
 rk runs cost <root>
 ```
+
+**`rk run --ordering-hints <prior-run-dir>`** (added 2026-05-23, entity
+`job-ordering-from-run-wallclock-hints`) reads per-task elapsed
+wallclock from a prior run's artifacts and dispatches longest-known
+tasks first under concurrency > 1, dropping tail-latency on parallel
+matrices. Default-off; provenance records the hint source. See
+`src/razorback/run_ordering.py`.
+
+**`rk run` runs_dir default** (added 2026-05-23, entity `x9`): when
+`--runs-dir` is absent, resolves to `$XDG_DATA_HOME/razorback/runs/`
+(env-override via `$RAZORBACK_RUNS_DIR`; falls back to
+`~/.local/share/razorback/runs/`). Per-run artifacts survive worktree
+teardown and any razorback invocation can read them by run-dir name.
+See §7.0.
 
 Surface that ships when the autoresearch loop's analyze stage needs
 paired hypothesis testing:
@@ -239,7 +264,25 @@ Each command:
   the run's overall stratified mean per the adapter's stratum
   tagging. With `--against-constant <name=value>`, emits an
   inside-CI / outside-CI line per stratum, the paper-reproduction
-  readout. No paired comparison; that's `rk diff`'s job.
+  readout. No paired comparison; that's `rk diff`'s job. **As of
+  2026-05-23 (entity `zb`)** the reduction is **per-query
+  `pass@1`** (paper-faithful), not the previous binary "trial passed
+  iff all queries passed" form. Implementation: `rk score` delegates
+  to `runs/aggregate.py:reduce_per_query_stratified` — the same
+  reducer that produces `summary.json`'s `stratified_pass_at_1` at
+  run-end. Wilson CIs are computed at the **per-query cell level**
+  (`k = sum(reward >= 1.0)`, `n = trials of that query`) because
+  the per-query proportion is binomial; the **stratum-level CI is
+  emitted as `null`** because the mean-of-proportions across queries
+  is not binomial (a bootstrap CI on that quantity is a separate
+  stats question deferred to `rk diff`). `--against-constant` reuses
+  `score/verdict.py:_point_verdict` for the stratum-level
+  comparison. A round-trip test pins `rk score`'s output to
+  `summary.json`'s value with object-equality
+  (`tests/integration/test_rk_score_matches_summary.py`).
+  **Historical:** the original spec called for binary `pass@1`
+  via `score/reduce.py:reduce_trials`; that file is deleted as of
+  `zb`.
 - **`rk audit`**: post-hoc trajectory scanner. Walks a run-dir's
   trial traces (parent agent logs, subagent trace manifests,
   recursive subagent traces) and pattern-matches for forbidden
@@ -396,11 +439,26 @@ surface:
 - **The workflow's mods** (provided by razorback as generic mods)
   write `phase_stats.json` and commit the workspace at stage
   boundaries.
-- **The run-dir's `_razorback/freeze/<sealed_hash>/`** is the on-disk
-  surface shared between the class and the mods. It contains:
+- **The user-data CAS at `$XDG_DATA_HOME/razorback/freeze/<sealed_hash>/`** is
+  the on-disk surface shared between the class and the mods. It contains:
   - `.git/`, a private git repo holding workspace snapshots per stage
-  - `phase_stats.json`, per-stage tokens/cost/wallclock
+  - `phase_stats.json`, per-stage tokens/cost/wallclock (mods deferred — see §7.2 note)
   - `sealed_hash.txt`, the sealed-input hash, written at first stage
+
+  **Updated 2026-05-23 (entity `f1`):** the freeze tree was relocated
+  from `<harbor-run-dir>/_razorback/freeze/<sealed_hash>/` to
+  `$XDG_DATA_HOME/razorback/freeze/<sealed_hash>/` (default
+  `~/.local/share/razorback/freeze/`, env-override via
+  `$RAZORBACK_FREEZE_DIR`). The original run-dir-local location was
+  destroyed when worktrees were torn down at entity terminal cleanup;
+  the content-addressable user-data CAS survives worktree teardown and
+  is discoverable by any razorback invocation that computes the same
+  `sealed_hash`. AC-5's "Goal 1 re-score from CAS without re-running" is
+  pinned by `tests/integration/test_freeze_cas_resume_no_agent_invocation.py`
+  (asserts `host_git_calls[0] == ("checkout", "--", ".")` on the resume
+  branch — no `init`/`add`/`commit` re-seed). **Historical:** the original
+  spec called for `<harbor-run-dir>/_razorback/freeze/<sealed_hash>/`;
+  see commit `5da804e` for the prior placement.
 
 Downstream consumers (`rk diff`, an experiment-workflow analyze stage)
 read `phase_stats.json` and the trial's `result.json` to attribute
@@ -423,10 +481,11 @@ harbor's resume destroys the trial directory and every razorback file
 under it, and the re-executed trial gets a new `trial_name` that
 would not match any `trial_name`-keyed sibling store.
 
-The mitigation: razorback writes the freeze tree to a sibling
-directory **outside harbor's per-trial scratch zone**, keyed by
-`sealed_hash` rather than `trial_name`. The freeze location is
-`<harbor-run-dir>/_razorback/freeze/<sealed_hash>/` (see §7.1).
+The mitigation: razorback writes the freeze tree to a location
+**outside harbor's per-trial scratch zone** (and as of 2026-05-23,
+outside the run-dir entirely), keyed by `sealed_hash` rather than
+`trial_name`. The freeze location is
+`$XDG_DATA_HOME/razorback/freeze/<sealed_hash>/` (see §7.1).
 `sealed_hash` is the §4.3 + §8.4 sealed-input hash, identical across
 the initial run and any subsequent `harbor jobs resume` because the
 sealed inputs (model, sampling, solver_workflow content, prompts,
@@ -492,6 +551,19 @@ Empirically verified by AC-0.2's probe at
 with `import_path: probe_agent:ProbeAgent` had its `setup()` and
 `run()` invoked by harbor without any entry-point declaration in the
 package's `pyproject.toml`.
+
+**Dispatch consolidation (2026-05-23, Phase 6).** Prior to Phase 6,
+razorback's spec-translator carried two parallel surfaces:
+`_REGISTRY` in `agents/registry.py` for the v1 kind
+(`spacedock-solver`) plus hardcoded `SPACEDOCK_SOLVER_V2_IMPORT_PATH`
+constants in `translate.py` for the v2 kind (`spacedock_solver_v2`).
+Phase 6 retired the v1 class to `_legacy/`, promoted the v2 class to
+the canonical kind `spacedock_solver`, and routed the canonical name
+through `_REGISTRY` like every other kind. `translate.py`'s hardcoded
+constants are gone; `spec.agent.kind` resolves via
+`resolve_agent_kind()` uniformly across `claude-cli`, `nop`, and
+`spacedock_solver`. The `_legacy/` v1 holding tank is retained for
+emergency rollback per the original Phase 7 disposition.
 
 ---
 
@@ -615,6 +687,60 @@ disk. Empirically verified by AC-0.2's probe at
 `docs/superpowers/plans/2026-05-19-harbor-entry-point-probe.md`
 ("Adapter dispatch probe" section).
 
+**Dataset identity is content-addressable (added 2026-05-23, entities
+`gb` + `qh`).** Razorback's `benchmark:` block accepts a `dataset:`
+field whose value is a versioned package reference. Two source
+shapes ship today:
+
+- **Harbor published-dataset reference** (`gb`, used by ADE-Bench):
+  `dataset: <org>/<name>@<ref>`. The `<ref>` follows Harbor's
+  `PackageReference` parsing (`harbor.models.package.version_ref.VersionRef`)
+  and accepts three forms:
+  - **Tag** (`@latest`, `@stable`, ...) — mutable label, re-resolves at
+    each invocation. Use for daily smokes and dev workflows.
+  - **Revision** (`@1`, `@2`, ...) — auto-incrementing integer pinned
+    once published. Use for stable-ish citations between dataset
+    republishes.
+  - **Digest** (`@sha256:<hex>`) — content hash. Resolver refuses
+    mismatched content. Use for paper-grade reproducibility.
+  Resolution invokes `harbor.registry.client.PackageDatasetClient.download_dataset(name, output_dir=..., export=True)`,
+  which returns per-task `PackageTaskId(ref="sha256:...")` entries; each
+  task package directory then flows through the generic task-view
+  materializer (see "Task-view materialization" below). Razorback's
+  schema rejects bare names without `<org>/` and emits an error citing
+  the canonical example. Verified by
+  `tests/unit/test_ade_bench_dataset_ref_schema.py` (8 tests).
+
+- **Plugin-shipped dataset definition** (`qh`, used by DAB): when the
+  dataset is *generated* per-`data_root` rather than source-controlled
+  in a Harbor registry, the dataset definition is a `dataset.toml` file
+  shipped *inside* the adapter plugin (e.g.,
+  `packages/razorback-plugin-dab/src/razorback_plugin_dab/dataset.toml`).
+  Specs name it as `dataset: dab@<version>`; the plugin parses the
+  TOML into a `DabDatasetDefinition` carrying task ids, query ids per
+  task, strata metadata, and variant catalog. Local `data_root`
+  remains an adapter-side materialization input, no longer a per-run
+  benchmark identity.
+
+These two shapes are **deliberately asymmetric**: Harbor's
+`PackageTaskId` model fits source-controlled task packages but not
+generated-per-data-root datasets like DAB. The decision matrix lives
+in `qh`'s plan doc.
+
+**Task-view materialization (PKG-40, shipped 2026-05-22).** Between
+the dataset resolver and Harbor's run-time dispatch, razorback runs a
+generic task-view materialization layer (`src/razorback/harbor_tasks/`)
+that applies per-benchmark transforms over the resolved task
+directories: image overrides, leakage deny-globs (e.g.,
+`ADE_BENCH_DENY_GLOBS`), per-task Dockerfile additions (e.g.,
+dbt-deps layer), `RAZORBACK_BENCHMARK_KIND` env injection, and
+solution-file exclusion. Both ADE and DAB resolved tasks flow through
+this layer before `harbor run` sees them. The view's manifest at
+`<run-dir>/_razorback/task_views/<view-id>/view_manifest.json` (schema
+v2) records `dataset_ref`, `dataset_content_hash` (dataset-level
+sha256), and per-task `task_content_hash` so frozen specs pin both
+layers of identity.
+
 ```yaml
 version: 1
 experiment: dab-paper-reproduction
@@ -640,9 +766,13 @@ agent:
   tools_allowed: []
 
 benchmark:
-  # passes through to harbor's task/dataset config
-  dataset: dab
-  tasks: [bookreview, agnews, crmarenapro]
+  # Harbor dataset reference (gb/qh, 2026-05-23).
+  # Three ref tiers: tag (@latest), revision (@1), digest (@sha256:...).
+  # Use digest for paper-grade reproducibility (resolver refuses content drift).
+  kind: harbor_dab
+  dataset: dab@1.0
+  datasets: [bookreview, agnews, crmarenapro]  # subset selector over dataset def
+  query_mode: per-query                          # behavior-side, orthogonal to dataset identity
 
 environment:
   # passes through to harbor's environment config
@@ -734,33 +864,62 @@ question in the probe summary).
 
 ## 7. Run-dir contract
 
-Razorback adds two artifacts to the run-dir harbor produces; the rest
-of the layout is harbor's.
+Razorback adds artifacts to the run-dir harbor produces; the freeze
+tree lives in a sibling user-data CAS, **not** in the run-dir.
+
+### 7.0 Where runs live (added 2026-05-23, entity `x9`)
+
+The default `runs_dir` resolves to `$XDG_DATA_HOME/razorback/runs/`
+(or `$RAZORBACK_RUNS_DIR` if set; falls back to
+`~/.local/share/razorback/runs/`). Explicit `--runs-dir <path>` still
+works as before and remains the way to direct a specific invocation's
+output. The default was changed because the prior worktree-relative
+default caused experiment artifacts to be destroyed when worktrees
+were torn down at entity terminal cleanup. Per-run artifacts now
+survive worktree teardown and any razorback invocation that knows the
+run-dir name can read its `summary.json`, `validation.json`, etc.
+Verified by `tests/integration/test_worktree_teardown_preserves_runs.py`.
 
 ### 7.1 Layout
 
 ```
-<harbor-run-dir>/
+<runs_dir>/<experiment>/<job-name-or-trial>/
 ├── (harbor's standard run-dir layout)
 ├── trials/<task>-NNNN__<uuid7>/  # harbor owns; rmtree'd on resume if incomplete
 │   └── (harbor's standard trial layout — razorback never writes here)
 ├── spec.frozen.yaml              # razorback writes at `rk freeze`
 ├── provenance.yaml               # razorback writes at `rk freeze`
-└── _razorback/                   # razorback's sibling directory; harbor never touches
-    └── freeze/
-        └── <sealed_hash>/        # SpacedockSolverAgent contract; survives `harbor jobs resume`
-            ├── .git/             # workspace snapshots per stage (mods write)
-            ├── phase_stats.json  # per-stage tokens/cost/wallclock (mods write)
-            └── sealed_hash.txt   # sealed-input hash (class writes at first stage)
+├── summary.json                  # razorback writes post-harbor (PKG-17 aggregator)
+├── manifest.json                 # razorback writes post-harbor
+├── per_trial_outcomes.json       # razorback writes post-harbor
+├── events.jsonl                  # razorback concatenates from per-trial event streams
+└── _razorback/                   # razorback's sibling subtree under the run-dir; harbor never touches
+    └── task_views/<view-id>/     # PKG-40 generic task-view materializer (added 2026-05-22)
+        ├── view_manifest.json    # schema v2: dataset_ref + dataset_content_hash + task_content_hash
+        └── <task>/...            # materialized task-view directories (image override + deny-globs applied)
 ```
 
-`_razorback/freeze/<sealed_hash>/` is the only razorback-owned subtree
-under harbor's run-dir layout. It lives **outside** harbor's
-`trials/<name>/` so that `harbor jobs resume`'s rmtree of incomplete
-trials (`harbor/job.py:_maybe_init_existing_job:192-228`) cannot
-destroy the freeze tree. The directory is keyed by `sealed_hash` (the
-§4.3 + §8.4 sealed-input hash) rather than by `trial_name`, because
-`harbor jobs resume` regenerates `trial_name` for re-executed trials
+Plus the **content-addressable freeze CAS** at:
+
+```
+$XDG_DATA_HOME/razorback/freeze/<sealed_hash>/
+├── .git/                         # workspace snapshots per stage (class writes at first stage; mods deferred — see §7.2)
+├── phase_stats.json              # per-stage tokens/cost/wallclock (mods deferred — see §7.2)
+└── sealed_hash.txt               # sealed-input hash (class writes at first stage)
+```
+
+The freeze CAS is **outside the run-dir** so that:
+1. `harbor jobs resume`'s rmtree of incomplete trials
+   (`harbor/job.py:_maybe_init_existing_job:192-228`) cannot reach it.
+2. Worktree teardown (entity terminal cleanup) cannot destroy it.
+3. Any razorback invocation that computes the same `sealed_hash` from
+   `spec.frozen.yaml` discovers the existing freeze tree without
+   coordination — same machine, different worktrees, different jobs
+   all share the CAS.
+
+The directory is keyed by `sealed_hash` (the §4.3 + §8.4 sealed-input
+hash) rather than by `trial_name`, because `harbor jobs resume`
+regenerates `trial_name` for re-executed trials
 (`harbor/models/trial/config.py:213-222`); `sealed_hash` is derived
 from `spec.frozen.yaml`, which itself survives resume, so the same
 freeze tree is addressable by the re-executed agent instance. See
@@ -769,6 +928,14 @@ basis (AC-0.5 probe at
 `docs/superpowers/plans/2026-05-19-harbor-resume-probe.md`,
 commit `1569853`). Razorback does not modify harbor's `trials/`,
 `agent/`, `verifier/`, or `artifacts/` subtrees.
+
+**Historical (pre-2026-05-23):** the freeze tree originally lived at
+`<harbor-run-dir>/_razorback/freeze/<sealed_hash>/` per the
+2026-05-20 spec revision (commit `5da804e`). The
+2026-05-23 entity `f1 freeze-tree-content-addressable-store`
+relocated it to the user-data CAS for the reasons above. Existing
+test fixtures and integration smokes use `monkeypatch.setenv("RAZORBACK_FREEZE_DIR", ...)`
+to direct test runs at a tmp-path CAS root.
 
 ### 7.2 `phase_stats.json`
 
@@ -799,6 +966,21 @@ attribute spend per stage and per token-type.
 
 Razorback ships `assert_phase_stats_schema(path)` for downstream
 validation.
+
+**Writer status (as of 2026-05-23):** v1's `SpacedockSolverAgent`
+shipped a class-side `_write_phase_stats_file` (now in
+`_legacy/`); v2's canonical agent does not write `phase_stats.json`
+itself. The spec calls for workflow mods to write it at stage
+boundaries, and AC-3.6 of the reconciliation plan explicitly defers
+the workflow-mod machinery to "whenever the autoresearch loop's
+first halt-resume hypothesis run is planned." Goals 1 and 2 run
+single straight-through solves and never exercise per-stage commits,
+so the gap is acceptable for those goals. When autoresearch
+surfaces, the workflow-mod side of §4.4's three-party contract must
+materialize. Until then, `phase_stats.json` is an aspirational
+contract documented here but not produced on disk; downstream
+consumers (`rk diff`, experiment-workflow analyze) read
+`summary.json` + `result.json` for cost attribution instead.
 
 ### 7.3 Stability
 
