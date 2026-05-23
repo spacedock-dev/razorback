@@ -1,0 +1,125 @@
+{
+  "against_constant": {
+    "name": "direct_baseline",
+    "value": 0.4376,
+    "verdict": "no_data"
+  },
+  "n_strata_scored": 0,
+  "n_strata_total": 12,
+  "pooled_n_pass": 0,
+  "pooled_n_total": 0,
+  "pooled_pass_at_1": null,
+  "pooled_wilson_95ci": null,
+  "strata": {
+    "DEPS_DEV_V1": {
+      "error_reason": "no_result_json",
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_total": 0,
+      "pass_at_1": null,
+      "result_json": null,
+      "wilson_ci": null
+    },
+    "GITHUB_REPOS": {
+      "error_reason": "no_result_json",
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_total": 0,
+      "pass_at_1": null,
+      "result_json": null,
+      "wilson_ci": null
+    },
+    "PANCANCER_ATLAS": {
+      "error_reason": "no_result_json",
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_total": 0,
+      "pass_at_1": null,
+      "result_json": null,
+      "wilson_ci": null
+    },
+    "PATENTS": {
+      "error_reason": "no_result_json",
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_total": 0,
+      "pass_at_1": null,
+      "result_json": null,
+      "wilson_ci": null
+    },
+    "agnews": {
+      "error_reason": "no_result_json",
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_total": 0,
+      "pass_at_1": null,
+      "result_json": null,
+      "wilson_ci": null
+    },
+    "bookreview": {
+      "error_reason": "no_result_json",
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_total": 0,
+      "pass_at_1": null,
+      "result_json": null,
+      "wilson_ci": null
+    },
+    "crmarenapro": {
+      "error_reason": "no_result_json",
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_total": 0,
+      "pass_at_1": null,
+      "result_json": null,
+      "wilson_ci": null
+    },
+    "googlelocal": {
+      "error_reason": "no_result_json",
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_total": 0,
+      "pass_at_1": null,
+      "result_json": null,
+      "wilson_ci": null
+    },
+    "music_brainz_20k": {
+      "error_reason": "no_result_json",
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_total": 0,
+      "pass_at_1": null,
+      "result_json": null,
+      "wilson_ci": null
+    },
+    "stockindex": {
+      "error_reason": "no_result_json",
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_total": 0,
+      "pass_at_1": null,
+      "result_json": null,
+      "wilson_ci": null
+    },
+    "stockmarket": {
+      "error_reason": "no_result_json",
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_total": 0,
+      "pass_at_1": null,
+      "result_json": null,
+      "wilson_ci": null
+    },
+    "yelp": {
+      "error_reason": "no_result_json",
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_total": 0,
+      "pass_at_1": null,
+      "result_json": null,
+      "wilson_ci": null
+    }
+  },
+  "stratified_pass_at_1_mean_over_strata": null,
+  "variant": "direct-minimal"
+}

@@ -1,0 +1,30 @@
+{
+  "summary_version": 1,
+  "n_trials_total": 1,
+  "n_trials_completed": 1,
+  "n_trials_errored": 0,
+  "stratified_pass_at_1": null,
+  "datasets": {},
+  "trials": [
+    {
+      "trial_id": "PANCANCER_ATLAS__y632Q2n",
+      "reward": null,
+      "cost_usd": null,
+      "wall_seconds": null,
+      "error_reason": null,
+      "stratum": {
+        "dataset": "PANCANCER_ATLAS",
+        "query_ids": [
+          1,
+          2,
+          3
+        ],
+        "backends": [
+          "duckdb",
+          "postgres"
+        ]
+      }
+    }
+  ],
+  "cost_usd": null
+}

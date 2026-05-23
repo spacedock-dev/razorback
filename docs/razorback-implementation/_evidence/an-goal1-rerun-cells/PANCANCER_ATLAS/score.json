@@ -1,0 +1,18 @@
+{
+  "score_version": 1,
+  "alpha": 0.05,
+  "strata": {},
+  "stratified_pass_at_1": null,
+  "stratified_n_completed": 0,
+  "stratified_n_errored": 1,
+  "error_reason": null,
+  "against_constant": {
+    "name": "spacedock",
+    "value": 0.577,
+    "per_stratum": {},
+    "stratified": {
+      "mean": null,
+      "verdict": null
+    }
+  }
+}
