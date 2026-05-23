@@ -10,7 +10,7 @@ score: 0.95
 worktree: .worktrees/spacedock-ensign-goal1-rerun-dab-spacedock-opus47-xhigh
 issue:
 pr:
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 ## Problem
