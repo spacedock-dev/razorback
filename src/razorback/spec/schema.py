@@ -107,11 +107,17 @@ class HarborDabBenchmarkBlock(BaseModel):
     `razorback-plugin-dab generate`, then a harbor `JobConfig` whose
     `tasks:` references the emitted task directories. Razorback core
     never imports from the plugin at runtime.
+
+    `dataset:` (AC-2) names a Harbor-style dataset definition ref of the form
+    `<name>@<version>`. When set, `data_root` becomes optional and falls back
+    to the env-default at materialization time; `datasets:` is treated as a
+    task-subset selector over the definition (empty = all datasets in the def).
     """
     model_config = ConfigDict(extra="forbid")
     kind: Literal["harbor_dab"]
-    data_root: Path
-    datasets: list[str] = Field(min_length=1)
+    dataset: str | None = None
+    data_root: Path | None = None
+    datasets: list[str] = Field(default_factory=list)
     workspace_variant: Literal["direct-minimal", "direct-structured", "spacedock"] = "direct-minimal"
     hints: bool = False
     query_mode: Literal["batch", "per-query"] = "per-query"
@@ -119,7 +125,40 @@ class HarborDabBenchmarkBlock(BaseModel):
     @field_validator("data_root", mode="before")
     @classmethod
     def _expand_data_root(cls, value: object) -> object:
+        if value is None:
+            return None
         return _expand_path(value)
+
+    @field_validator("dataset")
+    @classmethod
+    def _validate_dataset_ref(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if "@" not in value:
+            raise ValueError(
+                f"benchmark.dataset must be in the form '<name>@<version>'; "
+                f"got dataset format {value!r}"
+            )
+        name, version = value.split("@", 1)
+        if not name or not version:
+            raise ValueError(
+                f"benchmark.dataset must be '<name>@<version>' with non-empty parts; "
+                f"got dataset format {value!r}"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _dataset_or_data_root(self) -> "HarborDabBenchmarkBlock":
+        if self.dataset is None:
+            if self.data_root is None:
+                raise ValueError(
+                    "benchmark.data_root is required when benchmark.dataset is not set"
+                )
+            if not self.datasets:
+                raise ValueError(
+                    "benchmark.datasets must be non-empty when benchmark.dataset is not set"
+                )
+        return self
 
 
 class AdeBenchTaskEntry(BaseModel):

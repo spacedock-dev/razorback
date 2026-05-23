@@ -1,3 +1,5 @@
+# ABOUTME: Dev-only DAB spec — uses legacy kind: dab (via in_tree_dab alias). Canonical path is
+# ABOUTME: kind: harbor_dab + dataset: dab@1.0 (see goal1-paper-matrix specs).
 version: 1
 experiment: phase2-bookreview-claude-in-tree-dab
 agent:

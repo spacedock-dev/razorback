@@ -5,8 +5,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, NotRequired, TypedDict
+
+from razorback.diff.stats import wilson_ci
 
 MANIFEST_SCHEMA_VERSION = 1
 
@@ -216,6 +220,138 @@ def _read_trial(trial_dir: Path) -> dict:
         "error_reason": None,
         "stratum": stratum,
     }
+
+
+class QueryCell(TypedDict):
+    query_id: str | int | float | bool | None
+    n_trials: int
+    n_correct: int
+    pass_at_1: float
+    wilson_ci: tuple[float, float] | None
+
+
+class DatasetStratum(TypedDict):
+    dataset: str
+    n_queries: int
+    dataset_pass_at_1: float
+    queries: list[QueryCell]
+    wilson_ci: None
+
+
+class StratifiedReport(TypedDict):
+    score_version: int
+    alpha: float
+    strata: dict[str, DatasetStratum]
+    stratified_pass_at_1: float | None
+    n_trials_total: int
+    n_trials_completed: int
+    n_trials_errored: int
+    error_reason: str | None
+
+
+class TrialOutcome(TypedDict):
+    trial_id: str
+    reward: float | None
+    cost_usd: float | None
+    wall_seconds: float | None
+    error_reason: str | None
+    stratum: dict[str, Any]
+
+
+def read_trial_outcomes(run_dir: Path) -> list[TrialOutcome]:
+    """Walk run_dir's trial subdirs and return one outcome row per trial.
+
+    Filesystem-state-driven mirror of the per-trial information aggregate_summary
+    consumes. Used by `rk score` to delegate scoring to the same reducer the
+    post-harbor aggregator writes into summary.json.
+    """
+    return [_read_trial(td) for td in _iter_trial_dirs(run_dir)]
+
+
+SCORE_REPORT_VERSION = 1
+
+
+def reduce_per_query_stratified(
+    outcomes: list[TrialOutcome], *, alpha: float = 0.05
+) -> StratifiedReport:
+    """Per-query stratified pass@1 with per-query Wilson CIs.
+
+    Single source of truth for both summary.json's `stratified_pass_at_1`
+    and `rk score`'s headline number. Each (dataset, query_id) cell is a
+    binomial proportion (k=#trials with reward>=1.0, n=trials), and the
+    Wilson CI attaches at the cell level only. The dataset stratum is the
+    mean of per-query proportions — that is not a binomial, so its
+    `wilson_ci` is always `null`.
+    """
+    n_trials_total = len(outcomes)
+    completed = [t for t in outcomes if t["error_reason"] is None and t["reward"] is not None]
+    n_trials_completed = len(completed)
+    n_trials_errored = n_trials_total - n_trials_completed
+
+    if not completed:
+        return StratifiedReport(
+            score_version=SCORE_REPORT_VERSION,
+            alpha=alpha,
+            strata={},
+            stratified_pass_at_1=None,
+            n_trials_total=n_trials_total,
+            n_trials_completed=0,
+            n_trials_errored=n_trials_errored,
+            error_reason=_dominant_error_reason(outcomes) if outcomes else None,
+        )
+
+    by_ds_q: dict[tuple[str, Any], list[float]] = {}
+    for t in completed:
+        ds = (t["stratum"] or {}).get("dataset", "default")
+        qid = (t["stratum"] or {}).get("query_id")
+        by_ds_q.setdefault((str(ds), qid), []).append(float(t["reward"]))
+
+    strata: dict[str, DatasetStratum] = {}
+    for (ds, qid), rewards in by_ds_q.items():
+        n = len(rewards)
+        c = sum(1 for r in rewards if r >= 1.0)
+        cell: QueryCell = {
+            "query_id": qid,
+            "n_trials": n,
+            "n_correct": c,
+            "pass_at_1": (c / n) if n else 0.0,
+            "wilson_ci": wilson_ci(k=c, n=n, alpha=alpha) if n else None,
+        }
+        entry = strata.setdefault(
+            ds,
+            {"dataset": ds, "n_queries": 0, "dataset_pass_at_1": 0.0, "queries": [], "wilson_ci": None},
+        )
+        entry["queries"].append(cell)
+
+    for entry in strata.values():
+        entry["queries"].sort(key=lambda q: (q["query_id"] is None, q["query_id"]))
+        entry["n_queries"] = len(entry["queries"])
+        entry["dataset_pass_at_1"] = (
+            sum(q["pass_at_1"] for q in entry["queries"]) / entry["n_queries"]
+        )
+
+    stratified = sum(d["dataset_pass_at_1"] for d in strata.values()) / len(strata)
+    return StratifiedReport(
+        score_version=SCORE_REPORT_VERSION,
+        alpha=alpha,
+        strata=dict(sorted(strata.items())),
+        stratified_pass_at_1=stratified,
+        n_trials_total=n_trials_total,
+        n_trials_completed=n_trials_completed,
+        n_trials_errored=n_trials_errored,
+        error_reason=None,
+    )
+
+
+def _dominant_error_reason(outcomes: list[TrialOutcome]) -> str | None:
+    """Most-frequent error_reason among errored trials; ties broken alphabetically."""
+    classes = [t["error_reason"] for t in outcomes if t["error_reason"]]
+    if not classes:
+        return None
+    counts = Counter(classes)
+    max_count = max(counts.values())
+    top = sorted(name for name, count in counts.items() if count == max_count)
+    return top[0]
 
 
 def _stratified_pass_at_1(trials: list[dict]) -> tuple[dict, float | None]:

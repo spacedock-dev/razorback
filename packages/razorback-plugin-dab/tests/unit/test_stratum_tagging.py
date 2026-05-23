@@ -31,3 +31,22 @@ def test_write_stratum_file(tmp_path: Path):
     assert payload["stratum"]["dataset"] == "agnews"
     assert payload["stratum"]["query_id"] == 2
     assert payload["stratum"]["backends"] == ["mongo", "sqlite"]
+
+
+def test_stratum_payload_metadata_from_definition():
+    """AC-4 Verified by: stratum metadata is sourced from the dataset definition,
+    not from an ad-hoc catalog. Same definition source the generator uses."""
+    from razorback_plugin_dab.dataset_def import load_default_definition
+
+    definition = load_default_definition()
+    ds = definition.get_dataset("bookreview")
+    payload = stratum_payload(
+        dataset=ds.name, query_id=1, backends=ds.backends,
+    )
+    assert payload == {
+        "stratum": {
+            "dataset": "bookreview",
+            "query_id": 1,
+            "backends": ["postgres", "sqlite"],
+        }
+    }
