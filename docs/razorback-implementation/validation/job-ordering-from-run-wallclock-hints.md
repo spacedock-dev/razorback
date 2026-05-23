@@ -2,7 +2,134 @@
 
 Entity: `k05te9qfkv1at7qh3zay5naf`
 Branch: `spacedock-ensign/job-ordering-from-run-wallclock-hints`
-Validated commits: `db9e249`, `1212642`, `518a030`, `fbb8b09`, `97b375b`, `15e742e`, `57eba27`
+Validated commits: `db9e249`, `1212642`, `518a030`, `fbb8b09`, `97b375b`, `15e742e`, `57eba27`, `044da5e`, `fa0662e`
+
+## Cycle 2 Validation
+
+Gate decision: PASSED.
+
+Cycle 1 was rejected because two branch-local unit test doubles did not accept
+the additive `ordering_hint` keyword. Commit `044da5e` updated both test doubles,
+and the required cycle-2 focused commands now pass. The optional full suite still
+has unrelated environment/integration failures, but no ordering-hint or
+branch-local unit regressions remain.
+
+## Cycle 2 Commands Run
+
+Previously failing branch-local tests:
+
+```text
+PYTHONPATH=packages/razorback-plugin-dab/src .venv/bin/python -m pytest --import-mode=importlib tests/unit/test_cli_run_aggregator_wiring.py::test_cli_run_invokes_aggregator_on_harbor_success tests/unit/test_run_plugin_drift_wired.py::test_run_with_allow_plugin_drift_records_in_provenance -q
+..                                                                       [100%]
+2 passed in 0.79s
+```
+
+Focused ordering/provenance/scoring suite:
+
+```text
+PYTHONPATH=packages/razorback-plugin-dab/src .venv/bin/python -m pytest --import-mode=importlib tests/unit/test_run_ordering.py tests/unit/test_rk_run_ordering_hint_cli.py tests/unit/test_rk_run_v2_provenance_artifacts.py tests/unit/test_task_identity_scoring.py tests/unit/test_score_load.py tests/unit/test_cli_run_aggregator_wiring.py tests/unit/test_run_plugin_drift_wired.py -q
+..........................                                               [100%]
+26 passed in 1.24s
+```
+
+Focused translator/harbor-view/aggregate suite:
+
+```text
+PYTHONPATH=packages/razorback-plugin-dab/src .venv/bin/python -m pytest --import-mode=importlib tests/unit/test_ade_bench_translator.py tests/unit/test_ade_bench_harbor_view.py tests/unit/test_runs_aggregate.py -q
+................                                                         [100%]
+16 passed in 0.86s
+```
+
+Focused pre-check suite:
+
+```text
+PYTHONPATH=packages/razorback-plugin-dab/src .venv/bin/python -m pytest --import-mode=importlib tests/unit/test_rk_run_v2_pre_checks.py -q
+...                                                                      [100%]
+3 passed in 0.84s
+```
+
+Optional full suite:
+
+```text
+uv run pytest
+4 failed, 568 passed, 9 skipped, 16 warnings in 37.82s
+```
+
+Full-suite failures:
+
+```text
+FAILED tests/integration/test_budget_gate_two_invocations.py::test_two_sequential_invocations_second_refuses
+FAILED tests/integration/test_budget_gate_two_invocations.py::test_without_flag_regression_against_smoke
+FAILED tests/integration/test_rk_run_nop.py::test_rk_run_nop_end_to_end
+FAILED tests/integration/test_rk_run_v2_deterministic_smoke.py::test_deterministic_smoke_runs_end_to_end
+```
+
+The first, second, and fourth failures require external DAB data at
+`/Users/clkao/git/dataagentbench/data/query_bookreview`. The
+`test_rk_run_nop_end_to_end` failure is the previously documented
+`AssertionError: events.jsonl is empty`. The two branch-local unit failures
+from cycle 1 are no longer present in either the required focused commands or
+the optional full-suite run.
+
+## Cycle 2 Acceptance Criteria
+
+AC-1 - Optional ordering hint input: PASS.
+
+Evidence: `test_rk_run_without_ordering_hint_preserves_input_order` and
+`test_rk_run_order_from_run_serializes_longest_known_tasks_first` passed in the
+required focused command. Code inspection confirmed `src/razorback/cli/run.py`
+exposes `--order-from-run`, leaves no-hint task order unchanged, and applies
+ordering only when a hint is provided.
+
+AC-2 - Wallclock extraction is robust: PASS.
+
+Evidence: `tests/unit/test_run_ordering.py` passed. Code inspection confirmed
+`src/razorback/run_ordering.py` parses `started_at`/`finished_at`, handles run
+directories and single result files, ignores missing/malformed/non-positive
+timings, and records warning strings plus ignored counts.
+
+AC-3 - Longest-known-first scheduling: PASS.
+
+Evidence: `tests/unit/test_run_ordering.py` and
+`tests/unit/test_rk_run_ordering_hint_cli.py` passed. Inspection confirmed
+known durations sort descending, unknown tasks retain original relative order,
+and the serialized Harbor `JobConfig` order is asserted under
+`n_concurrent_trials == 2`.
+
+AC-4 - Results semantics do not change: PASS.
+
+Evidence: `tests/unit/test_task_identity_scoring.py` and
+`tests/unit/test_score_load.py` passed in the focused suite. Inspection
+confirmed the implementation only reorders `job_config.tasks`; aggregation and
+scoring continue to resolve trial identity from task-view manifests and trial
+names.
+
+AC-5 - Provenance records the hint: PASS.
+
+Evidence: `test_rk_run_records_ordering_hint_metadata_in_manifest_and_provenance`
+and `tests/unit/test_rk_run_v2_provenance_artifacts.py` passed. Inspection
+confirmed additive `ordering_hint` metadata is written through
+`src/razorback/runs/aggregate.py` and
+`src/razorback/provenance/provenance_yaml.py`.
+
+## Cycle 2 Code Review Findings
+
+Blocking: none.
+
+Non-blocking:
+
+- Optional `uv run pytest` still fails on unrelated environment/integration
+  issues: missing external DAB bookreview data and empty `events.jsonl` in the
+  nop integration test.
+
+## Cycle 2 Gate Decision
+
+PASSED.
+
+The cycle-1 branch-local unit regressions are fixed, AC-1 through AC-5 are
+covered by focused tests plus inspection, and the remaining full-suite failures
+match previously documented external/integration blockers unrelated to this
+ordering-hint change.
 
 ## Commands Run
 

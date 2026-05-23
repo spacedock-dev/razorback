@@ -150,3 +150,16 @@ in the validation report and do not need production-code fixes for this cycle.
 ### Summary
 
 Fixed only the branch-local test double regressions identified by validation feedback cycle 1. The production `ordering_hint` call contract remains unchanged, and verification covered the two rejected tests plus the focused feature suites.
+
+## Stage Report: validation (cycle 2)
+
+- DONE: Independently verifies AC-1 through AC-5 after feedback cycle 1 with code inspection and concrete command output.
+  Evidence: validation report records PASS for AC-1 through AC-5, including code inspection of `run_ordering.py`, `cli/run.py`, `runs/aggregate.py`, and `provenance_yaml.py` plus focused pytest output.
+- DONE: Reruns the previously failing branch-local tests plus focused ordering/provenance/scoring/translator regression tests, or reports exact blockers.
+  Evidence: required focused commands passed with `2 passed`, `26 passed`, `16 passed`, and `3 passed`; optional full suite was run and only unrelated integration/environment failures remain.
+- DONE: Writes/updates the validation report with blocking/non-blocking findings and an explicit gate decision of PASSED or REJECTED.
+  Evidence: `docs/razorback-implementation/validation/job-ordering-from-run-wallclock-hints.md` now includes cycle-2 blocking/non-blocking findings and gate decision `PASSED`.
+
+### Summary
+
+Cycle-2 validation accepted the feedback fix in `044da5e`: the two previously failing branch-local unit tests now pass, and the broader focused ordering/provenance/scoring/translator suites pass. The optional full suite still has the known external DAB data and nop events integration failures, classified as non-blocking for this ordering-hint gate.
