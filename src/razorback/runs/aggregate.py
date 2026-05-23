@@ -187,6 +187,58 @@ def _trial_cost(trial_dir: Path) -> float | None:
     return sum(costs) if costs else None
 
 
+def _load_reward_per_query(trial_dir: Path) -> dict[int, float] | None:
+    """Read the DAB batch-mode sidecar at `<trial_dir>/.../reward_per_query.json`.
+
+    Returns `None` when neither candidate sidecar exists (not a batch trial —
+    caller falls back to the one-row-per-trial path). Returns a possibly-empty
+    `{query_id: reward}` dict otherwise; an empty dict signals a batch trial
+    whose sidecar produced no usable rows. Mirrors the legacy reader at
+    `_legacy/benchmarks/dab/aggregate.py:_load_per_query_rewards` but takes a
+    trial_dir directly.
+    """
+    candidates = [
+        trial_dir / "steps" / "main" / "verifier" / "reward_per_query.json",
+        trial_dir / "verifier" / "reward_per_query.json",
+    ]
+    payload: dict | None = None
+    found = False
+    for candidate in candidates:
+        if candidate.exists():
+            found = True
+            try:
+                parsed = json.loads(candidate.read_text())
+            except (OSError, json.JSONDecodeError):
+                parsed = None
+            if isinstance(parsed, dict):
+                payload = parsed
+            break
+    if not found:
+        return None
+    if not isinstance(payload, dict):
+        return {}
+    out: dict[int, float] = {}
+    for key, entry in payload.items():
+        if not isinstance(key, str) or not key.startswith("q"):
+            continue
+        try:
+            qid = int(key[1:])
+        except ValueError:
+            continue
+        reward: Any
+        if isinstance(entry, dict):
+            reward = entry.get("reward")
+        else:
+            reward = entry
+        if reward is None:
+            continue
+        try:
+            out[qid] = float(reward)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
 def _read_trial(trial_dir: Path) -> dict:
     """Extract one trial's row for summary.json + per_trial_outcomes.json."""
     result = _read_json(trial_dir / "result.json") or {}
@@ -258,14 +310,61 @@ class TrialOutcome(TypedDict):
     stratum: dict[str, Any]
 
 
+def _fan_batch_trial(trial_dir: Path, per_query: dict[int, float]) -> list[TrialOutcome]:
+    """Emit one outcome row per per-query reward for a DAB batch trial.
+
+    `query_id` overrides any composite stratum value; `cost_usd` rides only on
+    the first row so the headline `_job_cost_usd` sum is unchanged. `trial_id`
+    is `<trial_dir.name>#q<N>` so per-trial diagnostics still trace back.
+    """
+    base_stratum = _resolve_stratum(trial_dir) or {}
+    trial_cost = _trial_cost(trial_dir)
+    rows: list[TrialOutcome] = []
+    for ordinal, qid in enumerate(sorted(per_query.keys())):
+        stratum = {**base_stratum, "query_id": qid}
+        rows.append(
+            {
+                "trial_id": f"{trial_dir.name}#q{qid}",
+                "reward": float(per_query[qid]),
+                "cost_usd": trial_cost if ordinal == 0 else None,
+                "wall_seconds": None,
+                "error_reason": None,
+                "stratum": stratum,
+            }
+        )
+    return rows
+
+
 def read_trial_outcomes(run_dir: Path) -> list[TrialOutcome]:
-    """Walk run_dir's trial subdirs and return one outcome row per trial.
+    """Walk run_dir's trial subdirs and return one outcome row per per-query reward.
 
     Filesystem-state-driven mirror of the per-trial information aggregate_summary
     consumes. Used by `rk score` to delegate scoring to the same reducer the
-    post-harbor aggregator writes into summary.json.
+    post-harbor aggregator writes into summary.json. DAB batch trials whose
+    `reward_per_query.json` sidecar exists fan into N rows keyed by
+    `(dataset, query_id)`; all other trials emit one row per trial.
     """
-    return [_read_trial(td) for td in _iter_trial_dirs(run_dir)]
+    outcomes: list[TrialOutcome] = []
+    for td in _iter_trial_dirs(run_dir):
+        per_query = _load_reward_per_query(td)
+        if per_query is None:
+            outcomes.append(_read_trial(td))
+            continue
+        if not per_query:
+            stratum = _resolve_stratum(td) or {}
+            outcomes.append(
+                {
+                    "trial_id": td.name,
+                    "reward": None,
+                    "cost_usd": _trial_cost(td),
+                    "wall_seconds": None,
+                    "error_reason": "BatchSidecarEmpty",
+                    "stratum": stratum,
+                }
+            )
+            continue
+        outcomes.extend(_fan_batch_trial(td, per_query))
+    return outcomes
 
 
 SCORE_REPORT_VERSION = 1
