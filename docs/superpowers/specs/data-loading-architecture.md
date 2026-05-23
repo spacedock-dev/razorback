@@ -4,12 +4,12 @@
 **Companion to:** [`2026-05-19-razorback-on-harbor.md`](2026-05-19-razorback-on-harbor.md)
 
 How a frozen razorback spec turns into a running benchmark task with its
-dependent services (Postgres, Mongo, etc.) — and where the
-reproducibility audit trail currently goes thin.
+dependent services (Postgres, Mongo, ...) — and where the
+reproducibility audit trail goes thin.
 
 ---
 
-## 1. The three layers between spec and live DB
+## 1. Three layers between spec and live DB
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
@@ -33,7 +33,7 @@ reproducibility audit trail currently goes thin.
                           ▼
 ┌───────────────────────────────────────────────────────────────┐
 │ Layer 3: Per-task compose stack (the runtime)                 │
-│ Generated/materialized per (task, query) pair:                │
+│ One per (task, query) pair:                                   │
 │   <task>/                                                     │
 │   ├── task.toml             # metadata, healthcheck           │
 │   ├── instruction.md                                          │
@@ -59,9 +59,10 @@ bytes, compose stack provides the runtime.
 The pattern is **per-task `environment/docker-compose.yaml`**, not a
 benchmark-specific add-on. Harbor's docker environment
 (`harbor/environments/docker/docker.py:251-296`) detects the file,
-merges it with harbor-generated overrides (volume bindmounts via
-`_mounts_compose_path`, no-network override when `allow_internet=False`),
-and starts the whole stack via `docker compose up` before agent setup.
+merges in its own overrides, and starts the stack via `docker compose
+up` before agent setup. The overrides: volume bindmounts via
+`_mounts_compose_path`, and a no-network override when
+`allow_internet=False`.
 
 The agent's container is just one service in the stack. The agent
 reaches sibling services by container hostname over the compose network
@@ -102,8 +103,8 @@ published via `harbor publish` follow the same shape.
 
 ## 3. How DAB threads through the three layers
 
-DAB is the most service-heavy benchmark razorback currently runs. Its
-shape exercises every part of the architecture.
+DAB is the most service-heavy benchmark razorback runs. Its shape
+exercises every part of the architecture.
 
 ### At `rk freeze`
 
@@ -121,7 +122,7 @@ shape exercises every part of the architecture.
 
 5. Harbor invokes the DAB plugin's task generator
    (`razorback-plugin-dab generate`).
-6. Generator now evaluates `${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}`
+6. Generator evaluates `${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}`
    against the live env. Opens `<resolved>/query_yelp/db_config.yaml`,
    reads `<resolved>/query_yelp/<dump>.sql.gz` paths.
 7. Generator emits **one task directory per (dataset, query) pair**
@@ -168,7 +169,7 @@ and image digest, which are independently pinned).
 | DB schema/row contents match expected | n/a | ⚠️ implicitly via verifier outcome (NOT a separate check) | n/a |
 
 **The DAB `data_root` row is the audit hole.** Image, init scripts, and
-dataset identity are pinned. The actual database dumps under
+dataset identity are pinned; the database dumps under
 `$DATAAGENTBENCH_DATA_ROOT` are not.
 
 ---
@@ -259,10 +260,10 @@ Publishing DAB as a Harbor registry dataset (e.g.,
 - Make DAB reproducible across machines without coordinating clones
 
 **Tradeoffs:**
-- Upload bandwidth: DAB's dumps are large (~GB scale)
-- Auth: who owns the publish credentials?
+- Upload bandwidth: DAB's dumps are large (~GB scale).
+- Auth: ownership of publish credentials is unsettled.
 - Backward compat: the in-tree `kind: dab` and plugin's `dataset.toml`
-  path stay valid; the registry path is additive
+  path stay valid; the registry path is additive.
 
 **Effort:** Significant — depends on Harbor's `harbor publish`
 maturity, dump-size constraints, and dataset-publish auth model.
@@ -295,4 +296,4 @@ emerges.
 ## 8. Living document
 
 This doc is updated inline as the data-loading surfaces evolve.
-Significant updates should bump the snapshot date at the top.
+Bump the snapshot date on significant updates.
