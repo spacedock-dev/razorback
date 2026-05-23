@@ -1,13 +1,13 @@
 ---
 id: k05te9qfkv1at7qh3zay5naf
 title: Historical wallclock ordering hints for job dispatch
-status: validation
+status: done
 source: Captain directive 2026-05-23 - "optionally ordering the job based on a previous run result file as ordering hint"
 started: 2026-05-23T00:47:29Z
-completed:
-verdict:
+completed: 2026-05-23T01:17:53Z
+verdict: PASSED
 score: 0.75
-worktree: .worktrees/spacedock-ensign-job-ordering-from-run-wallclock-hints
+worktree: 
 issue:
 pr:
 mod-block: 
