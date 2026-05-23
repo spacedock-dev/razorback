@@ -2,42 +2,43 @@
 title: Goal 1 Re-run — DAB Spacedock Matrix (opus-4.7, reasoning_effort=xhigh) — Captain Report
 entity: docs/razorback-implementation/goal1-rerun-dab-spacedock-opus47-xhigh.md
 date: 2026-05-23
-status: matrix complete (cycle 2), 12/12 strata scored
+status: matrix complete (cycle 2), 12/12 strata scored; headline recomputed post-1s
 ---
 
-> **⚠️ Headline notice.** The pooled `stratified_pass_at_1 = 0.333` reported
-> below is the BINARY pass@1 per the current
-> `runs/aggregate.py:_stratified_pass_at_1` reducer, which binarizes each
-> cell's composite reward via `>= 1.0`. For DAB batch-mode cells (one trial =
-> composite of N queries), this under-counts the model's per-query
-> performance — e.g. yelp at composite reward `0.857` contributes `0` to the
-> headline despite passing 6 of 7 queries. The captain has directed "stop
-> reporting binary for dab." The continuous-reward / per-query-mean headline
-> will replace this number once entity `1s runs-aggregate-single-score-reducer`
-> (currently in implementation) ships its canonical reducer. See
-> `docs/razorback-implementation/runs-aggregate-single-score-reducer.md`. The
-> cycle-2 run-dir artifacts under `_evidence/an-goal1-rerun-cells/<dataset>/`
-> and `_runs/goal1-rerun-spacedock-opus47-xhigh/spacedock/<dataset>/` are the
-> ground-truth fixtures that the post-`1s` recompute will consume. The
-> per-cell continuous `reward` column in the table below is provided as the
-> interim true-picture signal.
+> **Headline scoring:** canonical per-query reducer (`runs/aggregate.py:reduce_per_query_stratified`, post-`1s` merge at commit `f76443b` on main).
 
-## Headline (cycle 2 — clean 12/12)
+## Headline (post-1s recompute — per-query)
 
-**Spacedock pooled pass@1 = 0.333 (95% Wilson CI [0.138, 0.609]) across 12 scored strata.**
-**Verdict vs paper `spacedock=0.577`: `matches` (paper inside CI).**
+**Spacedock pooled per-query pass@1 = 0.722 (95% Wilson CI [0.591, 0.824]) across 54 query cells over 12 dataset strata.**
+**Verdict vs paper `spacedock=0.577`: `above` (paper sits below the per-query CI lower bound at 0.591).**
 
-- 12/12 cells dispatched + scored, 0 model-side failures, 0 verifier-infra failures.
-- 4 strata (`bookreview`, `music_brainz_20k`, `stockindex`, `stockmarket`) scored
-  pass@1=1.0; remaining 8 strata scored pass@1=0.0 with partial rewards in the
-  0.0–0.857 range.
-- The four cells dropped by cycle 1 (`GITHUB_REPOS`, `PANCANCER_ATLAS`, `PATENTS`,
-  `stockmarket`) were re-scored cleanly after rebasing onto Codex's verifier fix
-  (`d6fbfdd Fix DAB batch common_scaffold verifier imports`). The 8 cycle-1 cells
-  were preserved and rolled into the aggregate; only the 4 dropped cells were
-  re-executed.
+Up from the archived binary `0.333` — DAB batch-mode cells whose composite
+reward fell below 1.0 now contribute their per-query partial credit instead of
+binarizing to 0. `yelp` now contributes 6/7 instead of 0; `crmarenapro` 9/13,
+`googlelocal` 3/4, `PANCANCER_ATLAS` 2/3, `agnews` 2/4, `DEPS_DEV_V1` 1/2,
+`GITHUB_REPOS` 2/4 all surface their partial passes. `bookreview`,
+`music_brainz_20k`, `stockindex`, `stockmarket` stay at 1.0 (all queries
+passed); `PATENTS` stays at 0.0 (no queries passed). The 12/12 dataset-stratum
+coverage is unchanged from the cycle-2 archived run; only the scoring lens
+changed.
 
-## Cycle-1 headline (preserved for trail)
+## Audit history — prior headlines
+
+These are the binary-reducer numbers the report carried before the post-`1s`
+recompute. Preserved as the audit trail; do not delete.
+
+### Cycle-2 binary headline (pre-1s, archived)
+
+**Spacedock pooled `stratified_pass_at_1 = 0.333` (95% Wilson CI [0.138, 0.609]) across 12 scored strata.**
+Verdict vs paper `spacedock=0.577`: `matches` (paper inside CI).
+The binary number under-counted DAB batch-mode performance because the
+pre-`1s` reducer (`runs/aggregate.py:_stratified_pass_at_1`) binarized each
+cell's composite reward via `>= 1.0`; cells with partial composite rewards
+(yelp 0.857, crmarenapro 0.692, etc.) contributed 0 to the headline.
+The under-count is what motivated entity `1s runs-aggregate-single-score-reducer`,
+whose canonical per-query reducer is the source of the headline above.
+
+### Cycle-1 headline (preserved for trail)
 
 **Cycle 1 — 8/12 scored: pooled pass@1 = 0.375 (95% Wilson CI [0.137, 0.694]).**
 Same verdict (`matches`). 4/12 cells crashed at the verifier layer with
@@ -51,29 +52,40 @@ for evidence comparison; the cycle-1 dispatch ledger is preserved as
 
 ## Per-dataset table (cycle 2 — 12/12 scored)
 
-| dataset | n_total | n_pass | reward | pass@1 | wilson_95ci | wallclock | cycle | verifier_ok | against `paper=0.577` |
-|---|---:|---:|---:|---:|---|---:|:---:|:---:|:---|
-| agnews | 1 | 0 | 0.500 | 0.0 | [0.0, 0.793] | 2905s | 1 | yes | inside CI |
-| bookreview | 1 | 1 | 1.000 | 1.0 | [0.207, 1.0] | 161s | 1 | yes | inside CI |
-| crmarenapro | 1 | 0 | 0.692 | 0.0 | [0.0, 0.793] | 698s | 1 | yes | inside CI |
-| DEPS_DEV_V1 | 1 | 0 | 0.500 | 0.0 | [0.0, 0.793] | 358s | 1 | yes | inside CI |
-| GITHUB_REPOS | 1 | 0 | 0.500 | 0.0 | [0.0, 0.793] | 417s | 2 | yes | inside CI |
-| googlelocal | 1 | 0 | 0.750 | 0.0 | [0.0, 0.793] | 181s | 1 | yes | inside CI |
-| music_brainz_20k | 1 | 1 | 1.000 | 1.0 | [0.207, 1.0] | 509s | 1 | yes | inside CI |
-| PANCANCER_ATLAS | 1 | 0 | 0.667 | 0.0 | [0.0, 0.793] | 209s | 2 | yes | inside CI |
-| PATENTS | 1 | 0 | 0.000 | 0.0 | [0.0, 0.793] | 617s | 2 | yes | inside CI |
-| stockindex | 1 | 1 | 1.000 | 1.0 | [0.207, 1.0] | 115s | 1 | yes | inside CI |
-| stockmarket | 1 | 1 | 1.000 | 1.0 | [0.207, 1.0] | 201s | 2 | yes | inside CI |
-| yelp | 1 | 0 | 0.857 | 0.0 | [0.0, 0.793] | 392s | 1 | yes | inside CI |
-| **pooled** | **12** | **4** | **—** | **0.333** | **[0.138, 0.609]** | **6675s + 1444s = 8119s (2.26h)** | — | — | **matches** |
+`pass@1` is the archived binary number (cell composite reward `>= 1.0`);
+`per_query_pass@1` is the post-`1s` per-query number from
+`runs/aggregate.py:reduce_per_query_stratified`. The pooled per-query row
+is the captain-facing headline. For every cell, `per_query_pass@1` and
+continuous `reward` agree to four decimals (no divergence > 0.05 — no rows
+flagged).
 
-Per-query rewards span 0.0–1.0; 4 strata achieved a clean 1.0 pass
+| dataset | n_total | n_pass | reward | pass@1 | per_query_pass@1 | wilson_95ci | wallclock | cycle | verifier_ok | against `paper=0.577` |
+|---|---:|---:|---:|---:|---:|---|---:|:---:|:---:|:---|
+| agnews | 1 | 0 | 0.500 | 0.0 | 0.500 (2/4) | [0.0, 0.793] | 2905s | 1 | yes | inside CI |
+| bookreview | 1 | 1 | 1.000 | 1.0 | 1.000 (3/3) | [0.207, 1.0] | 161s | 1 | yes | inside CI |
+| crmarenapro | 1 | 0 | 0.692 | 0.0 | 0.692 (9/13) | [0.0, 0.793] | 698s | 1 | yes | inside CI |
+| DEPS_DEV_V1 | 1 | 0 | 0.500 | 0.0 | 0.500 (1/2) | [0.0, 0.793] | 358s | 1 | yes | inside CI |
+| GITHUB_REPOS | 1 | 0 | 0.500 | 0.0 | 0.500 (2/4) | [0.0, 0.793] | 417s | 2 | yes | inside CI |
+| googlelocal | 1 | 0 | 0.750 | 0.0 | 0.750 (3/4) | [0.0, 0.793] | 181s | 1 | yes | inside CI |
+| music_brainz_20k | 1 | 1 | 1.000 | 1.0 | 1.000 (3/3) | [0.207, 1.0] | 509s | 1 | yes | inside CI |
+| PANCANCER_ATLAS | 1 | 0 | 0.667 | 0.0 | 0.667 (2/3) | [0.0, 0.793] | 209s | 2 | yes | inside CI |
+| PATENTS | 1 | 0 | 0.000 | 0.0 | 0.000 (0/3) | [0.0, 0.793] | 617s | 2 | yes | inside CI |
+| stockindex | 1 | 1 | 1.000 | 1.0 | 1.000 (3/3) | [0.207, 1.0] | 115s | 1 | yes | inside CI |
+| stockmarket | 1 | 1 | 1.000 | 1.0 | 1.000 (5/5) | [0.207, 1.0] | 201s | 2 | yes | inside CI |
+| yelp | 1 | 0 | 0.857 | 0.0 | 0.857 (6/7) | [0.0, 0.793] | 392s | 1 | yes | inside CI |
+| **pooled** | **12** | **4** | **—** | **0.333** | **0.722 (39/54)** | **per-query [0.591, 0.824] · binary [0.138, 0.609]** | **6675s + 1444s = 8119s (2.26h)** | — | — | **above (per-query) / matches (binary, audit)** |
+
+Per-query pass@1 spans 0.0–1.0; 4 strata achieved a clean 1.0 pass
 (`bookreview`, `music_brainz_20k`, `stockindex`, `stockmarket`). The
-aggregator's `verdict=matches` follows from `paper=0.577 ∈ [0.138, 0.609]`.
-Compared with the cycle-1 partial headline (`0.375 [0.137, 0.694]` on 8/12),
-the 12/12 pooled headline is slightly lower (`0.333` vs `0.375`) but the
-95% Wilson CI tightened on the upper bound (`0.609` vs `0.694`) and the
-paper constant remains inside CI.
+post-`1s` headline verdict is `above`: `paper=0.577` falls below the
+per-query Wilson CI's lower bound (`0.591`), so spacedock opus-4.7+xhigh
+materially outperforms the paper constant on this matrix at N=1.
+For comparison, the archived binary CI [0.138, 0.609] (audit history)
+contained `paper=0.577`, hence the prior `matches` verdict. Compared with
+the cycle-1 partial binary headline (`0.375 [0.137, 0.694]` on 8/12), the
+12/12 pooled per-query headline (`0.722 [0.591, 0.824]`) is materially
+higher because DAB batch cells contribute their partial-credit per-query
+passes instead of binarizing to 0.
 
 ## Cycle-2 re-execution detail (4 cells re-scored)
 
@@ -179,6 +191,13 @@ the harbor-kwarg-bound hash (and is recorded in the frozen spec instead).
 - Faster than the plan's 10–15min/cell estimate because batch query_mode bundles
   all queries per dataset into a single composite trial; many cells finished in
   2–5 min.
+
+## Provenance — post-1s recompute
+
+- **Reducer source:** `src/razorback/runs/aggregate.py:reduce_per_query_stratified` (introduced by entity `1s runs-aggregate-single-score-reducer`, merged into `main` at commit `f76443b` on 2026-05-23).
+- **Fixture source:** 12 cell run-dirs at `_runs/goal1-rerun-spacedock-opus47-xhigh/spacedock/<dataset>/` (8 cycle-1 preserved + 4 cycle-2 re-executed; `reward_per_query.json` sidecars under each trial's `steps/main/verifier/`).
+- **Matrix-execution source:** entity `an goal1-rerun-dab-spacedock-opus47-xhigh` (archived; produced the run-dir artifacts above).
+- **Recompute date:** 2026-05-23.
 
 ## Deviations from plan
 
