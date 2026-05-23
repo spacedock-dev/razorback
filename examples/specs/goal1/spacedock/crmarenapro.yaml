@@ -20,9 +20,10 @@ agent:
   - Glob
   - Grep
   tools_denied: []
+  reasoning_effort: xhigh
 benchmark:
   kind: harbor_dab
-  data_root: "${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}"
+  dataset: dab@1.0
   datasets:
   - crmarenapro
   workspace_variant: spacedock

@@ -1,0 +1,43 @@
+{
+  "summary_version": 1,
+  "n_trials_total": 1,
+  "n_trials_completed": 1,
+  "n_trials_errored": 0,
+  "stratified_pass_at_1": 0.0,
+  "datasets": {
+    "PATENTS": {
+      "dataset_pass_at_1": 0.0,
+      "n_queries": 1,
+      "queries": [
+        {
+          "query_id": null,
+          "n_trials": 1,
+          "n_correct": 0,
+          "pass_at_1": 0.0
+        }
+      ]
+    }
+  },
+  "trials": [
+    {
+      "trial_id": "PATENTS__vSYaYfV",
+      "reward": 0.0,
+      "cost_usd": null,
+      "wall_seconds": null,
+      "error_reason": null,
+      "stratum": {
+        "dataset": "PATENTS",
+        "query_ids": [
+          1,
+          2,
+          3
+        ],
+        "backends": [
+          "postgres",
+          "sqlite"
+        ]
+      }
+    }
+  ],
+  "cost_usd": null
+}

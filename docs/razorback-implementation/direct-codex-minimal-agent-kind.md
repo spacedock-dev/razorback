@@ -63,3 +63,16 @@ Do not implement first-officer dispatch here; that belongs to
 ### Summary
 
 Implemented a first-class direct Codex schema/registry/translator path that routes to `razorback.agents._runtime.codex:RazorbackCodex` with Codex auth and proxy-block environment handling, without solver workflow or sealed-hash requirements. Updated Codex examples, generator tests, and architecture docs; true first-officer dispatch remains intentionally out of scope for the parallel workflow task.
+
+## Stage Report: implementation (cycle 2)
+
+- DONE: Merge current `main` into the direct Codex worktree branch and preserve direct Codex ownership.
+  Evidence: merged `main` after root update `049cb34`/`ab5b5d8`; resolved the only content conflict in `examples/drivers/generate-dab-paper-matrix-specs.py` by keeping both optional `dataset_ref` and main's `reasoning_effort` support.
+- DONE: Preserve architecture desired-state/gaps while not taking over Claude-side real FO dispatch.
+  Evidence: `docs/agent-run-architecture.md` still documents direct `agent.kind: codex`, structured+freeze, and true first-officer dispatch as a remaining gap; Goal 1 generated examples remain Claude/spacedock cells from main.
+- DONE: Re-run focused validation after the main merge.
+  Evidence: `uv run --frozen pytest ... test_dab_paper_matrix_spec_generator.py -q` passed 79/79.
+
+### Summary
+
+Post-merge resolution kept the direct Codex minimal implementation intact and incorporated main's Goal 1 reasoning-effort generator changes without converting Claude-side Goal 1 specs to Codex. No true first-officer dispatch implementation was added.

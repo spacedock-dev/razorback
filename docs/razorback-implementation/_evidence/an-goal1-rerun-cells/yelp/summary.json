@@ -1,0 +1,47 @@
+{
+  "summary_version": 1,
+  "n_trials_total": 1,
+  "n_trials_completed": 1,
+  "n_trials_errored": 0,
+  "stratified_pass_at_1": 0.0,
+  "datasets": {
+    "yelp": {
+      "dataset_pass_at_1": 0.0,
+      "n_queries": 1,
+      "queries": [
+        {
+          "query_id": null,
+          "n_trials": 1,
+          "n_correct": 0,
+          "pass_at_1": 0.0
+        }
+      ]
+    }
+  },
+  "trials": [
+    {
+      "trial_id": "yelp__Cc94VEd",
+      "reward": 0.8571428571428571,
+      "cost_usd": null,
+      "wall_seconds": null,
+      "error_reason": null,
+      "stratum": {
+        "dataset": "yelp",
+        "query_ids": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "backends": [
+          "duckdb",
+          "mongo"
+        ]
+      }
+    }
+  ],
+  "cost_usd": null
+}

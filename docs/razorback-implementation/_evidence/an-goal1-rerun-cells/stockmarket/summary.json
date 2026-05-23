@@ -1,0 +1,45 @@
+{
+  "summary_version": 1,
+  "n_trials_total": 1,
+  "n_trials_completed": 1,
+  "n_trials_errored": 0,
+  "stratified_pass_at_1": 1.0,
+  "datasets": {
+    "stockmarket": {
+      "dataset_pass_at_1": 1.0,
+      "n_queries": 1,
+      "queries": [
+        {
+          "query_id": null,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        }
+      ]
+    }
+  },
+  "trials": [
+    {
+      "trial_id": "stockmarket__7Bk2xCJ",
+      "reward": 1.0,
+      "cost_usd": null,
+      "wall_seconds": null,
+      "error_reason": null,
+      "stratum": {
+        "dataset": "stockmarket",
+        "query_ids": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "backends": [
+          "duckdb",
+          "sqlite"
+        ]
+      }
+    }
+  ],
+  "cost_usd": null
+}
