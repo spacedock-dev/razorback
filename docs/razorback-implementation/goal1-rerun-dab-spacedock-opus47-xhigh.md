@@ -1,13 +1,13 @@
 ---
 id: an2znvdzjsp8q1v5a4wrg51p
 title: Goal 1 re-run — DAB spacedock matrix, opus-4.7, reasoning_effort=xhigh, batch, parallel=1
-status: validation
+status: done
 source: Captain directive 2026-05-23 — "do a fresh dab+spacedock on opus-4.7/xhigh, batch mode, parallel=1" issued after the gb/qh identity-layer ergonomics sprint landed
 started: 2026-05-23T13:57:32Z
-completed:
-verdict:
+completed: 2026-05-23T18:07:38Z
+verdict: PASSED
 score: 0.95
-worktree: .worktrees/spacedock-ensign-goal1-rerun-dab-spacedock-opus47-xhigh
+worktree: 
 issue:
 pr:
 mod-block: 
