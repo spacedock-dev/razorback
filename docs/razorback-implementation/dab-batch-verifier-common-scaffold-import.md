@@ -57,3 +57,37 @@ small affected DAB batch smoke that reaches score artifacts.
 This task does not tune solver prompts, rerun the full DAB 12-dataset
 score, or change the solver's answers. It only fixes verifier packaging
 so those runs can be scored.
+
+## Stage Report: plan
+
+- DONE: Identify the smallest code path change that makes generated DAB batch validators resolve `common_scaffold.validate.levenshtein` without changing solver prompts or answers.
+  Plan targets only batch task `tests/` materialization in `packages/razorback-plugin-dab/src/razorback_plugin_dab/generate/prepare.py`: copy upstream `data_root/common_scaffold` into generated `tests/common_scaffold`; leave `_batch_instruction()`, workdir prompts, and solver answer contract unchanged.
+- DONE: Map each acceptance criterion to concrete failing-first and passing validation commands, including a targeted affected-dataset smoke that proves score artifacts are emitted.
+  The inline plan below maps AC-1, AC-2, and AC-3 to pytest nodes plus an env-backed `PATENTS` batch smoke that asserts `reward.json` and `reward_per_query.json` parse as JSON.
+- DONE: Call out any risk that could turn a verifier infrastructure failure into a hidden solver failure, with the validation evidence needed to avoid that.
+  Risk is broad exception handling in `verify_batch.py`; the plan requires import failures to remain loud and uses a helper-executing positive test plus a negative import-error guard so infrastructure errors are not silently scored as wrong answers.
+
+### Summary
+
+Inline plan written on the entity per the FO tiny-task sizing; no separate `plans/{slug}.md` document was created. The cached `superpowers:writing-plans` skill is not registered in this Codex session, so this is an equivalent inline plan following the local plan style: AC-first tasks, failing tests before implementation, and the riskiest validator-import contract first.
+
+### Inline Implementation Plan
+
+Spec cites: v2 spec §6.1 (DAB is a plugin-shipped, generated-per-`data_root` task adapter whose emitted task dirs are what Harbor consumes), §7.1 (score artifacts live under Harbor/Razorback run artifacts and Razorback does not mutate trial internals), and §8.3a (`rk score` consumes completed trial rewards by stratum, so verifier infrastructure failures must not masquerade as solver outcomes).
+
+Files to touch:
+- `packages/razorback-plugin-dab/src/razorback_plugin_dab/generate/prepare.py`
+- `packages/razorback-plugin-dab/tests/unit/test_prepare_batch_query_mode.py`
+- New or extended batch verifier tests under `packages/razorback-plugin-dab/tests/unit/`
+- Optional env-gated affected-dataset smoke under `packages/razorback-plugin-dab/tests/integration/`
+
+TDD checkpoints:
+1. **AC-1 / §6.1 - batch task imports resolve.** Add `test_batch_mode_materializes_common_scaffold_for_upstream_validators` to the batch materialization tests. The synthetic `data_root` should include `common_scaffold/validate/levenshtein.py` and a `query1/validate.py` importing it; before the fix, importing generated `tests/validate_q1.py` fails with `ModuleNotFoundError`, and after the fix it resolves without network access.
+   Command: `UV_FROZEN=1 uv run --frozen pytest packages/razorback-plugin-dab/tests/unit/test_prepare_batch_query_mode.py::test_batch_mode_materializes_common_scaffold_for_upstream_validators -q`.
+2. **AC-1 green / smallest production change.** Add a small helper such as `_install_common_scaffold(tests_dir, data_root)` and call it only from `_materialize_batch_task_dir()` after creating `tests_dir` and before/alongside validator installation. It should copy `dataset_dir.parent / "common_scaffold"` to `tests/common_scaffold`, ignore `__pycache__`, and no-op when the upstream package is absent so existing synthetic fixtures stay simple.
+3. **AC-2 / §6.1 + §7.1 - artifacts are emitted.** Add a focused generated-task smoke where the generated validator imports and executes `common_scaffold.validate.levenshtein`, `answers.json` has a known valid non-empty answer, and the copied `tests/verify_batch.py` is run via subprocess. Assert `reward.json == {"reward": 1.0}` and `reward_per_query.json` contains `q1.reward == 1.0`.
+   Command: `UV_FROZEN=1 uv run --frozen pytest packages/razorback-plugin-dab/tests/unit/test_verify_batch_reward_shape.py::test_batch_verify_writes_artifacts_when_validator_imports_common_scaffold -q`.
+4. **Risk guard / §8.3a - do not hide verifier infrastructure failures.** Add a negative verifier test with `validate_q1.py` importing a missing package and assert the verifier exits nonzero without writing reward artifacts. Do not catch `ImportError` or rewrite it as `reward: 0.0`; empty or wrong solver answers are solver failures, missing verifier dependencies are infrastructure failures.
+   Command: `UV_FROZEN=1 uv run --frozen pytest packages/razorback-plugin-dab/tests/unit/test_verify_batch_reward_shape.py::test_batch_verify_does_not_mask_validator_import_errors -q`.
+5. **Affected-dataset mechanism smoke / AC-2 + §7.1.** Add or run an env-gated integration smoke against real external DAB data: `DAB_DATA_ROOT=/path/to/dataagentbench/data DAB_AFFECTED_DATASET=PATENTS UV_FROZEN=1 uv run --frozen pytest packages/razorback-plugin-dab/tests/integration/test_batch_common_scaffold_smoke.py::test_affected_dataset_batch_emits_reward_artifacts -q`. The test should generate a batch task, run copied `verify_batch.py` with empty answers to avoid changing solver outputs, and assert both `reward.json` and `reward_per_query.json` exist and parse as JSON.
+6. **AC-3 / regression sweep.** Run the focused new tests first, then the DAB and scoring regression set: `UV_FROZEN=1 uv run --frozen pytest packages/razorback-plugin-dab/tests tests/unit/test_runs_aggregate.py tests/unit/test_rk_score.py -q`. If external DAB data is unavailable, document the skipped affected-dataset smoke separately; do not substitute the synthetic tests as evidence for the real affected-dataset artifact check.
