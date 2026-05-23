@@ -3,6 +3,10 @@
 
 import importlib
 import inspect
+import json
+import subprocess
+import sys
+import tomllib
 from types import SimpleNamespace
 
 import pytest
@@ -12,11 +16,17 @@ from harbor.agents.installed.codex import Codex
 from razorback.agents._runtime import claude as claude_adapter
 from razorback.agents._runtime import codex as codex_adapter
 from razorback.agents._runtime import pi as pi_adapter
+from razorback.agents.public_lookup_guard import codex_pretooluse_guard_script
 from razorback.agents.spacedock_solver import SpacedockSolverAgentError
 
 
 def _descriptor_kwargs(descriptors):
     return {descriptor.kwarg for descriptor in descriptors}
+
+
+def _appended_codex_config_toml(command: str) -> str:
+    marker = 'cat >>"$CODEX_HOME/config.toml" <<TOML\n'
+    return command.split(marker, 1)[1].rsplit("\nTOML", 1)[0]
 
 
 def test_harbor_installed_agent_descriptor_shapes_are_available():
@@ -205,9 +215,41 @@ async def test_codex_runtime_setup_installs_pretooluse_lookup_guard(
     delegated = calls[0]
     assert setup_command in delegated
     assert "razorback-public-lookup-guard.py" in delegated
-    assert "[[hooks.PreToolUse]]" in delegated
-    assert 'matcher = "*"' in delegated
+    appended_config = tomllib.loads(_appended_codex_config_toml(delegated))
+    pre_tool_use = appended_config["hooks"]["PreToolUse"]
+    assert len(pre_tool_use) == 1
+    matcher_group = pre_tool_use[0]
+    assert matcher_group["matcher"] == "*"
+    assert "command" not in matcher_group
+    assert len(matcher_group["hooks"]) == 1
+    hook = matcher_group["hooks"][0]
+    assert hook == {
+        "type": "command",
+        "command": "python3 $_RAZORBACK_LOOKUP_GUARD",
+        "timeout": 10,
+    }
+    assert "[[hooks.PreToolUse.hooks]]" in delegated
     assert "blocked benchmark public lookup command before execution" in delegated
+
+
+def test_codex_pretooluse_lookup_guard_script_blocks_public_lookup_payload(tmp_path):
+    guard_path = tmp_path / "guard.py"
+    guard_path.write_text(codex_pretooluse_guard_script())
+    payload = {
+        "tool_name": "Bash",
+        "tool_input": {"command": "curl https://example.com"},
+    }
+
+    result = subprocess.run(
+        [sys.executable, str(guard_path)],
+        input=json.dumps(payload),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "blocked benchmark public lookup command" in result.stderr
 
 
 @pytest.mark.parametrize(

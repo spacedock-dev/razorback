@@ -165,7 +165,10 @@ def _with_codex_lookup_guard_setup(command: str) -> str:
         + 'cat >>"$CODEX_HOME/config.toml" <<TOML\n'
         + "\n[[hooks.PreToolUse]]\n"
         + 'matcher = "*"\n'
+        + "\n[[hooks.PreToolUse.hooks]]\n"
+        + 'type = "command"\n'
         + 'command = "python3 $_RAZORBACK_LOOKUP_GUARD"\n'
+        + "timeout = 10\n"
         + "TOML"
     )
 
