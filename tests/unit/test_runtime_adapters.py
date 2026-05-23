@@ -54,6 +54,7 @@ def test_codex_constructs_inner_agent_with_supported_kwargs(tmp_path):
     assert flag_kwargs["reasoning_effort"] == "high"
     assert flag_kwargs["reasoning_summary"] == "auto"
     assert '-c \'web_search="disabled"\'' in inner.build_cli_flags()
+    assert "--dangerously-bypass-hook-trust" in inner.build_cli_flags()
 
 
 def test_codex_retained_overrides_document_upstream_method_and_benchmark_reason():
@@ -80,7 +81,7 @@ async def test_codex_install_phase_clears_proxy_env_while_delegating(
     async def fake_harbor_install(self, environment):
         await self.exec_as_agent(
             environment,
-            command="probe",
+            command="curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/install.sh",
             env={"X": "1"},
         )
 
@@ -107,6 +108,106 @@ async def test_codex_install_phase_clears_proxy_env_while_delegating(
     assert exec_env["HTTPS_PROXY"] == ""
     assert exec_env["X"] == "1"
     assert exec_env["OPENAI_API_KEY"] == "sk-fake"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "command",
+    [
+        "curl https://github.com/dbt-labs/dbt-core",
+        "wget https://raw.githubusercontent.com/f1db/f1db/master/f1db.sql",
+        "git ls-remote https://github.com/dbt-labs/dbt-core",
+        (
+            "python -c \"import urllib.request; "
+            "urllib.request.urlopen('https://hub.getdbt.com/api/v1/index.json')\""
+        ),
+    ],
+)
+async def test_codex_blocks_public_lookup_commands_before_delegating(
+    tmp_path, monkeypatch, command
+):
+    calls = []
+
+    async def fake_exec_as_agent(self, environment, command, **kwargs):
+        calls.append(command)
+        return SimpleNamespace(return_code=0, stdout="", stderr="")
+
+    monkeypatch.setattr(Codex, "exec_as_agent", fake_exec_as_agent)
+    inner = codex_adapter.build_inner_agent(
+        logs_dir=tmp_path,
+        model="gpt-5.1-codex",
+        harbor_agent_kwargs={},
+        extra_env={"OPENAI_API_KEY": "sk-fake"},
+    )
+
+    with pytest.raises(SpacedockSolverAgentError, match="public lookup"):
+        await inner.exec_as_agent(SimpleNamespace(), command=command)
+
+    assert calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "command",
+    [
+        "rg 'https://github.com' models/ tests/",
+        "sed -n '1,80p' models/staging/example.sql",
+        "dbt run --select customers",
+        "python -c \"import duckdb; duckdb.sql('select 1').fetchall()\"",
+        "find . -maxdepth 2 -type f -name '*.sql'",
+    ],
+)
+async def test_codex_allows_local_commands_to_delegate(tmp_path, monkeypatch, command):
+    calls = []
+
+    async def fake_exec_as_agent(self, environment, command, **kwargs):
+        calls.append(command)
+        return SimpleNamespace(return_code=0, stdout="", stderr="")
+
+    monkeypatch.setattr(Codex, "exec_as_agent", fake_exec_as_agent)
+    inner = codex_adapter.build_inner_agent(
+        logs_dir=tmp_path,
+        model="gpt-5.1-codex",
+        harbor_agent_kwargs={},
+        extra_env={"OPENAI_API_KEY": "sk-fake"},
+    )
+
+    await inner.exec_as_agent(SimpleNamespace(), command=command)
+
+    assert calls == [command]
+
+
+@pytest.mark.asyncio
+async def test_codex_runtime_setup_installs_pretooluse_lookup_guard(
+    tmp_path, monkeypatch
+):
+    calls = []
+
+    async def fake_exec_as_agent(self, environment, command, **kwargs):
+        calls.append(command)
+        return SimpleNamespace(return_code=0, stdout="", stderr="")
+
+    monkeypatch.setattr(Codex, "exec_as_agent", fake_exec_as_agent)
+    inner = codex_adapter.build_inner_agent(
+        logs_dir=tmp_path,
+        model="gpt-5.1-codex",
+        harbor_agent_kwargs={},
+        extra_env={"OPENAI_API_KEY": "sk-fake"},
+    )
+    setup_command = (
+        "cat >/tmp/auth.json <<EOF\n{}\nEOF\n"
+        'ln -sf /tmp/auth.json "$CODEX_HOME/auth.json"\n'
+    )
+
+    await inner.exec_as_agent(SimpleNamespace(), command=setup_command)
+
+    assert len(calls) == 1
+    delegated = calls[0]
+    assert setup_command in delegated
+    assert "razorback-public-lookup-guard.py" in delegated
+    assert "[[hooks.PreToolUse]]" in delegated
+    assert 'matcher = "*"' in delegated
+    assert "blocked benchmark public lookup command before execution" in delegated
 
 
 @pytest.mark.parametrize(
