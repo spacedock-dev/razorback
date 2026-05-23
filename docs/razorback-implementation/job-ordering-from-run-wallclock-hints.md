@@ -94,3 +94,16 @@ the job to Harbor rather than patching Harbor internals.
 ### Summary
 
 Wrote the standard separate implementation plan at `docs/razorback-implementation/plans/job-ordering-from-run-wallclock-hints.md`. The plan keeps the riskiest contract first by parsing historical timing and validating the `rk run -> spec_to_job_config -> ordered JobConfig.tasks -> _job_config.yaml` path before broader regression checks.
+
+## Stage Report: implementation
+
+- DONE: Implements optional `rk run --order-from-run` behavior with default no-hint task order unchanged.
+  Evidence: `tests/unit/test_rk_run_ordering_hint_cli.py` asserts no-hint `_job_config.yaml` order stays `[short, unknown, long]` and hinted order becomes `[long, short, unknown]`; commits `518a030` and `fbb8b09`.
+- DONE: Adds robust historical wallclock parsing and stable longest-known-first task ordering with tests for missing/malformed/partial timings.
+  Evidence: `tests/unit/test_run_ordering.py` covers max repeated timing, missing `finished_at`, malformed timestamps, single result files, unknown tasks, ties, and empty summaries; commits `db9e249` and `1212642`.
+- DONE: Records ordering hint metadata in run artifacts/provenance without changing task identity/scoring semantics.
+  Evidence: manifest/provenance metadata is asserted in `tests/unit/test_rk_run_ordering_hint_cli.py`, and reordered scoring identity invariance is asserted in `tests/unit/test_task_identity_scoring.py`; commits `fbb8b09` and `97b375b`.
+
+### Summary
+
+Added `src/razorback/run_ordering.py` for historical wallclock extraction and deterministic longest-known-first sorting, then wired `src/razorback/cli/run.py` to apply it after translation and before Harbor serialization. Harbor-facing changes are limited to the `JobConfig.tasks` list order; additive `ordering_hint` metadata is written through `src/razorback/runs/aggregate.py` and `src/razorback/provenance/provenance_yaml.py`. No plan deviations were needed; the requested `superpowers` sub-skill was unavailable in this session, so the approved plan was executed directly with TDD commits.
