@@ -1,0 +1,52 @@
+{
+  "variants": {
+    "direct-minimal": {
+      "against_constant": {
+        "name": "direct_baseline",
+        "value": 0.4376,
+        "verdict": "no_data"
+      },
+      "aggregate_json_path": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-rerun-dab-spacedock-opus47-xhigh/docs/razorback-implementation/_evidence/an-goal1-rerun-cells/direct-minimal/aggregate-score.json",
+      "n_strata_scored": 0,
+      "n_strata_total": 12,
+      "pooled_n_pass": 0,
+      "pooled_n_total": 0,
+      "pooled_pass_at_1": null,
+      "pooled_wilson_95ci": null,
+      "stratified_mean_over_strata": null
+    },
+    "direct-structured": {
+      "against_constant": {
+        "name": "direct_baseline",
+        "value": 0.4376,
+        "verdict": "no_data"
+      },
+      "aggregate_json_path": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-rerun-dab-spacedock-opus47-xhigh/docs/razorback-implementation/_evidence/an-goal1-rerun-cells/direct-structured/aggregate-score.json",
+      "n_strata_scored": 0,
+      "n_strata_total": 12,
+      "pooled_n_pass": 0,
+      "pooled_n_total": 0,
+      "pooled_pass_at_1": null,
+      "pooled_wilson_95ci": null,
+      "stratified_mean_over_strata": null
+    },
+    "spacedock": {
+      "against_constant": {
+        "name": "spacedock",
+        "value": 0.577,
+        "verdict": "matches"
+      },
+      "aggregate_json_path": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-rerun-dab-spacedock-opus47-xhigh/docs/razorback-implementation/_evidence/an-goal1-rerun-cells/spacedock/aggregate-score.json",
+      "n_strata_scored": 12,
+      "n_strata_total": 12,
+      "pooled_n_pass": 4,
+      "pooled_n_total": 12,
+      "pooled_pass_at_1": 0.3333333333333333,
+      "pooled_wilson_95ci": [
+        0.13812009109121315,
+        0.6093779111272004
+      ],
+      "stratified_mean_over_strata": 0.3333333333333333
+    }
+  }
+}
