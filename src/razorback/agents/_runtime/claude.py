@@ -1,14 +1,134 @@
 # ABOUTME: Claude runtime adapter for SpacedockSolverAgent v2 (spec §4.3.1, §8.4).
-# ABOUTME: Builds razorback's ClaudeCliAgent (a ClaudeCode subclass) so the inner
-# ABOUTME: agent emits cost_usd + claude-output.jsonl via PKG-26's surface.
+# ABOUTME: Builds RazorbackClaudeCode (a ClaudeCode subclass) so the inner agent
+# ABOUTME: emits cost_usd + claude-output.jsonl via PKG-26's surface.
 
+import shlex
 from pathlib import Path
 from typing import Any
 
 from harbor.agents.installed.claude_code import ClaudeCode
+from harbor.models.agent.context import AgentContext
 
-from razorback.agents.claude_cli import ClaudeCliAgent
+from razorback.agents.claude_invoke import DEFAULT_ALLOWED_TOOLS, DISALLOWED_TOOLS
+from razorback.agents.proxy import PROXY_BLOCK_ENV
 from razorback.agents.spacedock_solver import SpacedockSolverAgentError
+from razorback.errors import RazorbackError
+
+
+class RazorbackClaudeCodeError(RazorbackError):
+    """Raised on RazorbackClaudeCode contract violations."""
+
+
+class RazorbackClaudeCode(ClaudeCode):
+    """ClaudeCode runtime helper with Razorback auth, tool policy, and telemetry."""
+
+    SUPPORTS_WINDOWS = False
+
+    def __init__(
+        self,
+        logs_dir: Path,
+        model_name: str | None = None,
+        logger=None,
+        mcp_servers=None,
+        skills_dir=None,
+        *,
+        tools_allowed: list[str] | None = None,
+        sampling_temperature: float | None = None,
+        extra_env: dict[str, str] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        env = dict(extra_env or {})
+        if "ANTHROPIC_API_KEY" in env and "CLAUDE_CODE_OAUTH_TOKEN" in env:
+            raise RazorbackClaudeCodeError(
+                "ANTHROPIC_API_KEY and CLAUDE_CODE_OAUTH_TOKEN cannot both be set."
+            )
+
+        self._tools_allowed = (
+            list(tools_allowed) if tools_allowed else list(DEFAULT_ALLOWED_TOOLS)
+        )
+        self._sampling_temperature = sampling_temperature
+
+        kwargs.setdefault("allowed_tools", ",".join(self._tools_allowed))
+        # Harbor's build_cli_flags emits CLI flag values UNQUOTED. The razorback
+        # block list contains shell-active parens (e.g. `Bash(curl *)`); pre-
+        # shell-quote the whole CSV so the rendered command parses correctly.
+        kwargs.setdefault(
+            "disallowed_tools", shlex.quote(",".join(DISALLOWED_TOOLS))
+        )
+
+        super().__init__(
+            logs_dir=logs_dir,
+            model_name=model_name,
+            logger=logger,
+            mcp_servers=mcp_servers,
+            skills_dir=skills_dir,
+            extra_env=env,
+            **kwargs,
+        )
+
+        self._razorback_extra_env = env
+        self._exec_env: dict[str, str] = {}
+
+    @staticmethod
+    def name() -> str:
+        return "claude-cli"
+
+    @classmethod
+    def required_env(cls) -> dict:
+        return {
+            "mode": "alternation",
+            "names": ["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"],
+        }
+
+    @staticmethod
+    def supported_sampling() -> set[str]:
+        return {"temperature"}
+
+    async def run(self, instruction: str, environment, context):
+        import os
+
+        saved: dict[str, str | None] = {}
+        try:
+            for key, value in self._razorback_extra_env.items():
+                saved[key] = os.environ.get(key)
+                os.environ[key] = value
+            await super().run(instruction, environment, context)
+        finally:
+            for key, old in saved.items():
+                if old is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = old
+
+    async def setup(self, environment) -> None:
+        result = await environment.exec("claude --version")
+        if result.return_code != 0:
+            raise RazorbackClaudeCodeError(
+                "claude CLI not available inside the container "
+                f"(exit={result.return_code}, stderr={getattr(result, 'stderr', '')!r})"
+            )
+        self._exec_env = {**PROXY_BLOCK_ENV, **self._razorback_extra_env}
+        try:
+            self._version = result.stdout.strip() if hasattr(result, "stdout") else None
+        except Exception:
+            self._version = None
+
+    def populate_context_post_run(self, context: AgentContext) -> None:
+        super().populate_context_post_run(context)
+        claude_code_txt = self.logs_dir / "claude-code.txt"
+        claude_output_jsonl = self.logs_dir / "claude-output.jsonl"
+        if claude_code_txt.exists() and not claude_output_jsonl.exists():
+            try:
+                claude_output_jsonl.symlink_to(claude_code_txt.name)
+            except OSError:
+                try:
+                    import shutil
+
+                    shutil.copyfile(claude_code_txt, claude_output_jsonl)
+                except OSError as exc:
+                    self.logger.debug(
+                        f"Failed to publish claude-output.jsonl sentinel: {exc}"
+                    )
 
 
 _CLAUDE_SUPPORTED_KWARGS = {
@@ -23,15 +143,15 @@ def build_inner_agent(
     model: str,
     harbor_agent_kwargs: dict[str, Any],
     extra_env: dict[str, str],
-) -> ClaudeCliAgent:
-    """Construct razorback's ClaudeCliAgent (ClaudeCode subclass) for spacedock v2.
+) -> RazorbackClaudeCode:
+    """Construct razorback's ClaudeCode runtime helper for spacedock v2.
 
-    Routing through ClaudeCliAgent (rather than harbor's ClaudeCode directly)
+    Routing through RazorbackClaudeCode (rather than harbor's ClaudeCode directly)
     inherits PKG-26's cost-emit + claude-output.jsonl audit sentinel. The earlier
     path returned harbor.ClaudeCode directly and silently dropped cost telemetry
     even when paid-API auth was in use.
 
-    tools_allowed flows through ClaudeCliAgent's own param (not harbor's
+    tools_allowed flows through RazorbackClaudeCode's own param (not harbor's
     allowed_tools kwarg) so the subclass applies its DEFAULT_ALLOWED_TOOLS/
     DISALLOWED_TOOLS policy consistently. Drops None values so harbor uses its
     own defaults.
@@ -49,12 +169,12 @@ def build_inner_agent(
             kw["tools_allowed"] = list(value)
             continue
         if name == "tools_denied":
-            # ClaudeCliAgent applies its DISALLOWED_TOOLS list by default; v2 callers
-            # that need to widen the block list pass through harbor's disallowed_tools.
+            # RazorbackClaudeCode applies DISALLOWED_TOOLS by default; v2 callers
+            # that need a wider block list pass through harbor's disallowed_tools.
             kw["disallowed_tools"] = ",".join(value)
             continue
         kw[name] = value
-    return ClaudeCliAgent(
+    return RazorbackClaudeCode(
         logs_dir=Path(logs_dir),
         model_name=model,
         extra_env=dict(extra_env or {}),

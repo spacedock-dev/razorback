@@ -3,7 +3,7 @@
 
 from unittest.mock import AsyncMock, MagicMock
 
-from razorback.agents.claude_cli import ClaudeCliAgent
+from razorback.agents._runtime.claude import RazorbackClaudeCode
 
 
 def _make_environment(version_rc=0, stdout="0.6.3 (Claude Code)\n"):
@@ -16,7 +16,7 @@ def _make_environment(version_rc=0, stdout="0.6.3 (Claude Code)\n"):
 
 async def test_version_is_captured_from_container_setup(tmp_path):
     """setup() captures `claude --version` stdout into self._version."""
-    agent = ClaudeCliAgent(
+    agent = RazorbackClaudeCode(
         logs_dir=tmp_path,
         model_name="claude-opus-4-5",
         extra_env={"ANTHROPIC_API_KEY": "sk-1"},
@@ -27,5 +27,5 @@ async def test_version_is_captured_from_container_setup(tmp_path):
 
 async def test_version_is_none_before_setup(tmp_path):
     """Before setup() runs, _version is unset (harbor default None)."""
-    agent = ClaudeCliAgent(logs_dir=tmp_path, model_name="claude-opus-4-5")
+    agent = RazorbackClaudeCode(logs_dir=tmp_path, model_name="claude-opus-4-5")
     assert agent.version() is None

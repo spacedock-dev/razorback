@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from razorback.agents.claude_cli import ClaudeCliAgent
+from razorback.agents._runtime.claude import RazorbackClaudeCode
 
 
 def _make_environment(version_rc=0):
@@ -19,7 +19,7 @@ def _make_environment(version_rc=0):
 
 
 async def test_setup_with_only_api_key_carries_only_api_key(tmp_path):
-    agent = ClaudeCliAgent(
+    agent = RazorbackClaudeCode(
         logs_dir=tmp_path,
         model_name="claude-opus-4-5",
         extra_env={"ANTHROPIC_API_KEY": "sk-1"},
@@ -31,7 +31,7 @@ async def test_setup_with_only_api_key_carries_only_api_key(tmp_path):
 
 
 async def test_setup_with_only_oauth_carries_only_oauth(tmp_path):
-    agent = ClaudeCliAgent(
+    agent = RazorbackClaudeCode(
         logs_dir=tmp_path,
         model_name="claude-opus-4-5",
         extra_env={"CLAUDE_CODE_OAUTH_TOKEN": "oauth-1"},
@@ -43,7 +43,7 @@ async def test_setup_with_only_oauth_carries_only_oauth(tmp_path):
 
 async def test_constructor_refuses_to_co_mingle(tmp_path):
     with pytest.raises(Exception):
-        ClaudeCliAgent(
+        RazorbackClaudeCode(
             logs_dir=tmp_path,
             model_name="claude-opus-4-5",
             extra_env={
@@ -55,7 +55,7 @@ async def test_constructor_refuses_to_co_mingle(tmp_path):
 
 async def test_setup_carries_proxy_block_into_exec_env(tmp_path):
     """The proxy block from run_experiment.py:1515-1525 must ride alongside the auth."""
-    agent = ClaudeCliAgent(
+    agent = RazorbackClaudeCode(
         logs_dir=tmp_path,
         model_name="claude-opus-4-5",
         extra_env={"ANTHROPIC_API_KEY": "sk-1"},
@@ -71,7 +71,7 @@ async def test_setup_carries_proxy_block_into_exec_env(tmp_path):
 async def test_setup_validates_claude_binary_inside_container(tmp_path):
     """setup() runs `claude --version` inside the container; non-zero exit → raise."""
     env = _make_environment(version_rc=127)
-    agent = ClaudeCliAgent(
+    agent = RazorbackClaudeCode(
         logs_dir=tmp_path,
         model_name="claude-opus-4-5",
         extra_env={"ANTHROPIC_API_KEY": "sk-1"},

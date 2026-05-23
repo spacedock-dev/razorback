@@ -1,5 +1,5 @@
 # ABOUTME: PKG-38 compatibility checks for legacy agent.kind: claude-cli specs.
-# ABOUTME: Active translation routes old specs to Harbor ClaudeCode, not ClaudeCliAgent.
+# ABOUTME: Active translation routes old specs to the RazorbackClaudeCode runtime helper.
 
 from pathlib import Path
 

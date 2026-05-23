@@ -50,7 +50,7 @@ def test_claude_runtime_installs_four_dab_denials_verbatim_in_order(tmp_path):
     as the inner agent's disallowed_tools (harbor's PreToolUse surface).
     Cite spec §6.2.
 
-    The inner is razorback's ClaudeCliAgent (PKG-26 + goal1-resume followup); it
+    The inner is RazorbackClaudeCode (PKG-26 + goal1-resume followup); it
     inherits ClaudeCode but unions its own DISALLOWED_TOOLS list (curl, wget,
     huggingface, etc.) into harbor's disallowed_tools. The DAB-recommended
     denials must still appear in the merged list, but exact equality no longer
@@ -58,7 +58,7 @@ def test_claude_runtime_installs_four_dab_denials_verbatim_in_order(tmp_path):
     """
     agent = SpacedockSolverAgent(**_base_kwargs(tmp_path, tools_denied=DAB_DENIALS))
     inner = agent._build_inner_agent()
-    # ClaudeCliAgent is a ClaudeCode subclass.
+    # RazorbackClaudeCode is a ClaudeCode subclass.
     assert isinstance(inner, ClaudeCode)
     flag_kwargs = getattr(inner, "_flag_kwargs", {})
     assert "disallowed_tools" in flag_kwargs, (
@@ -66,7 +66,7 @@ def test_claude_runtime_installs_four_dab_denials_verbatim_in_order(tmp_path):
         f"flag_kwargs={flag_kwargs}"
     )
     raw = flag_kwargs["disallowed_tools"]
-    # ClaudeCliAgent shell-quotes the merged CSV; tolerate the wrapping quote.
+    # RazorbackClaudeCode shell-quotes the merged CSV; tolerate the wrapping quote.
     for denial in DAB_DENIALS:
         assert denial in raw, (
             f"DAB denial missing from disallowed_tools: {denial!r}; got {raw!r}"
@@ -74,20 +74,20 @@ def test_claude_runtime_installs_four_dab_denials_verbatim_in_order(tmp_path):
 
 
 def test_claude_runtime_empty_tools_denied_still_installs_default_block_list(tmp_path):
-    """Empty tools_denied still emits disallowed_tools — ClaudeCliAgent installs
+    """Empty tools_denied still emits disallowed_tools — RazorbackClaudeCode installs
     its DEFAULT DISALLOWED_TOOLS list (curl/wget/huggingface) unconditionally,
     which is the spec'd block-list for the razorback claude-cli surface.
 
     Earlier shape (harbor.ClaudeCode direct) emitted no disallowed_tools on
     empty input; the new shape always blocks DISALLOWED_TOOLS. The new behavior
     is strictly more protective; the prior empty-emits-nothing contract is
-    superseded by the ClaudeCliAgent surface.
+    superseded by the RazorbackClaudeCode surface.
     """
     agent = SpacedockSolverAgent(**_base_kwargs(tmp_path, tools_denied=[]))
     inner = agent._build_inner_agent()
     flag_kwargs = getattr(inner, "_flag_kwargs", {})
     assert "disallowed_tools" in flag_kwargs, (
-        "claude adapter dropped ClaudeCliAgent default DISALLOWED_TOOLS; "
+        "claude adapter dropped RazorbackClaudeCode default DISALLOWED_TOOLS; "
         f"flag_kwargs={flag_kwargs}"
     )
     raw = flag_kwargs["disallowed_tools"]

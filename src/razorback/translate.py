@@ -19,7 +19,6 @@ from razorback.errors import SpecError
 from razorback.spec.agent_kwargs import build_v2_harbor_agent_kwargs
 from razorback.spec.schema import (
     AdeBenchBenchmarkBlock,
-    ClaudeCliAgentBlock,
     DabBenchmarkBlock,
     HarborDabBenchmarkBlock,
     LocalBenchmarkBlock,
@@ -173,7 +172,7 @@ def _build_agent_config(
         task_env = dict(PROXY_BLOCK_ENV)
         return agent_cfg, task_env
 
-    if isinstance(spec.agent, ClaudeCliAgentBlock):
+    if getattr(spec.agent, "kind", None) == "claude-cli":
         if project_root is None:
             raise SpecError(
                 "claude-cli agent requires project_root for .env auth discovery."

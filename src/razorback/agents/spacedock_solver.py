@@ -361,7 +361,7 @@ class SpacedockSolverAgent(BaseAgent):
         """Delegate context-population to the inner agent.
 
         Harbor's trial framework invokes this hook on the OUTER agent only.
-        The inner agent (razorback ClaudeCliAgent for runtime=claude) holds
+        The inner agent (RazorbackClaudeCode for runtime=claude) holds
         the cost_usd / claude-output.jsonl surface from PKG-26 — without this
         delegation that surface stays dark on the spacedock variant.
         """

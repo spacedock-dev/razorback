@@ -1,6 +1,7 @@
 # ABOUTME: AC-3, per-runtime adapter sub-modules exist; pi raises NotImplementedError.
 # ABOUTME: claude.py and codex.py construct installed agents with expected kwargs.
 
+import importlib
 import inspect
 from types import SimpleNamespace
 
@@ -11,7 +12,6 @@ from harbor.agents.installed.codex import Codex
 from razorback.agents._runtime import claude as claude_adapter
 from razorback.agents._runtime import codex as codex_adapter
 from razorback.agents._runtime import pi as pi_adapter
-from razorback.agents.claude_cli import ClaudeCliAgent
 from razorback.agents.spacedock_solver import SpacedockSolverAgentError
 
 
@@ -31,6 +31,12 @@ def test_harbor_installed_agent_descriptor_shapes_are_available():
         "disallowed_tools",
     } <= _descriptor_kwargs(ClaudeCode.CLI_FLAGS)
     assert "max_thinking_tokens" in _descriptor_kwargs(ClaudeCode.ENV_VARS)
+
+
+def test_claude_runtime_helper_import_path_remains_loadable():
+    module = importlib.import_module("razorback.agents._runtime.claude")
+
+    assert getattr(module, "RazorbackClaudeCode").__name__ == "RazorbackClaudeCode"
 
 
 def test_codex_constructs_inner_agent_with_supported_kwargs(tmp_path):
@@ -133,10 +139,10 @@ def test_pi_raises_not_implemented(tmp_path):
         )
 
 
-def test_claude_constructs_inner_agent_as_claude_cli_subclass(tmp_path):
-    """Inner must be razorback's ClaudeCliAgent, not harbor's ClaudeCode directly.
+def test_claude_constructs_inner_agent_as_runtime_helper_subclass(tmp_path):
+    """Inner must be razorback's runtime helper, not harbor's ClaudeCode directly.
 
-    Routing through ClaudeCliAgent inherits PKG-26's cost-emit + claude-output.jsonl
+    Routing through RazorbackClaudeCode inherits PKG-26's cost-emit + claude-output.jsonl
     audit sentinel. Returning harbor.ClaudeCode directly (the earlier shape) silently
     dropped cost_usd telemetry even under paid-API auth — surfaced live during
     Goal 1 RESUME cell 1 (spacedock/agnews) where cost was null on disk despite
@@ -154,8 +160,8 @@ def test_claude_constructs_inner_agent_as_claude_cli_subclass(tmp_path):
         },
         extra_env={"ANTHROPIC_API_KEY": "sk-fake"},
     )
-    assert isinstance(inner, ClaudeCliAgent)
-    # Defense-in-depth: ClaudeCliAgent IS a ClaudeCode subclass; the harbor base
+    assert isinstance(inner, claude_adapter.RazorbackClaudeCode)
+    # Defense-in-depth: RazorbackClaudeCode IS a ClaudeCode subclass; the harbor base
     # contract still holds.
     assert isinstance(inner, ClaudeCode)
     assert getattr(inner, "_extra_env", {}) == {"ANTHROPIC_API_KEY": "sk-fake"}
@@ -165,6 +171,29 @@ def test_claude_constructs_inner_agent_as_claude_cli_subclass(tmp_path):
     assert flag_kwargs["allowed_tools"] == "Read,Write"
     assert flag_kwargs["disallowed_tools"] == "Bash(rm*)"
     assert flag_kwargs["append_system_prompt"] == "You are the first officer."
+
+
+def test_claude_runtime_helper_publishes_audit_sentinel(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_populate_context_post_run(self, context):
+        calls.append(context)
+
+    monkeypatch.setattr(ClaudeCode, "populate_context_post_run", fake_populate_context_post_run)
+    (tmp_path / "claude-code.txt").write_text('{"type":"result"}\n')
+    context = SimpleNamespace()
+    agent = claude_adapter.RazorbackClaudeCode(
+        logs_dir=tmp_path,
+        model_name="claude-opus-4-5",
+        extra_env={"ANTHROPIC_API_KEY": "sk-fake"},
+    )
+
+    agent.populate_context_post_run(context)
+
+    sentinel = tmp_path / "claude-output.jsonl"
+    assert calls == [context]
+    assert sentinel.exists()
+    assert sentinel.is_symlink() or sentinel.read_text() == '{"type":"result"}\n'
 
 
 def test_claude_passes_tools_denied_through_to_harbor_kwargs(tmp_path):
