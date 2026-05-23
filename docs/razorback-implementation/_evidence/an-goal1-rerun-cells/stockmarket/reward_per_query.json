@@ -1,0 +1,22 @@
+{
+  "q1": {
+    "reward": 1.0,
+    "reason": "Found matching number: 18.44 \u2248 18.44"
+  },
+  "q2": {
+    "reward": 1.0,
+    "reason": "Number 31 and all names (exact or \u22645 edits) found."
+  },
+  "q3": {
+    "reward": 1.0,
+    "reason": "All names (exact or \u22645 edits) and rounded numbers matched."
+  },
+  "q4": {
+    "reward": 1.0,
+    "reason": "All names matched (exact or \u22645 edits)."
+  },
+  "q5": {
+    "reward": 1.0,
+    "reason": "All names (exact or \u22645 edits) matched."
+  }
+}

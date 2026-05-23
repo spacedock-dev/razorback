@@ -1,0 +1,44 @@
+{
+  "summary_version": 1,
+  "n_trials_total": 1,
+  "n_trials_completed": 1,
+  "n_trials_errored": 0,
+  "stratified_pass_at_1": 0.0,
+  "datasets": {
+    "agnews": {
+      "dataset_pass_at_1": 0.0,
+      "n_queries": 1,
+      "queries": [
+        {
+          "query_id": null,
+          "n_trials": 1,
+          "n_correct": 0,
+          "pass_at_1": 0.0
+        }
+      ]
+    }
+  },
+  "trials": [
+    {
+      "trial_id": "agnews__JM7sQoz",
+      "reward": 0.5,
+      "cost_usd": null,
+      "wall_seconds": null,
+      "error_reason": null,
+      "stratum": {
+        "dataset": "agnews",
+        "query_ids": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "backends": [
+          "mongo",
+          "sqlite"
+        ]
+      }
+    }
+  ],
+  "cost_usd": null
+}

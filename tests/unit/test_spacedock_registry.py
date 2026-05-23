@@ -25,6 +25,20 @@ def test_spacedock_solver_kind_resolves_to_schema_and_import_path():
     assert cfg.tools_denied == ["Bash(curl*)"]
 
 
+def test_codex_kind_resolves_to_schema_and_direct_import_path():
+    entry = resolve_agent_kind("codex")
+    assert entry.import_path == "razorback.agents._runtime.codex:RazorbackCodex"
+    cfg = entry.config_schema(
+        model="gpt-5.5",
+        sampling={"temperature": 0.0, "top_p": None, "seed": None},
+        reasoning_effort="xhigh",
+        reasoning_summary="auto",
+    )
+    assert cfg.model == "gpt-5.5"
+    assert cfg.reasoning_effort == "xhigh"
+    assert cfg.reasoning_summary == "auto"
+
+
 def test_spec_parse_accepts_canonical_spacedock_solver(tmp_path):
     workflow = tmp_path / "solver"
     workflow.mkdir()

@@ -1,0 +1,39 @@
+{
+    "id": "9b569b4a-9de4-41d0-9b9a-06bf160571b2",
+    "started_at": "2026-05-23T08:45:27.499515",
+    "updated_at": "2026-05-23T08:48:28.268088",
+    "finished_at": "2026-05-23T08:48:28.268088",
+    "n_total_trials": 1,
+    "stats": {
+        "n_completed_trials": 1,
+        "n_errored_trials": 0,
+        "n_running_trials": 0,
+        "n_pending_trials": 0,
+        "n_cancelled_trials": 0,
+        "n_retries": 0,
+        "evals": {
+            "spacedock_solver__claude-opus-4-7__adhoc": {
+                "n_trials": 1,
+                "n_errors": 0,
+                "metrics": [
+                    {
+                        "mean": 0.75
+                    }
+                ],
+                "pass_at_k": {},
+                "reward_stats": {
+                    "reward": {
+                        "0.75": [
+                            "googlelocal__CQZve3k"
+                        ]
+                    }
+                },
+                "exception_stats": {}
+            }
+        },
+        "n_input_tokens": null,
+        "n_cache_tokens": null,
+        "n_output_tokens": null,
+        "cost_usd": null
+    }
+}

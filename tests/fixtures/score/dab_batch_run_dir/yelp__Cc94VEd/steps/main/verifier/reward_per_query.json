@@ -1,0 +1,9 @@
+{
+  "q1": {"reward": 1.0, "reason": "match"},
+  "q2": {"reward": 1.0, "reason": "match"},
+  "q3": {"reward": 1.0, "reason": "match"},
+  "q4": {"reward": 0.0, "reason": "miss"},
+  "q5": {"reward": 1.0, "reason": "match"},
+  "q6": {"reward": 1.0, "reason": "match"},
+  "q7": {"reward": 1.0, "reason": "match"}
+}

@@ -1,0 +1,224 @@
+{
+  "against_constant": {
+    "name": "spacedock",
+    "value": 0.577,
+    "verdict": "matches"
+  },
+  "n_strata_scored": 12,
+  "n_strata_total": 12,
+  "pooled_n_pass": 4,
+  "pooled_n_total": 12,
+  "pooled_pass_at_1": 0.3333333333333333,
+  "pooled_wilson_95ci": [
+    0.13812009109121315,
+    0.6093779111272004
+  ],
+  "strata": {
+    "DEPS_DEV_V1": {
+      "error_reason": null,
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_total": 1,
+      "pass_at_1": 0.0,
+      "result_json": "/Users/clkao/git/razorback/_runs/goal1-rerun-spacedock-opus47-xhigh/spacedock/DEPS_DEV_V1/goal1-spacedock-deps_dev_v1/30b71d96bf897162/result.json",
+      "rewards": {
+        "0.5": [
+          "DEPS_DEV_V1__P7xiyX7"
+        ]
+      },
+      "wilson_ci": [
+        0.0,
+        0.7934506856227626
+      ]
+    },
+    "GITHUB_REPOS": {
+      "error_reason": null,
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_total": 1,
+      "pass_at_1": 0.0,
+      "result_json": "/Users/clkao/git/razorback/_runs/goal1-rerun-spacedock-opus47-xhigh/spacedock/GITHUB_REPOS/goal1-spacedock-github_repos/657c0bb151af1451/result.json",
+      "rewards": {
+        "0.5": [
+          "GITHUB_REPOS__PyCMP7y"
+        ]
+      },
+      "wilson_ci": [
+        0.0,
+        0.7934506856227626
+      ]
+    },
+    "PANCANCER_ATLAS": {
+      "error_reason": null,
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_total": 1,
+      "pass_at_1": 0.0,
+      "result_json": "/Users/clkao/git/razorback/_runs/goal1-rerun-spacedock-opus47-xhigh/spacedock/PANCANCER_ATLAS/goal1-spacedock-pancancer_atlas/3405a7d598b417b5/result.json",
+      "rewards": {
+        "0.6666666666666666": [
+          "PANCANCER_ATLAS__vXNVdks"
+        ]
+      },
+      "wilson_ci": [
+        0.0,
+        0.7934506856227626
+      ]
+    },
+    "PATENTS": {
+      "error_reason": null,
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_total": 1,
+      "pass_at_1": 0.0,
+      "result_json": "/Users/clkao/git/razorback/_runs/goal1-rerun-spacedock-opus47-xhigh/spacedock/PATENTS/goal1-spacedock-patents/13a5f7dc122d89ed/result.json",
+      "rewards": {
+        "0.0": [
+          "PATENTS__vSYaYfV"
+        ]
+      },
+      "wilson_ci": [
+        0.0,
+        0.7934506856227626
+      ]
+    },
+    "agnews": {
+      "error_reason": null,
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_total": 1,
+      "pass_at_1": 0.0,
+      "result_json": "/Users/clkao/git/razorback/_runs/goal1-rerun-spacedock-opus47-xhigh/spacedock/agnews/goal1-spacedock-agnews/afcbe61961f2a91d/result.json",
+      "rewards": {
+        "0.5": [
+          "agnews__JM7sQoz"
+        ]
+      },
+      "wilson_ci": [
+        0.0,
+        0.7934506856227626
+      ]
+    },
+    "bookreview": {
+      "error_reason": null,
+      "n_errored": 0,
+      "n_pass": 1,
+      "n_total": 1,
+      "pass_at_1": 1.0,
+      "result_json": "/Users/clkao/git/razorback/_runs/goal1-rerun-spacedock-opus47-xhigh/spacedock/bookreview/goal1-spacedock-bookreview/07783db9977b2823/result.json",
+      "rewards": {
+        "1.0": [
+          "bookreview__7BC4kZx"
+        ]
+      },
+      "wilson_ci": [
+        0.20654931437723745,
+        1.0
+      ]
+    },
+    "crmarenapro": {
+      "error_reason": null,
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_total": 1,
+      "pass_at_1": 0.0,
+      "result_json": "/Users/clkao/git/razorback/_runs/goal1-rerun-spacedock-opus47-xhigh/spacedock/crmarenapro/goal1-spacedock-crmarenapro/5bb85d9a8b7d4650/result.json",
+      "rewards": {
+        "0.6923076923076923": [
+          "crmarenapro__nWLNCkD"
+        ]
+      },
+      "wilson_ci": [
+        0.0,
+        0.7934506856227626
+      ]
+    },
+    "googlelocal": {
+      "error_reason": null,
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_total": 1,
+      "pass_at_1": 0.0,
+      "result_json": "/Users/clkao/git/razorback/_runs/goal1-rerun-spacedock-opus47-xhigh/spacedock/googlelocal/goal1-spacedock-googlelocal/2099d5f8c37a0d4c/result.json",
+      "rewards": {
+        "0.75": [
+          "googlelocal__CQZve3k"
+        ]
+      },
+      "wilson_ci": [
+        0.0,
+        0.7934506856227626
+      ]
+    },
+    "music_brainz_20k": {
+      "error_reason": null,
+      "n_errored": 0,
+      "n_pass": 1,
+      "n_total": 1,
+      "pass_at_1": 1.0,
+      "result_json": "/Users/clkao/git/razorback/_runs/goal1-rerun-spacedock-opus47-xhigh/spacedock/music_brainz_20k/goal1-spacedock-music_brainz_20k/8ac1f86622e0f47e/result.json",
+      "rewards": {
+        "1.0": [
+          "music_brainz_20k__LzcQrSx"
+        ]
+      },
+      "wilson_ci": [
+        0.20654931437723745,
+        1.0
+      ]
+    },
+    "stockindex": {
+      "error_reason": null,
+      "n_errored": 0,
+      "n_pass": 1,
+      "n_total": 1,
+      "pass_at_1": 1.0,
+      "result_json": "/Users/clkao/git/razorback/_runs/goal1-rerun-spacedock-opus47-xhigh/spacedock/stockindex/goal1-spacedock-stockindex/2bdc287bf0a204aa/result.json",
+      "rewards": {
+        "1.0": [
+          "stockindex__BF22Jag"
+        ]
+      },
+      "wilson_ci": [
+        0.20654931437723745,
+        1.0
+      ]
+    },
+    "stockmarket": {
+      "error_reason": null,
+      "n_errored": 0,
+      "n_pass": 1,
+      "n_total": 1,
+      "pass_at_1": 1.0,
+      "result_json": "/Users/clkao/git/razorback/_runs/goal1-rerun-spacedock-opus47-xhigh/spacedock/stockmarket/goal1-spacedock-stockmarket/b5a77e3d776ccde7/result.json",
+      "rewards": {
+        "1.0": [
+          "stockmarket__7Bk2xCJ"
+        ]
+      },
+      "wilson_ci": [
+        0.20654931437723745,
+        1.0
+      ]
+    },
+    "yelp": {
+      "error_reason": null,
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_total": 1,
+      "pass_at_1": 0.0,
+      "result_json": "/Users/clkao/git/razorback/_runs/goal1-rerun-spacedock-opus47-xhigh/spacedock/yelp/goal1-spacedock-yelp/484d0b940af2aa7b/result.json",
+      "rewards": {
+        "0.8571428571428571": [
+          "yelp__Cc94VEd"
+        ]
+      },
+      "wilson_ci": [
+        0.0,
+        0.7934506856227626
+      ]
+    }
+  },
+  "stratified_pass_at_1_mean_over_strata": 0.3333333333333333,
+  "variant": "spacedock"
+}

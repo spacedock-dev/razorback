@@ -8,7 +8,11 @@ from pathlib import Path
 import typer
 
 from razorback.errors import ExitCode, RazorbackError
-from razorback.runs.aggregate import read_trial_outcomes, reduce_per_query_stratified
+from razorback.runs.aggregate import (
+    count_trials,
+    read_trial_outcomes,
+    reduce_per_query_stratified,
+)
 from razorback.score.render import render_json, render_markdown
 from razorback.score.verdict import AgainstConstantReport, against_constant
 
@@ -46,7 +50,9 @@ def score_command(
 
     try:
         outcomes = read_trial_outcomes(run_dir)
-        report = reduce_per_query_stratified(outcomes, alpha=alpha)
+        report = reduce_per_query_stratified(
+            outcomes, alpha=alpha, trial_counts=count_trials(run_dir)
+        )
     except RazorbackError as exc:
         typer.echo(f"score error: {exc}", err=True)
         raise typer.Exit(int(exc.exit_code))
