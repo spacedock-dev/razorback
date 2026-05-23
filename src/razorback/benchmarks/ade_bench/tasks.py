@@ -13,8 +13,10 @@ from typing import Any, Awaitable
 import shortuuid
 from harbor.models.task.id import GitTaskId
 
-from razorback.benchmarks.dab.prepare import _DEFAULT_DOCKER_IMAGE
 from razorback.spec.schema import AdeBenchTaskEntry
+
+
+DEFAULT_ADE_BENCH_DOCKER_IMAGE = "dab-agent:latest"
 
 
 def _run_async(coro: Awaitable[Any]) -> Any:
@@ -119,7 +121,7 @@ def materialize_git_task(
     git_url: str,
     git_commit_id: str,
     source_path: Path,
-    docker_image: str = _DEFAULT_DOCKER_IMAGE,
+    docker_image: str = DEFAULT_ADE_BENCH_DOCKER_IMAGE,
     cache_root: Path,
     _fake_git_source: Path | None = None,
 ) -> Path:

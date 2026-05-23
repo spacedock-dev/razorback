@@ -89,6 +89,12 @@ class LocalBenchmarkBlock(BaseModel):
 
 
 class DabBenchmarkBlock(BaseModel):
+    """Legacy-only schema block retained for `_legacy` imports.
+
+    Active specs no longer include this class in `BenchmarkBlock`; use
+    `benchmark.kind: harbor_dab`.
+    """
+
     model_config = ConfigDict(extra="forbid")
     kind: Literal["dab"]
     data_root: Path
@@ -275,7 +281,6 @@ class Spider2DbtBenchmarkBlock(BaseModel):
 BenchmarkBlock = Annotated[
     Union[
         LocalBenchmarkBlock,
-        DabBenchmarkBlock,
         HarborDabBenchmarkBlock,
         AdeBenchBenchmarkBlock,
         Spider2DbtBenchmarkBlock,

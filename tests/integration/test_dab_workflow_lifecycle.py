@@ -30,7 +30,7 @@ experiment: dab-claude-workflow-smoke
 agent:
   kind: claude-cli
 benchmark:
-  kind: dab
+  kind: harbor_dab
   data_root: {data_root}
   datasets: [bookreview]
 trials: 1

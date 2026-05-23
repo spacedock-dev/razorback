@@ -4,9 +4,9 @@
 import json
 from pathlib import Path
 
-from razorback.benchmarks.dab.aggregate import aggregate_synthetic
+from razorback._legacy.benchmarks.dab.aggregate import aggregate_synthetic
 
-FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "dab"
+FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "dab"
 
 
 def test_aggregator_matches_golden_summary(tmp_path):
@@ -20,7 +20,7 @@ def test_aggregator_matches_golden_summary(tmp_path):
 
 def test_pass_at_1_uses_pass_k_formula_at_k_equals_1():
     """pass@1 at k=1 reduces to c/n. Anchored to harbor's golden math."""
-    from razorback.benchmarks.dab.aggregate import pass_at_k
+    from razorback._legacy.benchmarks.dab.aggregate import pass_at_k
 
     # pass_at_k uses the verbatim DAB formula `1 - comb(n-c, k)/comb(n, k)`.
     # For k=1 this equals c/n algebraically, but float division leaves a residue
@@ -46,7 +46,7 @@ class _StubTrial:
 
 
 def test_aggregate_job_result_uses_trial_name_map_to_pair(tmp_path):
-    from razorback.benchmarks.dab.aggregate import aggregate_job_result
+    from razorback._legacy.benchmarks.dab.aggregate import aggregate_job_result
 
     trial_name_map = {
         "bookreview-q1": ("bookreview", 1),
@@ -65,7 +65,7 @@ def test_aggregate_job_result_uses_trial_name_map_to_pair(tmp_path):
 
 def test_aggregate_job_result_handles_missing_verifier_result(tmp_path):
     """A trial that errored before verifier emission counts as 0 reward."""
-    from razorback.benchmarks.dab.aggregate import aggregate_job_result
+    from razorback._legacy.benchmarks.dab.aggregate import aggregate_job_result
 
     class _ErroredTrial:
         trial_name = "bookreview-q1__zzzz001"

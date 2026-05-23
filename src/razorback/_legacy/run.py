@@ -139,7 +139,7 @@ async def _execute_run_async(
 
     from razorback.spec.schema import DabBenchmarkBlock
     if isinstance(spec.benchmark, DabBenchmarkBlock):
-        from razorback.benchmarks.dab.aggregate import aggregate_job_result
+        from razorback._legacy.benchmarks.dab.aggregate import aggregate_job_result
         aggregate_job_result(
             trial_results=result.trial_results,
             trial_name_map=trial_name_map,

@@ -4,7 +4,7 @@
 import json
 from pathlib import Path
 
-from razorback.benchmarks.dab.verify import emit_reward
+from razorback._legacy.benchmarks.dab.verify import emit_reward
 
 
 def _validate_py(root: Path) -> Path:

@@ -19,7 +19,10 @@ from razorback.benchmarks.ade_bench.tasks import (
     materialize_git_task,
     resolve_task_dirs,
 )
-from razorback.benchmarks.dab.prepare import _DEFAULT_DOCKER_IMAGE, prepare_dataset_tasks
+from razorback._legacy.benchmarks.dab.prepare import (
+    _DEFAULT_DOCKER_IMAGE,
+    prepare_dataset_tasks,
+)
 from razorback.errors import SpecError
 from razorback.spec.schema import (
     AdeBenchBenchmarkBlock,

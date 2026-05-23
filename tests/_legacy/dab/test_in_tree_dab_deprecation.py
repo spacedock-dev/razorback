@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import warnings
 
-from razorback.benchmarks.dab.prepare import prepare_dataset_tasks
+from razorback._legacy.benchmarks.dab.prepare import prepare_dataset_tasks
 
 
 def test_in_tree_dab_emits_deprecation_warning(tmp_path) -> None:

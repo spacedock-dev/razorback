@@ -3,10 +3,10 @@
 import json
 from pathlib import Path
 
-from razorback.benchmarks.dab.aggregate import aggregate_synthetic
+from razorback._legacy.benchmarks.dab.aggregate import aggregate_synthetic
 
 
-FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "provenance"
+FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "provenance"
 
 
 def test_aggregator_stratifies_across_twelve_datasets(tmp_path):

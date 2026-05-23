@@ -34,10 +34,9 @@ def test_harbor_dab_translator_does_not_call_test_sh_synthesis() -> None:
     )
 
 
-def test_dab_prepare_does_not_call_test_sh_synthesis() -> None:
-    """AC-3: razorback.benchmarks.dab.prepare (the DAB materializer) does
-    not reach into ade-bench's PKG-27 surface."""
-    import razorback.benchmarks.dab.prepare as prepare_module
+def test_harbor_dab_plugin_prepare_does_not_call_test_sh_synthesis() -> None:
+    """AC-3: the plugin materializer does not reach into ade-bench's PKG-27 surface."""
+    import razorback_plugin_dab.generate.prepare as prepare_module
 
     src = Path(prepare_module.__file__).read_text()
     assert "_build_test_sh" not in src

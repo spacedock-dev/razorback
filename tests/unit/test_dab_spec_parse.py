@@ -1,5 +1,5 @@
-# ABOUTME: Unit tests for the DAB extension of the spec schema.
-# ABOUTME: AC-7 input shape: kind: dab, data_root: Path, datasets: list[str].
+# ABOUTME: Unit tests for the plugin-backed DAB extension of the spec schema.
+# ABOUTME: Active input shape: kind: harbor_dab, data_root: Path, datasets: list[str].
 
 from pathlib import Path
 
@@ -9,13 +9,13 @@ from razorback.errors import SpecError
 from razorback.spec.parse import parse_spec_text
 
 
-VALID_DAB_SPEC = """\
+VALID_HARBOR_DAB_SPEC = """\
 version: 1
 experiment: m2-bookreview-nop
 agent:
   kind: nop
 benchmark:
-  kind: dab
+  kind: harbor_dab
   data_root: /Users/clkao/git/dataagentbench/data
   datasets:
     - bookreview
@@ -27,17 +27,17 @@ observers:
 """
 
 
-def test_parses_dab_benchmark_block():
-    spec = parse_spec_text(VALID_DAB_SPEC)
-    assert spec.benchmark.kind == "dab"
+def test_parses_harbor_dab_benchmark_block():
+    spec = parse_spec_text(VALID_HARBOR_DAB_SPEC)
+    assert spec.benchmark.kind == "harbor_dab"
     assert str(spec.benchmark.data_root) == "/Users/clkao/git/dataagentbench/data"
     assert spec.benchmark.datasets == ["bookreview"]
 
 
-def test_dab_data_root_expands_env_default(monkeypatch):
+def test_harbor_dab_data_root_expands_env_default(monkeypatch):
     monkeypatch.delenv("DATAAGENTBENCH_DATA_ROOT", raising=False)
     spec = parse_spec_text(
-        VALID_DAB_SPEC.replace(
+        VALID_HARBOR_DAB_SPEC.replace(
             "/Users/clkao/git/dataagentbench/data",
             '"${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}"',
         )
@@ -45,11 +45,11 @@ def test_dab_data_root_expands_env_default(monkeypatch):
     assert spec.benchmark.data_root == Path.home() / "dataagentbench" / "data"
 
 
-def test_dab_data_root_expands_env_override(tmp_path, monkeypatch):
+def test_harbor_dab_data_root_expands_env_override(tmp_path, monkeypatch):
     data_root = tmp_path / "dab-data"
     monkeypatch.setenv("DATAAGENTBENCH_DATA_ROOT", str(data_root))
     spec = parse_spec_text(
-        VALID_DAB_SPEC.replace(
+        VALID_HARBOR_DAB_SPEC.replace(
             "/Users/clkao/git/dataagentbench/data",
             '"${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}"',
         )
@@ -57,14 +57,14 @@ def test_dab_data_root_expands_env_override(tmp_path, monkeypatch):
     assert spec.benchmark.data_root == data_root
 
 
-def test_dab_rejects_unknown_subkey():
-    bad = VALID_DAB_SPEC + "  task_paths: [a]\n"
+def test_harbor_dab_rejects_unknown_subkey():
+    bad = VALID_HARBOR_DAB_SPEC + "  task_paths: [a]\n"
     with pytest.raises(SpecError):
         parse_spec_text(bad)
 
 
-def test_dab_requires_datasets():
-    bad = VALID_DAB_SPEC.replace("  datasets:\n    - bookreview\n", "")
+def test_harbor_dab_requires_datasets():
+    bad = VALID_HARBOR_DAB_SPEC.replace("  datasets:\n    - bookreview\n", "")
     with pytest.raises(SpecError):
         parse_spec_text(bad)
 

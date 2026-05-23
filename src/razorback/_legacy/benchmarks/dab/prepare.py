@@ -141,7 +141,7 @@ def _materialize_task_dir(
 
     tests_dir = task_dir / "tests"
     tests_dir.mkdir()
-    import razorback.benchmarks.dab.verify as verify_module
+    import razorback._legacy.benchmarks.dab.verify as verify_module
     shutil.copy2(Path(verify_module.__file__), tests_dir / "verify.py")
     shutil.copy2(query_dir / "validate.py", tests_dir / "validate.py")
 
