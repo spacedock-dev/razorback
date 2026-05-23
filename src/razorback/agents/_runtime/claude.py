@@ -127,6 +127,31 @@ class RazorbackClaudeCode(ClaudeCode):
             self._version = result.stdout.strip() if hasattr(result, "stdout") else None
         except Exception:
             self._version = None
+        await self._stage_plugin_dirs(environment)
+
+    async def _stage_plugin_dirs(self, environment) -> None:
+        """Upload each host-side plugin_dir into the agent container.
+
+        `--plugin-dir <path>` must resolve INSIDE the trial environment where
+        `claude` runs. The constructor accepts host paths; setup stages them to
+        an in-container path that is then substituted on every flag render.
+        Without this step the host path leaks into a docker container that
+        cannot see it, and claude refuses to load the plugin.
+        """
+        if not self._plugin_dirs or not hasattr(environment, "upload_dir"):
+            return
+        staged: list[str] = []
+        for host_path in self._plugin_dirs:
+            host = Path(host_path)
+            if not host.is_dir():
+                raise RazorbackClaudeCodeError(
+                    f"plugin_dir {host} is not a host directory; cannot stage."
+                )
+            container_path = f"/tmp/razorback-plugins/{host.name}"
+            await environment.exec(f"mkdir -p /tmp/razorback-plugins")
+            await environment.upload_dir(str(host), container_path)
+            staged.append(container_path)
+        self._plugin_dirs = staged
 
     def populate_context_post_run(self, context: AgentContext) -> None:
         super().populate_context_post_run(context)
