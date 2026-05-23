@@ -1,5 +1,5 @@
-# ABOUTME: SpacedockSolverAgent.populate_context_post_run writes
-# ABOUTME: subagent-trace-manifest.json at logs_dir.parents[3] from real claude-code.txt.
+# ABOUTME: SpacedockSolverAgent.run writes subagent-trace-manifest.json at
+# ABOUTME: logs_dir.parents[3] after the inner agent finishes.
 
 import json
 from pathlib import Path
@@ -33,11 +33,31 @@ def _common_kwargs(tmp_path):
     )
 
 
-def test_populate_context_post_run_writes_manifest_adjacent_to_provenance(
+class _FakeInnerAgent:
+    """Stub stand-in for the inner claude agent. Writes a synthetic
+    claude-code.txt during run() to mimic the real inner agent's side effect."""
+
+    def __init__(self, logs_dir: Path, fixture: str):
+        self._logs_dir = logs_dir
+        self._fixture = fixture
+
+    async def setup(self, environment):
+        return None
+
+    async def run(self, instruction, environment, context):
+        (self._logs_dir / "claude-code.txt").write_text(self._fixture)
+
+    async def cleanup(self, environment):
+        return None
+
+
+@pytest.mark.asyncio
+async def test_run_writes_manifest_adjacent_to_provenance(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ):
-    """End-to-end of the AC-2 post-run hook: populate_context_post_run
-    (the hook harbor.trial actually invokes on the outer agent) parses
+    """End-to-end of the AC-2 post-run hook: SpacedockSolverAgent.run (the
+    only hook harbor.trial invokes on a BaseAgent outer agent — see
+    harbor/trial/trial.py:466-471 gate on BaseInstalledAgent) parses
     claude-code.txt at logs_dir and writes subagent-trace-manifest.json at
     logs_dir.parents[3] (the cell-run-dir adjacent to provenance.yaml)."""
     monkeypatch.setenv("RAZORBACK_SPACEDOCK_PLUGIN_DIR", str(tmp_path))
@@ -45,13 +65,13 @@ def test_populate_context_post_run_writes_manifest_adjacent_to_provenance(
     cell_run_dir = tmp_path / "cell-run"
     logs_dir = cell_run_dir / "trial-001__aaaa1234" / "steps" / "main" / "agent"
     logs_dir.mkdir(parents=True)
-    (logs_dir / "claude-code.txt").write_text(T0_FIXTURE)
     (cell_run_dir / "provenance.yaml").write_text("placeholder")
 
     kw = _common_kwargs(tmp_path)
     agent = SpacedockSolverAgent(logs_dir=logs_dir, **kw)
+    agent._inner = _FakeInnerAgent(logs_dir, T0_FIXTURE)
 
-    agent.populate_context_post_run(context=None)
+    await agent.run(instruction="probe", environment=None, context=None)
 
     manifest_path = cell_run_dir / "subagent-trace-manifest.json"
     assert manifest_path.exists()
@@ -62,15 +82,15 @@ def test_populate_context_post_run_writes_manifest_adjacent_to_provenance(
     assert payload["schema_version"] == "razorback-subagent-traces-v1"
 
 
-def test_populate_context_post_run_for_codex_runtime_does_not_write_manifest(
+@pytest.mark.asyncio
+async def test_run_for_codex_runtime_does_not_write_manifest(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ):
-    """The manifest write is gated to runtime=claude; codex cells must not get
-    a stray manifest (per plan §Risk register)."""
+    """The manifest write is gated to runtime=claude; codex cells must not
+    get a stray manifest (per plan §Risk register)."""
     cell_run_dir = tmp_path / "cell-run"
     logs_dir = cell_run_dir / "trial-001__aaaa1234" / "steps" / "main" / "agent"
     logs_dir.mkdir(parents=True)
-    (logs_dir / "claude-code.txt").write_text(T0_FIXTURE)
 
     kw = _common_kwargs(tmp_path)
     kw["runtime"] = "codex"
@@ -83,7 +103,8 @@ def test_populate_context_post_run_for_codex_runtime_does_not_write_manifest(
     kw["model"] = "gpt-5.1-codex"
     kw["extra_env"] = {"OPENAI_API_KEY": "x"}
     agent = SpacedockSolverAgent(logs_dir=logs_dir, **kw)
+    agent._inner = _FakeInnerAgent(logs_dir, T0_FIXTURE)
 
-    agent.populate_context_post_run(context=None)
+    await agent.run(instruction="probe", environment=None, context=None)
 
     assert not (cell_run_dir / "subagent-trace-manifest.json").exists()

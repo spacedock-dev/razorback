@@ -429,8 +429,21 @@ class SpacedockSolverAgent(BaseAgent):
         )
         if self._freeze_checkpointing_ready:
             await self._commit_stage(environment, CHECKPOINT_RUN_AFTER_AGENT)
+        # AC-2 manifest write lives here because harbor's trial runner
+        # invokes only `setup` and `run` on `BaseAgent` subclasses;
+        # `populate_context_post_run` is gated to `BaseInstalledAgent`
+        # (harbor/trial/trial.py:466-471) and `cleanup` is not part of the
+        # BaseAgent lifecycle at all. Follow-up `m2
+        # spacedock-solver-base-installed-agent-feasibility` may relocate
+        # this hook once SpacedockSolverAgent graduates to BaseInstalledAgent.
+        if self._runtime == "claude":
+            self._maybe_write_subagent_trace_manifest()
 
     async def cleanup(self, environment):
+        # `cleanup()` is NOT part of harbor's BaseAgent lifecycle (the trial
+        # runner never calls it on the outer agent). Kept only as an inner-
+        # agent delegate for any other path that might call it; do NOT add
+        # post-run side effects here — they belong in `run()`.
         if self._inner is not None and hasattr(self._inner, "cleanup"):
             await self._inner.cleanup(environment)
 
@@ -460,18 +473,16 @@ class SpacedockSolverAgent(BaseAgent):
             )
 
     def populate_context_post_run(self, context):
-        """Delegate context-population to the inner agent and write the AC-2 manifest.
+        """Delegate context-population to the inner agent.
 
-        Harbor's trial framework invokes this hook on the OUTER agent only —
-        `cleanup()` is not part of the harbor agent lifecycle, so the
-        subagent-trace manifest must land here to actually be written on real
-        cell runs. The inner agent (RazorbackClaudeCode for runtime=claude)
-        holds the cost_usd / claude-output.jsonl surface from PKG-26 — without
-        the inner delegation that surface stays dark on the spacedock variant.
+        Harbor's trial runner gates this hook on
+        `isinstance(self._agent, BaseInstalledAgent)`
+        (harbor/trial/trial.py:466-471), so it is NOT called on
+        `SpacedockSolverAgent` (which subclasses `BaseAgent` directly).
+        Kept as an inner-agent delegate for any path that does invoke it;
+        the AC-2 manifest write lives in `run()` instead.
         """
         if self._inner is not None and hasattr(
             self._inner, "populate_context_post_run"
         ):
             self._inner.populate_context_post_run(context)
-        if self._runtime == "claude":
-            self._maybe_write_subagent_trace_manifest()
