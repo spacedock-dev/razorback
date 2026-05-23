@@ -199,3 +199,21 @@ runs it again in `SpacedockSolverAgent.setup()` before the inner Codex runtime
 can install or execute. The host `duckdb` dependency and lockfile update are
 intentional because the checker and tests inspect real DuckDB table metadata;
 no full 48-task matrix was run.
+
+## Stage Report: validation
+
+- FAILED: Independently verify AC-1 with sampled ADE task-view/data identity across `airbnb001`, `f1001`, and `quickbooks001` or report a concrete blocker.
+  Evidence: `docs/razorback-implementation/validation/ade-task-view-data-isolation.md` shows real-image preflight rejects `airbnb001` with missing `calendar/listings/reviews` while observing `raw_hosts/raw_listings/raw_reviews`; `f1001` and `quickbooks001` pass.
+- DONE: Independently verify AC-2 that ADE workspace mismatch fails before `codex exec` and classify any Dockerfile/runtime preflight gaps as blocking or non-blocking.
+  Evidence: focused tests pass `12 passed`; Docker build smoke exits 1 with `RAZORBACK_ADE_PREFLIGHT` F1/QuickBooks diagnostics before `CMD`; runtime tests prove inner Codex setup is not awaited on preflight failure.
+- DONE: Run focused tests plus the smallest useful smoke/score/audit command for AC-3, then write a validation report with PASS/REJECT gate recommendation and commit only validation artifacts.
+  Evidence: focused tests pass, task-view preflight-only smoke exposes the AC-1 blocker, score/audit fixture commands exit 0, and the validation report recommends REJECT.
+
+### Summary
+
+Validation rejects the implementation because the Airbnb preflight contract does
+not match real `airbnb001` workspace tables, so a canonical multi-family smoke
+would fail before Codex on valid task data. Dockerfile injection and runtime
+preflight ordering are otherwise proven runnable/fail-closed; the remaining
+full-suite collection error is pre-existing stale `razorback.score.load` test
+debt outside this branch.
