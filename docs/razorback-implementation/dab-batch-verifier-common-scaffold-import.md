@@ -10,7 +10,7 @@ score: 0.92
 worktree: .worktrees/spacedock-ensign-dab-batch-verifier-common-scaffold-import
 issue:
 pr:
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 ## Problem
