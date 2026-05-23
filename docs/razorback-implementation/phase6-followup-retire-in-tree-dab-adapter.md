@@ -10,7 +10,7 @@ score: 0.82
 worktree: .worktrees/spacedock-ensign-phase6-followup-retire-in-tree-dab-adapter
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 ---
 
 ## Problem
