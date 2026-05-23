@@ -249,3 +249,447 @@ terminal-bench-2, lawbench, replicationbench, medagentbench,
 swe-bench-pro, anything published next year) becomes a one-spec
 addition with zero razorback code change. That's a meaningful
 multiplier on razorback's surface coverage.
+
+## Plan-stage research validation (harbor==0.6.6 cross-check)
+
+Plan worker confirmed `harbor==0.6.6` installed in
+`.venv/lib/python3.12/site-packages/harbor/`. Patches to FO-recorded
+line citations (precise spans to use verbatim in the design doc):
+
+- **`harbor/cli/jobs.py`.** Function `start()` is defined at **line
+  471** (FO cited `800-895`, which is the flag block WITHIN the
+  signature, not the function start). End-of-signature inferred via
+  next function `resume()` at line 1362. Verbatim flag-block citations
+  for the design doc:
+  - `-p / --path` (path): **lines 804-813**
+  - `--task-git-url` (task_git_url): **lines 814-821**
+  - `--task-git-commit` (task_git_commit_id): **lines 822-830**
+  - `-d / --dataset` `<dataset@version>` (dataset_name_version):
+    **lines 831-840** — help text reads literally
+    `Dataset name@version (e.g., 'dataset@1.0')`.
+  - `--registry-url` (registry_url): **lines 841-849**
+  - `--registry-path` (registry_path): **lines 850-858**
+  - `-t / --task` `<org/name[@ref]>` (task_ref): **lines 859-868**
+  - `-i / --include-task-name` glob (dataset_task_names):
+    **lines 869-878**
+  - `-x / --exclude-task-name` glob (dataset_exclude_task_names):
+    **lines 879-888**
+  - `-l / --n-tasks` (n_tasks): **lines 889-898**
+  Recommended doc citation: `harbor/cli/jobs.py:471` (function start)
+  + `harbor/cli/jobs.py:804-898` (dataset/task selector flag block).
+  These ranges are stable for the pinned harbor==0.6.6.
+
+- **`harbor/models/dataset/manifest.py`.** Module is 280 lines total.
+  - `DatasetTaskRef` (name + sha256 digest, org/name validators):
+    **lines 23-69**
+  - `DatasetFileRef` (path + digest, e.g., `metric.py`):
+    **lines 72-108**
+  - `DatasetInfo` (name/description/authors/keywords):
+    **lines 111-150**
+  - `DatasetManifest` (schema_version + dataset + tasks + files +
+    content-hash algorithm): **lines 153-279**
+  - `compute_content_hash()` (sha256 over sorted task digests +
+    optional `path:digest` file pairs joined with `;`):
+    **lines 237-254**
+  FO's TOML excerpt matches the model verbatim. Recommended doc
+  citation: `harbor/models/dataset/manifest.py:23-279` (full schema).
+
+- **`harbor/registry/client/package.py`.** File is 125 lines total
+  (FO's `152-218` line guess was off — this is a small file).
+  - `PackageDatasetClient` class: **lines 14-124**
+  - `_get_dataset_metadata(name) -> DatasetMetadata`:
+    **lines 19-60** — resolves an `org/name[@ref]` via internal
+    RegistryDB, builds `PackageTaskId` per task (with
+    `ref=f"sha256:{tv['content_hash']}"`), attaches dataset-level
+    files, returns a `DatasetMetadata` carrying `task_ids`,
+    `dataset_version_id`, `dataset_version_content_hash`.
+  - `download_dataset_files()`: lines 62-91.
+  - `download_dataset()`: lines 93-121.
+  Recommended doc citation: `harbor/registry/client/package.py:14-124`.
+
+- **`src/razorback/cli/run.py:54-68` — `_invoke_harbor`.** Matches
+  the FO's snippet. Razorback emits a JobConfig YAML to
+  `harbor run -c <yaml>`. The benchmark-specific knowledge is
+  encoded entirely IN that YAML.
+
+- **`src/razorback/spec/schema.py` — current `BenchmarkBlock`
+  state.** Union at **lines 297-305**:
+  `LocalBenchmarkBlock | HarborDabBenchmarkBlock |
+  AdeBenchBenchmarkBlock | Spider2DbtBenchmarkBlock`. Critical for
+  the design doc: **`HarborDabBenchmarkBlock` already supports
+  `dataset: <name>@<version>` (line 140)** and
+  **`AdeBenchBenchmarkBlock` already supports
+  `dataset: <org>/<name>@<ref>` (line 231)** with three-tier resolution
+  (tag/revision/sha256). The collapse precedent is already in-tree
+  per-block; the design doc's job is to unify these two into a
+  single `HarborBenchmarkBlock` and decide what happens to
+  `Spider2DbtBenchmarkBlock` (currently local-only, `tasks_root`
+  required) and the legacy `DabBenchmarkBlock` (already SUPERSEDED
+  per its docstring lines 107-122).
+
+- **`src/razorback/translate.py` — current per-benchmark builders.**
+  - `_build_local` at **line 193**
+  - `_build_ade_bench` at **line 211**
+  - `_build_harbor_dab` at **line 312**
+  - `_build_spider2_dbt` at **line 442**
+  Verified `_build_harbor_dab` is NOT pure config translation: it
+  spawns `uv run razorback-plugin-dab generate` per dataset (lines
+  379-396) to materialize per-query task directories with
+  `workspace_variant` semantics. This is real razorback-side prep
+  work, not config. The design doc must explicitly flag that the
+  collapse cannot delete this code path — it can only move it behind
+  a per-dataset hook.
+
+### Dabstep manifest — FO did NOT do this, plan worker DID
+
+Probed `uv run harbor download adyen/dabstep@latest -o /tmp/... --cache`:
+
+- **No auth required.** Public dataset, anonymous HTTPS download.
+- Exit 0 in ~3s; 450 task directories materialized under
+  `/tmp/dabstep_probe/adyen/<task-id>/<sha256>/{task.toml,instruction.md}`.
+- Confirmed FO's hub-page task count (450) against actual download.
+- The dataset.toml itself is NOT materialized into the user
+  output_dir by `harbor download --cache` (the dataset manifest
+  lives only as registry-side metadata accessed via
+  `PackageDatasetClient`, not as a downloaded file). The hub
+  page's `harbor run -d adyen/dabstep` command suggestion works
+  because `harbor run` resolves the registry metadata internally
+  on each invocation.
+- Sample `task.toml` (verbatim, `adyen/1507`):
+  ```toml
+  version = "1.0"
+  [task]
+  name = "adyen/1507"
+  authors = []
+  keywords = []
+  [metadata]
+  author_name = ""
+  author_email = ""
+  difficulty = "hard"
+  category = "data-analysis"
+  tags = [ "dabstep", "data-analysis", "financial", "hard",]
+  [verifier]
+  timeout_sec = 600.0
+  [agent]
+  timeout_sec = 1800.0
+  [environment]
+  build_timeout_sec = 600.0
+  cpus = 1
+  memory_mb = 4096
+  storage_mb = 8192
+  gpus = 0
+  allow_internet = true
+  mcp_servers = []
+  [verifier.env]
+  [solution.env]
+  ```
+- Sample `instruction.md` (verbatim, `adyen/1507`):
+  > You are an expert data analyst and you will answer factoid
+  > questions by referencing files in the data directory:
+  > `/app/data/`... In the average scenario, which card scheme
+  > would provide the cheapest fee for a transaction value of 50
+  > EUR? ... When you have computed the final answer, write ONLY
+  > the final answer to `/app/answer.txt`.
+
+The materialized layout (`<org>/<task-id>/<sha256>/task.toml`) is
+the canonical Harbor task shape. Razorback's spec-side
+`benchmark.tasks: list[str]` selector (already used by
+`AdeBenchBenchmarkBlock`) maps cleanly: spec entry `1507` →
+matches resolved `adyen/1507`.
+
+**Material implication for the design doc.** Dabstep is the proof:
+zero razorback-side prep needed. The full task definition (image
+specs, timeouts, instruction prompt, verifier setup) lives in the
+downloaded `task.toml` + `instruction.md`. Razorback's job is
+literally just to pass `-d adyen/dabstep` (with optional `-i` task
+subset + `-l n-tasks` cap) through to harbor. No subprocess. No
+plugin. No per-task transform.
+
+Contrast with DAB (`_build_harbor_dab`): DAB is generative
+(razorback-side plugin produces task dirs per dataset/query
+combination per workspace_variant), so it CANNOT collapse to "just
+pass `-d` through." The collapse strategy must offer two
+operational modes — "pure pass-through" (dabstep, swe-bench-verified,
+terminal-bench-2, lawbench, replicationbench, medagentbench,
+swe-bench-pro) and "razorback prep + pass-through"
+(DAB, future generative benchmarks).
+
+## Implementation-stage plan (impl-stage worker reads this)
+
+The impl stage writes a single design doc at
+`docs/superpowers/specs/2026-05-23-generic-harbor-benchmark-surface.md`.
+Below is the prescribed section structure, the before/after spec
+examples to embed verbatim, the spec-amendment decision tree, and
+the recommendation decision tree. The impl worker should NOT redo
+the grounded research — it's already validated above.
+
+### Doc section structure (impl writes these in order)
+
+1. **Title + abstract** (~150 words). State the captain's framing
+   quote ("if dabstep is on harbor, there should be just simple
+   config") + the spec §1.3 quote ("Razorback ships no benchmark
+   adapters") + the proposal sentence.
+2. **§1 The current per-benchmark surface.** Enumerate the four
+   active blocks from `schema.py:297-305`, the four builders from
+   `translate.py:193/211/312/442`, and the per-block cost
+   (one Pydantic class + one builder + sometimes one
+   `razorback-plugin-<name>` package). Cite the legacy
+   `DabBenchmarkBlock` deprecation as precedent for "we already
+   collapse blocks here."
+3. **§2 What harbor already exposes.** Copy the `harbor/cli/jobs.py`
+   flag-block citation verbatim (lines 804-898), the
+   `DatasetManifest` schema citation (lines 23-279 of
+   `models/dataset/manifest.py`), the `PackageDatasetClient`
+   citation (lines 14-124 of `registry/client/package.py`), and
+   the `_invoke_harbor` razorback-side citation. Include the
+   dabstep download probe result (exit 0, 450 tasks, no auth, ~3s).
+4. **§3 The two operational modes.** "Pure pass-through" vs
+   "razorback prep + pass-through". Show the matrix:
+   - Pure pass-through: dabstep, swe-bench-verified, terminal-bench-2,
+     lawbench, replicationbench, medagentbench, swe-bench-pro,
+     and ADE-bench when sourced as `dataset: <org>/<name>@<ref>`.
+   - Prep + pass-through: DAB (plugin generates per-query dirs).
+   - Local-only: `LocalBenchmarkBlock` (no Harbor registry).
+   - Local-but-Harbor-shaped: ADE-bench when sourced as
+     `tasks_root:` (the dev escape hatch in the current
+     `AdeBenchBenchmarkBlock`), and `Spider2DbtBenchmarkBlock`
+     (`tasks_root` is required today).
+5. **§4 Proposed `HarborBenchmarkBlock`.** Schema:
+   ```python
+   class HarborBenchmarkBlock(BaseModel):
+       kind: Literal["harbor"]
+       dataset: str | None = None       # <org>/<name>@<ref> for registry-resolved
+       tasks_root: Path | None = None   # local Harbor-shaped dir, dev escape hatch
+       tasks: list[str] | None = None   # subset selector (matches -i flag semantics)
+       exclude_tasks: list[str] | None = None  # exclusion selector (matches -x)
+       n_tasks: int | None = None       # task-count cap (matches -l)
+       prep: PrepBlock | None = None    # OPTIONAL razorback-side prep hook
+   ```
+   The `prep:` discriminated union covers the DAB case (and any
+   future generative benchmark):
+   ```python
+   PrepBlock = Annotated[Union[DabPrep, ...], Field(discriminator="kind")]
+
+   class DabPrep(BaseModel):
+       kind: Literal["dab-plugin"]
+       workspace_variant: Literal["direct-minimal", "direct-structured", "spacedock"]
+       data_root: Path | None = None
+       hints: bool = False
+       query_mode: Literal["batch", "per-query"] = "per-query"
+   ```
+   This is the impl-stage doc's central proposal. The doc should
+   explicitly note that `prep: None` ⇒ pure pass-through path.
+6. **§5 Before/after spec examples (verbatim).** Two pairs, exactly
+   as in §5.1 + §5.2 below.
+7. **§6 Migration shape.** What `harbor_dab` / `ade-bench` /
+   `spider2-dbt` collapse to:
+   - `kind: harbor_dab` ⇒ `kind: harbor` + `prep: {kind: dab-plugin, ...}`.
+   - `kind: ade-bench, dataset: <org>/<name>@<ref>` ⇒ `kind: harbor`
+     (no prep). The `db_type` / `project_type` /
+     `docker_image_override` / `batch_mode` fields move to a
+     thin `ade-bench` prep block IF they're load-bearing — flag
+     for captain review.
+   - `kind: ade-bench, tasks_root: <path>` ⇒ `kind: harbor` +
+     `tasks_root:` (no prep, since tasks_root mode is pure local).
+   - `kind: spider2-dbt` ⇒ same shape as ade-bench local-path —
+     `kind: harbor` + `tasks_root:` with optional thin
+     `spider2-dbt` prep block if `docker_image_override` /
+     `batch_mode` are load-bearing.
+   - `kind: local` ⇒ KEEPS its own block (genuinely different
+     invocation — no Harbor registry, raw task_paths).
+8. **§7 What `translate.py` looks like after collapse.** A single
+   `_build_harbor()` builder that:
+   - Resolves `dataset:` via PackageDatasetClient (when set) OR
+     reads from `tasks_root:` (when set).
+   - Dispatches `prep:` to the corresponding sibling plugin (DAB
+     today, others later) if present.
+   - Builds JobConfig with `tasks: list[TaskConfig]` from the
+     resolved task paths, plus passes `tasks` / `exclude_tasks` /
+     `n_tasks` selectors through.
+   - The existing `_build_harbor_dab` body collapses into a
+     `dab-plugin` prep hook called by `_build_harbor`.
+9. **§8 Backwards compat.** Three options (impl doc picks one based
+   on §10 recommendation):
+   - **Hard cutover.** Delete the old kinds. Per `spec.benchmark`
+     hashes change, so frozen specs need re-freeze. Cost: 12
+     direct-structured specs from `7q-matrix` + however many DAB
+     paper-repro specs.
+   - **Aliases.** Keep `harbor_dab` / `ade-bench` / `spider2-dbt`
+     as type aliases that emit `kind: harbor` + auto-populate
+     `prep:` at validation time. Spec hash stable. Deprecation
+     window measured in months.
+   - **Coexist permanently.** New `kind: harbor` is the recommended
+     surface; old kinds keep working forever. No spec breakage.
+     Cost: doubled schema surface area, drift risk.
+10. **§9 Razorback-side prep that DOES survive collapse.** Enumerate:
+    - DAB's `workspace_variant` (solver-side detail, threads via
+      `DabPrep.workspace_variant`).
+    - DAB's `query_mode` (`batch` vs `per-query`, threads via
+      `DabPrep.query_mode`).
+    - DAB's `hints:` flag (threads via `DabPrep.hints`).
+    - ADE-bench's `db_type` / `project_type` / `docker_image_override` /
+      `batch_mode` — captain-review needed; if load-bearing, they
+      get a thin `AdeBenchPrep` block; if vestigial, drop.
+    - Spider2-dbt's `docker_image_override` / `batch_mode` — same
+      captain-review treatment.
+    - The task-view materializer (`src/razorback/harbor_tasks/`)
+      stays — it's already generic across ADE + DAB per spec
+      §6.1's "Task-view materialization" paragraph.
+11. **§10 Spec amendment** (see §5.3 below for the decision tree).
+12. **§11 Recommendation** (see §5.4 below for the decision tree).
+
+### Verbatim before/after spec examples (impl embeds these in §5)
+
+#### §5.1 — dabstep
+
+**Today (would require new code):**
+```yaml
+# Requires: new DabstepBenchmarkBlock class in spec/schema.py +
+# new _build_dabstep() in translate.py + (optionally) a
+# razorback-plugin-dabstep package. Roughly 3 PRs of work to add
+# a benchmark whose entire definition already lives on harbor.
+benchmark:
+  kind: dabstep              # ← NEW Pydantic class needed
+  dataset: adyen/dabstep@latest
+  tasks: [adyen/1507, adyen/2712]
+```
+
+**Under the proposal:**
+```yaml
+benchmark:
+  kind: harbor
+  dataset: adyen/dabstep@latest
+  tasks: [adyen/1507, adyen/2712]   # optional subset
+  n_tasks: 10                        # optional cap
+```
+Zero razorback code change. New harbor-published benchmark → one
+spec, one line.
+
+#### §5.2 — swe-bench-verified
+
+**Today:** would require the same triad as dabstep above
+(`SweBenchVerifiedBenchmarkBlock` + `_build_swe_bench_verified` +
+optional plugin).
+
+**Under the proposal:**
+```yaml
+benchmark:
+  kind: harbor
+  dataset: swe-bench/swe-bench-verified@latest
+  n_tasks: 50                        # impl-stage smoke subset
+```
+
+#### §5.3 — DAB (the prep-mode case, before/after)
+
+**Today:**
+```yaml
+benchmark:
+  kind: harbor_dab
+  dataset: dab@1.0
+  datasets: [bookreview, agnews, crmarenapro]
+  workspace_variant: direct-structured
+  query_mode: per-query
+```
+
+**Under the proposal:**
+```yaml
+benchmark:
+  kind: harbor
+  dataset: dab@1.0
+  prep:
+    kind: dab-plugin
+    workspace_variant: direct-structured
+    query_mode: per-query
+  tasks: [bookreview, agnews, crmarenapro]  # subset selector,
+                                             # same `-i` semantics
+```
+
+### §5.3 (continued) — Spec-amendment decision tree
+
+Spec doc at
+`docs/superpowers/specs/2026-05-19-razorback-on-harbor.md`. The
+amendment evaluation in the design doc must answer:
+
+- **Question A: does §1.3 already prescribe this?** YES. §1.3 reads
+  "Razorback ships no benchmark adapters" and the captain's framing
+  matches verbatim. The spec is already correct in spirit.
+- **Question B: does §6.1 prescribe this in the schema?** PARTIALLY.
+  §6.1 ("Top-level shape") already documents `dataset:
+  <org>/<name>@<ref>` for ADE and `dataset: <name>@<version>` for
+  DAB. Both routes go through `PackageDatasetClient` per the
+  "Task-view materialization" paragraph. The §6.1 YAML example at
+  line 728-734 uses `kind: harbor_dab`, which becomes wrong under
+  the collapse.
+- **Question C: does any other section reference `kind:
+  harbor_dab` / `ade-bench` / `spider2-dbt`?** Plan worker grep
+  showed only `kind: harbor_dab` at line 731. No other named-kind
+  references in the spec doc.
+- **Diff scope (if collapse accepted):**
+  - §6.1 example YAML: `kind: harbor_dab` → `kind: harbor` +
+    add `prep:` block. (~5 lines.)
+  - §6.1 prose: add "**Single `kind: harbor` for all Harbor-resolved
+    benchmarks**" sub-paragraph explaining the collapse +
+    `prep:` discriminator.
+  - §1.3 Non-goals: optionally add a clarifying bullet that
+    razorback ships ONE benchmark block (`kind: harbor`) and ONE
+    prep registry for benchmarks that need razorback-side
+    materialization (currently DAB).
+- **If NO collapse:** spec amendment is zero. The implementation
+  diverges from §1.3 in spirit but not in letter (the spec doesn't
+  forbid per-benchmark blocks; it just discourages adapters).
+
+### §5.4 — Recommendation decision tree
+
+The design doc's `## Recommendation` section must choose ONE:
+
+- **(a) Collapse-all.** Single `kind: harbor` block + `prep:`
+  discriminator. Migrate `harbor_dab`/`ade-bench`/`spider2-dbt`
+  via aliases (backwards-compat option 8.b). Cost: ~1 week of
+  refactor work in a sibling entity. Benefit: every future
+  Harbor-published dataset is a one-line spec.
+- **(b) Collapse-partial.** Add `kind: harbor` for pure
+  pass-through cases. Leave `harbor_dab`/`ade-bench`/`spider2-dbt`
+  alone (they keep working, but new benchmarks like dabstep use
+  `kind: harbor`). Cost: ~2 days. Benefit: dabstep + swe-bench-verified
+  + 5 other hub datasets become one-line specs immediately. Cost:
+  permanent schema-doubling.
+- **(c) No-op.** Document the current pattern as deliberate.
+  Cost: zero. Benefit: nothing changes. Future Harbor benchmarks
+  still cost ~3 PRs each.
+
+Plan worker's tentative leaning (impl doc author can override): **(b)
+collapse-partial**. Rationale: (b) ships dabstep + swe-bench-verified
+in days, doesn't break frozen DAB specs, and the
+"permanent-schema-doubling" cost is small because the existing
+per-benchmark blocks are stable + small. (a) is cleaner but its
+benefit (no schema doubling) is dwarfed by its cost (re-freeze
+ripple, alias maintenance burden during deprecation). Document this
+leaning in §11 but defer the final pick to the impl-doc author.
+
+### Research validation checklist (impl-stage worker confirms)
+
+Before writing the doc, the impl worker should re-verify (cheap):
+
+- `test -f /Users/clkao/git/razorback/.venv/lib/python3.12/site-packages/harbor/cli/jobs.py`
+- `uv run python -c "from harbor.cli.jobs import start; print(start.__module__)"`
+  (expect: `harbor.cli.jobs`)
+- `uv run python -c "from harbor.models.dataset.manifest import DatasetManifest; print(DatasetManifest.model_fields.keys())"`
+  (expect: `dict_keys(['schema_version', 'dataset', 'tasks', 'files'])`)
+- `uv run python -c "from harbor.registry.client.package import PackageDatasetClient; print(hasattr(PackageDatasetClient, '_get_dataset_metadata'))"`
+  (expect: `True`)
+
+If any of these fail, the impl worker should pause and message the
+captain — the harbor pin may have moved.
+
+## Stage Report: plan
+
+- DONE: Apply plan-output flex rule per README. 4 ACs but this entity IS the design doc — operationally simple. Recommend inline plan (the entity body already contains the FO's grounded research; the plan-stage worker's job is to scope HOW the design doc gets written, not redo the research). Justify decision in stage report.
+  Inline plan chosen — embedded the impl-stage section structure + verbatim spec examples + spec-amendment decision tree + recommendation decision tree directly in the entity body (sections "Plan-stage research validation" + "Implementation-stage plan"). Rationale: the deliverable is one Markdown file, no sub-task fan-out is meaningful, and the FO already invested in grounded research that the impl worker now has a complete scaffolding for.
+- DONE: Mechanism validation — extend the FO's grounded research by READING the actual harbor source files cited in the entity body and confirming the line numbers + function shapes.
+  Read `harbor/cli/jobs.py` (verified `start()` at line 471, flag block 804-898; FO's `800-895` cite was the flag block, not the function start — patched in the validation section), `harbor/models/dataset/manifest.py` (verified DatasetManifest at 153-279, FO's TOML excerpt matches verbatim), `harbor/registry/client/package.py` (verified `_get_dataset_metadata` at 19-60; FO's `152-218` line cite was wrong — the file is only 125 lines total — patched), `src/razorback/cli/run.py:54-68` `_invoke_harbor` (matches FO snippet verbatim), `src/razorback/spec/schema.py:297-305` `BenchmarkBlock` (confirmed `HarborDabBenchmarkBlock`/`AdeBenchBenchmarkBlock` already support `dataset:` — strong precedent for the collapse), `src/razorback/translate.py` (verified per-benchmark builders at 193/211/312/442; flagged that `_build_harbor_dab` does generative work via the DAB plugin, NOT pure config translation). Then probed `uv run harbor download adyen/dabstep@latest`: exit 0, ~3s, 450 task dirs, no auth required, sample `task.toml` + `instruction.md` captured verbatim. Material implication recorded: dabstep needs zero razorback-side prep, DAB needs a prep hook — the design must offer both modes.
+- DONE: Sequence the implementation-stage tasks. Plan worker's job is to enumerate (a) the design doc's section structure, (b) the verbatim before/after spec examples for dabstep + swe-bench-verified that impl will write, (c) the spec-amendment decision tree (which §6.1/§6.2 sections potentially change), (d) the recommendation section's decision tree (collapse-all vs collapse-partial vs no-op).
+  All four enumerated in "Implementation-stage plan" section: (a) 12-section doc structure prescribed; (b) verbatim before/after YAML for dabstep + swe-bench-verified + DAB embedded (the impl worker copies these directly into §5 of the design doc); (c) spec-amendment decision tree enumerated Question A/B/C + diff scope for §6.1 example YAML + §6.1 prose + optional §1.3 clarification; (d) recommendation decision tree enumerated (a) collapse-all / (b) collapse-partial / (c) no-op with cost+benefit, plan worker's tentative lean is (b) but explicit deferral to impl-doc author. Also added a research-validation checklist the impl worker can run in <30s before writing.
+
+### Summary
+
+Validated the FO's grounded research against `harbor==0.6.6` source — three line-citation corrections (function start at 471 not 800-895; manifest.py spans 23-279; package.py is 125 lines not 152-218). Probed `harbor download adyen/dabstep@latest`: confirmed pure pass-through is real (450 tasks, no auth, no razorback prep). Sequenced the impl-stage work as a 12-section doc with verbatim before/after YAML for dabstep + swe-bench-verified + DAB, a spec-amendment diff scope (~5 lines in §6.1 + optional §1.3 clarification), and a three-option recommendation tree with a tentative lean toward "collapse-partial" (ship dabstep + swe-bench-verified now without breaking frozen DAB specs).
