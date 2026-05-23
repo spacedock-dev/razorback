@@ -41,3 +41,16 @@ Verified by: `uv run pytest packages/razorback-plugin-dab/tests tests/unit/test_
 
 Coordinate with `dab-harbor-dataset-definition`; do not duplicate its
 dataset-definition work.
+
+## Stage Report: plan
+
+- DONE: DONE if the plan inventories active imports/usages of `razorback.benchmarks.dab` and identifies the plugin-backed replacement path without duplicating `dab-harbor-dataset-definition`.
+  Evidence: plan inventory names active `translate.py`, ADE default-image, schema/parse, and test imports; replacement is existing `harbor_dab` -> `razorback-plugin-dab generate`; dataset-definition scope is explicitly excluded.
+- DONE: DONE if the plan gives commit boundaries and TDD checkpoints for removing active translator dependency, moving the in-tree DAB adapter to `_legacy`, and keeping plugin/example tests green.
+  Evidence: plan commit boundaries split failing tests, translator cleanup, sideline move, and plugin/example regression checks; Tasks 1-5 include RED tests, focused pytest commands, and sideline commit discipline.
+- DONE: DONE if the plan states exact validation commands and coordination risks with DAB dataset-definition work and benchmark scoring.
+  Evidence: final validation lists the exact rg, `test -d`, required pytest command, focused guardrails, and full suite; risks call out `dab-harbor-dataset-definition`, scoring reducer/strata work, and ADE default-image coupling.
+
+### Summary
+
+Wrote the standard implementation plan at `docs/razorback-implementation/plans/phase6-followup-retire-in-tree-dab-adapter.md`. The plan maps work AC-by-AC, validates the plugin-backed path before moving the legacy adapter, and keeps dataset-definition and scoring redesigns out of this follow-up.
