@@ -223,3 +223,28 @@ changes are still present in the worktree at start of cycle 2 and are a
 reasonable starting point. Validator's report at
 `docs/razorback-implementation/validation/ade-bench-harbor-dataset-ref.md`
 (commit `bf32ae1`) is the authoritative source for the required fixes.
+
+## Stage Report: implementation (cycle 2)
+
+- DONE: Apply the 5 concrete fixes from the validation report (`docs/razorback-implementation/validation/ade-bench-harbor-dataset-ref.md`, committed at bf32ae1). The current worktree HAS uncommitted partial work in `src/razorback/spec/schema.py` and `src/razorback/benchmarks/ade_bench/dataset_ref.py` from the prior cycle — inspect with `git diff` first, then either complete or replace as needed. Required end-state: `PackageReference.parse` round-trip in both files; bare-name rejection error preserves the rule + canonical-example clauses; AC-1 schema accepts all three Harbor ref tiers (tag/revision/digest).
+  Finished the prior-cycle uncommitted work as-is (correct end-state): both `AdeBenchBenchmarkBlock._validate_source_selection` and `parse_dataset_ref` now delegate to `PackageReference.parse` and require `parsed.org`/`parsed.short_name`/`parsed.ref` non-empty. Bare-name rejection error message preserved verbatim (rule + canonical example). Committed at 1cd97e7.
+- DONE: Update `examples/specs/ade-bench-harbor-dataset-codex.yaml` line 20 to `dataset: dbt-labs/ade-bench@sha256:2c1f9e6966d01b0a5de2235d1a0b64089c7eead42c85c3b7b61d0929405c2bd5`. Update ABOUTME comments to reflect digest-tier-as-canonical. Update `docs/razorback-implementation/notes/ade-bench-harbor-dataset-ref-probe.md` lines 87-94 to lead with the digest tier; keep `@latest` documented as valid for daily smoke.
+  Spec line 20 now ships the digest tier; ABOUTME lines reframed to "paper-grade digest pin" with the manifest hashes codifying the same hash for freeze provenance. Probe-note closing paragraph leads with the digest tier; `@latest` remains documented as valid for daily smoke. Downstream test assertions in `test_canonical_dataset_ref_spec_is_checked_in`, `test_canonical_dataset_ref_spec_translates_with_pinned_hashes`, and `test_freeze_command_writes_provenance_for_dataset_ref_spec` updated to match. Committed at f18618f.
+- DONE: Land the 4 tri-acceptance tests in `tests/unit/test_ade_bench_dataset_ref_schema.py` (`test_schema_accepts_tag_ref`, `test_schema_accepts_revision_ref`, `test_schema_accepts_digest_ref_canonical_pin`, `test_schema_validation_uses_harbor_package_reference_parser`). Run `uv run pytest tests/unit/test_ade_bench_dataset_ref_schema.py` and report 12/12 passing. Run the focused 93-test bundle from the validator's report and ensure no regression. Append a cycle-2 Stage Report at the end of the entity body documenting each fix landed + commit SHAs.
+  4 tri-acceptance tests landed; `uv run --frozen pytest tests/unit/test_ade_bench_dataset_ref_schema.py` -> 12 passed in 0.10s. Focused 17-file bundle (prior 93 + 4 new schema tests): `uv run --frozen pytest <17 files>` -> 97 passed in 1.61s. Full unit suite (minus pre-existing unrelated `test_task_identity_scoring` collection failure): `uv run --frozen pytest tests/unit/ -q --ignore=tests/unit/test_task_identity_scoring.py` -> 563 passed in 9.17s. Commit SHAs: 1cd97e7 (parser-backed validator + 4 tri-acceptance tests), f18618f (digest-tier canonical example + 3 downstream test updates).
+
+### Summary
+
+Cycle-2 implementation finished the prior cycle's uncommitted parser-backed
+validator work (correct as-written) and landed the digest-tier canonical
+example with matching downstream test updates. Schema's `PackageReference.parse`
+round-trip now accepts all three Harbor ref tiers (tag / revision / digest);
+bare-name rejection guardrail preserved. The `@sha256:` digest tier is now
+the canonical example (paper-grade pin: resolver refuses mismatched content,
+not just a downstream manifest check). 97/97 focused tests pass; 563/563
+full unit suite passes (no regressions).
+
+### Commit SHAs
+
+- 1cd97e7 — fix(ade-bench): parser-backed Harbor dataset-ref validator (AC-1 tri-acceptance)
+- f18618f — fix(ade-bench): canonical example uses @sha256: digest pin (AC-4 paper-grade)
