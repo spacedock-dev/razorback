@@ -97,7 +97,9 @@ def test_run_with_allow_plugin_drift_records_in_provenance(tmp_path: Path) -> No
 
     captured: dict[str, object] = {}
 
-    def _capture(spec_bytes, spec, run_dir, *, plugin_drift_record=None):
+    def _capture(
+        spec_bytes, spec, run_dir, *, plugin_drift_record=None, ordering_hint=None
+    ):
         captured["plugin_drift_record"] = plugin_drift_record
         captured["run_dir"] = run_dir
 

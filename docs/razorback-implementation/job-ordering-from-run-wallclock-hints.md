@@ -137,3 +137,16 @@ full `uv run pytest` failed. The branch-local fixes are:
 
 The remaining full-suite failures are environment/integration failures noted
 in the validation report and do not need production-code fixes for this cycle.
+
+## Stage Report: implementation (cycle 2)
+
+- DONE: Fixes both branch-local test double regressions from additive `ordering_hint` keyword plumbing.
+  Evidence: updated the aggregator and provenance patched captures in `tests/unit/test_cli_run_aggregator_wiring.py` and `tests/unit/test_run_plugin_drift_wired.py` to accept `ordering_hint=None`.
+- DONE: Reruns the two failing unit tests and focused ordering/provenance suites.
+  Evidence: the two rejected tests passed (`2 passed`), and the focused ordering/provenance/scoring suite plus those tests passed (`20 passed`).
+- DONE: Leaves unrelated full-suite environment failures untouched and documented.
+  Evidence: no production code or integration/environment tests were changed; unrelated failures remain documented in `docs/razorback-implementation/validation/job-ordering-from-run-wallclock-hints.md`.
+
+### Summary
+
+Fixed only the branch-local test double regressions identified by validation feedback cycle 1. The production `ordering_hint` call contract remains unchanged, and verification covered the two rejected tests plus the focused feature suites.

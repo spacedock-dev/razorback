@@ -41,7 +41,7 @@ def test_cli_run_invokes_aggregator_on_harbor_success(tmp_path: Path):
         return 0
 
     def fake_aggregate(run_dir, *, spec_path, frozen_spec_hash, provenance_hash,
-                      harbor_job_name, benchmark_kind):
+                      harbor_job_name, benchmark_kind, ordering_hint=None):
         captured["run_dir"] = run_dir
         captured["frozen_spec_hash"] = frozen_spec_hash
         captured["benchmark_kind"] = benchmark_kind
