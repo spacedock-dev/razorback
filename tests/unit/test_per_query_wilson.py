@@ -87,3 +87,55 @@ def test_all_errored_emits_null_stratified_with_dominant_error_reason() -> None:
     assert report["error_reason"] == "SubprocessError"
     assert report["n_trials_errored"] == 3
     assert report["n_trials_completed"] == 0
+
+
+def test_mixed_run_uses_completed_denominator(_=None) -> None:
+    """Counting honesty (spec §9.2): errored trials do NOT inflate the denominator."""
+    outcomes = [
+        _outcome("t1", reward=1.0, query_id=1),
+        _outcome("t2", reward=0.0, query_id=2),
+        _outcome("t3", reward=None, query_id=3, error_reason="SubprocessError"),
+    ]
+    report = reduce_per_query_stratified(outcomes, alpha=0.05)
+    assert report["n_trials_total"] == 3
+    assert report["n_trials_completed"] == 2
+    assert report["n_trials_errored"] == 1
+    # q1 = 1.0, q2 = 0.0 -> dataset mean = 0.5 (q3 errored, not in any cell)
+    assert report["strata"]["bookreview"]["dataset_pass_at_1"] == 0.5
+    assert report["stratified_pass_at_1"] == 0.5
+
+
+def test_error_reason_tie_broken_alphabetically() -> None:
+    outcomes = [
+        _outcome("t1", reward=None, error_reason="ZError"),
+        _outcome("t2", reward=None, error_reason="AError"),
+    ]
+    report = reduce_per_query_stratified(outcomes, alpha=0.05)
+    assert report["error_reason"] == "AError"
+
+
+def test_top_level_error_reason_absent_when_any_query_has_completions() -> None:
+    """If at least one cell has completed trials, top-level error_reason is None."""
+    outcomes = [
+        _outcome("t1", reward=1.0, query_id=1),
+        _outcome("t2", reward=None, query_id=2, error_reason="SubprocessError"),
+    ]
+    report = reduce_per_query_stratified(outcomes, alpha=0.05)
+    assert report["stratified_pass_at_1"] is not None
+    assert report["error_reason"] is None
+
+
+def test_macro_average_across_datasets_drops_empty_strata() -> None:
+    """Dataset A (all pass) + Dataset B (all fail) + Dataset C (all errored, no cells)."""
+    outcomes = [
+        _outcome("a1", reward=1.0, dataset="A", query_id=1),
+        _outcome("a2", reward=1.0, dataset="A", query_id=2),
+        _outcome("b1", reward=0.0, dataset="B", query_id=1),
+        _outcome("b2", reward=0.0, dataset="B", query_id=2),
+        _outcome("c1", reward=None, dataset="C", query_id=1, error_reason="SubprocessError"),
+    ]
+    report = reduce_per_query_stratified(outcomes, alpha=0.05)
+    assert report["strata"]["A"]["dataset_pass_at_1"] == 1.0
+    assert report["strata"]["B"]["dataset_pass_at_1"] == 0.0
+    assert "C" not in report["strata"]
+    assert report["stratified_pass_at_1"] == 0.5
