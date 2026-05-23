@@ -202,3 +202,16 @@ Inline plan written on the entity per the first-officer tiny/small scope call; n
 ### Summary
 
 Implemented the v2-owned Claude runtime helper in `src/razorback/agents/_runtime/claude.py` and kept Harbor `ClaudeCode` surfaces for CLI flags, env descriptors, setup/version behavior, and post-run cost/audit population. The standalone wrapper is retained only under `_legacy`; `translate.py` continues to route legacy `agent.kind: claude-cli` specs to `razorback.agents._runtime.claude:RazorbackClaudeCode`. No deviations from the approved inline plan.
+
+## Stage Report: validation
+
+- DONE: AC-1 and AC-2 are independently verified with exact command results and rationale for any remaining allowed wrapper hits.
+  AC-1 `rg -n "ClaudeCliAgent|agents\\.claude_cli" src/razorback/agents/_runtime src/razorback/translate.py` exited 1 with no output; AC-2 `test -e src/razorback/agents/claude_cli.py` exited 1 and `test ! -e src/razorback/agents/claude_cli.py` exited 0; remaining broad hits are schema/fixture/_legacy archive references, not active wrapper imports.
+- DONE: AC-3 focused runtime adapter/tool-denial command is rerun and its actual result is recorded.
+  `uv run pytest tests/unit/test_runtime_adapters.py tests/unit/test_tools_denied_claude_hook.py -q` passed `18 passed in 0.23s`; compatibility/proxy/auth suite passed `26 passed in 0.53s`; full `uv run pytest` passed `576 passed, 12 skipped`.
+- DONE: Code review findings are classified as blocking or non-blocking, with a clear PASS/REJECTED gate recommendation.
+  Applied the cached `superpowers:requesting-code-review` checklist manually to `8611e34..0123bea`; blocking findings: none; non-blocking findings: none; gate recommendation: PASSED.
+
+### Summary
+
+Validation independently reproduced AC-1, AC-2, AC-3, the inline-plan compatibility/proxy/auth regression bundle, runtime import-path smoke, and the full pytest suite from the assigned worktree branch. The standalone wrapper is absent from the active path and retained only under `_legacy`; approve this entity to `done` with gate recommendation PASSED.
