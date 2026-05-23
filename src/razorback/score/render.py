@@ -1,5 +1,5 @@
 # ABOUTME: rk score renderers — canonical JSON (§3.3) + human-readable markdown (§3.2).
-# ABOUTME: JSON key set is the §3.3 semver-stable surface; Task 9 pins it via snapshot.
+# ABOUTME: Consumes StratifiedReport from runs/aggregate.py — single source of truth with summary.json.
 
 """Canonical JSON shape for `rk score` output (semver-stable within major version):
 
@@ -12,9 +12,18 @@
           "n_completed": int,
           "n_errored": int,
           "n_pass": int,
-          "pass_at_1": float | null,
-          "wilson_ci": [float, float] | null,
-          "error_reason": str | null
+          "pass_at_1": float | null,    # the per-query stratum mean
+          "wilson_ci": null,             # mean-of-proportions across queries is not binomial
+          "error_reason": str | null,
+          "queries": [
+            {
+              "query_id": str|int|null,
+              "n_trials": int,
+              "n_correct": int,
+              "pass_at_1": float,
+              "wilson_ci": [float, float] | null
+            }, ...
+          ]
         }, ...
       },
       "stratified_pass_at_1": float | null,
@@ -37,12 +46,12 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from razorback.score.reduce import ScoreReport
-from razorback.score.verdict import AgainstConstantReport
+from razorback.runs.aggregate import StratifiedReport
+from razorback.score.verdict import AgainstConstantReport, build_stratum_view
 
 
 def render_json(
-    report: ScoreReport, verdict: AgainstConstantReport | None
+    report: StratifiedReport, verdict: AgainstConstantReport | None
 ) -> str:
     payload: dict[str, Any] = _report_to_jsonable(report)
     if verdict is not None:
@@ -51,7 +60,7 @@ def render_json(
 
 
 def render_markdown(
-    report: ScoreReport, verdict: AgainstConstantReport | None
+    report: StratifiedReport, verdict: AgainstConstantReport | None
 ) -> str:
     lines: list[str] = []
     has_verdict = verdict is not None
@@ -71,12 +80,13 @@ def render_markdown(
     lines.append(header)
     lines.append(separator)
 
-    for stratum_name in sorted(report["strata"].keys()):
-        stats = report["strata"][stratum_name]
-        pass_at_1 = _fmt_float(stats["pass_at_1"])
-        ci = _fmt_ci(stats["wilson_ci"])
+    views = {name: build_stratum_view(stratum) for name, stratum in report["strata"].items()}
+    for stratum_name in sorted(views.keys()):
+        view = views[stratum_name]
+        pass_at_1 = _fmt_float(view["pass_at_1"])
+        ci = _fmt_ci(view["wilson_ci"])
         row = (
-            f"| {stratum_name} | {stats['n_completed']} | {stats['n_errored']} | "
+            f"| {stratum_name} | {view['n_completed']} | {view['n_errored']} | "
             f"{pass_at_1} | {ci} |"
         )
         if has_verdict:
@@ -98,36 +108,40 @@ def render_markdown(
     return "\n".join(lines)
 
 
-def _report_to_jsonable(report: ScoreReport) -> dict[str, Any]:
+def _report_to_jsonable(report: StratifiedReport) -> dict[str, Any]:
     strata: dict[str, Any] = {}
-    for name, stats in report["strata"].items():
-        ci = stats["wilson_ci"]
+    for name, stratum in report["strata"].items():
+        view = build_stratum_view(stratum)
+        queries: list[dict[str, Any]] = []
+        for cell in stratum["queries"]:
+            ci = cell["wilson_ci"]
+            queries.append(
+                {
+                    "query_id": cell["query_id"],
+                    "n_trials": cell["n_trials"],
+                    "n_correct": cell["n_correct"],
+                    "pass_at_1": cell["pass_at_1"],
+                    "wilson_ci": list(ci) if ci is not None else None,
+                }
+            )
         strata[name] = {
-            **{
-                key: stats[key]
-                for key in (
-                    "dataset",
-                    "query_id",
-                    "benchmark_kind",
-                    "benchmark_task_id",
-                )
-                if key in stats
-            },
-            "n_total": stats["n_total"],
-            "n_completed": stats["n_completed"],
-            "n_errored": stats["n_errored"],
-            "n_pass": stats["n_pass"],
-            "pass_at_1": stats["pass_at_1"],
-            "wilson_ci": list(ci) if ci is not None else None,
-            "error_reason": stats["error_reason"],
+            "dataset": stratum["dataset"],
+            "n_total": view["n_total"],
+            "n_completed": view["n_completed"],
+            "n_errored": view["n_errored"],
+            "n_pass": view["n_pass"],
+            "pass_at_1": view["pass_at_1"],
+            "wilson_ci": None,
+            "error_reason": view["error_reason"],
+            "queries": queries,
         }
     return {
         "score_version": report["score_version"],
         "alpha": report["alpha"],
         "strata": strata,
         "stratified_pass_at_1": report["stratified_pass_at_1"],
-        "stratified_n_completed": report["stratified_n_completed"],
-        "stratified_n_errored": report["stratified_n_errored"],
+        "stratified_n_completed": report["n_trials_completed"],
+        "stratified_n_errored": report["n_trials_errored"],
         "error_reason": report["error_reason"],
     }
 

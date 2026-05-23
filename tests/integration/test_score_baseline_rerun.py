@@ -40,7 +40,7 @@ def test_rk_score_baseline_rerun_against_paper_577_exits_zero() -> None:
     assert bookreview["pass_at_1"] == 1.0
 
     verdict = parsed["against_constant"]["per_stratum"]["bookreview"]["verdict"]
-    assert verdict in {"matches", "outside-CI"}
+    assert verdict in {"matches", "above", "below"}
 
 
 def test_rk_score_baseline_rerun_markdown_format() -> None:
