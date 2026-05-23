@@ -1,11 +1,16 @@
 version: 1
 experiment: m3-bookreview-claude
 agent:
-  kind: claude-cli
+  kind: spacedock_solver
+  runtime: claude
   model: claude-opus-4-5
   sampling:
     temperature: 0.0
+    seed: 42
+  solver_workflow: ./examples/solver_workflows/claude-benchmark-solver
+  max_turns: 200
   tools_allowed: [Bash, Read, Write, Edit, Glob, Grep]
+  tools_denied: []
 benchmark:
   kind: harbor_dab
   data_root: "${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}"
