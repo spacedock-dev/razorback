@@ -50,3 +50,16 @@ describes the desired-state variant split plus the current remaining gaps.
 This task owns `docs/agent-run-architecture.md` updates for the variant split.
 Do not implement first-officer dispatch here; that belongs to
 `spacedock-workflow-invokes-first-officer`.
+
+## Stage Report: implementation
+
+- DONE: `agent.kind: codex` parses and translates directly to `RazorbackCodex` without `solver_workflow` or `sealed_hash`, with focused schema/translator tests.
+  Evidence: commit 874e96e adds `CodexAgentBlock`, direct registry/translator routing, `tests/unit/test_spec_schema_codex.py`, and `tests/unit/test_translate_codex_direct.py`; focused suite passed 76/76.
+- DONE: supported Codex controls such as reasoning effort are preserved or fail closed in the direct path, without regressing existing `spacedock_solver` Codex behavior.
+  Evidence: `reasoning_effort`/`reasoning_summary` pass through direct `AgentConfig.kwargs`; unsupported solver/tool/sampling fields reject; existing runtime adapter and spacedock translator tests passed in the 76-test focused suite.
+- DONE: minimal Codex examples/docs are unambiguous, including an update to `docs/agent-run-architecture.md` for desired state and remaining gaps.
+  Evidence: commit 874e96e updates Codex smoke specs and `generate-codex-benchmark-specs.py` to emit direct `agent.kind: codex`, and updates `docs/agent-run-architecture.md` variant guidance.
+
+### Summary
+
+Implemented a first-class direct Codex schema/registry/translator path that routes to `razorback.agents._runtime.codex:RazorbackCodex` with Codex auth and proxy-block environment handling, without solver workflow or sealed-hash requirements. Updated Codex examples, generator tests, and architecture docs; true first-officer dispatch remains intentionally out of scope for the parallel workflow task.
