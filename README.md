@@ -50,6 +50,19 @@ uv run rk score <run-dir> --format json
 uv run rk audit <run-dir> --policy strict --format json
 ```
 
+## Where do runs go?
+
+`rk run` writes one run-dir per `(spec, job)` under a base "runs-dir":
+
+- **Default**: `$RAZORBACK_RUNS_DIR` if set; else `$XDG_DATA_HOME/razorback/runs`
+  if set; else `~/.local/share/razorback/runs`.
+- **Override**: pass `--runs-dir <path>` to `rk run`.
+
+The default lives OUTSIDE your git worktree on purpose: `git worktree remove
+--force` cannot destroy experiment outputs written there. If you pin a
+worktree-relative path (`--runs-dir _runs`, `--runs-dir runs/`) the outputs
+share the worktree's fate.
+
 ## Current Direction
 
 The active goal is to produce N=1 full-dataset benchmark numbers for

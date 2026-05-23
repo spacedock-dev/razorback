@@ -11,6 +11,7 @@ worktree:
 issue:
 pr:
 mod-block:
+archived: 2026-05-22T23:14:13Z
 ---
 
 ## Problem
@@ -123,3 +124,22 @@ runs/ paths and asserts the size delta.
 After this entity merges, goal1 re-dispatches will commit their
 audit-essential outputs alongside the worktree branch. Worktree
 teardown no longer destroys the scoring set.
+
+## Supersession (2026-05-22)
+
+Archived without being shipped. Captain decision: experiment
+artifacts are not meant to be committed to source. The failure mode
+this entity targeted (worktree teardown destroys run output) is
+closed structurally by the sibling entities:
+
+- `razorback-runs-outside-worktree` (x9) — default `runs_dir` lives at
+  `$XDG_DATA_HOME/razorback/runs/`, so artifacts are not inside the
+  worktree to begin with.
+- `freeze-tree-content-addressable-store` (f1) — sealed-hash freeze
+  trees move to a user-data CAS, surviving worktree teardown.
+- `fo-no-force-worktree-remove` (z5) — FO contract requires an
+  untracked-file audit before `--force` removal, catching strays.
+
+Once those three ship, the worktree contains no run output to .gitignore
+in the first place. Reproducibility comes from `spec.frozen.yaml` +
+`sealed_hash`, not from check-in.

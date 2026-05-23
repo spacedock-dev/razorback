@@ -11,6 +11,7 @@ from harbor.environments.base import BaseEnvironment
 
 from razorback.agents.seal import compute_sealed_hash, prompt_sha256  # noqa: F401
 from razorback.errors import RazorbackError, SeedMismatchError
+from razorback.freeze_dir_default import resolve_default_freeze_dir
 
 
 _REQUIRED_PHASE_STATS_KEYS = (
@@ -182,15 +183,18 @@ class SpacedockSolverAgent(BaseAgent):
         return {"temperature"}
 
     def resolve_freeze_dir(self) -> Path:
-        """Per b5 contract point 2 + spec §4.3.4: sealed_hash-keyed external freeze.
+        """Per spec §4.3.4 + AC-1: sealed_hash-keyed external freeze in a CAS.
 
-        Harbor's per-trial logs_dir layout varies across Harbor releases.
-        Walk up until we find a run-dir sentinel.
-        The freeze tree lives at <run-dir>/_razorback/freeze/<sealed_hash>/,
-        outside the trial subtree that harbor jobs resume rmtree's.
+        The freeze tree lives at `<cas-root>/<sealed_hash>/` where `<cas-root>`
+        resolves via `$RAZORBACK_FREEZE_DIR` → `$XDG_DATA_HOME/razorback/freeze`
+        → `~/.local/share/razorback/freeze`. This is independent of any
+        worktree, so:
+        - `git worktree remove --force` cannot destroy freeze trees.
+        - Any worktree can discover any prior freeze by sealed_hash (AC-2).
+        - Re-running the same spec resumes from the existing freeze without
+          re-invoking the agent (AC-5).
         """
-        run_dir = self._resolve_run_dir_from_logs_dir(Path(self.logs_dir))
-        return run_dir / "_razorback" / "freeze" / self.sealed_hash
+        return resolve_default_freeze_dir() / self.sealed_hash
 
     @staticmethod
     def _resolve_run_dir_from_logs_dir(logs_dir: Path) -> Path:
