@@ -23,6 +23,7 @@ class TrialRecord:
     passed: bool | None
     reward: float | None
     error_class: str | None
+    stratum_payload: dict[str, Any] | None = None
 
 
 _NON_TRIAL_NAMES = {
@@ -62,7 +63,8 @@ def load_run_dir(run_dir: Path) -> list[TrialRecord]:
 
 def _read_trial(trial_dir: Path) -> TrialRecord:
     result = _read_json(trial_dir / "result.json")
-    stratum = _resolve_stratum(trial_dir, result)
+    stratum_payload = _resolve_stratum_payload(trial_dir)
+    stratum = _stratum_label(trial_dir, stratum_payload)
     exception_info = result.get("exception_info")
     verifier_result = result.get("verifier_result")
 
@@ -74,6 +76,7 @@ def _read_trial(trial_dir: Path) -> TrialRecord:
             passed=None,
             reward=None,
             error_class=exception_info.get("exception_type"),
+            stratum_payload=stratum_payload,
         )
 
     if verifier_result is None:
@@ -84,6 +87,7 @@ def _read_trial(trial_dir: Path) -> TrialRecord:
             passed=None,
             reward=None,
             error_class="MissingVerifierResult",
+            stratum_payload=stratum_payload,
         )
 
     reward = _extract_reward(verifier_result)
@@ -94,6 +98,7 @@ def _read_trial(trial_dir: Path) -> TrialRecord:
         passed=(reward is not None and reward >= 1.0),
         reward=reward,
         error_class=None,
+        stratum_payload=stratum_payload,
     )
 
 
@@ -107,12 +112,8 @@ def _extract_reward(verifier_result: dict[str, Any]) -> float | None:
     return None
 
 
-def _resolve_stratum(trial_dir: Path, result: dict[str, Any]) -> str:
-    """Read stratum from agent/stratum.json or logs/verifier/stratum.json side-channels.
-
-    Prefer `stratum.dataset` (DAB convention); else first scalar (str/int/float/bool)
-    value under the `stratum` mapping; raise ScoreInputError otherwise.
-    """
+def _resolve_stratum_payload(trial_dir: Path) -> dict[str, Any]:
+    """Read stratum from sidecars or PKG-40 task-view manifests."""
     candidates = [
         trial_dir / "agent" / "stratum.json",
         trial_dir / "logs" / "verifier" / "stratum.json",
@@ -130,10 +131,16 @@ def _resolve_stratum(trial_dir: Path, result: dict[str, Any]) -> str:
             break
 
     if stratum_payload is None:
+        stratum_payload = _resolve_stratum_from_task_view_manifest(trial_dir)
+    if stratum_payload is None:
         raise ScoreInputError(
-            f"trial {trial_dir.name} has no stratum tag (expected agent/stratum.json)"
+            f"trial {trial_dir.name} has no stratum tag "
+            "(expected agent/stratum.json or _razorback/task_views/*/view_manifest.json)"
         )
+    return stratum_payload
 
+
+def _stratum_label(trial_dir: Path, stratum_payload: dict[str, Any]) -> str:
     if "dataset" in stratum_payload and _is_scalar(stratum_payload["dataset"]):
         return str(stratum_payload["dataset"])
 
@@ -144,6 +151,30 @@ def _resolve_stratum(trial_dir: Path, result: dict[str, Any]) -> str:
     raise ScoreInputError(
         f"trial {trial_dir.name} stratum has no scalar field to use as label"
     )
+
+
+def _resolve_stratum_from_task_view_manifest(trial_dir: Path) -> dict[str, Any] | None:
+    views_root = trial_dir.parent / "_razorback" / "task_views"
+    if not views_root.is_dir():
+        return None
+
+    trial_prefix = trial_dir.name.split("__", 1)[0]
+    for manifest_path in sorted(views_root.glob("*/view_manifest.json")):
+        view_prefix = manifest_path.parent.name[:32].rstrip("_-")
+        if trial_prefix != view_prefix:
+            continue
+        payload = _read_json(manifest_path)
+        benchmark_kind = payload.get("benchmark_kind")
+        benchmark_task_id = payload.get("benchmark_task_id")
+        if not benchmark_kind or not benchmark_task_id:
+            return None
+        return {
+            "dataset": str(benchmark_kind),
+            "query_id": str(benchmark_task_id),
+            "benchmark_kind": str(benchmark_kind),
+            "benchmark_task_id": str(benchmark_task_id),
+        }
+    return None
 
 
 def _is_scalar(value: Any) -> bool:

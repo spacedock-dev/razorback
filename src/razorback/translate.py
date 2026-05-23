@@ -13,9 +13,10 @@ from harbor.models.trial.config import (
     VerifierConfig,
 )
 
-from razorback.agents.auth import resolve_claude_auth
+from razorback.agents.auth import resolve_claude_auth, resolve_codex_auth
 from razorback.agents.proxy import PROXY_BLOCK_ENV
 from razorback.errors import SpecError
+from razorback.spec.agent_kwargs import build_v2_harbor_agent_kwargs
 from razorback.spec.schema import (
     AdeBenchBenchmarkBlock,
     ClaudeCliAgentBlock,
@@ -23,6 +24,7 @@ from razorback.spec.schema import (
     HarborDabBenchmarkBlock,
     LocalBenchmarkBlock,
     NopAgentBlock,
+    Spider2DbtBenchmarkBlock,
     SpacedockSolverAgentBlock,
     SpacedockSolverV2AgentBlock,
     Spec,
@@ -35,7 +37,13 @@ SPACEDOCK_SOLVER_IMPORT_PATH = (
 SPACEDOCK_SOLVER_V2_IMPORT_PATH = (
     "razorback.agents.spacedock_solver_v2:SpacedockSolverAgent"
 )
-CLAUDE_CLI_IMPORT_PATH = "razorback.agents.claude_cli:ClaudeCliAgent"
+SPACEDOCK_SOLVER_V2_ENVIRONMENT_IMPORT_PATH = (
+    "razorback.environments.docker:ProxySeparatedDockerEnvironment"
+)
+RAZORBACK_CLAUDE_CODE_IMPORT_PATH = (
+    "razorback.agents._runtime.claude:RazorbackClaudeCode"
+)
+SPACEDOCK_SOLVER_V2_CONTAINER_FREEZE_ROOT = "/razorback-freeze"
 
 
 def spec_to_job_config(
@@ -96,6 +104,13 @@ def spec_to_job_config(
             agent_cfg=agent_cfg,
             home=home,
             materialize_mode=materialize_mode,
+        ), {}
+    if isinstance(spec.benchmark, Spider2DbtBenchmarkBlock):
+        return _build_spider2_dbt(
+            spec=spec,
+            job_name=job_name,
+            jobs_dir=jobs_dir,
+            agent_cfg=agent_cfg,
         ), {}
     raise SpecError(f"unsupported benchmark block: {type(spec.benchmark).__name__}")
 
@@ -158,14 +173,18 @@ def _build_agent_config(
             raise SpecError(
                 "spacedock_solver_v2 spec must be frozen (agent.sealed_hash missing)."
             )
-        resolution = resolve_claude_auth(project_root=project_root, home=home)
-        harbor_agent_kwargs: dict[str, Any] = {
-            "max_turns": spec.agent.max_turns,
-            "tools_allowed": list(spec.agent.tools_allowed),
-            "tools_denied": list(spec.agent.tools_denied),
-        }
-        if spec.agent.append_system_prompt is not None:
-            harbor_agent_kwargs["append_system_prompt"] = spec.agent.append_system_prompt
+        if spec.agent.runtime == "codex":
+            resolution = resolve_codex_auth(project_root=project_root, home=home)
+        else:
+            resolution = resolve_claude_auth(project_root=project_root, home=home)
+        harbor_agent_kwargs = build_v2_harbor_agent_kwargs(
+            max_turns=spec.agent.max_turns,
+            tools_allowed=spec.agent.tools_allowed,
+            tools_denied=spec.agent.tools_denied,
+            append_system_prompt=spec.agent.append_system_prompt,
+            reasoning_effort=spec.agent.reasoning_effort,
+            reasoning_summary=spec.agent.reasoning_summary,
+        )
         kwargs: dict[str, Any] = {
             "runtime": spec.agent.runtime,
             "model": spec.agent.model,
@@ -202,13 +221,18 @@ def _build_agent_config(
             raise SpecError(
                 "claude-cli agent requires project_root for .env auth discovery."
             )
+        if spec.agent.sampling.temperature not in (None, 0.0):
+            raise SpecError(
+                "legacy agent.kind: claude-cli now routes to Harbor ClaudeCode, "
+                "which has no temperature kwarg; keep sampling.temperature at "
+                "its default no-op value."
+            )
         resolution = resolve_claude_auth(project_root=project_root, home=home)
-        kwargs = {
-            "tools_allowed": list(spec.agent.tools_allowed),
-            "sampling_temperature": spec.agent.sampling.temperature,
-        }
+        kwargs: dict[str, Any] = {}
+        if spec.agent.tools_allowed:
+            kwargs["allowed_tools"] = ",".join(spec.agent.tools_allowed)
         agent_cfg = AgentConfig(
-            import_path=CLAUDE_CLI_IMPORT_PATH,
+            import_path=RAZORBACK_CLAUDE_CODE_IMPORT_PATH,
             model_name=spec.agent.model,
             kwargs=kwargs,
             env=dict(resolution.env),
@@ -223,16 +247,17 @@ def _build_local(
     *, spec: Spec, job_name: str, jobs_dir: Path, agent_cfg: AgentConfig
 ) -> JobConfig:
     assert isinstance(spec.benchmark, LocalBenchmarkBlock)
+    run_dir = jobs_dir / job_name
     return JobConfig(
         job_name=job_name,
         jobs_dir=jobs_dir,
-        n_concurrent_trials=1,
+        n_concurrent_trials=spec.concurrency.trials,
         n_attempts=spec.trials,
         agents=[agent_cfg],
         tasks=[TaskConfig(path=Path(p).resolve()) for p in spec.benchmark.task_paths],
         verifier=VerifierConfig(disable=False),
         retry=RetryConfig(max_retries=0),
-        environment=EnvironmentConfig(delete=False),
+        environment=_environment_config(agent_cfg, run_dir),
     )
 
 
@@ -245,15 +270,21 @@ def _build_ade_bench(
     home: Path | None = None,
     materialize_mode: Literal["bind", "copy"] = "bind",
 ) -> JobConfig:
-    # Phase 1 keeps the in-tree ade-bench path until Phase 8's port-out.
+    from razorback.benchmarks.ade_bench.harbor_view import (
+        materialize_ade_harbor_task_view,
+    )
     from razorback.benchmarks.ade_bench.tasks import (
         materialize_git_task,
-        materialize_local_task,
         resolve_task_dirs,
     )
     from razorback.benchmarks.dab.prepare import _DEFAULT_DOCKER_IMAGE
 
     assert isinstance(spec.benchmark, AdeBenchBenchmarkBlock)
+    if spec.benchmark.batch_mode == "shared-context":
+        raise SpecError(
+            "ade-bench batch_mode='shared-context' is explicit but not yet "
+            "supported for Harbor dispatch; use batch_mode='per-task'."
+        )
     resolved = resolve_task_dirs(
         tasks_root=spec.benchmark.tasks_root,
         tasks=spec.benchmark.tasks,
@@ -265,24 +296,9 @@ def _build_ade_bench(
     cache_root = home_dir / ".cache" / "razorback" / "ade-bench"
 
     tasks: list[TaskConfig] = []
+    view_root = jobs_dir / job_name / "_razorback" / "task_views"
     for r in resolved:
-        if r.local_slug is not None:
-            if spec.benchmark.ade_bench_root is None:
-                raise SpecError(
-                    "ade-bench local task entry requires ade_bench_root on the "
-                    "benchmark block (PKG-19)"
-                )
-            materialized = materialize_local_task(
-                ade_bench_root=Path(spec.benchmark.ade_bench_root).expanduser(),
-                task_slug=r.local_slug,
-                docker_image=docker_image,
-                cache_root=cache_root,
-                materialize_mode=materialize_mode,
-                db_type=spec.benchmark.db_type,
-                project_type=spec.benchmark.project_type,
-            )
-            tasks.append(TaskConfig(path=materialized))
-        elif r.git_url is not None and r.git_commit_id is not None:
+        if r.git_url is not None and r.git_commit_id is not None:
             materialized = materialize_git_task(
                 git_url=r.git_url,
                 git_commit_id=r.git_commit_id,
@@ -292,17 +308,25 @@ def _build_ade_bench(
             )
             tasks.append(TaskConfig(path=materialized))
         else:
-            tasks.append(TaskConfig(path=r.path))
+            materialized = materialize_ade_harbor_task_view(
+                source_task_dir=r.path,
+                view_root=view_root,
+                task_slug=r.path.name,
+                docker_image=spec.benchmark.docker_image_override,
+                view_mode="copy",
+            )
+            tasks.append(TaskConfig(path=materialized))
+    run_dir = jobs_dir / job_name
     return JobConfig(
         job_name=job_name,
         jobs_dir=jobs_dir,
-        n_concurrent_trials=1,
+        n_concurrent_trials=spec.concurrency.trials,
         n_attempts=spec.trials,
         agents=[agent_cfg],
         tasks=tasks,
         verifier=VerifierConfig(disable=False),
         retry=RetryConfig(max_retries=0),
-        environment=EnvironmentConfig(delete=False),
+        environment=_environment_config(agent_cfg, run_dir),
     )
 
 
@@ -328,21 +352,23 @@ def _build_dab(
                 tasks_root=tasks_root / dataset,
                 task_env=task_env,
             )
-        )
+    )
     tasks = [TaskConfig(path=entry["task_dir"]) for entry in manifest_all]
     trial_name_map = {
-        entry["task_name"]: (entry["dataset"], entry["query_id"]) for entry in manifest_all
+        entry["task_name"]: (entry["dataset"], entry["query_id"])
+        for entry in manifest_all
     }
+    run_dir = jobs_dir / job_name
     cfg = JobConfig(
         job_name=job_name,
         jobs_dir=jobs_dir,
-        n_concurrent_trials=1,
+        n_concurrent_trials=spec.concurrency.trials,
         n_attempts=spec.trials,
         agents=[agent_cfg],
         tasks=tasks,
         verifier=VerifierConfig(disable=False),
         retry=RetryConfig(max_retries=0),
-        environment=EnvironmentConfig(delete=False),
+        environment=_environment_config(agent_cfg, run_dir),
     )
     return cfg, trial_name_map
 
@@ -424,15 +450,87 @@ def _build_harbor_dab(
                         pass
 
     tasks = [TaskConfig(path=p) for p in task_dirs]
+    run_dir = jobs_dir / job_name
     cfg = JobConfig(
         job_name=job_name,
         jobs_dir=jobs_dir,
-        n_concurrent_trials=1,
+        n_concurrent_trials=spec.concurrency.trials,
         n_attempts=spec.trials,
         agents=[agent_cfg],
         tasks=tasks,
         verifier=VerifierConfig(disable=False),
         retry=RetryConfig(max_retries=0),
-        environment=EnvironmentConfig(delete=False),
+        environment=_environment_config(agent_cfg, run_dir),
     )
     return cfg, trial_name_map
+
+
+def _build_spider2_dbt(
+    *,
+    spec: Spec,
+    job_name: str,
+    jobs_dir: Path,
+    agent_cfg: AgentConfig,
+) -> JobConfig:
+    from razorback.benchmarks.spider2_dbt.harbor_view import (
+        materialize_spider2_harbor_task_view,
+    )
+
+    assert isinstance(spec.benchmark, Spider2DbtBenchmarkBlock)
+    if spec.benchmark.batch_mode == "shared-context":
+        raise SpecError(
+            "spider2-dbt batch_mode='shared-context' is explicit but not yet "
+            "supported for Harbor dispatch; use batch_mode='per-task'."
+        )
+
+    view_root = jobs_dir / job_name / "_razorback" / "task_views"
+    source_root = Path(spec.benchmark.tasks_root).resolve()
+    task_configs: list[TaskConfig] = []
+    for slug in spec.benchmark.tasks:
+        source_task_dir = source_root / slug
+        if not (source_task_dir / "task.toml").is_file():
+            raise FileNotFoundError(
+                f"spider2-dbt task '{slug}' not found at {source_task_dir} "
+                f"(missing task.toml); tasks_root={source_root}"
+            )
+        materialized = materialize_spider2_harbor_task_view(
+            source_task_dir=source_task_dir,
+            view_root=view_root,
+            task_slug=slug,
+            docker_image=spec.benchmark.docker_image_override,
+            view_mode="copy",
+        )
+        task_configs.append(TaskConfig(path=materialized))
+
+    run_dir = jobs_dir / job_name
+    return JobConfig(
+        job_name=job_name,
+        jobs_dir=jobs_dir,
+        n_concurrent_trials=spec.concurrency.trials,
+        n_attempts=spec.trials,
+        agents=[agent_cfg],
+        tasks=task_configs,
+        verifier=VerifierConfig(disable=False),
+        retry=RetryConfig(max_retries=0),
+        environment=_environment_config(agent_cfg, run_dir),
+    )
+
+
+def _environment_config(agent_cfg: AgentConfig, run_dir: Path) -> EnvironmentConfig:
+    if agent_cfg.import_path != SPACEDOCK_SOLVER_V2_IMPORT_PATH:
+        return EnvironmentConfig(delete=False)
+
+    host_freeze_root = run_dir / "_razorback" / "freeze"
+    host_freeze_root.mkdir(parents=True, exist_ok=True)
+    return EnvironmentConfig(
+        import_path=SPACEDOCK_SOLVER_V2_ENVIRONMENT_IMPORT_PATH,
+        delete=False,
+        env=dict(PROXY_BLOCK_ENV),
+        mounts_json=[
+            {
+                "type": "bind",
+                "source": str(host_freeze_root.resolve()),
+                "target": SPACEDOCK_SOLVER_V2_CONTAINER_FREEZE_ROOT,
+            }
+        ],
+    )

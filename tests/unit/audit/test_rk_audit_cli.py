@@ -12,7 +12,8 @@ runner = CliRunner()
 
 
 def _parse_json_stdout(result):
-    return json.loads(result.stdout)
+    payload, _ = json.JSONDecoder().raw_decode(result.stdout)
+    return payload
 
 
 def test_rk_audit_emits_per_trial_status(three_trial_run_dir):
@@ -58,3 +59,59 @@ def test_rk_audit_rejects_unknown_policy(clean_only_run_dir):
     result = runner.invoke(app, ["audit", str(clean_only_run_dir), "--policy", "nope"])
     assert result.exit_code == 2
     assert "unknown policy" in result.output
+
+
+def test_rk_audit_discovers_harbor_codex_txt_trial(harbor_codex_clean_txt_run_dir):
+    result = runner.invoke(app, ["audit", str(harbor_codex_clean_txt_run_dir)])
+    assert result.exit_code == 0, result.stdout
+    payload = _parse_json_stdout(result)
+    assert len(payload["trials"]) == 1
+    assert payload["trials"][0]["trial_id"] == "task-a/query-1/trial-0"
+    assert payload["trials"][0]["taint_status"] == "clean"
+    assert payload["summary"] == {"clean": 1, "tainted": 0, "coverage_missing": 0}
+
+
+def test_rk_audit_strict_taints_harbor_codex_session_command(
+    harbor_codex_tainted_session_run_dir,
+):
+    result = runner.invoke(
+        app,
+        ["audit", str(harbor_codex_tainted_session_run_dir), "--policy", "strict"],
+    )
+    assert result.exit_code == 23
+    payload = _parse_json_stdout(result)
+    assert payload["summary"] == {"clean": 0, "tainted": 1, "coverage_missing": 0}
+    finding = payload["trials"][0]["findings"][0]
+    assert finding["category"] == "forbidden_lookup"
+    assert finding["source_kind"] == "harbor_codex_session"
+    assert finding["source_path"] == (
+        "steps/main/agent/sessions/2026/05/21/session.jsonl"
+    )
+
+
+def test_rk_audit_strict_taints_harbor_codex_txt_command(
+    harbor_codex_tainted_txt_run_dir,
+):
+    result = runner.invoke(
+        app,
+        ["audit", str(harbor_codex_tainted_txt_run_dir), "--policy", "strict"],
+    )
+    assert result.exit_code == 23
+    payload = _parse_json_stdout(result)
+    finding = payload["trials"][0]["findings"][0]
+    assert finding["category"] == "forbidden_lookup"
+    assert finding["source_kind"] == "harbor_codex_text"
+    assert finding["source_path"] == "steps/main/agent/codex.txt"
+
+
+def test_rk_audit_strict_ignores_job_log_setup_install(
+    harbor_codex_setup_install_only_run_dir,
+):
+    result = runner.invoke(
+        app,
+        ["audit", str(harbor_codex_setup_install_only_run_dir), "--policy", "strict"],
+    )
+    assert result.exit_code == 0, result.stdout
+    payload = _parse_json_stdout(result)
+    assert payload["summary"] == {"clean": 1, "tainted": 0, "coverage_missing": 0}
+    assert payload["trials"][0]["findings"] == []

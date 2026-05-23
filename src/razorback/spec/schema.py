@@ -84,6 +84,8 @@ class SpacedockSolverV2AgentBlock(BaseModel):
     tools_allowed: list[str] = Field(default_factory=list)
     tools_denied: list[str] = Field(default_factory=list)
     append_system_prompt: str | None = None
+    reasoning_effort: str | None = None
+    reasoning_summary: str | None = None
     resume_from_freeze: Path | None = None
     sealed_hash: str | None = None
     spacedock_skill_version: str | None = None
@@ -144,31 +146,34 @@ class AdeBenchTaskEntry(BaseModel):
     git_commit_id: str
 
 
-class AdeBenchLocalTaskEntry(BaseModel):
-    """PKG-19 — local upstream-checkout task entry.
-
-    Opts the entry into the `ade_bench_root` materialization path: the
-    translator dispatches to `materialize_local_task`, which builds a view-
-    dir from the captain's `~/git/ade-bench` checkout instead of cloning
-    `harbor-datasets` per task.
-    """
-    model_config = ConfigDict(extra="forbid")
-    slug: str
-
-
 class AdeBenchBenchmarkBlock(BaseModel):
     model_config = ConfigDict(extra="forbid")
     kind: Literal["ade-bench"]
     tasks_root: Path
-    tasks: list[str | AdeBenchTaskEntry | AdeBenchLocalTaskEntry] = Field(min_length=1)
+    tasks: list[str | AdeBenchTaskEntry] = Field(min_length=1)
     docker_image_override: str | None = None
-    ade_bench_root: Path | None = None
+    batch_mode: Literal["per-task", "shared-context"] = "per-task"
     db_type: Literal["duckdb", "snowflake"] | None = None
     project_type: Literal["dbt", "dbt-fusion"] | None = None
 
 
+class Spider2DbtBenchmarkBlock(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["spider2-dbt"]
+    tasks_root: Path
+    tasks: list[str] = Field(min_length=1)
+    docker_image_override: str | None = None
+    batch_mode: Literal["per-task", "shared-context"] = "per-task"
+
+
 BenchmarkBlock = Annotated[
-    Union[LocalBenchmarkBlock, DabBenchmarkBlock, HarborDabBenchmarkBlock, AdeBenchBenchmarkBlock],
+    Union[
+        LocalBenchmarkBlock,
+        DabBenchmarkBlock,
+        HarborDabBenchmarkBlock,
+        AdeBenchBenchmarkBlock,
+        Spider2DbtBenchmarkBlock,
+    ],
     Field(discriminator="kind"),
 ]
 
@@ -210,6 +215,11 @@ class ExperimentMetaBlock(BaseModel):
     estimated_cost_usd: float | None = None
 
 
+class ConcurrencyBlock(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    trials: int = Field(default=1, ge=1, le=4)
+
+
 class Spec(BaseModel):
     model_config = ConfigDict(extra="forbid")
     version: int
@@ -217,6 +227,7 @@ class Spec(BaseModel):
     agent: AgentBlock
     benchmark: BenchmarkBlock
     trials: int = 1
+    concurrency: ConcurrencyBlock = Field(default_factory=ConcurrencyBlock)
     observers: list[ObserverBlock] = Field(default_factory=list)
     provenance: ProvenanceBlock = Field(default_factory=ProvenanceBlock)
     experiment_meta: ExperimentMetaBlock | None = None

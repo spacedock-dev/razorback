@@ -9,6 +9,7 @@ import pytest
 import yaml
 from typer.testing import CliRunner
 
+from razorback.agents.seal import compute_sealed_hash
 from razorback.cli import app
 
 
@@ -79,7 +80,7 @@ def test_freeze_writes_plugins_block(spec_file, monkeypatch) -> None:
     monkeypatch.setattr(fc, "resolve_plugin_inventory", lambda: FAKE_PLUGINS)
     monkeypatch.setattr(fc, "resolve_solver_workflow_hash", lambda _p: None)
 
-    result = runner.invoke(app, ["spec", "freeze", str(spec_file)])
+    result = runner.invoke(app, ["freeze", str(spec_file)])
     assert result.exit_code == 0, result.output
     prov = yaml.safe_load((spec_file.parent / "provenance.yaml").read_text())
     assert prov["plugins"] == FAKE_PLUGINS["plugins"]
@@ -93,7 +94,7 @@ def test_freeze_writes_plugins_into_spec_frozen_yaml(spec_file, monkeypatch) -> 
     monkeypatch.setattr(fc, "resolve_plugin_inventory", lambda: FAKE_PLUGINS)
     monkeypatch.setattr(fc, "resolve_solver_workflow_hash", lambda _p: None)
 
-    result = runner.invoke(app, ["spec", "freeze", str(spec_file)])
+    result = runner.invoke(app, ["freeze", str(spec_file)])
     assert result.exit_code == 0, result.output
     frozen = yaml.safe_load(spec_file.with_suffix(".frozen.yaml").read_text())
     assert frozen["provenance"]["plugins"] == FAKE_PLUGINS["plugins"]
@@ -116,10 +117,124 @@ def test_freeze_writes_solver_workflow_hash_when_present(
         fc, "_solver_workflow_path", lambda _spec: Path("/tmp/sw")
     )
 
-    result = runner.invoke(app, ["spec", "freeze", str(spec_file)])
+    result = runner.invoke(app, ["freeze", str(spec_file)])
     assert result.exit_code == 0, result.output
     prov = yaml.safe_load((spec_file.parent / "provenance.yaml").read_text())
     assert prov["solver_workflow_hash"] == "sha256:deadbeef"
+
+
+def test_freeze_stamps_v2_solver_workflow_hash_and_sealed_hash(tmp_path, monkeypatch) -> None:
+    """PKG-26 smoke path: v2 frozen specs must be runnable by rk run."""
+    workflow = tmp_path / "solver"
+    workflow.mkdir()
+    (workflow / "README.md").write_text("## Stages\n- model\n")
+    spec_file = tmp_path / "codex.yaml"
+    spec_file.write_text(
+        f"""\
+version: 1
+experiment: pkg26-codex-freeze
+agent:
+  kind: spacedock_solver_v2
+  runtime: codex
+  model: gpt-5.1-codex
+  solver_workflow: {workflow}
+  spacedock_skill_version: "1.0.0"
+  max_turns: 200
+benchmark:
+  kind: local
+  task_paths: []
+trials: 1
+"""
+    )
+    _stub_existing_resolvers(monkeypatch)
+    import razorback.provenance.freeze_cmd as fc
+
+    monkeypatch.setattr(fc, "resolve_plugin_inventory", lambda: FAKE_PLUGINS)
+    monkeypatch.setattr(
+        fc,
+        "resolve_solver_workflow_hash",
+        lambda _p: "sha256:" + "a" * 64,
+    )
+
+    result = runner.invoke(app, ["freeze", str(spec_file)])
+
+    assert result.exit_code == 0, result.output
+    frozen = yaml.safe_load(spec_file.with_suffix(".frozen.yaml").read_text())
+    expected = compute_sealed_hash(
+        model="gpt-5.1-codex",
+        sampling={"temperature": 0.0, "top_p": None, "seed": None},
+        solver_workflow_content_hash="sha256:" + "a" * 64,
+        prompt_content_hashes={},
+        spacedock_skill_version="1.0.0",
+        harbor_agent_kwargs={
+            "max_turns": 200,
+            "tools_allowed": [],
+            "tools_denied": [],
+        },
+    )
+    assert frozen["agent"]["solver_workflow_content_hash"] == "sha256:" + "a" * 64
+    assert frozen["agent"]["sealed_hash"] == expected
+    assert frozen["agent"].get("reasoning_effort") is None
+    assert frozen["agent"].get("reasoning_summary") is None
+
+
+def test_freeze_includes_codex_reasoning_kwargs_in_v2_sealed_hash(
+    tmp_path, monkeypatch
+) -> None:
+    workflow = tmp_path / "solver"
+    workflow.mkdir()
+    (workflow / "README.md").write_text("## Stages\n- model\n")
+    spec_file = tmp_path / "codex.yaml"
+    spec_file.write_text(
+        f"""\
+version: 1
+experiment: pkg35-codex-freeze-reasoning
+agent:
+  kind: spacedock_solver_v2
+  runtime: codex
+  model: gpt-5.5
+  reasoning_effort: xhigh
+  reasoning_summary: auto
+  solver_workflow: {workflow}
+  spacedock_skill_version: "1.0.0"
+  max_turns: 200
+benchmark:
+  kind: local
+  task_paths: []
+trials: 1
+"""
+    )
+    _stub_existing_resolvers(monkeypatch)
+    import razorback.provenance.freeze_cmd as fc
+
+    monkeypatch.setattr(fc, "resolve_plugin_inventory", lambda: FAKE_PLUGINS)
+    monkeypatch.setattr(
+        fc,
+        "resolve_solver_workflow_hash",
+        lambda _p: "sha256:" + "a" * 64,
+    )
+
+    result = runner.invoke(app, ["freeze", str(spec_file)])
+
+    assert result.exit_code == 0, result.output
+    frozen = yaml.safe_load(spec_file.with_suffix(".frozen.yaml").read_text())
+    expected = compute_sealed_hash(
+        model="gpt-5.5",
+        sampling={"temperature": 0.0, "top_p": None, "seed": None},
+        solver_workflow_content_hash="sha256:" + "a" * 64,
+        prompt_content_hashes={},
+        spacedock_skill_version="1.0.0",
+        harbor_agent_kwargs={
+            "max_turns": 200,
+            "tools_allowed": [],
+            "tools_denied": [],
+            "reasoning_effort": "xhigh",
+            "reasoning_summary": "auto",
+        },
+    )
+    assert frozen["agent"]["reasoning_effort"] == "xhigh"
+    assert frozen["agent"]["reasoning_summary"] == "auto"
+    assert frozen["agent"]["sealed_hash"] == expected
 
 
 def test_freeze_omits_solver_workflow_hash_for_non_spacedock_spec(
@@ -132,7 +247,7 @@ def test_freeze_omits_solver_workflow_hash_for_non_spacedock_spec(
     monkeypatch.setattr(fc, "resolve_plugin_inventory", lambda: FAKE_PLUGINS)
     monkeypatch.setattr(fc, "resolve_solver_workflow_hash", lambda _p: None)
 
-    result = runner.invoke(app, ["spec", "freeze", str(spec_file)])
+    result = runner.invoke(app, ["freeze", str(spec_file)])
     assert result.exit_code == 0, result.output
     prov = yaml.safe_load((spec_file.parent / "provenance.yaml").read_text())
     assert "solver_workflow_hash" not in prov
@@ -148,6 +263,6 @@ def test_freeze_refuses_when_plugins_resolver_returns_none(
     monkeypatch.setattr(fc, "resolve_plugin_inventory", lambda: None)
     monkeypatch.setattr(fc, "resolve_solver_workflow_hash", lambda _p: None)
 
-    result = runner.invoke(app, ["spec", "freeze", str(spec_file)])
+    result = runner.invoke(app, ["freeze", str(spec_file)])
     assert result.exit_code == 11
     assert "plugins" in result.output

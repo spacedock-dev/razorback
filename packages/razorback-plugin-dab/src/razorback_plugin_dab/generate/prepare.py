@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import stat
 import subprocess
@@ -668,20 +669,28 @@ def _task_toml(
         # mongorestore wall time for agnews/yelp (~120-150k docs). Per-dataset
         # override via db_config[<client>].healthcheck_retries handles outliers.
         db_name, collection = mongo_probes[0]
-        probe = (
-            "python3 -c \\\"from pymongo import MongoClient; "
-            "c = MongoClient('mongodb://dab-mongo:27017', "
-            "serverSelectionTimeoutMS=5000); "
-            f"assert c['{db_name}']['{collection}'].count_documents({{}}) > 0\\\""
+        # Harbor runs this per-step healthcheck inside the `main` agent
+        # container. `dab-agent:latest` carries pymongo but not mongosh, so use
+        # Python here and leave mongosh to the mongo sidecar's own healthcheck.
+        probe_py = (
+            "import sys; "
+            "from pymongo import MongoClient; "
+            "client = MongoClient("
+            "'mongodb://dab-mongo:27017', "
+            "serverSelectionTimeoutMS=5000, connectTimeoutMS=5000"
+            "); "
+            f"count = client[{db_name!r}][{collection!r}].count_documents({{}}, limit=1); "
+            "sys.exit(0 if count > 0 else 1)"
         )
         retries = (
             mongo_healthcheck_retries
             if mongo_healthcheck_retries is not None
             else _MONGO_HEALTHCHECK_DEFAULT_RETRIES
         )
+        probe = f"python3 -c {shlex.quote(probe_py)}"
         body += (
             "\n[steps.healthcheck]\n"
-            f'command = "{probe}"\n'
+            f'command = "{_toml_escape(probe)}"\n'
             "interval_sec = 5\n"
             "timeout_sec = 10\n"
             "start_period_sec = 60\n"

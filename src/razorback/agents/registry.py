@@ -76,7 +76,7 @@ _REGISTRY: dict[str, AgentKindEntry] = {
     "nop": AgentKindEntry(NopAgentConfig, None),
     "claude-cli": AgentKindEntry(
         ClaudeCliAgentConfig,
-        "razorback.agents.claude_cli:ClaudeCliAgent",
+        "razorback.agents._runtime.claude:RazorbackClaudeCode",
     ),
     "spacedock-solver": AgentKindEntry(
         SpacedockSolverAgentConfig,

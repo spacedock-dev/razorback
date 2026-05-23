@@ -3,6 +3,8 @@
 
 from pathlib import Path
 
+from harbor.agents.installed.claude_code import ClaudeCode
+
 from razorback.agents.spacedock_solver_v2 import SpacedockSolverAgent
 
 
@@ -57,8 +59,6 @@ def test_claude_runtime_installs_four_dab_denials_verbatim_in_order(tmp_path):
     agent = SpacedockSolverAgent(**_base_kwargs(tmp_path, tools_denied=DAB_DENIALS))
     inner = agent._build_inner_agent()
     # ClaudeCliAgent is a ClaudeCode subclass.
-    from harbor.agents.installed.claude_code import ClaudeCode
-
     assert isinstance(inner, ClaudeCode)
     flag_kwargs = getattr(inner, "_flag_kwargs", {})
     assert "disallowed_tools" in flag_kwargs, (

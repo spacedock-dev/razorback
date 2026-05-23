@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from razorback.compat.harbor_0_6_6 import spec_to_job_config
+from razorback.translate import spec_to_job_config
 from razorback.spec.parse import parse_spec_text
 
 
@@ -88,11 +88,14 @@ def test_translator_passes_resolved_auth_into_agent_env_not_kwargs(tmp_path):
         project_root=tmp_path,
     )
     agent_cfg = cfg.agents[0]
-    assert agent_cfg.import_path == "razorback.agents.claude_cli:ClaudeCliAgent"
+    assert (
+        agent_cfg.import_path
+        == "razorback.agents._runtime.claude:RazorbackClaudeCode"
+    )
     # AC-1: kwargs must not carry any auth surface.
     assert "resolved_auth_env" not in agent_cfg.kwargs
-    assert agent_cfg.kwargs["tools_allowed"] == ["Bash", "Read", "Write", "Edit", "Glob", "Grep"]
-    assert agent_cfg.kwargs["sampling_temperature"] == 0.0
+    assert agent_cfg.kwargs["allowed_tools"] == "Bash,Read,Write,Edit,Glob,Grep"
+    assert "sampling_temperature" not in agent_cfg.kwargs
     # AC-1: env carries the resolved value in-memory (harbor's templatize_sensitive_env
     # redacts on serialization, not on the Python object).
     assert agent_cfg.env == {"ANTHROPIC_API_KEY": "sk-test-2"}
