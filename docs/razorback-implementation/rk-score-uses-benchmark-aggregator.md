@@ -124,3 +124,15 @@ consistent — `summary.json["stratified_pass_at_1"]` and
 
 ### Summary
 Plan written. Single-source-of-truth dispatch chosen (no per-benchmark `aggregate.py` dispatch — the post-harbor reducer is already benchmark-agnostic via stratum tags). AC-3 Wilson question resolved: per-query Wilson cells + null at stratum level. Found a factual error in the entity body (`benchmarks/ade_bench/aggregate.py` does not exist) that informed the architecture choice.
+
+## Stage Report: implementation
+
+- DONE: Execute the plan at docs/razorback-implementation/plans/rk-score-uses-benchmark-aggregator.md TDD-first. The dispatch shape is single-source-of-truth via `runs/aggregate.py:_stratified_pass_at_1` — DO NOT create per-benchmark dispatch. AC-1's round-trip test (`rk run` → `summary.json` → `rk score` → assert same number) is the riskiest contract; land its RED test first.
+  RED integration test landed first at 6671577 (`tests/integration/test_rk_score_matches_summary.py` with DAB + ADE-bench + unequal-trials-per-query fixtures). Green after wiring at 88876c7. Reducer extracted at 74c8398 (`read_trial_outcomes` + `reduce_per_query_stratified`); no per-benchmark dispatch was created. 524/524 tests pass.
+- DONE: AC-3 Wilson CI: per-query Wilson at the cell level (binomial: k=sum(reward>=1.0), n=trials of that query), null at the stratum level (mean-of-means is not binomial). `--against-constant` reuses existing `verdict.py:_point_verdict` per the plan.
+  Implemented in `reduce_per_query_stratified` (74c8398) and `verdict.against_constant` (88876c7). Stratum-level CI is always `null`; stratum verdict is a point comparison (matches/above/below) using `_point_verdict`. Pinned by `tests/unit/test_per_query_wilson.py` and the updated `tests/unit/test_score_verdict.py`.
+- DONE: Edit the entity body to fix AC-2: drop the claim that `benchmarks/ade_bench/aggregate.py` is invoked. AC-2's intent (`rk score` returns ADE-bench's score the same way it returns DAB's) is satisfied by the single-source approach — re-word AC-2 to reflect that. Commit the entity body edit separately from the code commits.
+  Entity body edited at 3278283 (separate commit). Both the Problem paragraph and AC-2 paragraph now describe the single-source-of-truth path through `runs/aggregate.py` and explicitly note that `benchmarks/ade_bench/aggregate.py` is not invoked (and does not exist).
+
+### Summary
+The binary reducer is gone: `rk score` and `summary.json` are now driven by the same `reduce_per_query_stratified` function in `runs/aggregate.py`. The round-trip equality test red-bars under the old binary path (0.333 vs 0.25 for unequal trials per query) and goes green under the new single-source-of-truth path. Per-query Wilson CIs ride at the cell level; the stratum CI is explicitly `null` because mean-of-proportions across queries is not binomial. `score/reduce.py` and `score/load.py` were deleted; both AC-4 grep gates return zero hits. 524 tests pass.
