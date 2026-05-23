@@ -1,13 +1,13 @@
 ---
 id: nxaw93fjsj46tkrezjf4r7dx
 title: Phase 6 follow-up — clean internal Spacedock v2 names
-status: plan
+status: implementation
 source: phase6-promote-v2-canonical validation — non-blocking canonical naming cleanup
 started: 2026-05-23T05:32:13Z
 completed:
 verdict:
 score: 0.58
-worktree:
+worktree: .worktrees/spacedock-ensign-phase6-followup-clean-canonical-spacedock-names
 issue:
 pr:
 mod-block:
