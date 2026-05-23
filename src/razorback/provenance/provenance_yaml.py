@@ -46,6 +46,7 @@ def write_provenance_yaml(
     *,
     drift_record: dict[str, Any] | None = None,
     plugin_drift_record: dict[str, Any] | None = None,
+    ordering_hint: dict[str, Any] | None = None,
 ) -> None:
     """Serialize the resolved-field dict to provenance.yaml.
 
@@ -75,4 +76,6 @@ def write_provenance_yaml(
         document["alias_drift"] = drift_record
     if plugin_drift_record is not None:
         document["plugin_drift"] = plugin_drift_record
+    if ordering_hint is not None:
+        document["ordering_hint"] = ordering_hint
     out_path.write_text(yaml.safe_dump(document, sort_keys=False, default_flow_style=False))

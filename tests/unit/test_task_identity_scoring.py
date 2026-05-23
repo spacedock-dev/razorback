@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from razorback.runs.aggregate import aggregate_summary, write_per_trial_outcomes
+from razorback.score.load import load_run_dir
 
 
 def _write_trial(run_dir: Path, trial_name: str, reward: float) -> None:
@@ -58,3 +59,37 @@ def test_aggregator_resolves_task_identity_from_view_manifest(tmp_path):
     outcomes = json.loads((run_dir / "per_trial_outcomes.json").read_text())
     task_ids = {row["benchmark_task_id"] for row in outcomes["trials"]}
     assert task_ids == {"adebench-fixture-001", "spider2-fixture-001"}
+
+
+def test_task_identity_outputs_are_invariant_to_dispatch_order(tmp_path):
+    default_run = tmp_path / "default"
+    reordered_run = tmp_path / "reordered"
+    for run_dir in (default_run, reordered_run):
+        run_dir.mkdir()
+        _write_manifest(run_dir, "task-alpha", "fixture-bench", "alpha")
+        _write_manifest(run_dir, "task-beta", "fixture-bench", "beta")
+
+    _write_trial(default_run, "task-alpha__aaa", 1.0)
+    _write_trial(default_run, "task-beta__bbb", 0.0)
+    _write_trial(reordered_run, "task-beta__bbb", 0.0)
+    _write_trial(reordered_run, "task-alpha__aaa", 1.0)
+
+    for run_dir in (default_run, reordered_run):
+        aggregate_summary(run_dir)
+        write_per_trial_outcomes(run_dir)
+
+    def outcome_set(run_dir: Path) -> set[tuple[str, str, float]]:
+        payload = json.loads((run_dir / "per_trial_outcomes.json").read_text())
+        return {
+            (row["benchmark_kind"], row["benchmark_task_id"], row["reward"])
+            for row in payload["trials"]
+        }
+
+    assert outcome_set(default_run) == outcome_set(reordered_run)
+    assert {
+        (record.stratum_payload["benchmark_kind"], record.stratum_payload["benchmark_task_id"])
+        for record in load_run_dir(default_run)
+    } == {
+        (record.stratum_payload["benchmark_kind"], record.stratum_payload["benchmark_task_id"])
+        for record in load_run_dir(reordered_run)
+    }

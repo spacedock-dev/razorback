@@ -25,6 +25,7 @@ from razorback.runs_dir_canary import (
     check_runs_dir_visible,
     default_container_probe_factory,
 )
+from razorback.run_ordering import apply_wallclock_ordering, load_wallclock_hints
 from razorback.spec.freeze import derive_job_name
 from razorback.spec.parse import parse_spec_file
 from razorback.translate import spec_to_job_config
@@ -116,6 +117,7 @@ def _write_provenance_artifacts(
     run_dir: Path,
     *,
     plugin_drift_record: dict | None = None,
+    ordering_hint: dict | None = None,
 ) -> None:
     """AC-3: byte-for-byte echo of the input frozen spec + provenance.yaml writer.
 
@@ -127,12 +129,13 @@ def _write_provenance_artifacts(
 
     (run_dir / "spec.frozen.yaml").write_bytes(spec_bytes)
     frozen_provenance = spec.model_dump(mode="json").get("provenance") or {}
-    if frozen_provenance:
+    if frozen_provenance or ordering_hint is not None:
         write_provenance_yaml(
             run_dir / "provenance.yaml",
             frozen_provenance,
             drift_record=None,
             plugin_drift_record=plugin_drift_record,
+            ordering_hint=ordering_hint,
         )
 
 
@@ -161,6 +164,11 @@ def run_command(
         help="ade-bench task materialization mode: 'bind' (default; reflect "
              "upstream files as symlinks for the agent view-dir) or 'copy' "
              "(full content copy for provenance-strict tarball runs). PKG-19.",
+    ),
+    order_from_run: Optional[Path] = typer.Option(
+        None,
+        "--order-from-run",
+        help="Previous run directory or result artifact used as wallclock ordering hint.",
     ),
 ) -> None:
     """Execute a frozen spec against harbor and write the v2 run-dir artifacts."""
@@ -279,6 +287,22 @@ def run_command(
         typer.echo(f"{type(exc).__name__}: {exc}", err=True)
         raise typer.Exit(exc.exit_code)
 
+    ordering_hint_metadata: dict | None = None
+    if order_from_run is not None:
+        summary = load_wallclock_hints(order_from_run)
+        for warning in summary.warnings:
+            typer.echo(f"warning: {warning}", err=True)
+        ordered_tasks, ordering_hint_metadata = apply_wallclock_ordering(
+            job_config.tasks, summary
+        )
+        if summary.usable_timing_count == 0:
+            typer.echo(
+                f"warning: --order-from-run {order_from_run} yielded no usable timings; "
+                "preserving default task order",
+                err=True,
+            )
+        job_config = job_config.model_copy(update={"tasks": ordered_tasks})
+
     # Harbor's AgentConfig._serialize_env templatizes sensitive env values that
     # match os.environ ("FOO" -> "${FOO}"); values that don't match are redacted
     # irrecoverably (sk-a****gAA). razorback resolves OAuth from
@@ -319,7 +343,11 @@ def run_command(
     # AC-3: write spec.frozen.yaml + provenance.yaml BEFORE the aggregator so
     # it can hash provenance.yaml into manifest.json.
     _write_provenance_artifacts(
-        spec_bytes, spec, run_dir, plugin_drift_record=plugin_drift_record
+        spec_bytes,
+        spec,
+        run_dir,
+        plugin_drift_record=plugin_drift_record,
+        ordering_hint=ordering_hint_metadata,
     )
 
     # PKG-17 §AC-1..AC-4: write the canonical aggregator artifacts. Runs after
@@ -344,6 +372,7 @@ def run_command(
         provenance_hash=provenance_hash,
         harbor_job_name=job_name,
         benchmark_kind=benchmark_kind,
+        ordering_hint=ordering_hint_metadata,
     )
     for w in warnings:
         typer.echo(f"warning: {w}", err=True)
