@@ -10,7 +10,7 @@ score: 0.78
 worktree: .worktrees/spacedock-ensign-phase6-followup-retire-cli-agent-wrapper
 issue:
 pr:
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 ## Problem
