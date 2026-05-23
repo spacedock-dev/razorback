@@ -165,3 +165,26 @@ Per plan AC-6.9.
 ### Summary
 
 Wrote the standard separate Phase 6 plan at `docs/razorback-implementation/plans/phase6-promote-v2-canonical.md` because the entity has nine ACs and spans multiple subsystems. The plan is based on committed `HEAD` context, treats the current dirty main-worktree edits as contamination, and records the backlog -> plan gate as auto-approved rather than human-gated.
+
+## Stage Report: implementation
+
+- DONE: DONE if canonical `agent.kind: spacedock_solver` routes to the v2 runtime-adapter solver, `spacedock_solver_v2` no longer parses/routes, v1 solver code is sidelined or explicitly legacy-only, and focused route/schema/freeze/runtime tests pass.
+  Evidence: commits `f99876a`, `e761ef5`, `f5c956b`, `ab708ea`, `9792294`; `uv run pytest tests/unit/test_spec_schema_spacedock_solver.py tests/unit/test_translate_spacedock_solver_import_path.py tests/unit/test_spacedock_solver_class.py tests/unit/test_spacedock_solver_lifecycle.py tests/unit/test_spacedock_solver_freeze_on_host.py tests/unit/test_runtime_adapters.py tests/unit/test_spec_freeze_cli_pkg8.py tests/unit/test_seal_v2_six_inputs.py tests/unit/test_tools_denied_parse.py tests/unit/test_spacedock_registry.py tests/unit/test_generate_matrix_specs.py tests/unit/test_generate_matrix_specs_per_variant_kind.py tests/unit/test_codex_benchmark_spec_generator.py tests/unit/test_claude_benchmark_spec_generator.py -q` -> 90 passed.
+- DONE: DONE if active examples/generators use canonical `spacedock_solver`, stale registry/v1 tests are removed or rehomed, and grep/inventory checks show no active `spacedock_solver_v2`/`spacedock-solver` references outside legacy or historical docs.
+  Evidence: commits `25f46ba`, `099c348`, `d9362cd`, `6403daf`; `rg -n "spacedock_solver_v2|spacedock-solver" src/razorback tests examples/specs examples/drivers packages` returns only `_legacy/` hits; `rg -n "kind: dab|kind: in_tree_dab" examples/specs examples/drivers tests/fixtures/specs` returns no hits.
+- DONE: DONE if implementation follows the approved plan's commit boundaries as far as safely possible, documents any blocked AC-4 broad adapter sideline (DAB/ADE/standalone CLI/compat/observers) with evidence rather than forcing it, and commits a stage report with exact tests run.
+  Evidence: commit order is `f99876a`, `e761ef5`, `f5c956b`, `ab708ea`, `25f46ba`, `099c348`, `9792294`, `d9362cd`, `6403daf`; broad AC-4 adapter sidelines were stopped per FO route update and blocker evidence below.
+- SKIPPED: AC-4 standalone CLI agent sideline.
+  Rationale: `src/razorback/agents/_runtime/claude.py` actively imports `razorback.agents.claude_cli.ClaudeCliAgent`, and `tests/unit/test_runtime_adapters.py` asserts the Claude runtime adapter uses it for cost/audit/tool policy.
+- SKIPPED: AC-4 in-tree DAB and ADE-Bench adapter sidelines.
+  Rationale: `src/razorback/translate.py` still imports `razorback.benchmarks.dab.prepare` and `razorback.benchmarks.ade_bench.*`; ADE/DAB task-view tests still exercise those modules, so moving them now would block active adapter work.
+- SKIPPED: AC-4 compat and observer sidelines.
+  Rationale: compat/observer refs remain in ignored legacy/drop tests and `_legacy/`; FO explicitly instructed to defer broad DAB/ADE/standalone-CLI/compat/observer sidelines for this implementation pass.
+- SKIPPED: AC-1 live `rk run`, AC-7 statistical cross-history diff, and AC-9 full pytest completion.
+  Rationale: live run/diff need DAB data/API/baseline availability and full pytest was stopped after FO route update; structural fallback already wrote `/tmp/bookreview-spacedock.phase6.frozen.yaml` with `agent.kind: spacedock_solver`, `benchmark.kind: harbor_dab`, solver hash, and sealed hash, and `uv run rk score tests/fixtures/score/baseline_rerun_bookreview --format json` returned 3/3 completed with `stratified_pass_at_1: 1.0`.
+- FAILED: AC-8 workflow status check.
+  Details: `python /home/exedev/.codex/skills/commission/bin/status --workflow-dir docs/razorback-implementation` fails before rendering because unrelated active entity `goal1-resume-t0-cost-projection.md` is missing required `id`.
+
+### Summary
+
+Promoted the v2 runtime-adapter solver to canonical `agent.kind: spacedock_solver`, moved the old v1 solver to `_legacy/agents/spacedock_solver_legacy.py` with a deprecation warning, updated active examples/generators, trimmed the active registry, and removed stale v1/transitional tests. The backlog -> plan and plan -> implementation gates were auto-approved by the first officer, not human-gated; broad AC-4 adapter sidelines are intentionally deferred with active-import evidence instead of forced in this pass.
