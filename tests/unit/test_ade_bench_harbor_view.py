@@ -115,3 +115,50 @@ def test_ade_harbor_view_installs_dbt_packages_during_image_build(tmp_path):
     assert "reuse image-installed dbt packages" in test_setup
     assert "Skipping dbt deps; dbt_packages already present." in test_setup
     assert "dbt run --full-refresh" in test_setup
+
+
+def test_ade_harbor_view_injects_workspace_preflight_before_cmd(tmp_path):
+    source = tmp_path / "source"
+    (source / "environment").mkdir(parents=True)
+    (source / "task.toml").write_text(
+        "\n".join(
+            [
+                'schema_version = "1.0"',
+                "[environment]",
+                'os = "linux"',
+                "cpus = 1",
+                "memory_mb = 1024",
+                "storage_mb = 1024",
+                "",
+            ]
+        )
+    )
+    (source / "environment" / "db_name.txt").write_text("f1\n")
+    (source / "environment" / "Dockerfile").write_text(
+        "\n".join(
+            [
+                "FROM python:3.12",
+                "WORKDIR /app",
+                "RUN touch /app/f1.duckdb",
+                'CMD ["bash"]',
+                "",
+            ]
+        )
+    )
+
+    view = materialize_ade_harbor_task_view(
+        source_task_dir=source,
+        view_root=tmp_path / "views",
+        task_slug="f1001",
+    )
+
+    preflight_script = view / "environment" / "razorback_ade_preflight.py"
+    assert preflight_script.is_file()
+    assert "def preflight_ade_workspace" in preflight_script.read_text()
+
+    dockerfile = (view / "environment" / "Dockerfile").read_text()
+    assert "Razorback: validate ADE task-specific DuckDB before agent runtime." in dockerfile
+    assert "COPY razorback_ade_preflight.py /tmp/razorback_ade_preflight.py" in dockerfile
+    assert "--task-id f1001" in dockerfile
+    assert "--db-name f1" in dockerfile
+    assert dockerfile.index("razorback_ade_preflight.py") < dockerfile.index('CMD ["bash"]')
