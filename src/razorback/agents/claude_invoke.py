@@ -1,5 +1,5 @@
 # ABOUTME: Shared `claude -p` argv builder + DISALLOWED_TOOLS list.
-# ABOUTME: Used by ClaudeCliAgent (M3) and SpacedockSolverAgent (M4 per-stage runs).
+# ABOUTME: Used by RazorbackClaudeCode and SpacedockSolverAgent per-stage runs.
 
 import shlex
 

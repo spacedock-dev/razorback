@@ -66,7 +66,7 @@ def test_claude_runtime_installs_four_dab_denials_verbatim_in_order(tmp_path):
         f"flag_kwargs={flag_kwargs}"
     )
     raw = flag_kwargs["disallowed_tools"]
-    # ClaudeCliAgent shell-quotes the merged CSV; tolerate the wrapping quote.
+    # RazorbackClaudeCode shell-quotes the merged CSV; tolerate the wrapping quote.
     for denial in DAB_DENIALS:
         assert denial in raw, (
             f"DAB denial missing from disallowed_tools: {denial!r}; got {raw!r}"
@@ -81,7 +81,7 @@ def test_claude_runtime_empty_tools_denied_still_installs_default_block_list(tmp
     Earlier shape (harbor.ClaudeCode direct) emitted no disallowed_tools on
     empty input; the new shape always blocks DISALLOWED_TOOLS. The new behavior
     is strictly more protective; the prior empty-emits-nothing contract is
-    superseded by the ClaudeCliAgent surface.
+    superseded by the RazorbackClaudeCode surface.
     """
     agent = SpacedockSolverAgent(**_base_kwargs(tmp_path, tools_denied=[]))
     inner = agent._build_inner_agent()
