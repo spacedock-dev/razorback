@@ -10,7 +10,7 @@ score: 0.8
 worktree: .worktrees/spacedock-ensign-rk-score-uses-benchmark-aggregator
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 ---
 
 ## Problem
