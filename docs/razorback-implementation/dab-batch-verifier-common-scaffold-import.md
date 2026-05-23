@@ -106,3 +106,16 @@ TDD checkpoints:
 Changed files: `packages/razorback-plugin-dab/src/razorback_plugin_dab/generate/prepare.py`, `packages/razorback-plugin-dab/tests/unit/test_prepare_batch_query_mode.py`, `packages/razorback-plugin-dab/tests/unit/test_verify_batch_reward_shape.py`, and `packages/razorback-plugin-dab/tests/integration/test_batch_common_scaffold_smoke.py`. The only Harbor-facing surface changed is generated batch task `tests/` packaging; solver instructions, workdir shape, compose generation, core scoring, and `verify_batch.py` semantics are unchanged.
 
 Deviation: the env-backed smoke used `PANCANCER_ATLAS` instead of `PATENTS` because AC-1 names both as affected datasets and spec §7.1 only requires the generated verifier to reach score artifacts; this exercises the same `common_scaffold.validate.levenshtein` import with a smaller hydrated dataset. Validation also used the current scoring test files (`test_cli_score.py`, score render/verdict/schema snapshot) because `tests/unit/test_rk_score.py` does not exist in this worktree.
+
+## Stage Report: validation
+
+- DONE: Independently verify AC-1 by checking generated batch task materialization makes `common_scaffold.validate.levenshtein` importable for an affected validator.
+  Evidence: AC-1 pytest passed (`1 passed`), and a real generated `PANCANCER_ATLAS` `validate_q2.py` imported `tests/common_scaffold/validate/levenshtein.py` successfully.
+- DONE: Independently verify AC-2 by running the affected-dataset smoke and confirming `reward.json` plus `reward_per_query.json` are emitted and parse as JSON, while the negative missing-import guard still fails loudly.
+  Evidence: AC-2 pytest passed (`2 passed`), env-backed smoke passed (`1 passed`), direct verifier smoke parsed `reward.json={'reward': 0.0}` and `reward_per_query` keys `q1,q2,q3`, and the missing-import guard returned nonzero without artifacts.
+- DONE: Run focused AC-3 regressions and a code-review pass, then write a validation report with an explicit PASSED or REJECTED gate decision.
+  Evidence: plugin unit regressions passed (`138 passed, 2 skipped`), score/runs regressions passed (`36 passed`), manual code review found no blocking findings, and `docs/razorback-implementation/validation/dab-batch-verifier-common-scaffold-import.md` records gate decision PASSED.
+
+### Summary
+
+Validation approves this task to `done`. The literal repo-root AC-3 package-test command is unusable in this layout because of the `tests` package collision and missing `tests/unit/test_rk_score.py`, so validation used the documented equivalent split command; the report also records unrelated root-unit stale-import evidence separately from the branch gate.
