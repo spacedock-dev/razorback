@@ -282,3 +282,32 @@ Shipped the full FO-dispatch wiring + subagent-trace smoke gate for `agent.kind:
 ### Summary
 
 REJECT back to implementation. AC-1 satisfied end-to-end on a live $0.26-equivalent bookreview cell (claude CLI receives the two required flags, plugin staged into the container, 3 `Agent` tool_use events fired, all targeting `spacedock:ensign`). AC-2 fails in production because `_maybe_write_subagent_trace_manifest` is invoked from `cleanup()` which harbor never calls — `harbor.agents.base.BaseAgent` has no `cleanup` method; the trial runner only invokes `setup`, `run`, and `populate_context_post_run`. The integration test masks the bug by manually invoking `cleanup`. AC-3 validator + dispatcher hook are wired correctly and were exercised by the live smoke (the matrix dispatcher rejected the cell with `subagent-dispatch-missing`, exit 3) — but they reject correct runs too, because the manifest never lands. Fix is one move: write the manifest from `populate_context_post_run` after delegating to the inner agent. Validation report at `docs/razorback-implementation/validation/spacedock-solver-real-fo-dispatch-and-smoke-gate.md`.
+
+## Stage Report: implementation (cycle 2)
+
+- DONE: Move the manifest-write call from `SpacedockSolverAgent.cleanup()` to `populate_context_post_run()` in `src/razorback/agents/spacedock_solver.py`.
+  Commit on worktree branch: `populate_context_post_run` now delegates to inner agent first, then calls `_maybe_write_subagent_trace_manifest` when runtime=claude. `cleanup()` is now a pure inner-agent delegate. See `src/razorback/agents/spacedock_solver.py:433-435,464-481`.
+- DONE: Update unit test to exercise the SAME hook harbor invokes.
+  `tests/integration/test_spacedock_cleanup_writes_trace_manifest.py` renamed both test functions and switched the call from `await agent.cleanup(environment=None)` to `agent.populate_context_post_run(context=None)`. Both tests pass (2/2). All 20 owned tests still green.
+- FAILED: Re-run the live bookreview pilot smoke; confirm `subagent-trace-manifest.json` appears next to `provenance.yaml` with `captured >= 1`.
+  Pilot ran 8m 43s; AC-1 still PASS (3 `Agent` tool_use dispatches in `claude-code.txt`). Matrix dispatcher REJECTED the cell with `subagent-dispatch-missing`. Smoke log says `manifest-missing`. Trial dir: `/Users/clkao/git/razorback/.worktrees/spacedock-ensign-spacedock-solver-real-fo-dispatch-and-smoke-gate/_runs/spacedock-fo-cycle2/spacedock/bookreview/goal1-spacedock-bookreview/703817880c73e047/`. claude-code.txt at `…/bookreview__j5qtsm7/steps/main/agent/claude-code.txt`.
+
+### Summary
+
+Applied the cycle-1 fix exactly as scoped: moved manifest write from `cleanup()` into `populate_context_post_run()` and updated the integration test to call the same hook harbor invokes. Owned tests green; live bookreview pilot still produces 3 `Agent` dispatches (AC-1 PASS); manifest still not written.
+
+The cycle-1 root-cause diagnosis was incorrect. Harbor's trial framework does NOT unconditionally call `populate_context_post_run` on the outer agent — it gates the call on `isinstance(self._agent, BaseInstalledAgent)` at `harbor/trial/trial.py:466-471`. `SpacedockSolverAgent` extends `BaseAgent` directly (not `BaseInstalledAgent`), so `populate_context_post_run` is also dead code on this agent — the same shape as `cleanup()`. For a `BaseAgent` subclass the trial runner only invokes `setup`, `run`, and `to_agent_info`. There is no post-run hook the outer agent receives unconditionally.
+
+Routing back for cycle-3 decision. Options surfaced to team-lead:
+1. Move the manifest write into `run()` itself, after `await self._inner.run(...)` returns — ~3 lines, no harbor surface change, claude-code.txt is flushed by that point.
+2. Make `SpacedockSolverAgent` extend `BaseInstalledAgent` — much larger surface change.
+3. Move the manifest writer out of the agent and into the matrix dispatcher's post-run hook (the smoke validator could compute + assert in one pass).
+
+Evidence for cycle-3 reviewer:
+- harbor gate: `.venv/lib/python3.12/site-packages/harbor/trial/trial.py:465-472`
+- trial dir: `_runs/spacedock-fo-cycle2/spacedock/bookreview/goal1-spacedock-bookreview/703817880c73e047/`
+- subagent-smoke.log says `manifest-missing` at the expected path
+- AC-1 still PASS: 3 `Task/Agent` tool_use events in the trial's `claude-code.txt`
+- agent claude argv carries `--plugin-dir /tmp/razorback-plugins/spacedock --agent spacedock:first-officer` (from `job.log`)
+
+Cycle count: 2 of 3.
