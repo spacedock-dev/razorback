@@ -235,3 +235,21 @@ transformed model names. The preflight now prefers dbt `sources:` metadata when
 available, using a table `identifier` before logical `name`; this matches real
 ADE Airbnb source metadata while retaining static family contracts for minimal
 fixtures and QuickBooks.
+
+## Stage Report: validation (cycle 2)
+
+- FAILED: independently verify AC-1: valid canonical preflight passes for `airbnb001`, `f1001`, and `quickbooks001` task views/images, including the Airbnb raw-table/source-metadata contract.
+  Evidence: `uv run --frozen pytest tests/unit/test_ade_bench_workspace_preflight.py tests/unit/test_ade_bench_harbor_view.py tests/unit/test_spacedock_solver_ade_preflight.py -q` -> `13 passed`; fresh `docker build --no-cache -t rb-validation-c2-airbnb001 runs/ade-preflight-validation-cycle-2/task_views/ade-bench-airbnb001/environment` passed with `required_tables_source=dbt_source_metadata` and `raw_hosts/raw_listings/raw_reviews`, but `docker build --no-cache -t rb-validation-c2-f1001 runs/ade-preflight-validation-cycle-2/task_views/ade-bench-f1001/environment` failed preflight after Docker read Airbnb Drive ID `1a26...` for `db_name=f1`.
+- DONE: independently verify AC-2: mismatched/cross-family data still fails before Codex setup/exec, with diagnostic evidence and focused test results.
+  Evidence: the same 13-test suite includes `test_ade_preflight_failure_blocks_inner_codex_setup_as_infra_failure`; the F1 image build failed before `CMD`/Codex with `RAZORBACK_ADE_PREFLIGHT` showing missing F1 source tables and forbidden observed Airbnb raw tables.
+- FAILED: independently verify AC-3: run the smallest practical ADE direct-Codex smoke or preflight-to-normal-score path needed to justify restarting the full ADE 1x run; include score/audit status if a live agent smoke is feasible, or explicitly name any blocker.
+  Evidence: blocker is unresolved Docker build-context data isolation for same-size `db_file_id.txt` files copied with `1970-01-01` mtimes; `uv run --frozen rk score tests/fixtures/score/ade_bench_run_dir --format json` reports `stratified_pass_at_1=1.0`, `stratified_n_completed=3`, `stratified_n_errored=0`, and strict audit reports zero clean/tainted/coverage-missing trials.
+
+### Summary
+
+Cycle 2 confirms the Airbnb raw-table/source-metadata fix itself works, but the
+task-view image path still fails AC-1 for F1: host files and tar output show the
+correct F1 Drive ID, while Docker receives stale same-size content until the
+validation copy is touched. Recommendation: REJECT, because a canonical
+multi-family ADE restart can still build or fail from cross-family database
+content before any live Codex smoke is meaningful.
