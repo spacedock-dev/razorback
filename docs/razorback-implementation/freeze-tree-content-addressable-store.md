@@ -10,7 +10,7 @@ score: 0.95
 worktree: .worktrees/spacedock-ensign-freeze-tree-content-addressable-store
 issue:
 pr:
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 ## Problem
