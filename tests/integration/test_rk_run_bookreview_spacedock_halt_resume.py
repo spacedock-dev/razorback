@@ -24,8 +24,14 @@ HAS_AUTH = bool(
 
 
 @pytest.mark.skipif(
-    not DAB_DATA.exists() or shutil.which("claude") is None or not HAS_AUTH,
-    reason="end-to-end needs bookreview dataset, host `claude` CLI, and an auth token",
+    not os.environ.get("RAZORBACK_RUN_DOCKER_TESTS")
+    or not DAB_DATA.exists()
+    or shutil.which("claude") is None
+    or not HAS_AUTH,
+    reason=(
+        "end-to-end needs RAZORBACK_RUN_DOCKER_TESTS=1, bookreview dataset, "
+        "host `claude` CLI, and an auth token"
+    ),
 )
 @pytest.mark.timeout(1800)
 def test_seed_run_then_resume_run_against_matching_sealed_hash(colima_safe_tmp_path):

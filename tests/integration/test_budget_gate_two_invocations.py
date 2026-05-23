@@ -29,6 +29,10 @@ def _freeze_smoke_spec(target_dir: Path) -> Path:
 
 
 @pytest.mark.integration
+@pytest.mark.skipif(
+    not os.environ.get("RAZORBACK_RUN_DOCKER_TESTS"),
+    reason="budget integration smoke runs Harbor/Docker; set RAZORBACK_RUN_DOCKER_TESTS=1",
+)
 def test_two_sequential_invocations_second_refuses(colima_safe_tmp_path: Path):
     """AC-1: first run succeeds; second run refuses with exit 22 (budget exceeded).
 
@@ -89,6 +93,10 @@ def test_two_sequential_invocations_second_refuses(colima_safe_tmp_path: Path):
 
 
 @pytest.mark.integration
+@pytest.mark.skipif(
+    not os.environ.get("RAZORBACK_RUN_DOCKER_TESTS"),
+    reason="budget integration smoke runs Harbor/Docker; set RAZORBACK_RUN_DOCKER_TESTS=1",
+)
 def test_without_flag_regression_against_smoke(colima_safe_tmp_path: Path):
     """AC-5: omitting --max-budget-usd-running runs the smoke spec unchanged from Phase 1."""
     runs_dir = colima_safe_tmp_path / "_runs-no-budget"

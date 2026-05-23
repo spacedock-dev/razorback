@@ -1,5 +1,5 @@
 # ABOUTME: AC-7 — razorback source never references harbor's `agent/` directory for writes.
-# ABOUTME: All razorback-owned state lives under logs_dir/agent_freeze/.
+# ABOUTME: All razorback-owned state lives in the sealed-hash freeze CAS.
 
 import subprocess
 from pathlib import Path
@@ -39,10 +39,10 @@ def test_no_agent_dir_writes_in_razorback_agents():
     )
 
 
-def test_agent_freeze_is_the_only_razorback_subtree_name():
-    """Positive twin: `agent_freeze` IS referenced (Task 5 writes there)."""
+def test_freeze_cas_is_the_only_razorback_checkpoint_surface_name():
+    """Positive twin: v2 references the sealed-hash freeze CAS."""
     result = subprocess.run(
-        ["grep", "-rln", "agent_freeze", str(REPO / "src" / "razorback" / "agents")],
+        ["grep", "-rln", "resolve_freeze_dir", str(REPO / "src" / "razorback" / "agents")],
         capture_output=True, text=True,
     )
     assert result.returncode == 0
