@@ -10,7 +10,7 @@ score: 0.75
 worktree: .worktrees/spacedock-ensign-job-ordering-from-run-wallclock-hints
 issue:
 pr:
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 ## Problem
