@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 _ENV_DEFAULT_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*):-([^}]*)\}")
@@ -43,43 +43,6 @@ class ClaudeCliAgentBlock(BaseModel):
     sampling: SamplingBlock = Field(default_factory=SamplingBlock)
     tools_allowed: list[str] = Field(default_factory=list)
     prompt_file: Path | None = None
-
-
-class SpacedockSolverAgentBlock(BaseModel):
-    """Spec-level agent block (§6.2 third bullet).
-
-    Unfrozen specs carry prompt FILE PATHS in `prompts`; freeze resolves them to
-    `sha256:<hex>` strings and pins the body under `prompt_contents`. `sealed_hash`
-    is populated by freeze; absent in unfrozen specs.
-    """
-    model_config = ConfigDict(extra="forbid")
-    kind: Literal["spacedock-solver"]
-    model: str = "claude-opus-4-5"
-    sampling: SamplingBlock = Field(default_factory=SamplingBlock)
-    stages: list[str] = Field(default_factory=lambda: ["model", "analyze", "verify"])
-    tools_allowed: list[str] = Field(default_factory=list)
-    prompts: dict[str, str] = Field(default_factory=dict)
-    prompt_contents: dict[str, str] | None = None
-    sealed_hash: str | None = None
-
-    @field_validator("stages")
-    @classmethod
-    def _stages_exact(cls, v: list[str]) -> list[str]:
-        if v != ["model", "analyze", "verify"]:
-            raise ValueError(
-                f"stages must be ['model', 'analyze', 'verify']; got {v!r}"
-            )
-        return v
-
-    @model_validator(mode="after")
-    def _prompts_cover_stages(self) -> "SpacedockSolverAgentBlock":
-        missing = set(self.stages) - set(self.prompts.keys())
-        if missing:
-            raise ValueError(f"prompts missing for stages: {sorted(missing)}")
-        extra = set(self.prompts.keys()) - set(self.stages)
-        if extra:
-            raise ValueError(f"prompts has keys not in stages: {sorted(extra)}")
-        return self
 
 
 class SpacedockSolverV2AgentBlock(BaseModel):

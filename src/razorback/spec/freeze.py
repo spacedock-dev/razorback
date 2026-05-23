@@ -1,12 +1,11 @@
-# ABOUTME: Spec freeze — pin canonical YAML; for spacedock-solver content-hash prompt
-# ABOUTME: files (§6.4) and stamp sealed_hash (§6.2).
+# ABOUTME: Spec freeze — pin canonical YAML and stamp v2 solver sealed fields (§6.2).
 
 import hashlib
 from pathlib import Path
 
 import yaml
 
-from razorback.agents.seal import compute_sealed_hash, prompt_sha256
+from razorback.agents.seal import compute_sealed_hash
 from razorback.spec.schema import (
     SpacedockSolverV2AgentBlock,
     Spec,
@@ -16,9 +15,8 @@ from razorback.spec.schema import (
 def freeze_spec(spec: Spec) -> str:
     """Return the canonical YAML for a parsed spec.
 
-    For spacedock-solver agents, prompt file paths are read and replaced with
-    `sha256:` strings; bodies are embedded under `prompt_contents`; `sealed_hash`
-    is pinned (§6.2, §6.4).
+    For canonical spacedock_solver agents, the solver workflow content hash and
+    sealed_hash are pinned (§6.2, §6.4).
     """
     payload = spec.model_dump(mode="json")
 
@@ -31,8 +29,7 @@ def freeze_spec(spec: Spec) -> str:
 def _freeze_spacedock_v2(agent_block: dict, solver_workflow: Path) -> None:
     """Compute solver_workflow_content_hash + sealed_hash for v2 (spec §4.3.5 + §8.4).
 
-    `solver_workflow` resolves relative to cwd when not absolute (mirrors the
-    v1 prompt-path resolution at _freeze_spacedock_prompts:50).
+    `solver_workflow` resolves relative to cwd when not absolute.
     """
     workflow_path = solver_workflow
     if not workflow_path.is_absolute():
@@ -77,32 +74,6 @@ def _dir_content_hash(path: Path) -> str:
         h.update(len(body).to_bytes(8, "big"))
         h.update(body)
     return "sha256:" + h.hexdigest()
-
-
-def _freeze_spacedock_prompts(agent_block: dict) -> None:
-    """Replace prompts.<stage> file paths with sha256: strings; embed bodies under prompt_contents."""
-    prompts = agent_block.get("prompts") or {}
-    contents: dict[str, str] = {}
-    resolved: dict[str, str] = {}
-    for stage, value in prompts.items():
-        if isinstance(value, str) and value.startswith("sha256:"):
-            existing = (agent_block.get("prompt_contents") or {}).get(stage)
-            if existing is None:
-                raise ValueError(
-                    f"agent.prompts.{stage} is pre-hashed but prompt_contents.{stage} is missing"
-                )
-            resolved[stage] = value
-            contents[stage] = existing
-            continue
-        path = Path(value)
-        if not path.is_absolute():
-            path = Path.cwd() / path
-        body = path.read_bytes()
-        resolved[stage] = prompt_sha256(body)
-        contents[stage] = body.decode("utf-8")
-    agent_block["prompts"] = resolved
-    agent_block["prompt_contents"] = contents
-
 
 def derive_job_name(frozen_text: str) -> str:
     """Content-derived job_name per §6.7: sha256(frozen)[:16] hex."""
