@@ -17,9 +17,14 @@ _BUILD_PROXY_ENV_KEYS = frozenset(
     key for key in PROXY_BLOCK_ENV if "proxy" in key.lower()
 )
 
+_BUILD_OR_PULL_COMPOSE_COMMANDS = frozenset({"build", "create", "pull", "run", "up"})
+
 
 class ProxySeparatedDockerEnvironment(DockerEnvironment):
     """DockerEnvironment that does not pass runtime proxy blocks to builds."""
+
+    def _compose_command_may_build_or_pull(self, command: list[str]) -> bool:
+        return bool(command and command[0] in _BUILD_OR_PULL_COMPOSE_COMMANDS)
 
     def _compose_subprocess_env(self, command: list[str]) -> dict[str, str]:
         env = self._env_vars.to_env_dict(include_os_env=True)
@@ -27,7 +32,7 @@ class ProxySeparatedDockerEnvironment(DockerEnvironment):
             env.update(self._compose_task_env)
         if self._persistent_env:
             env.update(self._persistent_env)
-        if command and command[0] == "build":
+        if self._compose_command_may_build_or_pull(command):
             for key in _BUILD_PROXY_ENV_KEYS:
                 env.pop(key, None)
         if self._windows_container_name:

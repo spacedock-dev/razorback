@@ -61,6 +61,9 @@ class SpacedockSolverAgentBlock(BaseModel):
     solver_workflow_content_hash: str | None = None
     max_turns: int = 200
     max_budget_usd: float | None = None
+    override_timeout_sec: float | None = Field(default=None, gt=0)
+    override_setup_timeout_sec: float | None = Field(default=None, gt=0)
+    max_timeout_sec: float | None = Field(default=None, gt=0)
     tools_allowed: list[str] = Field(default_factory=list)
     tools_denied: list[str] = Field(default_factory=list)
     append_system_prompt: str | None = None
@@ -70,6 +73,19 @@ class SpacedockSolverAgentBlock(BaseModel):
     sealed_hash: str | None = None
     spacedock_skill_version: str | None = None
     prompt_content_hashes: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _timeout_cap_allows_override(self) -> "SpacedockSolverAgentBlock":
+        if (
+            self.override_timeout_sec is not None
+            and self.max_timeout_sec is not None
+            and self.max_timeout_sec < self.override_timeout_sec
+        ):
+            raise ValueError(
+                "agent.max_timeout_sec must be greater than or equal to "
+                "agent.override_timeout_sec"
+            )
+        return self
 
 
 AgentBlock = Annotated[

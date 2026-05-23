@@ -141,6 +141,19 @@ def test_checked_in_dab_smoke_spec_uses_structured_workspace_without_hints() -> 
     assert payload["benchmark"]["hints"] is False
 
 
+def test_checked_in_ade_codex_spec_uses_successful_probe_shape() -> None:
+    spec_path = REPO_ROOT / "examples" / "specs" / "ade-bench-harbor-dataset-codex.yaml"
+
+    payload = yaml.safe_load(spec_path.read_text())
+
+    assert payload["agent"]["solver_workflow"] == (
+        "./examples/solver_workflows/codex-ade-dbt-minimal"
+    )
+    assert payload["agent"]["reasoning_effort"] == "xhigh"
+    assert "docker_image_override" not in payload["benchmark"]
+    assert "shared-dbt-duckdb" not in spec_path.read_text()
+
+
 def test_emit_dab_codex_spec_allows_model_override(tmp_path: Path) -> None:
     generator = _load_generator()
     row = generator.plan_dab_specs(data_root=tmp_path / "dab-data")[0]

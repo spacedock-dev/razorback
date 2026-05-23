@@ -20,6 +20,7 @@ _SHELL_TOOL_NAMES = {
     "functions.exec_command",
 }
 _COMMAND_KEYS = {"cmd", "command", "shell", "script"}
+_GUARD_BLOCK_SENTINEL = "blocked benchmark public lookup command before execution"
 _EXTRA_SHELL_PATTERNS = {
     "forbidden_lookup": [
         re.compile(r"(?m)(?:^|[;&|]\s*)git\s+clone\b"),
@@ -43,15 +44,20 @@ def _trial_root_for_source(path: Path) -> Path | None:
     for parent in path.parents:
         if parent.name == "steps":
             return parent.parent
+    for parent in path.parents:
+        if parent.name == "agent":
+            return parent.parent
     return None
 
 
 def discover_trial_roots(run_dir: Path) -> list[Path]:
-    """Return Harbor trial roots with Codex traces under steps/*/agent."""
+    """Return Harbor trial roots with Codex traces under agent directories."""
     run_dir = Path(run_dir)
     seen: set[Path] = set()
     roots: list[Path] = []
     for pattern in (
+        "**/agent/codex.txt",
+        "**/agent/sessions/**/*.jsonl",
         "**/steps/*/agent/codex.txt",
         "**/steps/*/agent/sessions/**/*.jsonl",
     ):
@@ -66,7 +72,12 @@ def discover_trial_roots(run_dir: Path) -> list[Path]:
 
 def _trace_sources(trial_root: Path) -> list[tuple[str, Path]]:
     sources: list[tuple[str, Path]] = []
-    for agent_dir in sorted(trial_root.glob("steps/*/agent")):
+    agent_dirs: list[Path] = []
+    direct_agent_dir = trial_root / "agent"
+    if direct_agent_dir.is_dir():
+        agent_dirs.append(direct_agent_dir)
+    agent_dirs.extend(sorted(trial_root.glob("steps/*/agent")))
+    for agent_dir in agent_dirs:
         codex_txt = agent_dir / "codex.txt"
         if codex_txt.is_file():
             sources.append(("harbor_codex_text", codex_txt))
@@ -174,7 +185,50 @@ def _scan_response_item_event(event: dict[str, Any], base: dict[str, Any]) -> li
     return findings
 
 
+def _text_contains_guard_block(value: Any) -> bool:
+    if isinstance(value, str):
+        return _GUARD_BLOCK_SENTINEL in value
+    if isinstance(value, dict):
+        return any(_text_contains_guard_block(nested) for nested in value.values())
+    if isinstance(value, list):
+        return any(_text_contains_guard_block(item) for item in value)
+    return False
+
+
+def _item_completed_guard_blocked(event: dict[str, Any]) -> bool:
+    item = event.get("item")
+    if not isinstance(item, dict):
+        return False
+    if item.get("type") != "command_execution":
+        return False
+    if item.get("exit_code") != 2:
+        return False
+    return any(
+        _text_contains_guard_block(item.get(field))
+        for field in ("aggregated_output", "output", "stdout", "stderr")
+    )
+
+
+def _response_guard_blocked_call_ids(events: list[Any]) -> set[str]:
+    blocked: set[str] = set()
+    for event in events:
+        if not isinstance(event, dict) or event.get("type") != "response_item":
+            continue
+        payload = event.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        if payload.get("type") != "function_call_output":
+            continue
+        call_id = payload.get("call_id")
+        if isinstance(call_id, str) and _text_contains_guard_block(payload):
+            blocked.add(call_id)
+    return blocked
+
+
 def _scan_item_completed_event(event: dict[str, Any], base: dict[str, Any]) -> list[dict[str, Any]]:
+    if _item_completed_guard_blocked(event):
+        return []
+
     item = event.get("item")
     if not isinstance(item, dict):
         return []
@@ -213,10 +267,20 @@ def _scan_item_completed_event(event: dict[str, Any], base: dict[str, Any]) -> l
     return findings
 
 
-def _scan_codex_event(event: Any, base: dict[str, Any]) -> list[dict[str, Any]]:
+def _scan_codex_event(
+    event: Any,
+    base: dict[str, Any],
+    *,
+    guard_blocked_call_ids: set[str],
+) -> list[dict[str, Any]]:
     if not isinstance(event, dict):
         return []
     if event.get("type") == "response_item":
+        payload = event.get("payload")
+        if isinstance(payload, dict):
+            call_id = payload.get("call_id")
+            if isinstance(call_id, str) and call_id in guard_blocked_call_ids:
+                return []
         return _scan_response_item_event(event, base)
     if event.get("type") == "item.completed":
         return _scan_item_completed_event(event, base)
@@ -225,16 +289,21 @@ def _scan_codex_event(event: Any, base: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _scan_jsonl(path: Path, trial_root: Path, source_kind: str) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
-    for line_no, line in enumerate(
-        path.read_text(errors="ignore").splitlines(),
-        start=1,
-    ):
+    parsed_events: list[tuple[int, Any]] = []
+    for line_no, line in enumerate(path.read_text(errors="ignore").splitlines(), start=1):
         if not line.strip():
             continue
         try:
             event = json.loads(line)
         except json.JSONDecodeError:
             continue
+        parsed_events.append((line_no, event))
+
+    guard_blocked_call_ids = _response_guard_blocked_call_ids([
+        event for _line_no, event in parsed_events
+    ])
+
+    for line_no, event in parsed_events:
         base = {
             "source_kind": source_kind,
             "source_path": _rel(path, trial_root),
@@ -246,7 +315,13 @@ def _scan_jsonl(path: Path, trial_root: Path, source_kind: str) -> list[dict[str
             "tool_type": None,
             "line": line_no,
         }
-        findings.extend(_scan_codex_event(event, base))
+        findings.extend(
+            _scan_codex_event(
+                event,
+                base,
+                guard_blocked_call_ids=guard_blocked_call_ids,
+            )
+        )
     return findings
 
 
