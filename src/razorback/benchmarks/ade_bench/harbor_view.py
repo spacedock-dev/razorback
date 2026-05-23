@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import shlex
 from pathlib import Path
 from typing import Literal
 
+from razorback.benchmarks.ade_bench.preflight import (
+    contract_for_task_id,
+    preflight_script_text,
+)
 from razorback.harbor_tasks.leakage import DEFAULT_SOLUTION_DENY_GLOBS
 from razorback.harbor_tasks.materialize import materialize_harbor_task_view
 
@@ -16,6 +21,9 @@ _DBT_DEPS_LAYER_MARKER = (
 )
 _DBT_DEPS_TEST_SETUP_MARKER = (
     "# Razorback: reuse image-installed dbt packages when available."
+)
+_ADE_WORKSPACE_PREFLIGHT_MARKER = (
+    "# Razorback: validate ADE task-specific DuckDB before agent runtime."
 )
 
 
@@ -48,6 +56,7 @@ def materialize_ade_harbor_task_view(
         task_content_hash=task_content_hash,
     )
     _ensure_dbt_deps_image_layer(view)
+    _ensure_workspace_preflight_image_layer(view, task_slug=task_slug)
     _ensure_dbt_deps_test_setup_uses_preinstalled_packages(view)
     return view
 
@@ -97,6 +106,54 @@ def _ensure_dbt_deps_test_setup_uses_preinstalled_packages(view_dir: Path) -> No
     patched = _replace_standalone_dbt_deps(text)
     if patched != text:
         test_setup.write_text(patched)
+
+
+def _ensure_workspace_preflight_image_layer(view_dir: Path, *, task_slug: str) -> None:
+    contract = contract_for_task_id(task_slug)
+    if contract is None:
+        return
+
+    environment_dir = view_dir / "environment"
+    dockerfile = environment_dir / "Dockerfile"
+    if not dockerfile.is_file():
+        return
+
+    script_path = environment_dir / "razorback_ade_preflight.py"
+    script_path.write_text(preflight_script_text())
+
+    text = dockerfile.read_text()
+    if _ADE_WORKSPACE_PREFLIGHT_MARKER in text:
+        return
+
+    db_name = _read_db_name(environment_dir) or contract.expected_db_name
+    command = " ".join(
+        [
+            "python",
+            "/tmp/razorback_ade_preflight.py",
+            "--task-id",
+            shlex.quote(task_slug),
+            "--workspace",
+            "/app",
+            "--db-name",
+            shlex.quote(db_name),
+        ]
+    )
+    block = "\n".join(
+        [
+            _ADE_WORKSPACE_PREFLIGHT_MARKER,
+            "COPY razorback_ade_preflight.py /tmp/razorback_ade_preflight.py",
+            f"RUN {command}",
+        ]
+    )
+    dockerfile.write_text(_insert_before_final_cmd(text, block))
+
+
+def _read_db_name(environment_dir: Path) -> str | None:
+    db_name_path = environment_dir / "db_name.txt"
+    if not db_name_path.is_file():
+        return None
+    db_name = db_name_path.read_text().strip()
+    return db_name or None
 
 
 def _replace_standalone_dbt_deps(text: str) -> str:

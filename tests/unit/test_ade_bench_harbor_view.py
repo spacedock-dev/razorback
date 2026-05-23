@@ -157,8 +157,14 @@ def test_ade_harbor_view_injects_workspace_preflight_before_cmd(tmp_path):
     assert "def preflight_ade_workspace" in preflight_script.read_text()
 
     dockerfile = (view / "environment" / "Dockerfile").read_text()
-    assert "Razorback: validate ADE task-specific DuckDB before agent runtime." in dockerfile
-    assert "COPY razorback_ade_preflight.py /tmp/razorback_ade_preflight.py" in dockerfile
+    assert (
+        "Razorback: validate ADE task-specific DuckDB before agent runtime."
+        in dockerfile
+    )
+    assert (
+        "COPY razorback_ade_preflight.py /tmp/razorback_ade_preflight.py"
+        in dockerfile
+    )
     assert "--task-id f1001" in dockerfile
     assert "--db-name f1" in dockerfile
     assert dockerfile.index("razorback_ade_preflight.py") < dockerfile.index('CMD ["bash"]')
