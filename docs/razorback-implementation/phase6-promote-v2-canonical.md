@@ -290,3 +290,16 @@ Remaining validation work is to rerun the exact live AC-1 smoke if the
 environment has the required DAB/API/Docker prerequisites. Remaining
 product blocker is AC-4 broad adapter retirement, intentionally deferred
 to follow-up entities.
+
+## Stage Report: validation (cycle 2)
+
+- DONE: DONE if validation independently reruns the feedback-cycle checks: focused canonical solver suite, grep inventory, workflow status, and `uv run pytest`.
+  Evidence: focused suite returned `90 passed in 3.68s`; stale-kind grep found only `_legacy/` hits; benchmark-kind grep returned no active stale hits; packaged workflow status exited 0; `uv run pytest` returned `574 passed, 12 skipped, 16 warnings in 33.99s`.
+- DONE: DONE if validation checks `examples/specs/bookreview-claude.frozen.yaml` exists, parses as canonical `spacedock_solver` + `harbor_dab`, and either runs the exact AC-1 command or documents the precise live/Docker/API blocker.
+  Evidence: frozen parse reported `agent.kind: spacedock_solver`, `benchmark.kind: harbor_dab`, sealed hash `58a31226e065199ed4b86f73f638cf6a`; exact `uv run rk run examples/specs/bookreview-claude.frozen.yaml` exited 0 in 8m41s with 3/3 trials, 0 exceptions, mean 1.000, and `summary.json` `stratified_pass_at_1: 1.0`.
+- DONE: DONE if validation writes/updates the validation report and entity stage report with a clear gate decision, especially whether broad AC-4 deferral is acceptable as follow-up scope or still blocking.
+  Evidence: `docs/razorback-implementation/validation/phase6-promote-v2-canonical.md` records APPROVE to done for the core solver-retirement merge; broad AC-4 DAB/ADE/standalone-CLI/compat/observer retirements are non-blocking only under the first-officer scope split and must be filed as follow-up entities.
+
+### Summary
+
+Validation cycle 2 approves the branch for the core Phase 6 solver-retirement merge. The literal AC-1 smoke now runs live and produces the expected run-dir artifacts, workflow status renders, full pytest passes, and the code review found no blocking issues for the scoped merge. The broad AC-4 retirements remain deferred follow-up work, not silently completed scope.

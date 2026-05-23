@@ -1,138 +1,177 @@
-# Phase 6 Promote v2 Canonical Validation
+# Phase 6 Promote v2 Canonical Validation, Cycle 2
 
 Validator: `spacedock-ensign`
+Role asset read: `/home/exedev/.codex/plugins/cache/spacedock/spacedock/0.12.0/skills/ensign/SKILL.md`
 Worktree: `/home/exedev/razorback/.worktrees/spacedock-ensign-phase6-promote-v2-canonical`
 Branch: `spacedock-ensign/phase6-promote-v2-canonical`
-Implementation range reviewed: `a08769c..23a604c`
+Implementation range reviewed: `a08769c..c19e357`
 
-Gate decision: **REJECT back to implementation**.
+Gate decision: **APPROVE to done for the core solver-retirement merge**.
 
-The canonical routing work is partially correct, but the branch does not satisfy the entity ACs. The exact AC-1 acceptance artifact is missing, AC-4's required sideline commits were intentionally deferred, AC-8 workflow status fails, and AC-9 full pytest fails.
+This approval accepts the first-officer-scoped split: the Phase 6 core work
+promotes canonical `agent.kind: spacedock_solver`, retires the active v2
+discriminator, keeps the v1 solver legacy-only, provides the literal frozen
+bookreview smoke target, renders workflow status, and passes full tests.
+The broad AC-4 DAB/ADE/standalone-CLI/compat/observer retirements are not
+complete in this branch. I classify those as **non-blocking only for this core
+solver-retirement merge** because the first officer explicitly bounded that
+scope; they must be filed and tracked as follow-up entities before claiming the
+original broad Phase 6 retirement complete.
+
+The backlog -> plan, plan -> implementation, and validation re-dispatch gates
+were first-officer auto-approved, not human-gated.
 
 ## Commands
 
-Focused canonical suite:
+Focused canonical solver suite:
 
 ```text
 $ uv run pytest tests/unit/test_spec_schema_spacedock_solver.py tests/unit/test_translate_spacedock_solver_import_path.py tests/unit/test_spacedock_solver_class.py tests/unit/test_spacedock_solver_lifecycle.py tests/unit/test_spacedock_solver_freeze_on_host.py tests/unit/test_runtime_adapters.py tests/unit/test_spec_freeze_cli_pkg8.py tests/unit/test_seal_v2_six_inputs.py tests/unit/test_tools_denied_parse.py tests/unit/test_spacedock_registry.py tests/unit/test_generate_matrix_specs.py tests/unit/test_generate_matrix_specs_per_variant_kind.py tests/unit/test_codex_benchmark_spec_generator.py tests/unit/test_claude_benchmark_spec_generator.py -q
-90 passed in 3.67s
+90 passed in 3.68s
 ```
 
-Exact AC-1 acceptance command:
+Stale discriminator inventory:
 
 ```text
-$ uv run rk run examples/specs/bookreview-claude.frozen.yaml --runs-dir .runs/phase6-validation-ac1
-Invalid value for 'SPEC_PATH': File 'examples/specs/bookreview-claude.frozen.yaml' does not exist.
-exit 2
+$ rg -n "spacedock_solver_v2|spacedock-solver" src/razorback tests examples/specs examples/drivers packages
+src/razorback/_legacy/run.py:44:    # (e.g. spacedock-solver `sealed_hash` and `prompt_contents` populated).
+src/razorback/_legacy/run.py:120:    # AC-1: instantiate the spacedock-solver agent BEFORE harbor.Job.create so
+src/razorback/_legacy/agents/spacedock_solver_legacy.py:171:        return "spacedock-solver"
+src/razorback/_legacy/compat/harbor_0_6_6.py:51:    threads through to spacedock-solver agent kwargs for AC-1 sealed-hash refusal.
+src/razorback/_legacy/compat/harbor_0_6_6.py:112:                "spacedock-solver agent requires project_root for .env auth discovery."
+src/razorback/_legacy/compat/harbor_0_6_6.py:116:                "spacedock-solver spec must be frozen (agent.sealed_hash missing). "
+src/razorback/_legacy/compat/harbor_0_6_6.py:121:                "spacedock-solver spec must be frozen (agent.prompt_contents missing)."
 ```
 
-Structural fallback:
+Benchmark-kind inventory:
 
 ```text
-$ uv run rk freeze examples/specs/bookreview-spacedock-seed.yaml --out /tmp/bookreview-spacedock.phase6-validation.frozen.yaml
-ProvenanceError: unresolved provenance fields: model_resolved_version. Pass --allow-missing to write anyway
-exit 11
-
-$ uv run rk freeze examples/specs/bookreview-spacedock-seed.yaml --out /tmp/bookreview-spacedock.phase6-validation.frozen.yaml --allow-missing
-wrote /tmp/bookreview-spacedock.phase6-validation.frozen.yaml
-wrote examples/specs/provenance.yaml
-
-$ sed -n '1,45p' /tmp/bookreview-spacedock.phase6-validation.frozen.yaml
-version: 1
-experiment: m4-bookreview-spacedock
-agent:
-  kind: spacedock_solver
-  runtime: claude
-  model: claude-opus-4-5
-  sampling:
-    temperature: 0.0
-    top_p: null
-    seed: 42
-  solver_workflow: examples/solver_workflows/claude-benchmark-solver
-  solver_workflow_content_hash: sha256:a7dbdb88f0229b8b8f655283498d6d4cc603c03603505fb5e9fa5d0edaf559fd
-  max_turns: 200
-  max_budget_usd: null
-  tools_allowed:
-  - Bash
-  - Read
-  - Write
-  - Edit
-  - Glob
-  - Grep
-  tools_denied: []
-  append_system_prompt: null
-  reasoning_effort: null
-  reasoning_summary: null
-  resume_from_freeze: null
-  sealed_hash: 58a31226e065199ed4b86f73f638cf6a
-  spacedock_skill_version: 1.0.0
-  prompt_content_hashes: {}
-benchmark:
-  kind: harbor_dab
+$ rg -n "kind: dab|kind: in_tree_dab" examples/specs examples/drivers tests/fixtures/specs
+<no output, exit 1>
 ```
 
-Score / AC-7 fallback:
+Example canonical-kind inventory:
 
 ```text
-$ uv run rk diff --help
-No such command 'diff'.
-exit 2
+$ rg -n "spacedock_solver_v2" examples/specs examples/drivers
+<no output, exit 1>
 
-$ uv run rk score tests/fixtures/score/baseline_rerun_bookreview --format json --against-constant stratified_pass_at_1=0.577
-bookreview: n_completed=3, n_pass=3, pass_at_1=1.0, wilson_ci=[0.43850296824495455, 1.0]
-against_constant.bookreview.verdict=matches
-against_constant.stratified.mean=1.0
-against_constant.stratified.verdict=above
+$ rg -n "spacedock_solver" examples/specs examples/drivers
+examples/drivers/generate-codex-benchmark-specs.py:132:        "kind": "spacedock_solver",
+examples/drivers/generate-dab-paper-matrix-specs.py:31:            "kind": "spacedock_solver",
+examples/specs/bookreview-claude.yaml:4:  kind: spacedock_solver
+examples/specs/bookreview-claude.frozen.yaml:4:  kind: spacedock_solver
+examples/specs/bookreview-spacedock-seed.yaml:4:  kind: spacedock_solver
+examples/specs/bookreview-spacedock-resume.yaml:4:  kind: spacedock_solver
+examples/specs/goal1/spacedock/bookreview.yaml:6:  kind: spacedock_solver
 ```
 
 Workflow status:
 
 ```text
-$ python /home/exedev/.codex/skills/commission/bin/status --workflow-dir docs/razorback-implementation
-Error: missing required id: workflow=docs/razorback-implementation scope=active slug=goal1-resume-t0-cost-projection id= path=docs/razorback-implementation/goal1-resume-t0-cost-projection.md
-exit 1
+$ python /home/exedev/.codex/plugins/cache/spacedock/spacedock/0.12.0/skills/commission/bin/status --workflow-dir docs/razorback-implementation
+...
+t1     phase6-promote-v2-canonical    validation           Phase 6 -- promote v2 canonical, sideline v1 to _legacy/ 0.7      plan Phase 6 (v2 reconciliation plan at docs/superpowers/plans/2026-05-19-razorback-reconciliation-plan.md)
+1e     goal1-resume-t0-cost-projection done                 T0 cost-shape verification -- Goal 1 RESUME (spacedock-first)          2026-05-21 cost-shape probe note
+exit 0
 ```
 
 Full suite:
 
 ```text
 $ uv run pytest
-19 failed, 572 passed, 5 skipped, 16 warnings in 186.42s
+574 passed, 12 skipped, 16 warnings in 33.99s
 ```
 
-Representative full-suite failures:
+Frozen smoke target parse:
 
 ```text
-tests/integration/test_budget_gate_two_invocations.py::test_two_sequential_invocations_second_refuses
-tests/integration/test_rk_run_bookreview_claude.py::test_rk_run_bookreview_claude_produces_nonzero_score
-tests/integration/test_rk_run_bookreview_spacedock_halt_resume.py::test_seed_run_then_resume_run_against_matching_sealed_hash
-tests/integration/test_rk_run_v2_deterministic_smoke.py::test_deterministic_smoke_runs_end_to_end
-tests/integration/test_spacedock_git_freeze.py::test_run_creates_agent_freeze_git_repo_with_stage_commits
-tests/unit/test_spacedock_prompt_drift.py::test_run_refuses_when_prompt_contents_hash_does_not_match_pinned_hash
-tests/unit/test_spacedock_tools_allowed.py::test_setup_env_carries_only_proxy_auth_and_home
+$ uv run python - <<'PY'
+from pathlib import Path
+from razorback.spec.parse import parse_spec_file
+p = Path('examples/specs/bookreview-claude.frozen.yaml')
+spec = parse_spec_file(p)
+print('exists:', p.exists())
+print('agent.kind:', spec.agent.kind)
+print('benchmark.kind:', spec.benchmark.kind)
+print('sealed_hash:', spec.agent.sealed_hash)
+print('solver_workflow_content_hash:', spec.agent.solver_workflow_content_hash)
+print('data_root:', getattr(spec.benchmark, 'data_root', None))
+PY
+exists: True
+agent.kind: spacedock_solver
+benchmark.kind: harbor_dab
+sealed_hash: 58a31226e065199ed4b86f73f638cf6a
+solver_workflow_content_hash: sha256:a7dbdb88f0229b8b8f655283498d6d4cc603c03603505fb5e9fa5d0edaf559fd
+data_root: /home/exedev/dataagentbench/data
 ```
 
-## AC Results
-
-**AC-1 - Walking skeleton holds: FAIL.**
-
-The exact verified-by command cannot run because `examples/specs/bookreview-claude.frozen.yaml` is absent. The fallback freeze proves a different spec, `examples/specs/bookreview-spacedock-seed.yaml`, can structurally freeze as canonical `spacedock_solver` only with `--allow-missing`. It does not produce a run dir or `summary.json`, so the run-dir artifact contract in spec §7 is unverified.
-
-**AC-2 - `spacedock_solver` routes to v2: PASS.**
-
-The focused suite passed. `rg -n "spacedock_solver_v2|spacedock-solver" src/razorback tests examples/specs examples/drivers packages` returns only `_legacy/` hits:
+Exact AC-1 command:
 
 ```text
-src/razorback/_legacy/run.py
-src/razorback/_legacy/compat/harbor_0_6_6.py
-src/razorback/_legacy/agents/spacedock_solver_legacy.py
+$ uv run rk run examples/specs/bookreview-claude.frozen.yaml
+Starting step 1/1: main
+  3/3 Mean: 1.000
+adhoc * spacedock_solver * claude-opus-4-5
+Trials 3, Exceptions 0, Mean 1.000
+Job Info
+Total runtime: 8m 41s
+Results written to /home/exedev/.local/share/razorback/runs/m3-bookreview-claude/1739dfdc7e8295ce/result.json
+exit 0
 ```
 
-**AC-3 - V1 class sidelined as own commit: PASS.**
-
-`git log --diff-filter=R --summary --reverse a08769c..23a604c -- src/razorback/agents src/razorback/_legacy/agents` shows:
+Run-dir contract / `summary.json` check:
 
 ```text
+$ uv run python - <<'PY'
+import json
+from pathlib import Path
+run = Path('/home/exedev/.local/share/razorback/runs/m3-bookreview-claude/1739dfdc7e8295ce')
+summary = json.loads((run / 'summary.json').read_text())
+result = json.loads((run / 'result.json').read_text())
+print('summary.exists:', (run / 'summary.json').exists())
+print('result.exists:', (run / 'result.json').exists())
+print('job_config.exists:', (run / '_job_config.yaml').exists())
+print('n_trials_total:', summary['n_trials_total'])
+print('n_trials_completed:', summary['n_trials_completed'])
+print('n_trials_errored:', summary['n_trials_errored'])
+print('stratified_pass_at_1:', summary['stratified_pass_at_1'])
+print('datasets:', ','.join(summary['datasets'].keys()))
+print('harbor_n_completed:', result['stats']['n_completed_trials'])
+print('harbor_n_errors:', result['stats']['n_errored_trials'])
+print('harbor_mean:', result['stats']['evals']['spacedock_solver__claude-opus-4-5__adhoc']['metrics'][0]['mean'])
+PY
+summary.exists: True
+result.exists: True
+job_config.exists: True
+n_trials_total: 3
+n_trials_completed: 3
+n_trials_errored: 0
+stratified_pass_at_1: 1.0
+datasets: bookreview
+harbor_n_completed: 3
+harbor_n_errors: 0
+harbor_mean: 1.0
+```
+
+Score and AC-7 fallback:
+
+```text
+$ uv run rk diff --help
+No such command 'diff'.
+exit 2
+
+$ uv run rk score /home/exedev/.local/share/razorback/runs/m3-bookreview-claude/1739dfdc7e8295ce --format json --against-constant stratified_pass_at_1=0.577
+"stratified_pass_at_1": 1.0
+"stratified_n_completed": 3
+"stratified_n_errored": 0
+"against_constant": {"stratified": {"mean": 1.0, "verdict": "above"}, "per_stratum": {"bookreview": {"verdict": "matches", "ci": [0.43850296824495455, 1.0]}}}
+```
+
+Rename / sideline evidence:
+
+```text
+$ git log --diff-filter=R --summary --reverse a08769c..HEAD -- src/razorback/agents src/razorback/_legacy/agents
 e761ef5 sideline: v1 SpacedockSolverAgent -> _legacy
 rename src/razorback/{agents/spacedock_solver.py => _legacy/agents/spacedock_solver_legacy.py} (100%)
 
@@ -140,56 +179,108 @@ f5c956b phase6: promote v2 solver module to canonical path
 rename src/razorback/agents/{spacedock_solver_v2.py => spacedock_solver.py} (99%)
 ```
 
-**AC-4 - Non-survivor modules sidelined: FAIL.**
+## AC Results
 
-The required six sideline commits are not present. `src/razorback/agents/claude_cli.py`, `src/razorback/benchmarks/dab/`, and `src/razorback/benchmarks/ade_bench/` remain active. `src/razorback/compat/` and `src/razorback/observers/` are already absent from canonical and present under `_legacy/`, but this branch does not satisfy the AC's required ordered sideline sequence. The implementation report says the broad DAB/ADE/standalone-CLI/compat/observer sidelines were intentionally deferred; that is a blocking AC deviation.
+**AC-1, Walking skeleton holds: PASS.**
 
-**AC-5 - Trimmed canonical surface: FAIL.**
+The exact verified-by command exited 0. The run dir
+`/home/exedev/.local/share/razorback/runs/m3-bookreview-claude/1739dfdc7e8295ce`
+contains `summary.json`, `result.json`, and `_job_config.yaml`.
+`summary.json` reports 3 total trials, 3 completed, 0 errored, and
+`stratified_pass_at_1: 1.0`.
 
-The canonical solver route and registry are trimmed, but the active surface still includes non-survivors required by AC-4 to move: `src/razorback/agents/claude_cli.py`, `src/razorback/benchmarks/dab/*`, and `src/razorback/benchmarks/ade_bench/*`. `src/razorback/agents/registry.py` contains only the `spacedock_solver` pydantic helper.
+**AC-2, `spacedock_solver` routes to v2: PASS.**
 
-**AC-6 - Examples reflect v2: PASS.**
+The focused canonical suite passed. The run artifact also shows
+`agent.import_path` as `razorback.agents.spacedock_solver:SpacedockSolverAgent`
+with `agent_info.name: spacedock_solver`. Stale `spacedock_solver_v2` and
+hyphenated `spacedock-solver` references are legacy-only.
 
-`rg -n "spacedock_solver_v2" examples/specs examples/drivers` returns no hits. `rg -n "kind: spacedock_solver|spacedock_solver" examples/specs examples/drivers` shows canonical spacedock examples and generators. `rg -n "kind: dab|kind: in_tree_dab" examples/specs examples/drivers tests/fixtures/specs` returns no hits.
+**AC-3, V1 class sidelined as its own commit: PASS.**
 
-**AC-7 - Same-canonical cross-history diff: SKIPPED / fallback partial.**
+Commit `e761ef5` is titled `sideline: v1 SpacedockSolverAgent -> _legacy` and
+renames `src/razorback/agents/spacedock_solver.py` to
+`src/razorback/_legacy/agents/spacedock_solver_legacy.py`. The legacy class
+emits `DeprecationWarning` on instantiation.
 
-`rk diff` is unavailable. The fallback score command ran and the bookreview fixture's CI includes the target constant, but this is fixture scoring, not a full post-Phase-6 canonical benchmark against a pre-promotion v2 run dir. It is acceptable as only partial evidence, not as a full AC pass.
+**AC-4, Non-survivor modules sidelined: DEFERRED / NON-BLOCKING FOR THIS GATE.**
 
-**AC-8 - workflow dispatch can resume: FAIL.**
+The original AC's six broad sideline commits are not all present.
+`src/razorback/agents/claude_cli.py`, `src/razorback/benchmarks/dab/`, and
+`src/razorback/benchmarks/ade_bench/` remain active. The implementation
+documents live imports at `src/razorback/agents/_runtime/claude.py:10` and
+`src/razorback/translate.py:299-300`/ADE paths. I accept the first-officer
+scope split as non-blocking for the core solver-retirement merge, but this is
+still mandatory follow-up scope.
 
-The documented workflow status command fails before rendering because `docs/razorback-implementation/goal1-resume-t0-cost-projection.md` is missing required `id`. The plan and implementation gates were first-officer auto-approved, not human-gated; this validation records that accurately, but the resume/status check still fails.
+**AC-5, Trimmed canonical surface: PASS FOR CORE SOLVER SCOPE, BROAD RETIREMENTS DEFERRED.**
 
-**AC-9 - `uv run pytest` exits 0: FAIL.**
+`src/razorback/agents/registry.py` contains only the canonical
+`spacedock_solver` registry entry. `src/razorback/spec/schema.py` exposes only
+`kind: Literal["spacedock_solver"]` for the solver block, and
+`src/razorback/translate.py` routes that block to the canonical import path.
+The active DAB/ADE/Claude CLI surfaces remain intentionally deferred with AC-4.
 
-Full pytest exits 1 with `19 failed, 572 passed, 5 skipped`. Several remaining tests directly construct the canonical `SpacedockSolverAgent` with the retired v1/Phase-3 constructor shape, and several integration smokes fail.
+**AC-6, Examples reflect v2: PASS.**
+
+`examples/specs/` and `examples/drivers/` have no `spacedock_solver_v2` hits,
+and the active spacedock examples/generators use `spacedock_solver`. The stale
+`kind: dab` and `kind: in_tree_dab` grep returned no output.
+
+**AC-7, Same-canonical cross-history diff: PARTIAL PASS VIA FALLBACK.**
+
+`rk diff` is unavailable, so the AC allows the fallback score path. The live
+canonical run scored `stratified_pass_at_1: 1.0`; the
+`--against-constant stratified_pass_at_1=0.577` check reports the bookreview CI
+matches and the stratified verdict is above. This is acceptable fallback
+evidence until Phase 4b ships `rk diff`.
+
+**AC-8, workflow dispatch can resume: PASS.**
+
+The packaged Spacedock status command renders the workflow and exits 0. The
+previous malformed active entity `goal1-resume-t0-cost-projection.md` now
+appears as `done`.
+
+**AC-9, `uv run pytest` exits 0: PASS.**
+
+Full pytest exits 0 with `574 passed, 12 skipped, 16 warnings in 33.99s`.
 
 ## Code Review
 
-Applied the `superpowers:requesting-code-review` template to implementation range `a08769c..23a604c`. Codex did not expose a separate Task subagent tool in this session, so the review was performed directly against the diff, ACs, and validation output.
+I applied the `superpowers:requesting-code-review` template to range
+`a08769c..c19e357`. Codex does not expose a Task subagent tool in this session,
+so the review was performed directly against the diff, requirements, and fresh
+validation output.
 
-Blocking findings:
-
-1. Missing AC-1 acceptance artifact.
-   File: `examples/specs/bookreview-claude.yaml:3`
-   The exact required frozen file is absent, and the remaining `bookreview-claude.yaml` is `agent.kind: claude-cli`, not canonical `spacedock_solver`. Add/commit the expected frozen canonical v2 Harbor-DAB spec or update the entity AC if a different smoke spec is intended.
-
-2. AC-4 sideline work is incomplete.
-   Files: `src/razorback/agents/_runtime/claude.py:10`, `src/razorback/benchmarks/dab/prepare.py`, `src/razorback/benchmarks/ade_bench/harbor_view.py`
-   The implementation leaves active imports and modules that the AC explicitly requires to be moved. Either complete the ordered sideline commits with tests green between commits, or revise/split the AC before approval.
-
-3. Full suite is not green.
-   Files: `tests/integration/test_spacedock_git_freeze.py:67`, `tests/unit/test_spacedock_prompt_drift.py:27`, `tests/unit/test_spacedock_tools_allowed.py:78`
-   Multiple surviving tests still use the old constructor/API shape and now fail. Port, rehome, or delete those tests according to the test inventory and ensure `uv run pytest` exits 0.
+Blocking findings: none for the core solver-retirement merge.
 
 Non-blocking findings:
 
-1. Compatibility/observer sideline evidence is historical, not Phase-6-local.
-   `src/razorback/compat` and `src/razorback/observers` are already gone from canonical and present under `_legacy/`, but validation should cite the prior commit if the AC is narrowed to "currently sidelined" rather than "six Phase 6 commits".
+1. Broad AC-4 retirements are not complete.
+   Files: `src/razorback/agents/_runtime/claude.py:10`,
+   `src/razorback/translate.py:299`, `src/razorback/benchmarks/dab/`,
+   `src/razorback/benchmarks/ade_bench/`.
+   This is intentionally deferred by first-officer scope, but follow-up
+   entities must retire or explicitly keep each surface.
 
-## Required Fixes
+2. Internal names still carry `V2` after canonical promotion.
+   Files: `src/razorback/spec/schema.py:48`,
+   `src/razorback/translate.py:28`.
+   The external discriminator and import path are canonical, so this is not a
+   behavior blocker. A later cleanup can rename internal symbols to reduce
+   historical terminology.
 
-1. Provide the literal AC-1 command target or update the AC: `uv run rk run examples/specs/bookreview-claude.frozen.yaml --runs-dir <dir>` must either run and produce a non-degraded `summary.json`, or the entity must name the actual canonical smoke artifact.
-2. Resolve AC-4 explicitly: complete the standalone CLI, DAB, ADE, compat, observer, and sweep sideline sequence, or send the task back to planning to split broad active-import retirements into separate entities.
-3. Port/rehome/delete the remaining stale v1/Phase-3 tests and make `uv run pytest` exit 0.
-4. Fix or archive the malformed active workflow entity `goal1-resume-t0-cost-projection.md` so workflow status can render.
+3. `rk diff` is absent.
+   Command: `uv run rk diff --help` exits 2 with `No such command 'diff'`.
+   The fallback score path is acceptable for this phase, but AC-7 should be
+   rerun with real cross-history diff once Phase 4b lands.
+
+## Required Follow-ups
+
+1. File follow-up entities for the deferred AC-4 broad retirements:
+   standalone CLI agent, in-tree DAB adapter, ADE-Bench adapter, compat,
+   observers, and remaining DROP/PORT-OUT sweep.
+2. Once Phase 4b lands, rerun AC-7 with the real `rk diff` cross-history
+   comparison instead of the score fallback.
+3. Optionally rename internal `SpacedockSolverV2AgentBlock` references to
+   canonical terminology after this merge.
