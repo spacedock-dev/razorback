@@ -1,4 +1,4 @@
-# ABOUTME: PKG-9 v2 AC-1 + AC-4: tools_denied parse/round-trip on v2 SpacedockSolverAgentBlock.
+# ABOUTME: PKG-9 AC-1 + AC-4: tools_denied parse/round-trip on SpacedockSolverAgentBlock.
 # ABOUTME: Spec §6.2 introduces tools_denied: list[str] on the spacedock_solver agent block.
 
 from typing import Any
@@ -23,7 +23,7 @@ FIVE_DENIALS = [
 def _spec_with(agent_extra: dict[str, Any]) -> str:
     spec: dict[str, Any] = {
         "version": 1,
-        "experiment": "pkg9-v2-parse-test",
+        "experiment": "pkg9-parse-test",
         "agent": {
             "kind": "spacedock_solver",
             "runtime": "claude",

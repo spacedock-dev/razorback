@@ -1,4 +1,4 @@
-# ABOUTME: PKG-9 v2 AC-2: claude runtime adapter installs tools_denied as inner-agent denials.
+# ABOUTME: PKG-9 AC-2: claude runtime adapter installs tools_denied as inner-agent denials.
 # ABOUTME: Spec §6.2: tools_denied is a denylist installed as PreToolUse hooks in the inner runtime.
 
 from pathlib import Path
@@ -46,7 +46,7 @@ def _base_kwargs(tmp_path: Path, *, tools_denied: list[str]) -> dict:
 
 
 def test_claude_runtime_installs_four_dab_denials_verbatim_in_order(tmp_path):
-    """AC-2: a SpacedockSolverAgent v2 with runtime=claude installs tools_denied
+    """AC-2: a SpacedockSolverAgent with runtime=claude installs tools_denied
     as the inner agent's disallowed_tools (harbor's PreToolUse surface).
     Cite spec §6.2.
 

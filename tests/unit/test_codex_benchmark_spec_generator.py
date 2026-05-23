@@ -66,7 +66,7 @@ def test_ade_bench_dry_run_rejects_upstream_local_task_root(tmp_path: Path) -> N
     assert "tasks/*/task.yaml roots are retired" in message
 
 
-def test_emit_dab_codex_spec_uses_solver_v2_codex_and_harbor_dab(tmp_path: Path) -> None:
+def test_emit_dab_codex_spec_uses_canonical_codex_solver_and_harbor_dab(tmp_path: Path) -> None:
     generator = _load_generator()
     row = generator.plan_dab_specs(data_root=tmp_path / "dab-data")[1]
 

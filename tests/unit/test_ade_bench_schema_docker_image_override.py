@@ -33,9 +33,9 @@ def test_docker_image_override_custom_value():
         kind="ade-bench",
         tasks_root="/tmp/ade-bench-tasks",
         tasks=[_git_entry()],
-        docker_image_override="custom-agent:v2",
+        docker_image_override="custom-agent:stable",
     )
-    assert block.docker_image_override == "custom-agent:v2"
+    assert block.docker_image_override == "custom-agent:stable"
 
 
 def test_docker_image_override_extra_forbid_preserved():
@@ -44,7 +44,7 @@ def test_docker_image_override_extra_forbid_preserved():
             kind="ade-bench",
             tasks_root="/tmp/ade-bench-tasks",
             tasks=[_git_entry()],
-            docker_image_override="custom-agent:v2",
+            docker_image_override="custom-agent:stable",
             bogus_field="foo",
         )
     msg = str(exc_info.value)

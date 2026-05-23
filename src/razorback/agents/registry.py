@@ -21,7 +21,7 @@ class _SamplingKwargs(BaseModel):
 
 
 class SpacedockSolverAgentConfig(BaseModel):
-    """Registry-level v2 kwargs for canonical agent.kind: spacedock_solver."""
+    """Registry-level kwargs for canonical agent.kind: spacedock_solver."""
     model_config = ConfigDict(extra="forbid")
     runtime: Literal["claude", "codex", "pi"] = "claude"
     model: str = Field(default="claude-opus-4-5", min_length=1)

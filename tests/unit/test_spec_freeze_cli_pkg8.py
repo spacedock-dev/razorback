@@ -18,12 +18,12 @@ runner = CliRunner()
 
 SPEC_TEXT = """\
 version: 1
-experiment: pkg8-v2-test
+experiment: pkg8-test
 agent:
   kind: claude-cli
   model: claude-opus-4-5
 benchmark:
-  kind: dab
+  kind: harbor_dab
   data_root: /tmp/data
   datasets: [bookreview]
 trials: 1
@@ -123,8 +123,8 @@ def test_freeze_writes_solver_workflow_hash_when_present(
     assert prov["solver_workflow_hash"] == "sha256:deadbeef"
 
 
-def test_freeze_stamps_v2_solver_workflow_hash_and_sealed_hash(tmp_path, monkeypatch) -> None:
-    """PKG-26 smoke path: v2 frozen specs must be runnable by rk run."""
+def test_freeze_stamps_solver_workflow_hash_and_sealed_hash(tmp_path, monkeypatch) -> None:
+    """PKG-26 smoke path: spacedock_solver frozen specs must be runnable by rk run."""
     workflow = tmp_path / "solver"
     workflow.mkdir()
     (workflow / "README.md").write_text("## Stages\n- model\n")
@@ -178,7 +178,7 @@ trials: 1
     assert frozen["agent"].get("reasoning_summary") is None
 
 
-def test_freeze_includes_codex_reasoning_kwargs_in_v2_sealed_hash(
+def test_freeze_includes_codex_reasoning_kwargs_in_canonical_sealed_hash(
     tmp_path, monkeypatch
 ) -> None:
     workflow = tmp_path / "solver"

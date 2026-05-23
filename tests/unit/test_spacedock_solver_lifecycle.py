@@ -157,7 +157,7 @@ async def test_first_stage_runs_git_init(
 async def test_setup_and_run_write_named_checkpoint_commits(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ):
-    """PKG-36: exact v2 checkpoint labels are stable git commit messages."""
+    """PKG-36: exact checkpoint labels are stable git commit messages."""
     monkeypatch.setenv("RAZORBACK_FREEZE_DIR", str(tmp_path / "freeze-cas"))
     agent = SpacedockSolverAgent(**_kw(tmp_path))
     fake_env = MagicMock()

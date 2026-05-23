@@ -1,5 +1,5 @@
 # ABOUTME: Tests that the make_run_dir fixture builder synthesizes the run-dir layout.
-# ABOUTME: Pins manifest.json + summary.json shape used by pkg1-v2 tests.
+# ABOUTME: Pins manifest.json + summary.json shape used by pkg1 tests.
 
 from pathlib import Path
 

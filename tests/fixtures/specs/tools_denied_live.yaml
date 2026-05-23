@@ -1,7 +1,7 @@
-# ABOUTME: PKG-9 v2 AC-3 — live runtime probe fixture spec.
+# ABOUTME: PKG-9 AC-3 — live runtime probe fixture spec.
 # ABOUTME: Agent is instructed to attempt pip install datasets; runtime hook blocks it.
 version: 1
-experiment: pkg9-v2-tools-denied-live
+experiment: pkg9-tools-denied-live
 agent:
   kind: spacedock_solver
   runtime: claude

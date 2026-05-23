@@ -1,7 +1,7 @@
-# ABOUTME: Phase 3 v2 deterministic-smoke micro-spec, walking-skeleton anchor for AC-1.
+# ABOUTME: Phase 3 deterministic-smoke micro-spec, walking-skeleton anchor for AC-1.
 # ABOUTME: agent.kind: spacedock_solver against the in-tree DAB adapter. Real-API gated.
 version: 1
-experiment: _deterministic-smoke-v2
+experiment: _deterministic-smoke
 agent:
   kind: spacedock_solver
   runtime: claude
@@ -31,7 +31,7 @@ observers:
   - kind: stdout
 
 # Expected outcome (recorded at Phase 3 implementation, gated on real Anthropic API):
-#   Live-API command: `uv run rk run examples/specs/_deterministic-smoke-v2.frozen.yaml`
+#   Live-API command: `uv run rk run examples/specs/_deterministic-smoke.frozen.yaml`
 #   On a clean run with valid ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN, exits 0;
 #   produces <run-dir>/_razorback/freeze/afc50cb618884495c9063958f532b9a1/sealed_hash.txt
 #   containing the literal sealed_hash above. Per-trial reward matches the v1

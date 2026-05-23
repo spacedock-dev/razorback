@@ -197,7 +197,7 @@ def test_claude_runtime_helper_publishes_audit_sentinel(tmp_path, monkeypatch):
 
 
 def test_claude_passes_tools_denied_through_to_harbor_kwargs(tmp_path):
-    """v4-pkg9-v2 owns the PreToolUse hook plumbing; Phase 3 just passes the kwarg through.
+    """v4-pkg9 owns the PreToolUse hook plumbing; Phase 3 just passes the kwarg through.
 
     Harbor's ClaudeCode stashes CLI flag kwargs in `_flag_kwargs`. The adapter
     must map razorback's `tools_denied` field to harbor's `disallowed_tools`.

@@ -45,8 +45,8 @@ class ClaudeCliAgentBlock(BaseModel):
     prompt_file: Path | None = None
 
 
-class SpacedockSolverV2AgentBlock(BaseModel):
-    """Spec-level agent block for v2 (spec §6.2 + §4).
+class SpacedockSolverAgentBlock(BaseModel):
+    """Spec-level agent block for canonical spacedock_solver (spec §6.2 + §4).
 
     Unfrozen specs carry the path `solver_workflow:`; freeze resolves the
     directory content hash and writes `solver_workflow_content_hash` into the
@@ -76,7 +76,7 @@ AgentBlock = Annotated[
     Union[
         NopAgentBlock,
         ClaudeCliAgentBlock,
-        SpacedockSolverV2AgentBlock,
+        SpacedockSolverAgentBlock,
     ],
     Field(discriminator="kind"),
 ]
@@ -308,7 +308,7 @@ class ProvenanceBlock(BaseModel):
     harness_git_sha: str | None = None
     harbor_version: str | None = None
     prompt_file_hashes: dict[str, str] | None = None
-    # PKG-8 v2 (spec §3.2 + §8.2): plugin inventory + solver_workflow content hash.
+    # PKG-8 (spec §3.2 + §8.2): plugin inventory + solver_workflow content hash.
     plugins: list[dict[str, str]] | None = None
     solver_workflow_hash: str | None = None
 

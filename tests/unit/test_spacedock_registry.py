@@ -66,11 +66,11 @@ benchmark:
     assert stale_kind in str(exc.value)
 
 
-def test_spec_parse_rejects_transitional_v2_spelling():
-    stale_kind = "spacedock_" + "solver_v2"
+def test_spec_parse_rejects_transitional_spelling():
+    stale_kind = "spacedock_" + "solver_v2"  # intentional historical rejection assertion
     bad_spec = f"""\
 version: 1
-experiment: stale-v2
+experiment: stale-transitional
 agent:
   kind: {stale_kind}
   model: claude-opus-4-5
@@ -114,7 +114,11 @@ def test_unknown_kind_raises_agent_kind_error():
 
 @pytest.mark.parametrize(
     "kind",
-    ["spacedock_" + "solver_v2", "spacedock" + "-solver", "claude-cli"],
+    [
+        "spacedock_" + "solver_v2",  # intentional historical rejection assertion
+        "spacedock" + "-solver",
+        "claude-cli",
+    ],
 )
 def test_stale_registry_routes_do_not_resolve(kind):
     with pytest.raises(AgentKindError):

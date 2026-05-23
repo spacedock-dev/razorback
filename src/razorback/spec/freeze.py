@@ -1,4 +1,4 @@
-# ABOUTME: Spec freeze — pin canonical YAML and stamp v2 solver sealed fields (§6.2).
+# ABOUTME: Spec freeze — pin canonical YAML and stamp spacedock_solver sealed fields (§6.2).
 
 import hashlib
 from pathlib import Path
@@ -6,8 +6,9 @@ from pathlib import Path
 import yaml
 
 from razorback.agents.seal import compute_sealed_hash
+from razorback.spec.agent_kwargs import build_spacedock_harbor_agent_kwargs
 from razorback.spec.schema import (
-    SpacedockSolverV2AgentBlock,
+    SpacedockSolverAgentBlock,
     Spec,
 )
 
@@ -20,14 +21,14 @@ def freeze_spec(spec: Spec) -> str:
     """
     payload = spec.model_dump(mode="json")
 
-    if isinstance(spec.agent, SpacedockSolverV2AgentBlock):
-        _freeze_spacedock_v2(payload["agent"], spec.agent.solver_workflow)
+    if isinstance(spec.agent, SpacedockSolverAgentBlock):
+        _freeze_spacedock_solver(payload["agent"], spec.agent.solver_workflow)
 
     return yaml.safe_dump(payload, sort_keys=False, default_flow_style=False)
 
 
-def _freeze_spacedock_v2(agent_block: dict, solver_workflow: Path) -> None:
-    """Compute solver_workflow_content_hash + sealed_hash for v2 (spec §4.3.5 + §8.4).
+def _freeze_spacedock_solver(agent_block: dict, solver_workflow: Path) -> None:
+    """Compute solver_workflow_content_hash + sealed_hash for spacedock_solver.
 
     `solver_workflow` resolves relative to cwd when not absolute.
     """
@@ -41,13 +42,14 @@ def _freeze_spacedock_v2(agent_block: dict, solver_workflow: Path) -> None:
     if agent_block.get("spacedock_skill_version") is None:
         agent_block["spacedock_skill_version"] = "1.0.0"
 
-    harbor_agent_kwargs = {
-        "max_turns": agent_block.get("max_turns"),
-        "tools_allowed": list(agent_block.get("tools_allowed") or []),
-        "tools_denied": list(agent_block.get("tools_denied") or []),
-    }
-    if agent_block.get("append_system_prompt") is not None:
-        harbor_agent_kwargs["append_system_prompt"] = agent_block["append_system_prompt"]
+    harbor_agent_kwargs = build_spacedock_harbor_agent_kwargs(
+        max_turns=agent_block.get("max_turns"),
+        tools_allowed=agent_block.get("tools_allowed"),
+        tools_denied=agent_block.get("tools_denied"),
+        append_system_prompt=agent_block.get("append_system_prompt"),
+        reasoning_effort=agent_block.get("reasoning_effort"),
+        reasoning_summary=agent_block.get("reasoning_summary"),
+    )
 
     agent_block["sealed_hash"] = compute_sealed_hash(
         model=agent_block["model"],

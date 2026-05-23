@@ -1,6 +1,6 @@
-# Smoke solver workflow (Phase 3 v2 reference)
+# Smoke solver workflow (Phase 3 reference)
 
-Minimal solver_workflow for the `_deterministic-smoke-v2.frozen.yaml` reference
+Minimal solver_workflow for the `_deterministic-smoke.frozen.yaml` reference
 spec. One stage, claude-only. The body of this README drives stage names per
 spec §4.3.2.
 

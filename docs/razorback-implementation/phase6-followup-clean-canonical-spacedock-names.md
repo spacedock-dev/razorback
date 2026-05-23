@@ -1,7 +1,7 @@
 ---
 id: nxaw93fjsj46tkrezjf4r7dx
 title: Phase 6 follow-up — clean internal Spacedock v2 names
-status: implementation
+status: validation
 source: phase6-promote-v2-canonical validation — non-blocking canonical naming cleanup
 started: 2026-05-23T05:32:13Z
 completed:
@@ -48,3 +48,31 @@ Verified by: validation report includes grep output and rationale for each remai
 ### Summary
 
 Wrote a separate implementation plan at `docs/razorback-implementation/plans/phase6-followup-clean-canonical-spacedock-names.md` because the inventory crosses multiple active subsystems despite only three ACs. The plan keeps this stage doc-only, reserves production edits for implementation, and requires validation to report every remaining historical hit explicitly.
+
+## Stage Report: implementation
+
+- DONE: Active `V2` / `v2` / `spacedock_solver_v2` names are cleaned up from code/tests/examples except explicit historical rejection coverage.
+  Evidence: `rg -n "V2|v2|spacedock_solver_v2" src/razorback tests examples --glob '!**/_legacy/**'` returns only three `stale_kind = "spacedock_" + "solver_v2"` assertions with inline historical-rejection comments.
+- DONE: Focused behavior checks for schema, translate, runtime adapter, freeze, and generator paths pass after the rename cleanup.
+  Evidence: required AC-2 suite `36 passed`; supporting freeze/registry/generator suite `55 passed`; example/generator checkpoint `34 passed, 1 skipped`.
+- DONE: The entity body has a `## Stage Report: implementation` section accounting for this checklist with DONE/SKIPPED/FAILED entries and cites exact grep/test evidence.
+  Evidence: this section plus `docs/razorback-implementation/validation/phase6-followup-clean-canonical-spacedock-names.md` records the final grep/test commands and outputs.
+
+### Summary
+
+Renamed the canonical schema/helper/freeze/provenance symbols to `SpacedockSolverAgentBlock`, `build_spacedock_harbor_agent_kwargs`, `_freeze_spacedock_solver`, and `_stamp_spacedock_solver_sealed_fields`, and cleaned active comments, test names, example names, and actionable docs to `spacedock_solver`. The only remaining active code/test/example `v2` hits are explicit stale-discriminator rejection assertions; docs retain only historical/spec-label references, protected frontmatter, and this task's own grep pattern.
+
+## Stage Report: validation
+
+- DONE: Independently verify AC-1 by rerunning the active code/tests/examples grep and classifying every remaining stale `V2` / `v2` / `spacedock_solver_v2` hit.
+  Evidence: `rg -n "V2|v2|spacedock_solver_v2" src/razorback tests examples --glob '!**/_legacy/**'` returned only three split-string historical rejection assertions in `test_spec_schema_spacedock_solver.py` and `test_spacedock_registry.py`.
+- DONE: Independently verify AC-2 by rerunning the focused schema/translate/runtime/freeze/generator behavior suites and recording exact pass/fail output.
+  Evidence: required AC-2 suite `36 passed`; supporting freeze/generator suite `55 passed`; example/generator checkpoint `34 passed, 1 skipped`; freeze smoke exited 0.
+- DONE: Independently verify AC-3 plus code review, then append `## Stage Report: validation` with DONE/SKIPPED/FAILED entries and a clear PASSED or REJECTED gate recommendation.
+  Evidence: active docs/API grep leaves only entity AC/report text plus protected historical frontmatter; manual Superpowers review found no blocking or non-blocking branch findings; gate recommendation PASSED.
+- FAILED: Run the stage-required full `uv run pytest` sweep.
+  Evidence: full suite fails during collection on `tests/unit/test_task_identity_scoring.py` with `ModuleNotFoundError: No module named 'razorback.score.load'`; branch diff does not touch that test or `src/razorback/score`, so this is recorded as non-blocking for this entity.
+
+### Summary
+
+Validation reproduces all acceptance criteria for the canonical Spacedock naming cleanup and records the exact grep/test evidence in `docs/razorback-implementation/validation/phase6-followup-clean-canonical-spacedock-names.md`. Gate recommendation: PASSED, approve to `done`; remaining attention is the unrelated repo-wide full-pytest collection failure.

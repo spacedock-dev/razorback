@@ -16,7 +16,7 @@ inspect run-dir artifacts.
   gaps.
 - `razorback-plugin-dab` emits Harbor task directories for
   DataAgentBench.
-- `spacedock_solver_v2` is the README-driven solver agent wrapper for
+- `spacedock_solver` is the README-driven solver agent wrapper for
   runtime adapters such as Claude and Codex.
 
 ## Layout
@@ -67,5 +67,5 @@ share the worktree's fate.
 
 The active goal is to produce N=1 full-dataset benchmark numbers for
 DAB and ade-bench using Codex. The first dependency is implementing
-the Codex runtime adapter for `spacedock_solver_v2`; DAB and
+the Codex runtime adapter for `spacedock_solver`; DAB and
 ade-bench score matrices build on that surface.

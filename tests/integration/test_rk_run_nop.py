@@ -62,7 +62,7 @@ def test_rk_run_nop_end_to_end(runs_root):
     assert re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", manifest["created_at"])
     datetime.fromisoformat(manifest["created_at"].replace("Z", "+00:00"))
 
-    # AC-5: v2 preserves the events.jsonl artifact. Harbor may leave it empty
+    # AC-5: canonical run preserves the events.jsonl artifact. Harbor may leave it empty
     # for local nop runs; when rows exist, they must be valid JSON.
     lines = (run_dir / "events.jsonl").read_text().splitlines()
     parsed = [json.loads(l) for l in lines]

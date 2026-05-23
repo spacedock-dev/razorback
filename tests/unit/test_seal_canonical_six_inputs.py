@@ -1,5 +1,5 @@
-# ABOUTME: AC-2, compute_sealed_hash takes the six v2 sealed inputs and flips on each.
-# ABOUTME: Per spec §4.3.5 + §8.4. b5 plan lines 41-42 name this as the v2 contract.
+# ABOUTME: AC-2, compute_sealed_hash takes the six canonical sealed inputs and flips on each.
+# ABOUTME: Per spec §4.3.5 + §8.4. b5 plan lines 41-42 name this contract.
 
 from razorback.agents.seal import compute_sealed_hash
 

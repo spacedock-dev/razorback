@@ -84,10 +84,10 @@ def test_translator_uses_default_docker_image_when_override_omitted(monkeypatch,
 
 def test_translator_uses_custom_override(monkeypatch, tmp_path):
     calls = _record_materialize_calls(monkeypatch, tmp_path / "fake-cache")
-    spec = _spec_with_tasks([_git_entry()], override="custom-agent:v2")
+    spec = _spec_with_tasks([_git_entry()], override="custom-agent:stable")
     cfg, _ = spec_to_job_config(spec, job_name="testjob", jobs_dir=tmp_path)
     assert len(calls) == 1
-    assert calls[0]["docker_image"] == "custom-agent:v2"
+    assert calls[0]["docker_image"] == "custom-agent:stable"
 
 
 def test_translator_emits_local_task_config_for_git_entries(monkeypatch, tmp_path):

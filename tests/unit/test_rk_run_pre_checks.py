@@ -1,4 +1,4 @@
-# ABOUTME: AC-2: rk run v2 wires alias-drift pre-check and surfaces harbor exit code as 30.
+# ABOUTME: AC-2: rk run wires alias-drift pre-check and surfaces harbor exit code as 30.
 # ABOUTME: Mocks the provider API and the harbor subprocess invocation.
 
 from pathlib import Path

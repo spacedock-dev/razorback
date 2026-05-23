@@ -59,7 +59,7 @@ def _major(version: str) -> int:
     return int(version.split(".", 1)[0])
 
 
-# PKG-8 v2 §3.2 + AC-3: refuse with exit 11 on plugin drift between freeze and run.
+# PKG-8 §3.2 + AC-3: refuse with exit 11 on plugin drift between freeze and run.
 def check_plugin_drift(
     *,
     frozen: list[dict[str, Any]] | None,

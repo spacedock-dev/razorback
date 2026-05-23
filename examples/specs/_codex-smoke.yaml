@@ -1,7 +1,7 @@
-# ABOUTME: PKG-26 Codex v2 smoke spec against the in-tree hello-world local task.
+# ABOUTME: PKG-26 Codex canonical smoke spec against the in-tree hello-world local task.
 # ABOUTME: Live execution is credential/container gated; use rk freeze then rk run.
 version: 1
-experiment: _codex-smoke-v2
+experiment: _codex-smoke
 agent:
   kind: spacedock_solver
   runtime: codex

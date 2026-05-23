@@ -17,7 +17,8 @@ mod-block:
 
 `src/razorback/provenance/freeze_cmd.py:97-107` writes the
 provenance.yaml sealed-input set only for agent kind ==
-`spacedock_solver_v2`. For agent kind == `claude-cli` (the kind
+`spacedock_solver` (historical spelling at observation time; canonical now
+`spacedock_solver`). For agent kind == `claude-cli` (the kind
 Goal 2's matrix uses; also the kind Goal 1 uses for two of its
 three variants), the writer emits a smaller field set and omits:
 
@@ -50,7 +51,7 @@ that asserts on the schema does not bomb.
 
 **AC-1 — Provenance schema is stable across agent kinds.** Every
 cell's provenance.yaml (under any supported agent kind:
-`claude-cli`, `spacedock_solver_v2`, future) contains exactly the
+`claude-cli`, `spacedock_solver`, future) contains exactly the
 same top-level key set. Where a key is not applicable to the kind,
 the value is `null` (not absent).
 Verified by: a unit test enumerates the writer's output keys
@@ -73,9 +74,9 @@ Verified by: unit test asserts each field's value for a
 `claude-cli` claude-haiku spec against a fixture; round-trip
 serialization preserves nulls.
 
-**AC-3 — Existing `spacedock_solver_v2` provenance unchanged.**
+**AC-3 — Existing `spacedock_solver` provenance unchanged.**
 PKG-22 only adds output for `claude-cli` kind; the existing
-spacedock_solver_v2 path emits the same field values as before.
+spacedock_solver path emits the same field values as before.
 Verified by: existing PKG-8 / PKG-15 provenance tests stay green.
 
 **AC-4 — Goal 1 + Goal 2 result docs reference real values.**

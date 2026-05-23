@@ -1,4 +1,4 @@
-# ABOUTME: Unit-test fixtures for pkg1-v2: make_run_dir synthesizes razorback run-dirs.
+# ABOUTME: Unit-test fixtures for pkg1: make_run_dir synthesizes razorback run-dirs.
 # ABOUTME: Mirrors the harbor run-dir layout (<root>/<experiment>/<job>/manifest+summary).
 
 import json

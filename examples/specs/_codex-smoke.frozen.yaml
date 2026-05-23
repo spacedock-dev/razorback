@@ -1,0 +1,50 @@
+version: 1
+experiment: _codex-smoke
+agent:
+  kind: spacedock_solver
+  runtime: codex
+  model: gpt-5.5
+  sampling:
+    temperature: 0.0
+    top_p: null
+    seed: 1
+  solver_workflow: examples/solver_workflows/_smoke
+  solver_workflow_content_hash: sha256:932a3e3a65fd904a1240ee6a6396e914d4bac7b2b0acd66000c25366e89d94b2
+  max_turns: 200
+  max_budget_usd: null
+  tools_allowed: []
+  tools_denied: []
+  append_system_prompt: null
+  reasoning_effort: null
+  reasoning_summary: null
+  resume_from_freeze: null
+  sealed_hash: aa96925f161ec30d112fd886ecb17ebb
+  spacedock_skill_version: 1.0.0
+  prompt_content_hashes: {}
+benchmark:
+  kind: local
+  task_paths:
+  - examples/tasks/hello-world
+trials: 1
+concurrency:
+  trials: 1
+observers:
+- kind: jsonl
+  path: events.jsonl
+- kind: stdout
+  path: null
+provenance:
+  pin_model_version: true
+  pin_image_digest: true
+  pin_agent_cli_hash: true
+  pin_git_sha: true
+  model_resolved_version: null
+  model_resolved_at: null
+  image_digest: sha256:18b989d81179e49dc51fb05c7bf26a06992ca5c7bb25c904220700aede06cc07
+  agent_cli_hash: sha256:db6388d892991f63193be10d432229b9511f0a5220d9452acc0cb62a84eca262
+  harness_git_sha: beb078c8823e3d95deb74f42b8e94f3149f85e98
+  harbor_version: 0.6.6
+  prompt_file_hashes: {}
+  plugins: []
+  solver_workflow_hash: sha256:932a3e3a65fd904a1240ee6a6396e914d4bac7b2b0acd66000c25366e89d94b2
+experiment_meta: null

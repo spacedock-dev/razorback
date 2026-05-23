@@ -116,7 +116,7 @@ def test_two_materializations_with_different_overrides_dont_drift_source(
 
     source = (FIXTURES / "fixture_git_task_no_image").resolve()
     original_bytes = (source / "task.toml").read_bytes()
-    for image in ("dab-agent:latest", "custom-agent:v2"):
+    for image in ("dab-agent:latest", "custom-agent:stable"):
         materialize_git_task(
             git_url="file://" + str(source),
             git_commit_id="cafebabe" * 5,

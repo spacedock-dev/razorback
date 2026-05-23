@@ -37,7 +37,7 @@ RESOLVED_DRIFT = {
 
 FROZEN_TEXT = """\
 version: 1
-experiment: pkg8-v2-run-drift
+experiment: pkg8-run-drift
 agent:
   kind: claude-cli
   model: claude-opus-4-5
