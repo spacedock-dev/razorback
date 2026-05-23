@@ -193,9 +193,8 @@ def _load_reward_per_query(trial_dir: Path) -> dict[int, float] | None:
     Returns `None` when neither candidate sidecar exists (not a batch trial —
     caller falls back to the one-row-per-trial path). Returns a possibly-empty
     `{query_id: reward}` dict otherwise; an empty dict signals a batch trial
-    whose sidecar produced no usable rows. Mirrors the legacy reader at
-    `_legacy/benchmarks/dab/aggregate.py:_load_per_query_rewards` but takes a
-    trial_dir directly.
+    whose sidecar produced no usable rows. Mirrors the legacy DAB aggregator's
+    per-query-rewards loader but takes a trial_dir directly.
     """
     candidates = [
         trial_dir / "steps" / "main" / "verifier" / "reward_per_query.json",

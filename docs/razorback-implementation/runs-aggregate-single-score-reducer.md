@@ -152,3 +152,16 @@ render-adapter snapshot, and the paired integration regression. Branch
 ### Summary
 
 Four ACs pass end-to-end: the canonical reducer reads `reward_per_query.json` and returns 6/7 for the yelp batch fixture; `_stratified_pass_at_1` is deleted; `aggregate_summary` and `rk score` agree byte-for-byte; three-family coverage + paired integration regression both green. Blocker: the branch introduces one new test failure — `test_dab_retirement.py::test_active_code_does_not_import_in_tree_dab_adapter` — because `_load_reward_per_query`'s docstring contains the literal `benchmarks/dab` substring (in `_legacy/benchmarks/dab/aggregate.py`). Recommended verdict: **REJECT-bounce-to-implementation** for a one-line docstring rewrite, then re-validate. Full validation report at `docs/razorback-implementation/validation/runs-aggregate-single-score-reducer.md`.
+
+## Stage Report: implementation (cycle 2)
+
+- DONE: Rewrite the docstring of `_load_reward_per_query` in `src/razorback/runs/aggregate.py` (around line 197) to drop the literal `benchmarks/dab` path token while preserving the design pointer.
+  Replaced `_legacy/benchmarks/dab/aggregate.py:_load_per_query_rewards` with "the legacy DAB aggregator's per-query-rewards loader" — substance unchanged, no path tokens. `grep -n 'benchmarks/dab' src/razorback/runs/aggregate.py` now returns 0 matches.
+- DONE: Re-run dab-retirement and reducer/paired regression tests
+  `tests/unit/test_dab_retirement.py` 2/2 PASS (incl. `test_active_code_does_not_import_in_tree_dab_adapter`). `tests/unit/test_runs_aggregate_per_query_reducer.py` + `tests/integration/test_rk_score_matches_summary.py` 8/8 PASS together.
+- DONE: Append cycle-2 report and commit on worktree branch
+  This section; commit on `spacedock-ensign/runs-aggregate-single-score-reducer` with the prescribed message.
+
+### Summary
+
+One-touch fix per cycle-1 validation feedback: paraphrased the `_load_reward_per_query` docstring to remove the `benchmarks/dab` substring that tripped `test_dab_retirement.py::test_active_code_does_not_import_in_tree_dab_adapter`. No production logic changed; reducer behavior, reducer tests, and paired integration regression all stay green.
