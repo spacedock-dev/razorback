@@ -1,7 +1,7 @@
 ---
 id: wpjrjfhkbp8zvqqpj83g9v5b
 title: DAB spacedock — verify-stage adversarial trace audit (port upstream's External-oracle audit contract)
-status: backlog
+status: plan
 source: 2026-05-23 7q validation cheating-audit finding — leak-guard prose alone is not enough; opus-4.7+xhigh may still attempt external lookups + admit them. DAB upstream's spacedock workflow (`~/git/dataagentbench/benchmark/workspace-readmes/workspace-readme.md` lines 128-135) includes an `External-oracle audit` step in the `verify` stage that scans the analyze-stage tool-use trace for matches against `huggingface`, `datasets.load_dataset`, `hf://`, `from datasets import`, `requests.get` to public data hosts, web-search invocations, or LLM-as-oracle patterns — and REJECTs with the offending event index. Razorback's spacedock `verify` stage (in `examples/solver_workflows/dab_paper_matrix/README.md`) has no such contract. Auto-approve: false because the workflow contract is captain-facing.
 score: 0.9
 auto-approve: false
@@ -9,7 +9,7 @@ worktree:
 issue:
 pr:
 mod-block:
-started:
+started: 2026-05-23T22:58:25Z
 completed:
 verdict:
 ---
