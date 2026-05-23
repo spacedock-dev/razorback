@@ -1,13 +1,13 @@
 ---
 id: d883spjk4ypycse716tfy3pt
 title: Goal 1 re-run — recompute captain-facing headline against canonical per-query reducer (post-1s)
-status: plan
+status: implementation
 source: Captain directive 2026-05-23 — "stop reporting binary for dab" — follow-up #4 from archived `an goal1-rerun-dab-spacedock-opus47-xhigh`, unblocked by `1s runs-aggregate-single-score-reducer` shipping (commit on main)
 started: 2026-05-23T18:57:57Z
 completed:
 verdict:
 score: 0.9
-worktree:
+worktree: .worktrees/spacedock-ensign-goal1-rerun-headline-per-query-recompute
 issue:
 pr:
 mod-block:
