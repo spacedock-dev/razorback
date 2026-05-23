@@ -225,9 +225,10 @@ async def test_codex_runtime_setup_installs_pretooluse_lookup_guard(
     hook = matcher_group["hooks"][0]
     assert hook == {
         "type": "command",
-        "command": "python3 $_RAZORBACK_LOOKUP_GUARD",
+        "command": "python3 $CODEX_HOME/razorback-public-lookup-guard.py",
         "timeout": 10,
     }
+    assert "_RAZORBACK_LOOKUP_GUARD" not in hook["command"]
     assert "[[hooks.PreToolUse.hooks]]" in delegated
     assert "blocked benchmark public lookup command before execution" in delegated
 
