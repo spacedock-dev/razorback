@@ -16,12 +16,10 @@ agent:
   tools_allowed: []
   tools_denied: []
 benchmark:
-  kind: spider2-dbt
+  kind: harbor-local
   tasks_root: ./tests/fixtures/spider2_dbt/harbor_task_minimal
   tasks:
     - spider2-fixture-001
-  docker_image_override: shared-dbt-duckdb:latest
-  batch_mode: per-task
 trials: 1
 concurrency:
   trials: 1

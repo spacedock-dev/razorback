@@ -18,13 +18,11 @@ from razorback.agents.proxy import PROXY_BLOCK_ENV
 from razorback.errors import SpecError
 from razorback.spec.agent_kwargs import build_spacedock_harbor_agent_kwargs
 from razorback.spec.schema import (
-    AdeBenchBenchmarkBlock,
     CodexAgentBlock,
     HarborBenchmarkBlock,
     HarborLocalBenchmarkBlock,
     LocalBenchmarkBlock,
     NopAgentBlock,
-    Spider2DbtBenchmarkBlock,
     SpacedockSolverAgentBlock,
     Spec,
 )
@@ -71,22 +69,6 @@ def spec_to_job_config(
     if isinstance(spec.benchmark, LocalBenchmarkBlock):
         return _build_local(
             spec=spec, job_name=job_name, jobs_dir=jobs_dir, agent_cfg=agent_cfg
-        ), {}
-    if isinstance(spec.benchmark, AdeBenchBenchmarkBlock):
-        return _build_ade_bench(
-            spec=spec,
-            job_name=job_name,
-            jobs_dir=jobs_dir,
-            agent_cfg=agent_cfg,
-            home=home,
-            materialize_mode=materialize_mode,
-        ), {}
-    if isinstance(spec.benchmark, Spider2DbtBenchmarkBlock):
-        return _build_spider2_dbt(
-            spec=spec,
-            job_name=job_name,
-            jobs_dir=jobs_dir,
-            agent_cfg=agent_cfg,
         ), {}
     if isinstance(spec.benchmark, HarborBenchmarkBlock):
         return _build_harbor(
@@ -238,107 +220,6 @@ def _build_local(
     )
 
 
-def _build_ade_bench(
-    *,
-    spec: Spec,
-    job_name: str,
-    jobs_dir: Path,
-    agent_cfg: AgentConfig,
-    home: Path | None = None,
-    materialize_mode: Literal["bind", "copy"] = "bind",
-) -> JobConfig:
-    from razorback.benchmarks.ade_bench.harbor_view import (
-        materialize_ade_harbor_task_view,
-    )
-    from razorback.benchmarks.ade_bench.tasks import (
-        DEFAULT_ADE_BENCH_DOCKER_IMAGE,
-        materialize_git_task,
-        resolve_task_dirs,
-    )
-
-    assert isinstance(spec.benchmark, AdeBenchBenchmarkBlock)
-    if spec.benchmark.batch_mode == "shared-context":
-        raise SpecError(
-            "ade-bench batch_mode='shared-context' is explicit but not yet "
-            "supported for Harbor dispatch; use batch_mode='per-task'."
-        )
-    home_dir = Path(home) if home is not None else Path.home()
-    cache_root = home_dir / ".cache" / "razorback" / "ade-bench"
-    view_root = jobs_dir / job_name / "_razorback" / "task_views"
-    tasks: list[TaskConfig] = []
-
-    if spec.benchmark.dataset is not None:
-        from razorback.benchmarks.ade_bench.dataset_ref import (
-            resolve_dataset_tasks,
-        )
-
-        dataset_cache_root = cache_root / "datasets"
-        # Spec-side task subset entries must be plain strings on the dataset-ref
-        # path; AdeBenchTaskEntry (git tasks) is local-only.
-        requested_subset: list[str] | None = None
-        if spec.benchmark.tasks:
-            requested_subset = [
-                t for t in spec.benchmark.tasks if isinstance(t, str)
-            ]
-        resolved_dataset = resolve_dataset_tasks(
-            dataset_ref=spec.benchmark.dataset,
-            tasks=requested_subset,
-            cache_root=dataset_cache_root,
-        )
-        for r in resolved_dataset:
-            materialized = materialize_ade_harbor_task_view(
-                source_task_dir=r.path,
-                view_root=view_root,
-                task_slug=r.requested_slug,
-                docker_image=spec.benchmark.docker_image_override,
-                view_mode="copy",
-                dataset_ref=spec.benchmark.dataset,
-                dataset_content_hash=r.dataset_content_hash,
-                task_content_hash=r.content_hash,
-            )
-            tasks.append(TaskConfig(path=materialized))
-    else:
-        resolved = resolve_task_dirs(
-            tasks_root=spec.benchmark.tasks_root,
-            tasks=spec.benchmark.tasks,
-        )
-        docker_image = (
-            spec.benchmark.docker_image_override or DEFAULT_ADE_BENCH_DOCKER_IMAGE
-        )
-        for r in resolved:
-            if r.git_url is not None and r.git_commit_id is not None:
-                materialized = materialize_git_task(
-                    git_url=r.git_url,
-                    git_commit_id=r.git_commit_id,
-                    source_path=r.path,
-                    docker_image=docker_image,
-                    cache_root=cache_root,
-                )
-                tasks.append(TaskConfig(path=materialized))
-            else:
-                materialized = materialize_ade_harbor_task_view(
-                    source_task_dir=r.path,
-                    view_root=view_root,
-                    task_slug=r.path.name,
-                    docker_image=spec.benchmark.docker_image_override,
-                    view_mode="copy",
-                )
-                tasks.append(TaskConfig(path=materialized))
-
-    run_dir = jobs_dir / job_name
-    return JobConfig(
-        job_name=job_name,
-        jobs_dir=jobs_dir,
-        n_concurrent_trials=spec.concurrency.trials,
-        n_attempts=spec.trials,
-        agents=[agent_cfg],
-        tasks=tasks,
-        verifier=VerifierConfig(disable=False),
-        retry=RetryConfig(max_retries=0),
-        environment=_environment_config(agent_cfg, run_dir),
-    )
-
-
 def _build_harbor_local(
     *,
     spec: Spec,
@@ -368,57 +249,6 @@ def _build_harbor_local(
         n_attempts=spec.trials,
         agents=[agent_cfg],
         tasks=[TaskConfig(path=p) for p in task_paths],
-        verifier=VerifierConfig(disable=False),
-        retry=RetryConfig(max_retries=0),
-        environment=_environment_config(agent_cfg, run_dir),
-    )
-
-
-def _build_spider2_dbt(
-    *,
-    spec: Spec,
-    job_name: str,
-    jobs_dir: Path,
-    agent_cfg: AgentConfig,
-) -> JobConfig:
-    from razorback.benchmarks.spider2_dbt.harbor_view import (
-        materialize_spider2_harbor_task_view,
-    )
-
-    assert isinstance(spec.benchmark, Spider2DbtBenchmarkBlock)
-    if spec.benchmark.batch_mode == "shared-context":
-        raise SpecError(
-            "spider2-dbt batch_mode='shared-context' is explicit but not yet "
-            "supported for Harbor dispatch; use batch_mode='per-task'."
-        )
-
-    view_root = jobs_dir / job_name / "_razorback" / "task_views"
-    source_root = Path(spec.benchmark.tasks_root).resolve()
-    task_configs: list[TaskConfig] = []
-    for slug in spec.benchmark.tasks:
-        source_task_dir = source_root / slug
-        if not (source_task_dir / "task.toml").is_file():
-            raise FileNotFoundError(
-                f"spider2-dbt task '{slug}' not found at {source_task_dir} "
-                f"(missing task.toml); tasks_root={source_root}"
-            )
-        materialized = materialize_spider2_harbor_task_view(
-            source_task_dir=source_task_dir,
-            view_root=view_root,
-            task_slug=slug,
-            docker_image=spec.benchmark.docker_image_override,
-            view_mode="copy",
-        )
-        task_configs.append(TaskConfig(path=materialized))
-
-    run_dir = jobs_dir / job_name
-    return JobConfig(
-        job_name=job_name,
-        jobs_dir=jobs_dir,
-        n_concurrent_trials=spec.concurrency.trials,
-        n_attempts=spec.trials,
-        agents=[agent_cfg],
-        tasks=task_configs,
         verifier=VerifierConfig(disable=False),
         retry=RetryConfig(max_retries=0),
         environment=_environment_config(agent_cfg, run_dir),

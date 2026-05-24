@@ -125,19 +125,15 @@ def test_schema_validation_uses_harbor_package_reference_parser():
 
 
 def test_schema_coexists_with_other_kinds_in_union():
-    """`HarborBenchmarkBlock` lives alongside surviving per-benchmark kinds."""
+    """`HarborBenchmarkBlock` dispatches alongside `harbor-local` and `local`."""
     from razorback.spec.schema import (
-        AdeBenchBenchmarkBlock,
         HarborLocalBenchmarkBlock,
         LocalBenchmarkBlock,
-        Spider2DbtBenchmarkBlock,
     )
 
     cases = [
         ({"kind": "harbor", "dataset": "adyen/dabstep@latest"}, HarborBenchmarkBlock),
         ({"kind": "harbor-local", "tasks_root": "/tmp", "tasks": ["t"]}, HarborLocalBenchmarkBlock),
-        ({"kind": "ade-bench", "dataset": "dbt-labs/ade-bench@latest"}, AdeBenchBenchmarkBlock),
-        ({"kind": "spider2-dbt", "tasks_root": "/tmp", "tasks": ["t"]}, Spider2DbtBenchmarkBlock),
         ({"kind": "local", "task_paths": []}, LocalBenchmarkBlock),
     ]
     for benchmark_dict, expected_cls in cases:

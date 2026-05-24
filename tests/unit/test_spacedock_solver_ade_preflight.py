@@ -29,7 +29,7 @@ def _kw(tmp_path: Path, **overrides):
         prompt_content_hashes={"readme": "sha256:" + "b" * 64},
         spacedock_skill_version="1.0.0",
         harbor_agent_kwargs={"max_turns": 200},
-        benchmark_kind="ade-bench",
+        benchmark_kind="harbor",
         benchmark_task_id="f1001",
         extra_env={"OPENAI_API_KEY": "x"},
     )
@@ -45,18 +45,18 @@ def _git_commit_subjects(path: Path) -> list[str]:
 
 
 @pytest.mark.asyncio
-async def test_ade_preflight_runs_before_inner_codex_setup(
+async def test_workspace_preflight_runs_before_inner_setup(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Generic preflight: solver execs `/workspace/preflight.sh` once if present.
+
+    No benchmark-kind gate — filesystem convention only.
+    """
     monkeypatch.setenv("RAZORBACK_FREEZE_DIR", str(tmp_path / "freeze-cas"))
     agent = SpacedockSolverAgent(**_kw(tmp_path))
     fake_env = MagicMock()
     fake_env.exec = AsyncMock(
-        return_value=MagicMock(
-            return_code=0,
-            stdout='RAZORBACK_ADE_PREFLIGHT {"status": "passed"}\n',
-            stderr="",
-        )
+        return_value=MagicMock(return_code=0, stdout="", stderr="")
     )
     agent._inner = MagicMock()
     agent._inner.setup = AsyncMock()
@@ -64,14 +64,13 @@ async def test_ade_preflight_runs_before_inner_codex_setup(
     await agent.setup(fake_env)
 
     preflight_command = fake_env.exec.call_args_list[0].args[0]
-    assert "razorback_ade_preflight.py" in preflight_command
-    assert "--task-id f1001" in preflight_command
+    assert "/workspace/preflight.sh" in preflight_command
     agent._inner.setup.assert_awaited_once_with(fake_env)
     assert _git_commit_subjects(agent.resolve_freeze_dir())[0] == "stage: setup/ready"
 
 
 @pytest.mark.asyncio
-async def test_ade_preflight_failure_blocks_inner_codex_setup_as_infra_failure(
+async def test_workspace_preflight_failure_blocks_inner_setup(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("RAZORBACK_FREEZE_DIR", str(tmp_path / "freeze-cas"))
@@ -81,11 +80,7 @@ async def test_ade_preflight_failure_blocks_inner_codex_setup_as_infra_failure(
         return_value=MagicMock(
             return_code=2,
             stdout="",
-            stderr=(
-                'RAZORBACK_ADE_PREFLIGHT {"status": "failed", '
-                '"task_id": "f1001", "missing_tables": ["circuits"], '
-                '"forbidden_tables_observed": ["account_data"]}\n'
-            ),
+            stderr="preflight script said no",
         )
     )
     agent._inner = MagicMock()
@@ -95,7 +90,5 @@ async def test_ade_preflight_failure_blocks_inner_codex_setup_as_infra_failure(
         await agent.setup(fake_env)
 
     message = str(exc_info.value)
-    assert "ADE workspace preflight failed before codex exec" in message
-    assert "f1001" in message
+    assert "workspace preflight (/workspace/preflight.sh)" in message
     agent._inner.setup.assert_not_awaited()
-    assert "codex exec" not in fake_env.exec.call_args_list[0].args[0]

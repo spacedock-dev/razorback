@@ -564,7 +564,7 @@ def test_cli_rejects_both_dataset_ref_and_local_root(tmp_path: Path, monkeypatch
 def test_canonical_dataset_ref_spec_is_checked_in() -> None:
     spec_path = REPO_ROOT / "examples" / "specs" / "ade-bench-harbor-dataset-codex.yaml"
     payload = yaml.safe_load(spec_path.read_text())
-    assert payload["benchmark"]["kind"] == "ade-bench"
+    assert payload["benchmark"]["kind"] == "harbor"
     assert payload["benchmark"]["dataset"] == (
         "dbt-labs/ade-bench@sha256:"
         "2c1f9e6966d01b0a5de2235d1a0b64089c7eead42c85c3b7b61d0929405c2bd5"
