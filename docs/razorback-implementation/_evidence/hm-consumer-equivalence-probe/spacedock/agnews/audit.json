@@ -1,0 +1,19 @@
+Resolving despite existing lockfile due to addition of global exclude newer 2026-05-17T19:34:07.84148Z
+{
+  "policy": "strict",
+  "run_dir": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-generic-harbor-benchmark-surface-design/tmp-agnews-rerun/goal1-spacedock-agnews/6a53de7f7005fe72",
+  "schema_version": "rk-audit-v1",
+  "summary": {
+    "clean": 1,
+    "coverage_missing": 0,
+    "tainted": 0
+  },
+  "trials": [
+    {
+      "findings": [],
+      "taint_status": "clean",
+      "trial_id": "agnews__L8nnGhg",
+      "trial_path": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-generic-harbor-benchmark-surface-design/tmp-agnews-rerun/goal1-spacedock-agnews/6a53de7f7005fe72/agnews__L8nnGhg"
+    }
+  ]
+}
