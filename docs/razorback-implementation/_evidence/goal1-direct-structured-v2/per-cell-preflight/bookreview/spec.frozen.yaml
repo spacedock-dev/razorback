@@ -1,0 +1,58 @@
+version: 1
+experiment: goal1-direct-structured-bookreview
+agent:
+  kind: claude-cli
+  model: claude-opus-4-7
+  sampling:
+    temperature: 0.0
+    top_p: null
+    seed: null
+  tools_allowed:
+  - Bash
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  prompt_file: null
+  reasoning_effort: xhigh
+benchmark:
+  kind: harbor
+  dataset: dab@1.0
+  tasks:
+  - bookreview
+  exclude_tasks: null
+  n_tasks: null
+  plugin: dab
+  plugin_args:
+    workspace_variant: direct-structured
+    query_mode: batch
+    hints: true
+trials: 1
+concurrency:
+  trials: 1
+observers:
+- kind: jsonl
+  path: events.jsonl
+- kind: stdout
+  path: null
+provenance:
+  pin_model_version: true
+  pin_image_digest: true
+  pin_agent_cli_hash: true
+  pin_git_sha: true
+  model_resolved_version: null
+  model_resolved_at: null
+  image_digest: sha256:d29dec396ea6651ca4a622e87e5e9607819e8e894868daa733818e534af961cc
+  agent_cli_hash: sha256:f4a1860d3d9b01653dde4183e2f1216ca9e0c1a404dd63caa4edf07c904102aa
+  harness_git_sha: f06f4ed79d63b523af76403834b467a740e1dffe
+  harbor_version: 0.6.6
+  prompt_file_hashes: {}
+  plugins: []
+  solver_workflow_hash: null
+experiment_meta:
+  max_budget_usd: 20.0
+  estimated_cost_usd: 2.0
+  paper_baseline:
+    name: direct
+    value: 0.4376

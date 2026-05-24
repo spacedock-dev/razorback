@@ -1,0 +1,95 @@
+{
+  "agent": {
+    "env_keys": [
+      "CLAUDE_CODE_OAUTH_TOKEN"
+    ],
+    "harbor_builtin_name": null,
+    "harbor_import_path": "razorback.agents._runtime.claude:RazorbackClaudeCode",
+    "kwargs": {
+      "allowed_tools": "Bash,Read,Write,Edit,Glob,Grep"
+    },
+    "max_timeout_sec": null,
+    "model": "claude-opus-4-7",
+    "override_setup_timeout_sec": null,
+    "override_timeout_sec": null,
+    "runtime": null,
+    "spec_kind": "claude-cli"
+  },
+  "benchmark": {
+    "dataset": "dab@1.0",
+    "exclude_tasks": null,
+    "kind": "harbor",
+    "n_tasks": null,
+    "plugin": "dab",
+    "plugin_args": {
+      "hints": true,
+      "query_mode": "batch",
+      "workspace_variant": "direct-structured"
+    },
+    "tasks": [
+      "stockmarket"
+    ]
+  },
+  "concurrency": {
+    "attempts": 1,
+    "trials": 1
+  },
+  "environment": {
+    "delete": false,
+    "env": {},
+    "force_build": false,
+    "import_path": null,
+    "kwargs": {},
+    "mounts_json": null,
+    "override_cpus": null,
+    "override_gpus": null,
+    "override_memory_mb": null,
+    "override_storage_mb": null,
+    "suppress_override_warnings": false,
+    "type": "docker"
+  },
+  "experiment": "goal1-direct-structured-stockmarket",
+  "explain_only": true,
+  "explain_side_effects": [
+    "runs normal preflight checks before the explain branch",
+    "translates the spec and may materialize task views to report exact task paths",
+    "does not write _job_config.yaml",
+    "does not invoke Harbor",
+    "does not run the model"
+  ],
+  "job_config_yaml": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/preflight/goal1-direct-structured-stockmarket/ea81126891073628/_job_config.yaml",
+  "job_name": "ea81126891073628",
+  "ordering_hint": null,
+  "preparation": [
+    "Parse frozen spec and validate schema.",
+    "Resolve runs-dir, job name, and run directory.",
+    "Run runs-dir Docker mount visibility canary.",
+    "Check frozen Harbor/model/plugin provenance drift when present.",
+    "Translate Razorback spec to Harbor JobConfig.",
+    "Invoke razorback-plugin-dab generate to materialize Harbor task directories from the typed plugin_args.",
+    "Build RazorbackClaudeCode directly.",
+    "Apply Claude auth/tool policy.",
+    "Invoke Claude with each task instruction directly.",
+    "Write Harbor job config to /Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/preflight/goal1-direct-structured-stockmarket/ea81126891073628/_job_config.yaml.",
+    "Invoke `uv run harbor run -c /Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/preflight/goal1-direct-structured-stockmarket/ea81126891073628/_job_config.yaml`.",
+    "After Harbor returns, write spec/provenance/aggregate artifacts under /Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/preflight/goal1-direct-structured-stockmarket/ea81126891073628."
+  ],
+  "prompt": {
+    "mode": "direct-task-instruction",
+    "prompt_prefix": "",
+    "sample_composed_prompt": "# Task\n\nAnswer ALL of the following queries using the databases described below.\nSolve every query in this single agent turn.\n\n## Queries\n\n### query1\n\nLocated under `/workspace/query1/query.json`:\n\n\"What was the maximum adjusted closing price in 2020 for The RealReal, Inc.?\"\n\n### query2\n\nLocated under `/workspace/query2/query.json`:\n\n\"List all ETF securities listed on NYSE Arca that reached an adjusted closing price above $200 at any point during 2015, and also report the total number of such ETFs.\"\n\n### query3\n\nLocated under `/workspace/query3/query.json`:\n\n\"List all company names on the NASDAQ-listed Market that were financially troubled (delinquent, deficient, or both) and have trading volume in 2008, for each, report its exisiting non-null average daily trading volume in 2008.\"\n\n### query4\n\nLocated under `/workspace/query4/query.json`:\n\n\"What are the names (not symbol) of the top 5 non-ETF stocks listed on the New York Stock Exchange (NYSE) that had more up days than down days in 2017? (Up days: closing price > opening price; Down days: closing price < opening price)\"\n\n### query5\n\nLocated under `/workspace/query5/query.json`:\n\n\"Which 5 companies listed on the NASDAQ Capital Market had the highest number of days in 2019 where the intraday price range exceeded 20% of the low price, list the company names please?\"\n\n## Databases\n\nHINTS: \nBelow are the definitions of stock market symbols for the relevant columns.  \n- Listing Exchange Codes:\n  - A = NYSE MKT\n  - N = New York Stock Exchange (NYSE)\n  - P = NYSE ARCA\n  - Z = BATS Global Markets (BATS)\n  - V = Investors' Exchange, LLC (IEXG)\n  - Q = NASDAQ Global Select Market (top-tier NASDAQ market)\n- Financial Status Codes:\n  - D = Deficient: Issuer failed to meet NASDAQ continued listing requirements\n  - E = Delinquent: Issuer missed regulatory filing deadline\n  - Q = Bankrupt: Issuer has filed for bankruptcy\n  - N = Normal (default): Issuer is NOT deficient, delinquent, or bankrupt\n  - G = Deficient and bankrupt\n  - H = Deficient and delinquent\n  - J = Delinquent and bankrupt\n  - K = Deficient, delinquent, and bankrupt\n- A company is considered financially troubled if it is deficient, delinquent, or both.\n- Market Category Codes:\n  - Q = NASDAQ Global Select Market\n  - G = NASDAQ Global Market\n  - S = NASDAQ Capital Market\n\n## Output contract\n\nWrite your final answers to `/workspace/answers.json` as a JSON object where each key is the query directory name (e.g. \"q1\", \"q2\", \"q3\", \"q4\", \"q5\") and each value is the answer string. For example:\n\n```json\n{\n  \"q1\": \"<your answer for query1>\",\n  \"q2\": \"<your answer for query2>\",\n  \"q3\": \"<your answer for query3>\",\n  \"q4\": \"<your answer for query4>\",\n  \"q5\": \"<your answer for query5>\"\n}\n```\n\nThe verifier reads this file and scores each query independently.\n",
+    "sample_instruction": "# Task\n\nAnswer ALL of the following queries using the databases described below.\nSolve every query in this single agent turn.\n\n## Queries\n\n### query1\n\nLocated under `/workspace/query1/query.json`:\n\n\"What was the maximum adjusted closing price in 2020 for The RealReal, Inc.?\"\n\n### query2\n\nLocated under `/workspace/query2/query.json`:\n\n\"List all ETF securities listed on NYSE Arca that reached an adjusted closing price above $200 at any point during 2015, and also report the total number of such ETFs.\"\n\n### query3\n\nLocated under `/workspace/query3/query.json`:\n\n\"List all company names on the NASDAQ-listed Market that were financially troubled (delinquent, deficient, or both) and have trading volume in 2008, for each, report its exisiting non-null average daily trading volume in 2008.\"\n\n### query4\n\nLocated under `/workspace/query4/query.json`:\n\n\"What are the names (not symbol) of the top 5 non-ETF stocks listed on the New York Stock Exchange (NYSE) that had more up days than down days in 2017? (Up days: closing price > opening price; Down days: closing price < opening price)\"\n\n### query5\n\nLocated under `/workspace/query5/query.json`:\n\n\"Which 5 companies listed on the NASDAQ Capital Market had the highest number of days in 2019 where the intraday price range exceeded 20% of the low price, list the company names please?\"\n\n## Databases\n\nHINTS: \nBelow are the definitions of stock market symbols for the relevant columns.  \n- Listing Exchange Codes:\n  - A = NYSE MKT\n  - N = New York Stock Exchange (NYSE)\n  - P = NYSE ARCA\n  - Z = BATS Global Markets (BATS)\n  - V = Investors' Exchange, LLC (IEXG)\n  - Q = NASDAQ Global Select Market (top-tier NASDAQ market)\n- Financial Status Codes:\n  - D = Deficient: Issuer failed to meet NASDAQ continued listing requirements\n  - E = Delinquent: Issuer missed regulatory filing deadline\n  - Q = Bankrupt: Issuer has filed for bankruptcy\n  - N = Normal (default): Issuer is NOT deficient, delinquent, or bankrupt\n  - G = Deficient and bankrupt\n  - H = Deficient and delinquent\n  - J = Delinquent and bankrupt\n  - K = Deficient, delinquent, and bankrupt\n- A company is considered financially troubled if it is deficient, delinquent, or both.\n- Market Category Codes:\n  - Q = NASDAQ Global Select Market\n  - G = NASDAQ Global Market\n  - S = NASDAQ Capital Market\n\n## Output contract\n\nWrite your final answers to `/workspace/answers.json` as a JSON object where each key is the query directory name (e.g. \"q1\", \"q2\", \"q3\", \"q4\", \"q5\") and each value is the answer string. For example:\n\n```json\n{\n  \"q1\": \"<your answer for query1>\",\n  \"q2\": \"<your answer for query2>\",\n  \"q3\": \"<your answer for query3>\",\n  \"q4\": \"<your answer for query4>\",\n  \"q5\": \"<your answer for query5>\"\n}\n```\n\nThe verifier reads this file and scores each query independently.\n",
+    "sample_instruction_path": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/preflight/goal1-direct-structured-stockmarket/ea81126891073628/tasks/stockmarket/instruction.md",
+    "sample_task_path": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/preflight/goal1-direct-structured-stockmarket/ea81126891073628/tasks/stockmarket",
+    "task_count": 1,
+    "task_instruction_application": "The benchmark task instruction is passed directly to the runtime adapter for each trial.",
+    "task_paths": [
+      "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/preflight/goal1-direct-structured-stockmarket/ea81126891073628/tasks/stockmarket"
+    ],
+    "workflow_readme": null
+  },
+  "run_dir": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/preflight/goal1-direct-structured-stockmarket/ea81126891073628",
+  "schema_version": "rk-run-explain-v1",
+  "spec_path": "examples/specs/goal1/direct-structured/stockmarket.frozen.yaml",
+  "spec_sha256": "ea81126891073628b6f0ecf872ca818cdb9a4b24a60736790e90173165dc46d9"
+}
