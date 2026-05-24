@@ -1,6 +1,7 @@
 # ABOUTME: `rk run` Typer command (Phase 1). Parse, pre-check, translate, delegate to harbor.
 # ABOUTME: Maps razorback typed errors to documented exit codes (§3.4).
 
+import hashlib
 import os
 import subprocess
 from pathlib import Path
@@ -26,6 +27,7 @@ from razorback.runs_dir_canary import (
     default_container_probe_factory,
 )
 from razorback.run_ordering import apply_wallclock_ordering, load_wallclock_hints
+from razorback.cli.run_explain import emit_run_explain, explain_run
 from razorback.runs_dir_default import resolve_default_runs_dir
 from razorback.spec.freeze import derive_job_name
 from razorback.spec.parse import parse_spec_file
@@ -181,6 +183,19 @@ def run_command(
         "--order-from-run",
         help="Previous run directory or result artifact used as wallclock ordering hint.",
     ),
+    explain: bool = typer.Option(
+        False,
+        "--explain",
+        help=(
+            "Explain the resolved Harbor job, solver/runtime path, preparation "
+            "steps, and prompt shape, then exit before invoking Harbor."
+        ),
+    ),
+    explain_format: str = typer.Option(
+        "markdown",
+        "--explain-format",
+        help="Output format for --explain: 'markdown' (default) or 'json'.",
+    ),
 ) -> None:
     """Execute a frozen spec against harbor and write the run-dir artifacts."""
     try:
@@ -240,7 +255,7 @@ def run_command(
     # Phase 4a: pre-launch budget gate. Opt-in via --max-budget-usd-running.
     # Refuses with exit 22 before spending harbor compute when the running
     # total plus this invocation's estimate would exceed the cap.
-    if max_budget_usd_running is not None:
+    if max_budget_usd_running is not None and not explain:
         from razorback.budget import (
             decide_budget,
             read_estimate_from_spec,
@@ -317,6 +332,19 @@ def run_command(
             )
         job_config = job_config.model_copy(update={"tasks": ordered_tasks})
 
+    if explain:
+        plan = explain_run(
+            spec_path=spec_path,
+            spec_bytes=spec_bytes,
+            spec=spec,
+            job_name=job_name,
+            run_dir=run_dir,
+            job_config=job_config,
+            ordering_hint_metadata=ordering_hint_metadata,
+        )
+        emit_run_explain(plan, explain_format)
+        return
+
     # Harbor's AgentConfig._serialize_env templatizes sensitive env values that
     # match os.environ ("FOO" -> "${FOO}"); values that don't match are redacted
     # irrecoverably (sk-a****gAA). razorback resolves OAuth from
@@ -367,8 +395,6 @@ def run_command(
     # PKG-17 §AC-1..AC-4: write the canonical aggregator artifacts. Runs after
     # harbor exit regardless of rc; failures collected as warnings so harbor's
     # exit code remains the user-facing signal.
-    import hashlib
-
     from razorback.runs import aggregate as _aggregate_module
 
     provenance_path = run_dir / "provenance.yaml"

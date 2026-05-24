@@ -16,8 +16,8 @@ inspect run-dir artifacts.
   gaps.
 - `razorback-plugin-dab` emits Harbor task directories for
   DataAgentBench.
-- `spacedock_solver` is the README-driven solver agent wrapper for
-  runtime adapters such as Claude and Codex.
+- `spacedock_solver` is the sealed Spacedock first-officer solver wrapper
+  for runtime adapters such as Claude and Codex.
 
 ## Layout
 
@@ -45,6 +45,7 @@ DataAgentBench data checkout for the machine running the benchmark.
 
 ```bash
 uv run rk freeze examples/specs/bookreview-claude-harbor-dab.yaml
+uv run rk run examples/specs/bookreview-claude-harbor-dab.frozen.yaml --explain
 uv run rk run examples/specs/bookreview-claude-harbor-dab.frozen.yaml --runs-dir runs/smoke
 uv run rk score <run-dir> --format json
 uv run rk audit <run-dir> --policy strict --format json

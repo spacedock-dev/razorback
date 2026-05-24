@@ -25,12 +25,16 @@ benchmark policy.
   - installs public-lookup guards and shell wrappers
   - clears proxy env during Codex installation
   - rejects unsupported Codex kwargs instead of silently dropping them
+  - can stage the Spacedock plugin into Codex's skills directory and enable
+    `multi_agent` when asked by the outer Spacedock solver
 
 - `RazorbackClaudeCode` in `src/razorback/agents/_runtime/claude.py`
   - subclasses Harbor `ClaudeCode`
   - normalizes Claude auth handling
   - applies Razorback tool allow/deny policy
   - preserves Harbor Claude telemetry/log surfaces
+  - can stage Spacedock plugins and invoke a named Claude sub-agent when asked
+    by the outer Spacedock solver
 
 These adapters should stay runtime-specific. Shared provenance, sealing,
 freeze, score, and benchmark identity logic should not move into
@@ -42,19 +46,31 @@ Claude-specific subclass.
 ### `SpacedockSolverAgent`
 
 `SpacedockSolverAgent` in `src/razorback/agents/spacedock_solver.py` is an
-outer solver wrapper. It currently:
+outer experiment and orchestration wrapper. It is not the raw model runtime and
+it is not a generic README-prepending helper. It currently:
 
 - computes sealed run identity from model, sampling, workflow hash, prompt
   hashes, task identity, and runtime kwargs
 - owns freeze/resume CAS and checkpoint commits
+- runs ADE workspace preflight before invoking the model runtime
 - reads a `solver_workflow/README.md`
-- prepends that README to the benchmark task instruction
+- injects that README into a first-officer bootstrap prompt
 - builds an inner runtime adapter (`RazorbackCodex`, `RazorbackClaudeCode`, or
   future `pi`)
-- delegates actual solving to that inner runtime adapter
+- configures the inner runtime for Spacedock dispatch:
+  - Codex: stages the Spacedock plugin into the skills surface, enables
+    `multi_agent`, and prompts Codex to resolve `spacedock:first-officer`
+  - Claude: stages the Spacedock plugin and invokes
+    `--agent spacedock:first-officer`
+- tells the first officer to dispatch `spacedock:ensign` workers and wait for
+  them
+- writes dispatch trace metadata after the inner runtime returns or times out
 
-Important: this class does not currently invoke Spacedock first-officer
-dispatch. It is a sealed, checkpointed, README-structured solver wrapper.
+This is the current Spacedock benchmark path. It addresses the experiment-level
+work around a solver run: sealed identity, freeze/resume, runtime-specific
+plugin bootstrapping, benchmark preflight, first-officer entry, and trace
+evidence. The raw runtime adapters address how to run Codex or Claude safely
+inside Harbor.
 
 ## Current Implementation Map
 
@@ -75,13 +91,12 @@ Razorback currently has three implemented agent entry shapes:
   - `SpacedockSolverAgent` then builds the selected inner runtime adapter
     (`runtime: codex` -> `RazorbackCodex`, `runtime: claude` ->
     `RazorbackClaudeCode`)
-  - this is currently README-structured and checkpointed, not first-officer
-    dispatch
+  - this is the Spacedock first-officer dispatch path, with sealed
+    freeze/resume and benchmark preflight
 
 Current Codex minimal specs should use `agent.kind: codex`. Codex specs that
 use `agent.kind: spacedock_solver` with `runtime: codex` are
-`structured+freeze` unless the solver prompt is changed to boot a true
-first-officer workflow.
+Spacedock workflow specs, not plain structured prompts.
 
 ## Run Variants
 
@@ -125,43 +140,45 @@ Harbor trial
   -> workflow README + task instruction
 ```
 
-This is "structured" because the model receives a procedure prompt. It is not a
-Spacedock workflow run. There are no enforced stage boundaries, separate
+This is "structured" because the model receives a procedure prompt. It is not
+a Spacedock workflow run. There are no first-officer dispatches, separate
 workers, or gates.
 
-The current implementation usually reaches this shape through
-`SpacedockSolverAgent`, which also adds sealing and freeze/checkpoint behavior:
+There is no first-class `structured` agent kind today. Do not use
+`spacedock_solver` to mean "README-only structured"; it now boots Spacedock
+dispatch. A future structured agent would have this shape:
 
 ```text
 Harbor trial
-  -> SpacedockSolverAgent
-       -> sealed hash / freeze checkpoints
-       -> workflow README + task instruction
-       -> RazorbackCodex or RazorbackClaudeCode
+  -> RazorbackCodex or RazorbackClaudeCode
+  -> workflow README + task instruction
 ```
-
-That should be understood as `structured+freeze`, not true Spacedock dispatch.
 
 Desired state:
 
 - Structured-only runs should be expressible without sealed/checkpoint
   semantics when the experiment only needs README prompting.
-- `spacedock_solver` should either remain explicitly named as
-  `structured+freeze` behavior or be replaced by clearer agent kinds that
-  separate README prompting from sealed provenance.
+- Structured-with-freeze should also be expressible without Spacedock dispatch
+  when the experiment needs sealed provenance but not workers.
 
 Current gap:
 
 - There is no first-class `structured` agent kind that prepends a workflow
   README without freeze/checkpoint behavior.
+- There is no first-class `structured+freeze` agent kind that adds sealing and
+  resume without first-officer dispatch.
 
 ### Structured + Freeze
 
-`structured+freeze` is useful for provenance and resume experiments, but it is
-not meaningful stage checkpointing by itself. Since a structured run is still a
-single `codex exec` or `claude --print` invocation, checkpoints mark setup,
-before-agent, and after-agent boundaries. They do not guarantee reusable
-intermediate stages unless the prompt asks the agent to write stage notes.
+`structured+freeze` is useful for provenance and resume experiments. It is not
+currently a separate implementation. If added, it should wrap a runtime adapter
+with sealed hash and freeze checkpoints, but should not stage Spacedock plugins
+or ask a first officer to dispatch workers.
+
+Even with freeze enabled, benchmark-level checkpoints currently mark setup,
+before-agent, and after-agent boundaries. Reusable intermediate stage state
+requires the solver workflow or worker prompts to write explicit stage notes or
+artifacts.
 
 ### Spacedock Workflow
 
@@ -182,21 +199,39 @@ Harbor trial
 
 This is the only variant that should be called `spacedock-workflow`.
 
-This is not implemented in the benchmark solver today. The current
-`spacedock_solver` name is therefore overloaded: it provides structured prompt
-and checkpoint behavior, but not first-officer dispatch.
+This is implemented today through `agent.kind: spacedock_solver`.
+
+Current implementation details:
+
+- Codex uses an inline benchmark workflow contract rather than a persistent
+  Spacedock entity directory. The first officer resolves the packaged
+  `spacedock:first-officer` skill, dispatches a `spacedock:ensign` worker with
+  `spawn_agent`, waits with `wait_agent`, then reports changed files and
+  validation evidence.
+- Claude uses the Spacedock plugin and `--agent spacedock:first-officer` path.
+- ADE-Bench final state is still the repaired dbt project. DAB final state is
+  still `answers.json`.
+- The run-level freeze commits are outer lifecycle checkpoints, not guaranteed
+  per-stage checkpoints inside the worker unless the workflow writes explicit
+  notes/artifacts.
 
 Desired state:
 
-- A `spacedock-workflow` variant should invoke first-officer/ensign dispatch
-  explicitly and use real workflow stage boundaries as the unit of gate,
-  rejection, reuse, and checkpoint evidence.
+- Spacedock workflow variants should use real workflow stage boundaries as the
+  unit of gate, rejection, reuse, and checkpoint evidence.
+- Parallel full-dataset runs should retain one dispatch manifest per trial, not
+  a collapsed job-level manifest.
 
 Current gap:
 
-- True first-officer dispatch is not implemented in this task. Until that lands,
-  benchmark specs should not describe `spacedock_solver` runs as
-  `spacedock-workflow` runs.
+- The Codex path is a benchmark-inline first-officer workflow, not a full
+  repository-style Spacedock entity/worktree workflow.
+- The current Codex prompt dispatches one worker per benchmark trial. Multi-stage
+  worker dispatch, gates, and rejections need workflow/prompt support beyond
+  that minimum.
+- Full parallel runs currently produce incomplete dispatch provenance because
+  the manifest is written at the job root and can collapse or overwrite
+  per-trial traces.
 
 ## Benchmark-Specific Artifacts
 
@@ -207,8 +242,8 @@ DAB tasks are answer-artifact tasks. The verifier expects `answers.json`.
 - Minimal: runtime adapter reads task files and writes `answers.json`.
 - Structured: workflow README gives the model a solve/verify procedure, then it
   writes `answers.json`.
-- Spacedock workflow: first officer dispatches real stages, and the terminal
-  stage writes `answers.json`.
+- Spacedock workflow: first officer dispatches workers, and the terminal worker
+  writes `answers.json`.
 
 ### ADE-Bench
 
@@ -218,8 +253,8 @@ state. There is no generic `answers.json` equivalent.
 - Minimal: runtime adapter edits the dbt project directly.
 - Structured: workflow README guides exploration, implementation, validation,
   and final cleanup, but one agent still performs the work.
-- Spacedock workflow: first officer dispatches real dbt repair stages; the
-  terminal state is the repaired project, not a separate answer file.
+- Spacedock workflow: first officer dispatches dbt repair work; the terminal
+  state is the repaired project, not a separate answer file.
 
 ## Naming Rule
 

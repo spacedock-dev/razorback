@@ -31,6 +31,9 @@ def test_compose_run_instruction_starts_with_role_prefix(tmp_path):
     agent = SpacedockSolverAgent(**_kw(tmp_path))
     out = agent._compose_run_instruction("solve this task")
     assert out.startswith("ROLE: You are the first-officer")
+    assert "Use the inline \"# Solver workflow instructions\" section" in out
+    assert "/workspace/README.md" not in out
+    assert "/workspace/answers.json will be written" not in out
     # README content still present after the ROLE block
     assert "## Stages" in out
     assert "solve this task" in out
