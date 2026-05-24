@@ -1,5 +1,5 @@
-# ABOUTME: KEEP-VERBATIM port of dataagentbench/benchmark/tests/test_taint.py.
-# ABOUTME: Exercises the verbatim taint.py + subagent_traces.py port for AC-2/3/4.
+# ABOUTME: Port of dataagentbench/benchmark/tests/test_taint.py with razorback divergence.
+# ABOUTME: pip-install rule rebalanced per captain principle (cycle-2 of wp entity).
 import json
 
 from razorback.audit import taint
@@ -173,6 +173,7 @@ def test_subagent_only_forbidden_lookup_taints_attempt(tmp_path):
 
 
 def test_shell_install_or_download_commands_taint_attempt(tmp_path):
+    """pip install of a named canonical-data lib is forbidden (razorback divergence)."""
     attempt = make_clean_parent_with_trace_manifest(tmp_path, expected=1, captured=1)
     child = attempt / "traces" / "subagents" / "model-thread-1.jsonl"
     child.write_text(child_command_jsonl("thread-1", "/bin/bash -lc 'pip install datasets'"))
@@ -180,8 +181,69 @@ def test_shell_install_or_download_commands_taint_attempt(tmp_path):
     report = taint.scan_attempt(attempt, taint_policy="fail")
 
     assert report["status"] == "failed"
-    assert report["findings"][0]["pattern"] == r"(?m)(?:^|[;&|]\s*)(?:python(?:3)?\s+-m\s+pip|pip(?:3)?)\s+install\b"
+    pattern = report["findings"][0]["pattern"]
+    assert r"datasets|huggingface|huggingface_hub|transformers|evaluate" in pattern, (
+        f"expected new captain-principle regex, got: {pattern!r}"
+    )
     assert report["findings"][0]["scanned_field"] == "command.shell"
+
+
+def test_shell_pip_install_generic_lib_stays_clean(tmp_path):
+    """Captain principle: generic compute libraries (rapidfuzz, scikit-learn,
+    duckdb, numpy, pandas) are CLEAN. Only the four canonical-data libraries
+    are forbidden by name. Mirrors razorback.agents.claude_invoke.DISALLOWED_TOOLS.
+    """
+    attempt = make_clean_parent_with_trace_manifest(tmp_path, expected=1, captured=1)
+    child = attempt / "traces" / "subagents" / "model-thread-1.jsonl"
+    child.write_text(
+        child_command_jsonl("thread-1", "/bin/bash -lc 'pip install rapidfuzz'")
+        + child_command_jsonl("thread-1", "/bin/bash -lc 'pip install scikit-learn'")
+        + child_command_jsonl("thread-1", "/bin/bash -lc 'pip install --user duckdb'")
+        + child_command_jsonl("thread-1", "/bin/bash -lc 'pip3 install numpy pandas'")
+    )
+
+    report = taint.scan_attempt(attempt, taint_policy="fail")
+
+    assert report["status"] == "clean", report["findings"]
+    assert report["findings"] == []
+
+
+def test_shell_pip_install_each_named_lib_taints_attempt(tmp_path):
+    """All four canonical-data libs in the named list MUST flag."""
+    for lib in ("datasets", "huggingface", "huggingface_hub", "transformers", "evaluate"):
+        attempt = make_clean_parent_with_trace_manifest(
+            tmp_path / lib, expected=1, captured=1,
+        )
+        child = attempt / "traces" / "subagents" / "model-thread-1.jsonl"
+        child.write_text(child_command_jsonl("thread-1", f"/bin/bash -lc 'pip install {lib}'"))
+        report = taint.scan_attempt(attempt, taint_policy="fail")
+        assert report["status"] == "failed", f"{lib} should taint: {report}"
+
+
+def test_shell_pip_install_named_lib_with_version_pin_taints_attempt(tmp_path):
+    """Version pins (datasets==2.18.0, huggingface_hub>=0.20, transformers~=4.40)
+    must still flag — the captain principle is the lib name, not the spec form.
+    """
+    for spec in ("datasets==2.18.0", "huggingface_hub>=0.20", "transformers~=4.40", "evaluate<0.5"):
+        attempt = make_clean_parent_with_trace_manifest(
+            tmp_path / spec.replace("=", "_").replace(">", "_").replace("<", "_").replace("~", "_"),
+            expected=1, captured=1,
+        )
+        child = attempt / "traces" / "subagents" / "model-thread-1.jsonl"
+        child.write_text(child_command_jsonl("thread-1", f"/bin/bash -lc 'pip install {spec}'"))
+        report = taint.scan_attempt(attempt, taint_policy="fail")
+        assert report["status"] == "failed", f"{spec} should taint: {report}"
+
+
+def test_shell_huggingface_cli_taints_attempt(tmp_path):
+    """huggingface-cli / hf binaries are forbidden (mirror claude_invoke list)."""
+    attempt = make_clean_parent_with_trace_manifest(tmp_path, expected=1, captured=1)
+    child = attempt / "traces" / "subagents" / "model-thread-1.jsonl"
+    child.write_text(child_command_jsonl(
+        "thread-1", "/bin/bash -lc 'huggingface-cli download fancyzhx/ag_news'",
+    ))
+    report = taint.scan_attempt(attempt, taint_policy="fail")
+    assert report["status"] == "failed"
 
 
 def test_shell_download_command_still_taints_attempt(tmp_path):

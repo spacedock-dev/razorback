@@ -46,31 +46,38 @@ the trace contains any of:
 - `hf://` URI references
 - `from datasets import` Python imports (the import-layer attack the
   agnews cheating event used)
-- `requests.get` to public data hosts
-  (`raw.githubusercontent.com`, `huggingface.co`,
-  `datasets-server.huggingface.co`, `api.github.com`, `kaggle.com`,
-  `drive.google.com`)
-- web-search tool invocations (`WebSearch`, `WebFetch`)
+- `requests.get` / `curl` / `wget` to public data hosts
+- `pip install` of one of the named canonical-data libraries:
+  `datasets`, `huggingface_hub`, `transformers`, `evaluate`
+  (generic compute libraries like `rapidfuzz`, `scikit-learn`,
+  `duckdb`, `numpy`, `pandas` are CLEAN)
+- `huggingface-cli` or `hf` binary invocations
+- web-search tool invocations (`WebSearch`, `WebFetch`,
+  upstream `web_search` / `web.run`)
 - LLM-call patterns asking another model for the answer
-  (`openai.`, `anthropic.messages.create`, `google.generativeai.`)
 
-The audit is mechanized by `razorback.agents.external_oracle_audit`.
-Invoke it against the cell's run-dir:
+The audit is mechanized by `rk audit --policy strict`, which delegates
+to `razorback.audit.taint` (the shared taint scanner, ported from
+upstream DAB with razorback divergences) and
+`razorback.audit.claude_code` (the claude-cli trace adapter). Invoke
+it against the cell's run-dir:
 
-    python -m razorback.agents.external_oracle_audit <cell-run-dir>
+    uv run rk audit <cell-run-dir> --policy strict --format json
 
-The exit-code contract mirrors the subagent smoke validator:
+The exit-code contract:
 
 - `0` — clean. Proceed with the answer-shape check above.
-- `2` — at least one confirmed forbidden pattern in the trace.
-  REJECT the cell; the offending event indices are written to
-  `<cell-run-dir>/external-oracle-audit.json` and surfaced in the
-  dispatch ledger as `status: external-oracle-cheating`.
-- `3` — `claude-code.txt` could not be located or parsed.
-  REJECT the cell as `status: external-oracle-audit-error`.
+- `23` — at least one trial in the cell tainted by a forbidden
+  lookup (the `TAINT_FINDINGS` exit). REJECT the cell; the
+  offending findings are written to `<cell-run-dir>/audit.json`
+  and surfaced in the dispatch ledger as
+  `status: external-oracle-cheating`.
+- any other non-zero — audit could not run cleanly (trace missing,
+  scanner error, etc.). REJECT the cell as
+  `status: external-oracle-audit-error`.
 
 The matrix dispatcher (`examples/drivers/dab-paper-matrix.sh`) runs
 this gate automatically for every cell across all three variants
-between `rk run` and `rk audit`. The verify-stage agent must treat a
+between `rk run` and `rk score`. The verify-stage agent must treat a
 non-zero exit as a REJECT and not write an answer that would otherwise
 pass the answer-shape check.

@@ -33,20 +33,20 @@ The External-oracle audit is the EXACT cheating audit our 7q validator just ran 
 Verified by: `grep -F 'External-oracle audit' examples/solver_workflows/dab_paper_matrix/README.md` matches; `grep -F 'datasets.load_dataset\|huggingface\|hf://' examples/solver_workflows/dab_paper_matrix/README.md` matches all three.
 
 **AC-2 — Razorback ships a `rk audit external-oracle` subcommand or library helper that mechanizes the verify-stage check.**
-A consumer-facing helper that takes a run-dir path and scans the `claude-code.txt` trace for forbidden patterns; emits structured findings (event index, matched pattern, snippet ≤200 chars, severity). Lives at `src/razorback/agents/external_oracle_audit.py` (or sibling to `subagent_traces.py`/`subagent_smoke.py` from `ne`). Mirror the contract of the smoke validator's exit codes (0 clean / 2 dirty / 3 error).
-Verified by: `python -m razorback.agents.external_oracle_audit <real-agnews-cell-dir>` returns exit 2 + names the `load_dataset` event index + the `fancyzhx/ag_news` URI in the snippet; `python -m razorback.agents.external_oracle_audit <real-bookreview-cell-dir>` returns exit 0.
+A consumer-facing helper that takes a run-dir path and scans the `claude-code.txt` trace for forbidden patterns; emits structured findings (event index, matched pattern, snippet ≤200 chars, severity). Cycle-1 shipped this as `src/razorback/agents/external_oracle_audit.py`; **cycle-2 SUPERSEDED that module** with an extension to the existing `src/razorback/audit/taint.py` plus a new claude-cli adapter at `src/razorback/audit/claude_code.py`. The captain-facing CLI is now `rk audit <cell-run-dir> --policy strict` (exit 0 clean / 23 tainted / other non-zero error). One canonical taint surface, two trace shapes (codex + claude-cli + harbor-codex).
+Verified by: `uv run rk audit <real-agnews-cell-dir> --policy strict` returns exit 23 with claude_code_trace findings naming `from datasets import` and `load_dataset` at the agnews cheating lines; the same against the real bookreview cell returns exit 0.
 
 **AC-3 — Solver-workflow verify stage prompt-level rule references the helper.**
-The `verify` stage prose in `examples/solver_workflows/dab_paper_matrix/README.md` instructs the agent to invoke (or describes the harness invoking) `python -m razorback.agents.external_oracle_audit` against its own run-dir as part of its self-audit, and REJECT if exit code is non-zero. Mirrors how DAB upstream's solver workflow ties the prose audit to a concrete check.
-Verified by: workflow README's verify section names the command + the exit-code semantic.
+The `verify` stage prose in `examples/solver_workflows/dab_paper_matrix/README.md` instructs the agent to invoke (or describes the harness invoking) the audit against its own run-dir as part of its self-audit, and REJECT if exit code is non-zero. Cycle-2 updated the prose to reference `rk audit --policy strict` (the cycle-1 prose referenced `python -m razorback.agents.external_oracle_audit`; SUPERSEDED).
+Verified by: workflow README's verify section names `rk audit --policy strict` + the 0/23/other exit-code semantic.
 
 **AC-4 — Per-cell post-run hook automation (defense in depth like ne's smoke gate).**
-The matrix dispatcher (`examples/drivers/dab-paper-matrix.sh`) — modeled on `ne`'s subagent-smoke-gate hook (commit 39847a5) — invokes the external-oracle audit as a post-cell gate after rk-run and before rk-audit. A failing audit marks the cell `status: external-oracle-cheating` in `dispatch-ledger.tsv` and the captain-facing aggregator surfaces it (mirrors how `ne` handles `captured == 0`).
-Verified by: synthetic cell with a `load_dataset` event in claude-code.txt triggers the dispatcher to mark `status: external-oracle-cheating`; clean cell stays `status: ok`.
+The matrix dispatcher (`examples/drivers/dab-paper-matrix.sh`) invokes the external-oracle audit as a per-cell gate after rk-run and before rk-score, for every variant (NOT variant-gated). A failing audit marks the cell `status: external-oracle-cheating` in `dispatch-ledger.tsv`. Cycle-2 changed the invocation from a separate `external_oracle_audit` module call to the canonical `rk audit --policy strict` (which now ALSO writes the per-cell `audit.json` artifact previously written by the post-gate rk audit invocation — folded into one call).
+Verified by: integration tests at `tests/integration/test_dab_paper_matrix_external_oracle_gate.py` cover (a) hook ordering between rk run and rk score, (b) exit-23 → external-oracle-cheating mapping, (c) failing audit appends to FAILURES_LOG + decrements ok_cells, (d) synthetic cheating cell exits 23 end-to-end, (e) synthetic clean cell exits 0 end-to-end.
 
 **AC-5 — Unit tests for the audit module.**
-Synthetic claude-code.txt fixtures: one with a `load_dataset('fancyzhx/ag_news')` event (must REJECT with the right finding), one with a clean Bash-only trace (must PASS), one with `requests.get('https://raw.githubusercontent.com/...')` (must REJECT), one with `from datasets import load_dataset` Python import (must REJECT — same import-layer attack as agnews used).
-Verified by: `uv run pytest tests/unit/test_external_oracle_audit.py -v` passes.
+Cycle-1 shipped 7 fixtures at `tests/unit/test_external_oracle_audit.py` — SUPERSEDED; deleted in cycle-2 along with the module they tested. Cycle-2 substituted: 11 claude-cli adapter tests at `tests/unit/audit/test_claude_code_adapter.py` (load_dataset python heredoc, clean Bash, pip install rapidfuzz CLEAN, pip install datasets flagged, WebSearch tool_use flagged, curl huggingface flagged, tool_result-echo defense, missing trace, discover_trial_roots, rk audit strict end-to-end cheating + clean); 4 new captain-principle tests in `tests/unit/audit/test_taint_keep_verbatim.py` (generic-lib CLEAN, each named lib taints, version-pinned named lib taints, huggingface-cli taints).
+Verified by: `uv run pytest tests/unit/audit/ -v` passes 46/46; `uv run pytest tests/integration/test_dab_paper_matrix_external_oracle_gate.py -v` passes 5/5.
 
 ## Test plan
 
@@ -61,6 +61,7 @@ Verified by: `uv run pytest tests/unit/test_external_oracle_audit.py -v` passes.
 - **Workspace README leak-guard prose port.** Sibling entity `k34cqr2myjsh6aaqm6fhz5nw`. Deters at the prompt layer; this entity catches what slips past.
 - **Network-layer block.** Sibling entity `wjfra5rje67399g6msza9zg6`. Hard guard regardless of prompt + trace.
 - **Full upstream `taint.py` schema parity.** Upstream's `taint.json` carries `schema_version`, `policy_mode`, `categories` (public_egress + dynamic_install + answer_key_access), `confirmed_count`/`suspected_count`/`suppressed_count`, etc. This entity ships the MINIMUM external-oracle audit; full taint scanner is sibling entity `8yb8fzx5549j8q1w23c7xbr9`.
+  *Cycle-2 update:* sibling entity `8y`'s "scanner port" half is now PARTIALLY SUPERSEDED by cycle-2's `audit/taint.py` extension (claude-cli adapter at `audit/claude_code.py` + pip-rule rebalance per captain principle). `8y`'s remaining scope: read-only rootfs + duckdb extension cache + the full taint.json schema fields above. Update `8y` entity body to reflect the narrower scope when it's resumed.
 - **direct-minimal / direct-structured verify-stage audit.** Those variants don't have a verify stage today (no spacedock crew loop). This entity scopes to the spacedock solver workflow. Direct variants would need the audit run as a separate post-cell hook (which AC-4's dispatcher integration provides incidentally).
 - **agnews-only re-run of 7q.** Same as the sibling leak-guard entity — file a follow-on 7q impl cycle after these ship.
 
@@ -116,3 +117,46 @@ Wrote separate plan doc at `docs/razorback-implementation/plans/dab-verify-stage
 ### Summary
 
 Shipped the verify-stage External-oracle audit contract in three layers — Python module (src/razorback/agents/external_oracle_audit.py with 0/2/3 exit codes + razorback-external-oracle-audit-v1 sidecar), dispatcher hook (dab-paper-matrix.sh, non-variant-gated, fires for all 3 variants between rk-run and rk-audit), and workflow README prose (mirrors DAB upstream verbatim + ties to the harness invocation). Cross-cell smoke verified the audit's calibration: agnews emits 12 confirmed findings across the 7 expected line numbers, all 11 other cells stay clean including music_brainz_20k's pip-install events (out-of-scope generic-lib install per plan). The ne smoke-gate templates (subagent_traces.py / subagent_smoke.py) referenced in the plan were design templates only — they have not merged to my branch's base (2abdd05), so the external-oracle audit ships standalone without depending on the smoke gate's presence in the dispatcher.
+
+## Stage Report: implementation (cycle 2 — (b) extend audit/taint.py + Option A rewire)
+
+- DONE: Extend `src/razorback/audit/taint.py` with claude-cli trace coverage.
+  Added sibling adapter `src/razorback/audit/claude_code.py` (modeled on `audit/harbor_codex.py`) — `discover_trial_roots` finds `**/agent/claude-code.txt`; `scan_trial` parses `event.type == "assistant" → message.content[*].type == "tool_use"`, extracts `input.command` for Bash / `input.file_path` for Read, flags WebSearch/WebFetch tool_use directly, re-uses `taint._scan_command` for all pattern logic. Wired into `audit/cli.py`'s `_discover_trial_roots` + `_audit_run_dir`. The captain-facing API surface (`rk audit ... --policy strict`, exit 23 on findings) is unchanged.
+- DONE: Rebalance the PyPI rule per captain principle.
+  Replaced the upstream `pip install\b` regex in `audit/taint.py` `FORBIDDEN_SHELL_PATTERNS` with a named-libs alternation `(datasets|huggingface|huggingface_hub|transformers|evaluate)(\b|[*=<>~])`. Added `huggingface-cli|hf` binary as a separate forbidden-pattern. The named-lib list mirrors `razorback.agents.claude_invoke.DISALLOWED_TOOLS` so audit and runtime block-list stay consistent. Generic compute libraries (rapidfuzz, scikit-learn, duckdb, numpy, pandas) are now CLEAN — captain principle encoded.
+- DONE: Tests cover both changes plus regression-guard the rebalance.
+  46/46 audit tests pass (`tests/unit/audit/`). New test classes: captain-principle generic-lib CLEAN; each of the 5 named libs flagged; version-pinned named libs flagged; huggingface-cli flagged; claude-cli adapter end-to-end (load_dataset python heredoc, clean Bash, generic-lib pip CLEAN, named-lib pip flagged, WebSearch tool_use flagged, curl huggingface flagged, tool_result-echo defense, missing trace returns empty, discover_trial_roots, rk audit strict end-to-end cheating + clean). One existing verbatim-port test updated to assert the new captain-principle regex literal instead of the upstream-verbatim one (the actual behavior assertion — `pip install datasets` flagged — preserved).
+- DONE: Empirically verified against real 7q cells.
+  `rk audit --policy strict <real-agnews-cell>` returns exit 23 with claude_code_trace findings at lines 26 (`from datasets import`), 28+32+34 (`pip install datasets`), 30 (curl `huggingface.co`), 38/40/45/48/53 (`load_dataset`). All 7 plan-required line numbers covered. `rk audit --policy strict <real-bookreview-cell>` returns exit 0. `rk audit --policy strict <real-music_brainz_20k-cell>` returns exit 0 (pip install duckdb/rapidfuzz CLEAN per captain principle — would have been REJECTED under the upstream-verbatim regex).
+- DONE: Discarded cycle-1's `src/razorback/agents/external_oracle_audit.py` (8KB) and its 7-fixture test file `tests/unit/test_external_oracle_audit.py`. `git rm` clean; no lingering imports anywhere in the tree (`grep -r razorback.agents.external_oracle_audit src/ tests/ examples/` returns nothing post-rewire).
+- DONE: Rewired `examples/drivers/dab-paper-matrix.sh` per-cell hook.
+  Folded the previously-separate gate call into the existing `rk audit` invocation (single per-cell audit run, not two). Exit 0 → continue to rk score; exit 23 → ledger status `external-oracle-cheating` + roll back from `ok_cells` to `failed_cells` + skip scoring + continue; any other non-zero → ledger status `external-oracle-audit-error` + same rollback. Hook remains NOT variant-gated; fires for all 3 variants. `bash -n` clean; `--dry-run` still emits 36 cells.
+- DONE: Rewired `tests/integration/test_dab_paper_matrix_external_oracle_gate.py`. Same 5-test contract (hook ordering, exit-23 mapping, FAILURES_LOG, synthetic cheating cell e2e, synthetic clean cell e2e) but now invokes `rk audit --policy strict` through the typer CliRunner instead of the deleted module's subprocess invocation. 5/5 pass.
+- DONE: Updated workflow README prose at `examples/solver_workflows/dab_paper_matrix/README.md`. Verify-stage External-oracle audit block now references `uv run rk audit <cell-run-dir> --policy strict --format json` and the 0/23/other exit-code semantic, with the named-lib list (datasets / huggingface_hub / transformers / evaluate) called out and the captain-principle (rapidfuzz, scikit-learn, duckdb, numpy, pandas CLEAN) made explicit. All upstream-verbatim forbidden patterns from cycle-1 preserved. AC-1/AC-3 grep verification: `External-oracle audit`:1, `datasets.load_dataset`:1, `huggingface`:3, `hf://`:1, `from datasets import`:2, `web-search`:1, `rk audit`:2, `--policy strict`:1.
+- DONE: Cross-cell smoke against all 12 7q direct-structured cells under `_runs/goal1-direct-structured-opus47-xhigh/direct-structured/`. Result table:
+
+      cell              exit  clean  tainted  top_finding
+      agnews            23    0      1        from datasets impo[rt]
+      bookreview        0     1      0        -
+      crmarenapro       0     1      0        -
+      DEPS_DEV_V1       0     1      0        -
+      GITHUB_REPOS      0     1      0        -
+      googlelocal       0     1      0        -
+      music_brainz_20k  0     1      0        -
+      PANCANCER_ATLAS   0     1      0        -
+      PATENTS           0     1      0        -
+      stockindex        0     1      0        -
+      stockmarket       0     1      0        -
+      yelp              0     1      0        -
+
+  Exact match with cycle-1's cross-cell verdict — the rewire preserved correct behavior. agnews REJECTed; music_brainz_20k stayed CLEAN (validates captain principle); 10 other cells clean. No previously-undetected cheating surfaced.
+
+- DONE: Full pytest: 655 passed, 12 skipped, 9 pre-existing failures (identical to cycle-1 and to sibling k3 worktree at the same base 2abdd05 — pre-date this work). Net delta vs cycle-1: +8 passing tests (deleted 7 cycle-1 unit + 5 cycle-1 integration; added 11 claude_code adapter + 4 captain-principle taint + 5 integration). One pre-existing import error at `tests/unit/test_task_identity_scoring.py` (`razorback.score.load` missing) deselected, same as cycle-1.
+
+### Summary
+
+Cycle-2 replaced cycle-1's parallel scanner module (`agents/external_oracle_audit.py`) with an extension to the existing `audit/taint.py` per captain Option-(b) decision. Two contract-changing edits: (1) added `audit/claude_code.py` adapter sibling to `audit/harbor_codex.py` that teaches taint to read the claude-cli `assistant.tool_use` event shape, fixing a previously silent-blindness bug — any `rk audit` invocation against claude-cli traces before this change silently reported CLEAN, including the agnews cheating cell; (2) rebalanced taint.py's `pip install` regex from "any package" to the four named canonical-data libraries (datasets/huggingface_hub/transformers/evaluate) plus huggingface-cli/hf binaries, mirroring `claude_invoke.DISALLOWED_TOOLS`, per the captain principle that generic compute libraries (rapidfuzz, scikit-learn, duckdb, numpy, pandas) are CLEAN.
+
+Razorback now has ONE canonical taint surface (`rk audit --policy strict`) that handles codex + harbor-codex + claude-cli trace shapes uniformly. Razorback's `audit/taint.py` diverges from upstream `dab lib/taint.py` for the first time — worth a future captain decision on whether to upstream the changes (claude-cli support may help upstream too if they ever add a claude-cli runtime; the PyPI rebalance is razorback-specific policy and likely should stay forked). Sibling entity `8y dab-taint-scanner-and-readonly-rootfs-port`'s "scanner port" half is now partially SUPERSEDED — `8y` is updated in §Out of scope; remaining `8y` scope is read-only rootfs + duckdb extension cache + full taint.json schema fields.
+
+The captain-facing implication for any prior `rk audit` invocation against claude-cli traces: those previously silently reported CLEAN; this fix changes that to correctly report TAINTED on cheating events. The 7q validation report's manual grep finding for agnews is now mechanically detectable.

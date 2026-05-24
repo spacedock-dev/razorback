@@ -1,14 +1,18 @@
-# ABOUTME: T3 — dab-paper-matrix.sh wires the external-oracle audit as a
-# ABOUTME: post-run / pre-audit per-cell hook with the right ledger contract.
+# ABOUTME: T3 cycle-2 — dab-paper-matrix.sh wires rk audit --policy strict as
+# ABOUTME: the per-cell external-oracle gate (no separate gate-only module).
 
 import json
-import subprocess
-import sys
 from pathlib import Path
+
+from typer.testing import CliRunner
+
+from razorback.cli import app
 
 
 DRIVER = Path("examples/drivers/dab-paper-matrix.sh")
 AGGREGATOR = Path("examples/drivers/aggregate-goal1-scores.py")
+
+runner = CliRunner()
 
 
 def _write_trace(cell_dir: Path, events: list[dict]) -> Path:
@@ -38,88 +42,70 @@ def _bash_event(cmd: str) -> dict:
     }
 
 
-def test_driver_invokes_external_oracle_audit_between_rk_run_and_rk_audit() -> None:
-    """AC-4 shape: the matrix driver must invoke the audit module per-cell."""
+def test_driver_invokes_rk_audit_strict_after_rk_run() -> None:
+    """AC-4 shape: the matrix driver must invoke rk audit --policy strict
+    as the per-cell external-oracle gate, between rk run and rk score."""
     body = DRIVER.read_text()
-    assert "razorback.agents.external_oracle_audit" in body, (
-        "dab-paper-matrix.sh must invoke the external-oracle audit per-cell"
-    )
-    # Hook fires for EVERY variant (NOT gated like the smoke gate).
-    # If a variant-only conditional shows up wrapping the audit, this catches it.
-    # Find the rk run / rk audit invocation sites (skip the file-header
-    # comments that mention the commands as documentation).
+    assert "rk audit" in body, "dab-paper-matrix.sh must invoke rk audit per-cell"
+    assert "--policy strict" in body, "rk audit must run under --policy strict"
     rk_run_idx = body.index('uv run --project "$REPO_ROOT" rk run')
-    audit_idx = body.index("razorback.agents.external_oracle_audit")
-    rk_audit_idx = body.index('uv run --project "$REPO_ROOT" rk audit')
-    assert rk_run_idx < audit_idx < rk_audit_idx, (
-        "external-oracle audit must run after rk run and before rk audit"
+    audit_idx = body.index('uv run --project "$REPO_ROOT" rk audit')
+    rk_score_idx = body.index('uv run --project "$REPO_ROOT" rk score')
+    assert rk_run_idx < audit_idx < rk_score_idx, (
+        "rk audit --policy strict must run after rk run and before rk score"
     )
 
 
-def test_driver_sets_external_oracle_cheating_status_on_audit_rc_2() -> None:
+def test_driver_maps_audit_exit_23_to_external_oracle_cheating() -> None:
     body = DRIVER.read_text()
     assert "external-oracle-cheating" in body, (
         "driver must surface external-oracle-cheating as a distinct ledger status"
     )
     assert "external-oracle-audit-error" in body, (
-        "driver must surface external-oracle-audit-error (rc==3) distinctly"
+        "driver must surface external-oracle-audit-error as a distinct ledger status"
+    )
+    # The exit-23 → cheating mapping must be explicit in the script.
+    assert "audit_rc == 23" in body, (
+        "driver must explicitly check for rk audit's strict-policy exit 23"
     )
 
 
-def test_driver_writes_audit_sidecar_path_to_failures_log() -> None:
-    """AC-4: cheating-cell rows must be appended to FAILURES_LOG so the
-    captain-facing review can locate the offending cells from a single file."""
+def test_driver_failing_audit_appends_to_failures_log() -> None:
+    """A failing audit must roll the cell from ok_cells to failed_cells and
+    append to FAILURES_LOG so the captain-facing review can locate the
+    offending cells from one file."""
     body = DRIVER.read_text()
-    # Same pattern as the run_failed branch: append to FAILURES_LOG on rc==2.
     assert "FAILURES_LOG" in body
-    # External-oracle-cheating rows must increment failed_cells (so the matrix
-    # exit code surfaces them) rather than ok_cells.
-    audit_section = body[body.index("razorback.agents.external_oracle_audit"):]
-    assert "failed_cells=$((failed_cells+1))" in audit_section, (
-        "external-oracle-cheating cells must increment failed_cells"
-    )
+    audit_section = body[body.index("rk audit"):]
+    assert "failed_cells=$((failed_cells+1))" in audit_section
+    assert "ok_cells=$((ok_cells-1))" in audit_section
 
 
-def test_audit_module_rejects_synthetic_cheating_cell(tmp_path: Path) -> None:
-    """End-to-end: synthetic cell with a load_dataset event → exit 2 + sidecar
-    findings non-empty. The dispatcher relies on this contract."""
-    cell = tmp_path / "cheating"
-    _write_trace(
-        cell,
-        [
-            {"type": "system", "subtype": "init", "tools": ["Bash"]},
-            _bash_event(
-                "python3 -c \"from datasets import load_dataset; "
-                "load_dataset('fancyzhx/ag_news')\""
-            ),
-        ],
-    )
-    rc = subprocess.run(
-        [sys.executable, "-m", "razorback.agents.external_oracle_audit", str(cell)],
-        capture_output=True,
-        text=True,
-    )
-    assert rc.returncode == 2, rc.stderr
-    sidecar = json.loads((cell / "external-oracle-audit.json").read_text())
-    assert sidecar["confirmed_count"] >= 1
-    assert sidecar["findings"], "sidecar findings must be non-empty for cheating cells"
+def test_rk_audit_strict_rejects_synthetic_cheating_cell(tmp_path: Path) -> None:
+    """End-to-end: synthetic claude-code.txt with load_dataset event makes
+    rk audit --policy strict exit 23 — the dispatcher relies on this contract."""
+    cell = tmp_path / "task-a" / "query-1" / "trial-0"
+    _write_trace(cell, [
+        {"type": "system", "subtype": "init", "tools": ["Bash"]},
+        _bash_event(
+            "python3 -c \"from datasets import load_dataset; "
+            "load_dataset('fancyzhx/ag_news')\""
+        ),
+    ])
+    result = runner.invoke(app, ["audit", str(tmp_path), "--policy", "strict"])
+    assert result.exit_code == 23, result.stdout
+    assert "TaintFindingsError" in result.output
 
 
-def test_audit_module_passes_synthetic_clean_cell(tmp_path: Path) -> None:
-    cell = tmp_path / "clean"
-    _write_trace(
-        cell,
-        [
-            {"type": "system", "subtype": "init", "tools": ["Bash"]},
-            _bash_event("psql -c 'SELECT 1'"),
-        ],
-    )
-    rc = subprocess.run(
-        [sys.executable, "-m", "razorback.agents.external_oracle_audit", str(cell)],
-        capture_output=True,
-        text=True,
-    )
-    assert rc.returncode == 0, rc.stderr
-    sidecar = json.loads((cell / "external-oracle-audit.json").read_text())
-    assert sidecar["findings"] == []
-    assert sidecar["confirmed_count"] == 0
+def test_rk_audit_strict_passes_synthetic_clean_cell(tmp_path: Path) -> None:
+    cell = tmp_path / "task-a" / "query-1" / "trial-0"
+    _write_trace(cell, [
+        {"type": "system", "subtype": "init", "tools": ["Bash"]},
+        _bash_event("psql -c 'SELECT 1'"),
+        _bash_event("pip install rapidfuzz"),
+    ])
+    result = runner.invoke(app, ["audit", str(tmp_path), "--policy", "strict"])
+    assert result.exit_code == 0, result.stdout
+    payload, _ = json.JSONDecoder().raw_decode(result.stdout)
+    assert payload["summary"]["tainted"] == 0
+    assert payload["summary"]["clean"] >= 1

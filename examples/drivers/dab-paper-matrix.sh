@@ -183,47 +183,41 @@ else:
     else
       ok_cells=$((ok_cells+1))
 
-      # Per-cell verify-stage gates run BEFORE rk audit/score; a failing gate
-      # rolls the cell back from ok_cells to failed_cells and skips downstream
-      # scoring.
+      # Per-cell verify-stage gate runs BEFORE rk score; a failing gate rolls
+      # the cell back from ok_cells to failed_cells and skips scoring.
       if [[ -n "$result_json" ]]; then
         cell_run_dir="$(dirname "$result_json")"
 
-        # External-oracle audit: scans claude-code.txt for the DAB verify-stage
-        # forbidden-pattern list (huggingface, load_dataset, hf://, from datasets
-        # import, requests.get to public hosts, web tools, LLM oracles). Fires
-        # for ALL variants — NOT variant-gated. See
-        # src/razorback/agents/external_oracle_audit.py.
-        oracle_rc=0
-        uv run --project "$REPO_ROOT" python -m razorback.agents.external_oracle_audit \
-          "$cell_run_dir" \
-          > "${cell_run_dir}/external-oracle-audit.log" \
-          2>> "${cell_run_dir}/external-oracle-audit.log" || oracle_rc=$?
-        if (( oracle_rc == 2 )); then
-          status="external-oracle-cheating"
-          ok_cells=$((ok_cells-1))
-          failed_cells=$((failed_cells+1))
-          printf '%s\t%s\t%d\t%s\n' "$v" "$d" "$oracle_rc" "$spec_frozen" >> "$FAILURES_LOG"
-          printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-            "$v" "$d" "$spec_frozen" "$cell_runs" "$status" "$oracle_rc" "$cost_usd" >> "$LEDGER"
-          echo "REJECT [$cell_index/$total] $v/$d external-oracle-cheating — see ${cell_run_dir}/external-oracle-audit.log" >&2
-          continue
-        elif (( oracle_rc == 3 )); then
-          status="external-oracle-audit-error"
-          ok_cells=$((ok_cells-1))
-          failed_cells=$((failed_cells+1))
-          printf '%s\t%s\t%d\t%s\n' "$v" "$d" "$oracle_rc" "$spec_frozen" >> "$FAILURES_LOG"
-          printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-            "$v" "$d" "$spec_frozen" "$cell_runs" "$status" "$oracle_rc" "$cost_usd" >> "$LEDGER"
-          echo "ERROR  [$cell_index/$total] $v/$d external-oracle-audit-error — see ${cell_run_dir}/external-oracle-audit.log" >&2
-          continue
-        fi
-
-        # Per-cell audit + score; record failures but do not abort the matrix on these.
+        # External-oracle audit: rk audit --policy strict scans the cell's
+        # trajectory for the DAB verify-stage forbidden-pattern list
+        # (huggingface, load_dataset, hf://, from datasets import, named
+        # canonical-data pip installs, web tools, etc.). Fires for ALL variants
+        # — NOT variant-gated. razorback.audit.claude_code adapts the claude-cli
+        # trace shape; razorback.audit.taint owns the patterns.
+        # Exit-code mapping: 0 clean / 23 cheating / other non-zero error.
         audit_rc=0
         uv run --project "$REPO_ROOT" rk audit "$cell_run_dir" --policy strict --format json \
           > "${cell_run_dir}/audit.json" 2> "${cell_run_dir}/audit.stderr" || audit_rc=$?
-        # If strict policy returned 23 the audit.json is still written; we keep both.
+        if (( audit_rc == 23 )); then
+          status="external-oracle-cheating"
+          ok_cells=$((ok_cells-1))
+          failed_cells=$((failed_cells+1))
+          printf '%s\t%s\t%d\t%s\n' "$v" "$d" "$audit_rc" "$spec_frozen" >> "$FAILURES_LOG"
+          printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "$v" "$d" "$spec_frozen" "$cell_runs" "$status" "$audit_rc" "$cost_usd" >> "$LEDGER"
+          echo "REJECT [$cell_index/$total] $v/$d external-oracle-cheating — see ${cell_run_dir}/audit.json" >&2
+          continue
+        elif (( audit_rc != 0 )); then
+          status="external-oracle-audit-error"
+          ok_cells=$((ok_cells-1))
+          failed_cells=$((failed_cells+1))
+          printf '%s\t%s\t%d\t%s\n' "$v" "$d" "$audit_rc" "$spec_frozen" >> "$FAILURES_LOG"
+          printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "$v" "$d" "$spec_frozen" "$cell_runs" "$status" "$audit_rc" "$cost_usd" >> "$LEDGER"
+          echo "ERROR  [$cell_index/$total] $v/$d external-oracle-audit-error rc=$audit_rc — see ${cell_run_dir}/audit.stderr" >&2
+          continue
+        fi
+
         # Score: --against-constant per variant.
         case "$v" in
           spacedock) target="spacedock=0.577" ;;
