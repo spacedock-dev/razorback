@@ -10,7 +10,7 @@ score: 0.92
 worktree: .worktrees/spacedock-ensign-dab-batch-materialization-disk-budget
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 ---
 
 ## Problem
