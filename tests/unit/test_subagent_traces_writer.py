@@ -108,6 +108,47 @@ def test_writer_counts_agent_tool_use_too(tmp_path):
     assert manifest["dispatches"][0]["subagent_type"] == "spacedock:ensign"
 
 
+def test_writer_counts_codex_spawn_agent_events(tmp_path):
+    cell_dir = tmp_path / "cell"
+    agent_dir = cell_dir / "steps" / "main" / "agent"
+    events = [
+        {
+            "type": "item.completed",
+            "item": {
+                "id": "spawn-model",
+                "type": "collab_tool_call",
+                "tool": "spawn_agent",
+                "prompt": (
+                    "stage_name: model\n"
+                    "dispatch_agent_id: spacedock:ensign\n"
+                    "worker_key: spacedock-ensign\n"
+                ),
+                "receiver_thread_ids": ["thread-1"],
+                "status": "completed",
+            },
+        },
+        {
+            "type": "item.completed",
+            "item": {
+                "id": "wait-model",
+                "type": "collab_tool_call",
+                "tool": "wait_agent",
+                "receiver_thread_ids": ["thread-1"],
+                "status": "completed",
+            },
+        },
+    ]
+    _write_claude_code_txt(agent_dir / "codex.txt", events)
+
+    manifest = write_subagent_trace_manifest(cell_dir)
+
+    assert manifest["captured"] == 1
+    assert manifest["capture_source"] == "razorback-codex-cli-trace"
+    assert manifest["dispatches"][0]["tool_use_id"] == "spawn-model"
+    assert manifest["dispatches"][0]["subagent_type"] == "spacedock:ensign"
+    assert manifest["dispatches"][0]["spawn_index"] == 0
+
+
 def test_writer_raises_on_missing_claude_code_txt(tmp_path):
     cell_dir = tmp_path / "empty-cell"
     cell_dir.mkdir()

@@ -42,3 +42,25 @@ def test_compose_run_instruction_mentions_subagent_dispatch(tmp_path):
     # The ROLE block tells the model to use the Task tool with spacedock:ensign.
     assert "subagent_type" in out
     assert "spacedock:ensign" in out
+
+
+def test_codex_compose_run_instruction_uses_codex_fo_dispatch_surface(tmp_path):
+    agent = SpacedockSolverAgent(
+        **_kw(
+            tmp_path,
+            runtime="codex",
+            model="gpt-5.5",
+            harbor_agent_kwargs={"reasoning_effort": "xhigh"},
+            extra_env={"OPENAI_API_KEY": "x"},
+        )
+    )
+    out = agent._compose_run_instruction("solve this task")
+    assert out.startswith("ROLE: You are the first-officer")
+    assert "current working directory IS the workspace (/app)" in out
+    assert "Use the inline \"# Solver workflow instructions\" section" in out
+    assert "do not search for Spacedock entity files" in out
+    assert "spawn_agent(..., fork_context=false)" in out
+    assert "wait_agent(...)" in out
+    assert "/tmp/razorback-agents/skills/spacedock/skills/first-officer/SKILL.md" in out
+    assert "role_asset_name: ensign" in out
+    assert "## Stages" in out

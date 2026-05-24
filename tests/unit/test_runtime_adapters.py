@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tomllib
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from harbor.agents.installed.claude_code import ClaudeCode
@@ -35,6 +36,21 @@ def _appended_codex_config_toml(command: str) -> str:
 
 def shlex_quote_path(path) -> str:
     return shlex.quote(str(path))
+
+
+def _spacedock_plugin_fixture(tmp_path):
+    plugin = tmp_path / "spacedock-plugin"
+    for rel in (
+        ".codex-plugin/plugin.json",
+        "skills/first-officer/SKILL.md",
+        "skills/ensign/SKILL.md",
+        "agents/first-officer.md",
+        "agents/ensign.md",
+    ):
+        path = plugin / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("placeholder\n")
+    return plugin
 
 
 def test_harbor_installed_agent_descriptor_shapes_are_available():
@@ -73,6 +89,52 @@ def test_codex_constructs_inner_agent_with_supported_kwargs(tmp_path):
     assert flag_kwargs["reasoning_summary"] == "auto"
     assert '-c \'web_search="disabled"\'' in inner.build_cli_flags()
     assert "--dangerously-bypass-hook-trust" in inner.build_cli_flags()
+
+
+def test_codex_spacedock_inner_agent_enables_multi_agent(tmp_path):
+    plugin = _spacedock_plugin_fixture(tmp_path)
+    inner = codex_adapter.build_inner_agent(
+        logs_dir=tmp_path,
+        model="gpt-5.5",
+        harbor_agent_kwargs={"reasoning_effort": "xhigh"},
+        extra_env={"OPENAI_API_KEY": "sk-fake"},
+        enable_multi_agent=True,
+        spacedock_plugin_dirs=[plugin],
+    )
+
+    flags = inner.build_cli_flags()
+    assert "--enable multi_agent" in flags
+    assert inner._spacedock_plugin_dirs == [plugin]
+
+
+@pytest.mark.asyncio
+async def test_codex_spacedock_setup_stages_plugin_and_registers_skills(
+    tmp_path, monkeypatch
+):
+    async def fake_setup(self, environment):
+        return None
+
+    monkeypatch.setattr(Codex, "setup", fake_setup)
+    plugin = _spacedock_plugin_fixture(tmp_path)
+    fake_env = SimpleNamespace(
+        exec=AsyncMock(return_value=SimpleNamespace(return_code=0, stdout="", stderr="")),
+        upload_dir=AsyncMock(),
+    )
+    inner = codex_adapter.build_inner_agent(
+        logs_dir=tmp_path,
+        model="gpt-5.5",
+        harbor_agent_kwargs={},
+        extra_env={"OPENAI_API_KEY": "sk-fake"},
+        enable_multi_agent=True,
+        spacedock_plugin_dirs=[plugin],
+    )
+
+    await inner.setup(fake_env)
+
+    assert inner.skills_dir == codex_adapter.CODEX_SPACEDOCK_REMOTE_SKILLS_DIR
+    fake_env.upload_dir.assert_awaited_once_with(
+        str(plugin), "/tmp/razorback-agents/skills/spacedock"
+    )
 
 
 def test_codex_retained_overrides_document_upstream_method_and_benchmark_reason():

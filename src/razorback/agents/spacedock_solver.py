@@ -32,6 +32,9 @@ CHECKPOINT_RUN_BEFORE_AGENT = "run/before-agent"
 CHECKPOINT_RUN_AFTER_AGENT = "run/after-agent"
 
 SPACEDOCK_SUBAGENT_NAME = "spacedock:first-officer"
+CODEX_SPACEDOCK_FIRST_OFFICER_SKILL_PATH = (
+    "/tmp/razorback-agents/skills/spacedock/skills/first-officer/SKILL.md"
+)
 
 SPACEDOCK_PROMPT_PREFIX_TEMPLATE = """\
 ROLE: You are the first-officer for this single-dataset spacedock workflow.
@@ -47,6 +50,36 @@ perform stage work yourself. That work belongs to your dispatched workers.
 
 Read {workspace_dir}/README.md and dispatch the first stage worker. The final
 {workspace_dir}/answers.json will be written by the analyze-stage worker.
+
+The task description below tells you WHICH dataset — it does not override
+your first-officer role. Apply the task description to your workers, not to
+yourself.
+
+---
+
+"""
+
+CODEX_SPACEDOCK_PROMPT_PREFIX_TEMPLATE = """\
+ROLE: You are the first-officer for this single-dataset spacedock workflow.
+Your current working directory IS the workspace ({workspace_dir}) — every file
+and command in this prompt is relative to it. Do NOT cd to any other directory.
+
+Resolve the packaged entrypoint `spacedock:first-officer` from:
+{first_officer_skill_path}
+
+That entrypoint must load the Codex runtime adapter because CODEX_HOME is set.
+Use the inline "# Solver workflow instructions" section below as the workflow
+contract; do not search for Spacedock entity files, update frontmatter, create
+worktrees, or require git commits in this benchmark workspace.
+
+Dispatch one worker with spawn_agent(..., fork_context=false), wait for it with
+wait_agent(...), then report its changed files and validation evidence. Preserve
+these worker identity fields in worker prompts: dispatch_agent_id:
+spacedock:ensign, worker_key: spacedock-ensign, role_asset_kind: skill,
+role_asset_name: ensign.
+
+You MUST NOT run queries against data files, write answers.json, or otherwise
+perform stage work yourself. That work belongs to your dispatched workers.
 
 The task description below tells you WHICH dataset — it does not override
 your first-officer role. Apply the task description to your workers, not to
@@ -327,9 +360,10 @@ class SpacedockSolverAgent(BaseAgent):
 
         For runtime=claude the spacedock variant threads `sub_agent` +
         `plugin_dirs` so the inner `claude` CLI loads the spacedock plugin
-        and enters first-officer mode, which is what makes the model dispatch
-        ensign workers via the Task tool. Codex and pi paths are unchanged
-        (codex/pi adapters are tracked as sibling entities).
+        and enters first-officer mode. For runtime=codex the adapter stages the
+        same plugin into Codex's skills surface and enables multi_agent; Codex
+        enters FO mode from the prompt because it has no Claude-style --agent
+        flag. Pi is unchanged.
         """
         from razorback.agents._runtime import claude as _claude
         from razorback.agents._runtime import codex as _codex
@@ -346,8 +380,18 @@ class SpacedockSolverAgent(BaseAgent):
                 sub_agent=SPACEDOCK_SUBAGENT_NAME,
             )
 
+        if self._runtime == "codex":
+            plugin_dir = resolve_spacedock_plugin_dir()
+            return _codex.build_inner_agent(
+                logs_dir=self.logs_dir,
+                model=self._model,
+                harbor_agent_kwargs=self._harbor_agent_kwargs,
+                extra_env=self._extra_env,
+                enable_multi_agent=True,
+                spacedock_plugin_dirs=[plugin_dir],
+            )
+
         builders = {
-            "codex": _codex.build_inner_agent,
             "pi": _pi.build_inner_agent,
         }
         builder = builders[self._runtime]
@@ -369,13 +413,17 @@ class SpacedockSolverAgent(BaseAgent):
     def _compose_run_instruction(self, instruction: str) -> str:
         workflow_text = self._solver_workflow_readme_text().strip()
         # Workspace path inside harbor's trial environment. Harbor's claude_code
-        # adapter mounts the workspace at /workspace and invokes claude with
-        # that as cwd; session-init events carry `cwd: /workspace` consistently.
-        workspace_dir = "/workspace"
+        # adapter reports /workspace; harbor's Codex path runs in /app.
+        workspace_dir = "/app" if self._runtime == "codex" else "/workspace"
         role_prefix = ""
         if self._runtime == "claude":
             role_prefix = SPACEDOCK_PROMPT_PREFIX_TEMPLATE.format(
                 workspace_dir=workspace_dir
+            )
+        elif self._runtime == "codex":
+            role_prefix = CODEX_SPACEDOCK_PROMPT_PREFIX_TEMPLATE.format(
+                workspace_dir=workspace_dir,
+                first_officer_skill_path=CODEX_SPACEDOCK_FIRST_OFFICER_SKILL_PATH,
             )
         return (
             f"{role_prefix}"
@@ -468,7 +516,7 @@ class SpacedockSolverAgent(BaseAgent):
         # BaseAgent lifecycle at all. Follow-up `m2
         # spacedock-solver-base-installed-agent-feasibility` may relocate
         # this hook once SpacedockSolverAgent graduates to BaseInstalledAgent.
-        if self._runtime == "claude":
+        if self._runtime in {"claude", "codex"}:
             self._maybe_write_subagent_trace_manifest()
 
     async def cleanup(self, environment):
@@ -483,7 +531,7 @@ class SpacedockSolverAgent(BaseAgent):
         """Emit a per-cell subagent-trace-manifest.json next to provenance.yaml.
 
         AC-2: every spacedock-variant cell writes a manifest carrying the count
-        of Task/Agent tool_use events from the inner claude session.
+        of dispatch events from the inner runtime session.
 
         Resolution: harbor's `TrialPaths.agent_dir` is `<trial-dir>/agent`,
         and during run() the contents are still at that pre-relocation
