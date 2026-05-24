@@ -1,13 +1,13 @@
 ---
 id: et8q8rd845hkn8p2bdhb9k9w
 title: DAB full batch Codex explain preflight
-status: plan
+status: implementation
 source: 2026-05-24 captain directive - explain the DAB full/batch Codex run before launching gpt-5.5/xhigh
 started: 2026-05-24T04:29:18Z
 completed:
 verdict:
 score: 0.9
-worktree:
+worktree: .worktrees/spacedock-ensign-dab-full-batch-codex-explain-preflight
 issue:
 pr:
 mod-block:

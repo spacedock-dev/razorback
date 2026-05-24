@@ -1,13 +1,13 @@
 ---
 id: bpb83at5rrcm0z77maf6bbqb
 title: Spacedock dispatch manifests are per trial
-status: plan
+status: implementation
 source: 2026-05-24 ADE full-run audit gap - parallel Spacedock run wrote one job-level subagent-trace-manifest.json
 started: 2026-05-24T04:29:17Z
 completed:
 verdict:
 score: 0.93
-worktree:
+worktree: .worktrees/spacedock-ensign-spacedock-dispatch-manifest-per-trial
 issue:
 pr:
 mod-block:
