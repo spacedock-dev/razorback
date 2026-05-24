@@ -1,13 +1,13 @@
 ---
 id: 52w1h8zh0bwfskvheckhj218
 title: DAB batch materialization fits ext4 disk budget
-status: plan
+status: implementation
 source: 2026-05-24 DAB full batch Codex explain preflight blocker - /dev/root filled during task-view materialization
 started: 2026-05-24T05:06:33Z
 completed:
 verdict:
 score: 0.92
-worktree:
+worktree: .worktrees/spacedock-ensign-dab-batch-materialization-disk-budget
 issue:
 pr:
 mod-block:
