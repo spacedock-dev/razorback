@@ -7,7 +7,7 @@ score: 0.92
 auto-approve: false
 worktree: .worktrees/spacedock-ensign-dab-workspace-readme-leak-guard-prose-port
 issue:
-pr:
+pr: #1
 mod-block: merge:pr-merge
 started: 2026-05-23T22:58:25Z
 completed:
