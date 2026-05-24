@@ -125,3 +125,24 @@ The riskiest contract is empirical: does the leak-guard prose ACTUALLY deter opu
 ### Summary
 
 Inline plan landed: verbatim port of DAB upstream's L77–83 leak-guard paragraph into all three razorback workspace variants, with three mechanical name swaps (db_config.yaml / single-query / no _runs). Image rebuild explicitly NOT required — `prepare.py` renders the README per-cell at workspace prep time from the razorback source, so a code edit propagates to the next live re-run without touching the dab-agent image. Sequenced T0→T5 with the live agnews re-run (~$0.50–2) as the empirical AC-2 gate; cheaper deterministic gates (unit test + full pytest) front-loaded.
+
+## Stage Report: implementation
+
+- DONE: T0 RED unit test committed before T1 prose edits
+  Commit 8a6e7ac (test_workspace_readme_leak_guard.py); 21 failures confirmed (7 phrases × 3 variants) before T1.
+- DONE: T1 GREEN prose port to all 3 variants
+  Commit 34cc541; verbatim DAB-upstream L77–83 paragraph + 3 mechanical swaps (connections.yaml→db_config.yaml, single-query, _runs/ wording). Per-variant character preserved (direct-minimal stays shortest, direct-structured keeps layout, spacedock keeps crew-loop framing).
+- DONE: AC-1 quick checks
+  `python3 -c "...assert 'datasets.load_dataset' in render_workspace_readme(variant=..., ...)"` exits 0 for all 3 variants; `grep -c 'UNABLE TO DETERMINE' workspace_readme.py` = 3.
+- DONE: T2 unit-test gate (AC-3 + AC-4-narrow)
+  `uv run pytest .../tests/unit/test_workspace_readme_leak_guard.py .../tests/unit/test_workspace_readme_variants.py -v` = 27/27 passed (21 new leak-guard + 6 pre-existing variant tests).
+- DONE: T3 image rebuild not required
+  Mechanism validation from plan confirmed: prepare.py L283–286 + L440 call render_workspace_readme(...) at workspace prep time. Code edit propagates to next live re-run without dab-agent image rebuild.
+- DONE: T5 full pytest (AC-4 full gate)
+  `uv run pytest packages/razorback-plugin-dab/tests/ -v` = 166 passed, 2 skipped, 1 failed. The single failure (integration/test_mongo_init_docker.py::test_mongo_init_shim_loads_bsondump_on_first_start, docker-mongo infra-dependent) reproduces verbatim on baseline main (HEAD 5424667). No branch-introduced regressions.
+- FAILED: T4 live agnews re-run (AC-2)
+  Captain ack requested twice via SendMessage to team-lead (~$0.50–$2 API spend); the team task previously created for T4 was deleted from the task list with no inbox reply. Per dispatch "auto-approve: false — do NOT self-approve", T4 not run. Mechanism gate for AC-2 remains unproven by live trace; deterministic ACs (1/3/4) are green and the prose IS in the rendered README (verified via direct render call). Recommend either follow-on captain ack for the live cell, or fold the re-run into 7q's pending re-run cycle and accept AC-2 as deferred.
+
+### Summary
+
+Deterministic work complete: T0 RED → T1 GREEN ordering observable in git history (8a6e7ac → 34cc541); all 3 workspace variants now carry the verbatim DAB-upstream leak-guard paragraph with 3 documented name swaps; 27/27 unit tests pass; full pytest reproduces baseline-only failures. AC-1, AC-3, AC-4 met. AC-2 live re-run gated on captain ack that was requested twice without reply — stage report committed with T4 marked FAILED + rationale rather than idling uncommitted per ensign discipline. Next move belongs to the captain: either ack the spend for a follow-on T4 dispatch, or accept AC-2 deferral to 7q's re-run cycle.
