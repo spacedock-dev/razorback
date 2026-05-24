@@ -9,7 +9,7 @@ verdict:
 score: 0.92
 worktree: .worktrees/spacedock-ensign-generic-harbor-benchmark-surface-design
 issue:
-pr:
+pr: #2
 mod-block: merge:pr-merge
 ---
 
