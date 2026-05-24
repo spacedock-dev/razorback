@@ -26,6 +26,8 @@ The razorback workspace READMEs in `packages/razorback-plugin-dab/src/razorback_
 
 DAB upstream's workspace README at `~/git/dataagentbench/benchmark/workspace-readmes/workspace-readme.md` carries the leak-guard prose (lines 77-83 verbatim — quoted in the entity body of any plan-stage doc). This entity ports that prose into all three razorback variants.
 
+**Scope expansion (captain widened during T4):** dispatching the direct-* cells exposed a baseline schema bug — `ClaudeCliAgentBlock` (`src/razorback/spec/schema.py`) has `extra="forbid"` and never declared `reasoning_effort`, while the goal-1 spec generator has written `agent.reasoning_effort: xhigh` into every direct-* yaml since commit a6ab344. `rk freeze` therefore refuses every direct-* spec at the freeze gate. The k3 entity is widened to fix that schema gap inline (small, on-threat-surface: post-T1 contract integrity) so the full 3-variant breadth check lands in one stage. AC-5 below pins the fix RED→GREEN.
+
 ## Acceptance criteria
 
 **AC-1 — Leak-guard prose present in all three razorback workspace variants.**
@@ -45,6 +47,10 @@ Verified by: `uv run pytest packages/razorback-plugin-dab/tests/unit/test_worksp
 **AC-4 — Existing pytest stays green; existing tests at `test_workspace_readme_variants.py` cover the new prose.**
 Branch's existing tests for workspace_variants pass; the new test runs alongside.
 Verified by: `uv run pytest packages/razorback-plugin-dab/tests/ -v` green; pre-existing failures (LFS-hydration etc.) reproduce on baseline `main`, no branch-introduced regressions.
+
+**AC-5 — `ClaudeCliAgentBlock` accepts `reasoning_effort` and round-trips through `rk freeze`.**
+Added during the T4 dispatch when direct-* freeze surfaced the pre-existing schema gap. New tests in `tests/unit/test_freeze.py` (`test_claude_cli_agent_block_accepts_reasoning_effort` + `test_claude_cli_reasoning_effort_round_trips_through_freeze`) assert that a `kind: claude-cli` spec carrying `agent.reasoning_effort: xhigh` parses cleanly via `parse_spec_text` and survives `freeze_spec` with the field preserved. Schema fix: add `reasoning_effort: str | None = None` to `ClaudeCliAgentBlock`, matching the same field on `SpacedockSolverAgentBlock`; `extra="forbid"` is preserved.
+Verified by: `uv run pytest tests/unit/test_freeze.py -v` shows both new tests GREEN; `uv run rk freeze examples/specs/goal1/direct-structured/agnews.yaml --allow-missing` and the direct-minimal counterpart both exit 0.
 
 ## Test plan
 
@@ -125,3 +131,109 @@ The riskiest contract is empirical: does the leak-guard prose ACTUALLY deter opu
 ### Summary
 
 Inline plan landed: verbatim port of DAB upstream's L77–83 leak-guard paragraph into all three razorback workspace variants, with three mechanical name swaps (db_config.yaml / single-query / no _runs). Image rebuild explicitly NOT required — `prepare.py` renders the README per-cell at workspace prep time from the razorback source, so a code edit propagates to the next live re-run without touching the dab-agent image. Sequenced T0→T5 with the live agnews re-run (~$0.50–2) as the empirical AC-2 gate; cheaper deterministic gates (unit test + full pytest) front-loaded.
+
+## Stage Report: implementation
+
+- DONE: T0 RED unit test committed before T1 prose edits
+  Commit 8a6e7ac (test_workspace_readme_leak_guard.py); 21 failures confirmed (7 phrases × 3 variants) before T1.
+- DONE: T1 GREEN prose port to all 3 variants
+  Commit 34cc541; verbatim DAB-upstream L77–83 paragraph + 3 mechanical swaps (connections.yaml→db_config.yaml, single-query, _runs/ wording). Per-variant character preserved (direct-minimal stays shortest, direct-structured keeps layout, spacedock keeps crew-loop framing).
+- DONE: AC-1 quick checks
+  `python3 -c "...assert 'datasets.load_dataset' in render_workspace_readme(variant=..., ...)"` exits 0 for all 3 variants; `grep -c 'UNABLE TO DETERMINE' workspace_readme.py` = 3.
+- DONE: T2 unit-test gate (AC-3 + AC-4-narrow)
+  `uv run pytest .../tests/unit/test_workspace_readme_leak_guard.py .../tests/unit/test_workspace_readme_variants.py -v` = 27/27 passed (21 new leak-guard + 6 pre-existing variant tests).
+- DONE: T3 image rebuild not required
+  Mechanism validation from plan confirmed: prepare.py L283–286 + L440 call render_workspace_readme(...) at workspace prep time. Code edit propagates to next live re-run without dab-agent image rebuild.
+- DONE: T5 full pytest (AC-4 full gate)
+  `uv run pytest packages/razorback-plugin-dab/tests/ -v` = 166 passed, 2 skipped, 1 failed. The single failure (integration/test_mongo_init_docker.py::test_mongo_init_shim_loads_bsondump_on_first_start, docker-mongo infra-dependent) reproduces verbatim on baseline main (HEAD 5424667). No branch-introduced regressions.
+- FAILED: T4 live agnews re-run (AC-2)
+  Captain ack requested twice via SendMessage to team-lead (~$0.50–$2 API spend); the team task previously created for T4 was deleted from the task list with no inbox reply. Per dispatch "auto-approve: false — do NOT self-approve", T4 not run. Mechanism gate for AC-2 remains unproven by live trace; deterministic ACs (1/3/4) are green and the prose IS in the rendered README (verified via direct render call). Recommend either follow-on captain ack for the live cell, or fold the re-run into 7q's pending re-run cycle and accept AC-2 as deferred.
+
+### Summary
+
+Deterministic work complete: T0 RED → T1 GREEN ordering observable in git history (8a6e7ac → 34cc541); all 3 workspace variants now carry the verbatim DAB-upstream leak-guard paragraph with 3 documented name swaps; 27/27 unit tests pass; full pytest reproduces baseline-only failures. AC-1, AC-3, AC-4 met. AC-2 live re-run gated on captain ack that was requested twice without reply — stage report committed with T4 marked FAILED + rationale rather than idling uncommitted per ensign discipline. Next move belongs to the captain: either ack the spend for a follow-on T4 dispatch, or accept AC-2 deferral to 7q's re-run cycle.
+
+## Stage Report: implementation (cycle 2)
+
+Resumed after captain ack on T4 (live agnews re-run; widened to 3 variants). The cycle-1 stage report above marked T4 FAILED on no-ack; this cycle supersedes that for the spacedock cell.
+
+- DONE: T4 — live agnews/spacedock re-run executed against post-T1 source (AC-2 PASS)
+  Evidence at docs/razorback-implementation/_evidence/leak-guard-rerun/spacedock/agnews/ (audit.json, result.json, score.json, reward_per_query.json). Commit b9d52d2.
+  - `rk audit --policy strict` verdict: **clean** (0 tainted, 1 clean trial agnews__JE3GiCo)
+  - AC-2 verbatim grep `grep -F 'canonical' .../claude-code.txt | grep -i 'ag news\|dataset'`: EMPTY
+  - `load_dataset` / `huggingface` mentions in claude-code.txt = 2 each, both inside the rendered README rule prose itself; never executed as Bash. `canonical=0, fancyzhx=0, "matched article_id"=0`.
+  - Branch (a): agent declined `load_dataset` outright after reading the `## Rules` section. Built a keyword classifier from workspace mongo/sqlite data only (SPORTS_HIGH/SPORTS_TEAMS lists).
+  - Score 0.5 (q1+q4 pass) — same headline as the prior cheating run, but legitimately earned without oracle lookup. Runtime 33m 11s.
+- FAILED: T4 — direct-structured/agnews + direct-minimal/agnews cells blocked on baseline schema bug
+  `ClaudeCliAgentBlock` (src/razorback/spec/schema.py:39–46) declares `extra="forbid"` and has no `reasoning_effort` field, but the spec generator (commit a6ab344 on baseline `main`) wrote `agent.reasoning_effort: xhigh` into all direct-* yamls. `rk freeze` rejects with `Extra inputs are not permitted`. Reproduces on baseline `main` HEAD 5424667; not introduced by this branch. Out of entity scope per CLAUDE.md "smallest reasonable changes." Recommend a sibling baseline-bug entity (add `reasoning_effort: str | None = None` to `ClaudeCliAgentBlock`) to unblock the direct-* breadth check as a follow-on.
+
+### Summary (cycle 2)
+
+T4 spacedock (the original cheating cell) PASSED cleanly: leak-guard prose deterred opus-4.7+xhigh from the `load_dataset` shortcut; agent built an honest workspace-data-only classifier; `rk audit --policy strict` returned `clean`; AC-2 verbatim grep returned empty. AC-2 is met for the load-bearing cell. The two direct-* cells captain widened scope to are blocked on a pre-existing baseline schema bug unrelated to this entity's prose port; recommend a follow-on baseline-bug fix + breadth re-run rather than carrying it inline. AC-1, AC-2 (spacedock), AC-3, AC-4 all green.
+
+## Stage Report: implementation (T4 amendment)
+
+Cycle-3 amendment per captain redirect — T4 was approved post the cycle-1 FAILED report. This cycle covers (a) the schema bug discovered during T4 direct-* freeze, (b) the in-entity widening to fix it, (c) the T6/T7 RED→GREEN, (d) per-cell T4 evidence for all 3 variants, (e) AC-5 verified.
+
+- DONE: T6 RED schema test
+  Commit d7d1e89. Added `test_claude_cli_agent_block_accepts_reasoning_effort` + `test_claude_cli_reasoning_effort_round_trips_through_freeze` to `tests/unit/test_freeze.py`; both fail RED before T7 with `SpecError: agent.claude-cli.reasoning_effort Extra inputs are not permitted`.
+- DONE: T7 schema GREEN
+  Commit 8ef0270. Added `reasoning_effort: str | None = None` to `ClaudeCliAgentBlock` (`src/razorback/spec/schema.py:46`), matching the same field on `SpacedockSolverAgentBlock`. `extra="forbid"` preserved. Both T6 tests now GREEN; the four `test_freeze.py` tests pass.
+- DONE: Entity body widened + AC-5 added
+  Commit 9da1f80. `## Problem` carries a "Scope expansion" paragraph naming the schema fix as part of the deliverable; `## Acceptance criteria` carries AC-5 pinning the round-trip contract.
+- DONE: AC-2 — T4 spacedock/agnews
+  Commits b9d52d2 (evidence) + dcd017e (cycle-2 report). `rk audit --policy strict` clean; verbatim grep empty; branch (a) decline; score 0.5 earned legitimately via workspace-only keyword classifier. Runtime 33m 11s.
+- DONE: AC-2 — T4 direct-structured/agnews
+  Commit d0699fa. `rk audit --policy strict` clean (0 tainted, 2 clean trials); verbatim grep empty; branch (a) decline; agent built workspace-only keyword-classifier+LR pipeline; load_dataset/hf://huggingface = 2 each (rule-prose only); fancyzhx/canonical/matched article_id = 0; score 0.5 (q1+q4 honest). Runtime 51m 43s.
+- DONE: AC-2 — T4 direct-minimal/agnews
+  Commit d0699fa. `rk audit --policy strict` clean (0 tainted, 2 clean trials); verbatim grep empty; branch (a) HARD decline — agent wrote `UNABLE TO DETERMINE` for all 4 queries without attempting classification (the terser variant + leak-guard prose elicits a more conservative posture than the structured variant). Score 0.0 for the RIGHT reason. Runtime 2m 17s.
+- DONE: AC-5 — `ClaudeCliAgentBlock.reasoning_effort` round-trip
+  Both T6 tests GREEN; `uv run rk freeze` succeeds on both direct-* yamls (frozen.yaml emitted; provenance.yaml emitted).
+- DONE: AC-4 — full pytest stable
+  `uv run pytest packages/razorback-plugin-dab/tests/` = 165 passed, 3 skipped, 1 failed; the single failure is `integration/test_mongo_init_docker.py::test_mongo_init_shim_loads_bsondump_on_first_start` which reproduces 1:1 on baseline `main` HEAD 5424667. No branch-introduced regressions.
+
+### Summary (cycle 3)
+
+3/3 variant agnews cells PASSED AC-2 with `rk audit --policy strict` clean and verbatim grep empty. All 3 took branch (a) — declined the `load_dataset` shortcut after seeing the `## Rules` section. The terser the variant, the more conservative the posture: spacedock + direct-structured built workspace-only classifiers (score 0.5 each, q1+q4 legit); direct-minimal hard-declined every query (score 0.0 for the right reason). Schema bug fixed in-entity per captain scope-widening (AC-5 added, RED→GREEN observable in commit history d7d1e89 → 8ef0270). AC-1, AC-2 (all 3 variants), AC-3, AC-4, AC-5 all met. Total live spend: 3 cells, ~87 min wallclock combined.
+
+## Stage Report: implementation (rk run --explain addendum)
+
+Cycle-4 addendum per team-lead heads-up that origin/main landed `rk run --explain` (d967c4c, 2026-05-24). Merged origin/main into k3 (merge commit captures all the new tests + run_explain.py) and used `rk run --explain --explain-format json` as a deterministic pre-flight gate on each agnews spec post-T7 schema fix. Strengthens AC-2 evidence + surfaces one new finding.
+
+- DONE: Merge of origin/main into k3 branch
+  Brings `src/razorback/cli/run_explain.py` (338 LOC) + `tests/unit/test_rk_run_explain.py` into the worktree.
+- DONE: `rk run --explain --explain-format json` captured for all 3 agnews cells
+  Commit d9c6707. Artifacts at `docs/razorback-implementation/_evidence/leak-guard-rerun/<variant>/agnews/explain.json`.
+  - **spacedock**: `agent.kwargs.harbor_agent_kwargs.reasoning_effort = "xhigh"` confirms xhigh threading through the spacedock_solver translate path. Plan-resolution snapshot otherwise matches the spec: model=claude-opus-4-7, runtime=claude, solver_workflow=examples/solver_workflows/dab_paper_matrix, tools_allowed Bash/Read/Write/Edit/Glob/Grep, tools_denied empty.
+  - **direct-structured**: `spec_kind=claude-cli`, `harbor_import_path=razorback.agents._runtime.claude:RazorbackClaudeCode`, `kwargs={"allowed_tools": "Bash,Read,Write,Edit,Glob,Grep"}`. Plan-resolution otherwise matches the spec.
+  - **direct-minimal**: identical to direct-structured.
+- FINDING: `reasoning_effort` is dropped by the translate layer on the claude-cli code path.
+  `src/razorback/translate.py:191-213` only threads `allowed_tools` into the agent kwargs for `spec_kind=claude-cli`; the `reasoning_effort` field (now accepted by my T7 schema fix) is silently discarded before reaching Harbor. The two direct-* T4 cells from earlier in this stage therefore ran WITHOUT xhigh reasoning_effort, despite the spec author's intent. This does NOT invalidate AC-2 — the leak-guard prose deterred the load_dataset shortcut regardless of reasoning depth, and `rk audit --policy strict` returned `clean` on both cells — but the spec→harbor contract is incomplete for the claude-cli path. **Out of k3 entity scope; recommend a sibling translate-threading-fix entity.**
+
+### Summary (cycle 4)
+
+`rk run --explain` (codex 2026-05-24, d967c4c) used as a deterministic pre-flight gate post-T7 schema fix. Three explain.json artifacts captured per-cell as additional AC-2 evidence. Spacedock plan resolution shows `reasoning_effort=xhigh` correctly threaded; direct-* plan resolution surfaces a new finding that the claude-cli translate path drops `reasoning_effort` before reaching harbor. AC-2 PASS unchanged (the leak-guard prose is the load-bearing deterrent, not reasoning depth); the threading bug is out-of-scope and filed as recommended sibling work.
+
+## Stage Report: validation
+
+Validation reproduced every AC's `Verified by:` clause verbatim against impl cycle-3 + cycle-4 artifacts on branch HEAD `d8671d3`. Baseline for AC-4 = post-merge `main` HEAD `5c4edfb9f102f567d0ebb37c9d19c508b556ea16`.
+
+- DONE: AC-1 — per-variant render assert + grep
+  3/3 variants `OK`; `grep -F 'UNABLE TO DETERMINE' workspace_readme.py` returns 3 matches (lines 29/62/105).
+- DONE: AC-2 — rk audit clean + verbatim grep empty + branch (a) decline (all 3 cells)
+  audit.json per cell: spacedock `{clean:1, tainted:0}`, direct-structured `{clean:2, tainted:0}`, direct-minimal `{clean:2, tainted:0}`. AC-2 verbatim grep `grep -F 'canonical' .../claude-code.txt | grep -i 'ag news\|dataset'` returns EMPTY for all 3. JSON-parsed tool_use Bash exec count for `load_dataset` = 0/0/0; the single `load_dataset` mention per cell is the rendered `## Rules` prose, not an executed command. Branch (a) decline applies to every cell.
+- DONE: AC-3 — leak-guard pytest GREEN
+  `uv run pytest packages/razorback-plugin-dab/tests/unit/test_workspace_readme_leak_guard.py -v` = 21 passed in 0.01s (7 phrases × 3 variants).
+- DONE: AC-4 — full pytest reproduces baseline
+  Worktree: `1 failed, 165 passed, 3 skipped in 65.63s`; baseline `main` HEAD `5c4edfb9` reproduces byte-identical `AssertionError: shim did not load BSON; final count=-1` for the same `test_mongo_init_shim_loads_bsondump_on_first_start`. No branch-introduced regressions.
+- DONE: AC-5 — schema RED→GREEN + fresh rk freeze
+  `uv run pytest tests/unit/test_freeze.py -v` = 4 passed including both new claude-cli `reasoning_effort` cases; fresh `rk freeze` on `examples/specs/goal1/direct-{structured,minimal}/agnews.yaml --allow-missing` both exit 0; `agnews.frozen.yaml` preserves `reasoning_effort: xhigh`.
+- DONE: Code review (`superpowers:requesting-code-review`)
+  Diff scope = 4 files / 93 insertions. Strengths: verbatim upstream port with 3 documented mechanical name swaps; per-variant character preserved; T0 RED → T1 GREEN + T6 RED → T7 GREEN ordering observable in git history; schema diff is 1 line mirroring sibling pattern; ABOUTME comments present. Minor (non-blocking): leak-guard test asserts phrase presence not paragraph structure; `reasoning_effort: str | None = None` is untyped (consistent with sibling fields). **No blocking findings.**
+- NOTED: Cycle-4 finding (translate.py drops `reasoning_effort` on claude-cli path) is out-of-scope per AC-5's stated contract (parse + freeze round-trip), which is what AC-5 explicitly verifies. Sibling entity `k4 translate-reasoning-effort-thread-through-claude-cli` filed by team-lead to fix the translator drop; discovered during k3 cycle-4 via `rk run --explain`; not blocking k3 verdict. Direct-structured + direct-minimal `explain.json` show no `reasoning_effort` in `harbor_agent_kwargs`; spacedock's correctly threads it — the two direct-* AC-2 cells therefore ran without xhigh reasoning_effort, but `rk audit --policy strict` returned clean and verbatim grep returned empty on all 3 cells because the leak-guard prose is not reasoning-depth-dependent.
+
+### Summary
+
+Validation report at `docs/razorback-implementation/validation/dab-workspace-readme-leak-guard-prose-port.md` (commit `65b2c0a`) carries per-AC reproduced output cited verbatim from the validator's own re-run, plus code-review findings. All 5 ACs PASS; the lone test failure (mongo_init_docker) is environmental and reproduces byte-identical on baseline `main`. Captain pre-authorized merge-on-PASS; this gate decision triggers terminalization with no further captain ack required.
+
+## Gate decision: APPROVE

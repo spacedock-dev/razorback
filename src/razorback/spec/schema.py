@@ -43,6 +43,7 @@ class ClaudeCliAgentBlock(BaseModel):
     sampling: SamplingBlock = Field(default_factory=SamplingBlock)
     tools_allowed: list[str] = Field(default_factory=list)
     prompt_file: Path | None = None
+    reasoning_effort: str | None = None
 
 
 class CodexAgentBlock(BaseModel):

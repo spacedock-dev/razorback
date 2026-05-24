@@ -1,0 +1,24 @@
+{
+  "policy": "strict",
+  "run_dir": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-dab-workspace-readme-leak-guard-prose-port/runs/leak-guard-rerun/direct-minimal/agnews/goal1-direct-minimal-agnews/a201b0263c2fd0e4",
+  "schema_version": "rk-audit-v1",
+  "summary": {
+    "clean": 2,
+    "coverage_missing": 0,
+    "tainted": 0
+  },
+  "trials": [
+    {
+      "findings": [],
+      "taint_status": "clean",
+      "trial_id": "agnews__Qy2truE/steps/main/agent",
+      "trial_path": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-dab-workspace-readme-leak-guard-prose-port/runs/leak-guard-rerun/direct-minimal/agnews/goal1-direct-minimal-agnews/a201b0263c2fd0e4/agnews__Qy2truE/steps/main/agent"
+    },
+    {
+      "findings": [],
+      "taint_status": "clean",
+      "trial_id": "agnews__Qy2truE",
+      "trial_path": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-dab-workspace-readme-leak-guard-prose-port/runs/leak-guard-rerun/direct-minimal/agnews/goal1-direct-minimal-agnews/a201b0263c2fd0e4/agnews__Qy2truE"
+    }
+  ]
+}

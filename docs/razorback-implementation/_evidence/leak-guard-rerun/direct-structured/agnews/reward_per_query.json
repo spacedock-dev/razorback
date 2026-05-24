@@ -1,0 +1,18 @@
+{
+  "q1": {
+    "reward": 1.0,
+    "reason": "Ground truth found in LLM output."
+  },
+  "q2": {
+    "reward": 0.0,
+    "reason": "Ground truth '0.14414414414414414' (tol=0.0001) not found in LLM output: 15/111"
+  },
+  "q3": {
+    "reward": 0.0,
+    "reason": "Ground truth numeric value '336.6363636363636' (tol=0.01) not found in LLM output: 346"
+  },
+  "q4": {
+    "reward": 1.0,
+    "reason": "Ground truth found in LLM output."
+  }
+}

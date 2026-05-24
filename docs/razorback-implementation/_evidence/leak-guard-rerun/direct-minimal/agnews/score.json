@@ -1,0 +1,77 @@
+{
+  "score_version": 1,
+  "alpha": 0.05,
+  "strata": {
+    "agnews": {
+      "dataset": "agnews",
+      "n_total": 4,
+      "n_completed": 4,
+      "n_errored": 0,
+      "n_pass": 0,
+      "pass_at_1": 0.0,
+      "wilson_ci": null,
+      "error_reason": null,
+      "queries": [
+        {
+          "query_id": 1,
+          "n_trials": 1,
+          "n_correct": 0,
+          "pass_at_1": 0.0,
+          "wilson_ci": [
+            0.0,
+            0.7934506856227626
+          ]
+        },
+        {
+          "query_id": 2,
+          "n_trials": 1,
+          "n_correct": 0,
+          "pass_at_1": 0.0,
+          "wilson_ci": [
+            0.0,
+            0.7934506856227626
+          ]
+        },
+        {
+          "query_id": 3,
+          "n_trials": 1,
+          "n_correct": 0,
+          "pass_at_1": 0.0,
+          "wilson_ci": [
+            0.0,
+            0.7934506856227626
+          ]
+        },
+        {
+          "query_id": 4,
+          "n_trials": 1,
+          "n_correct": 0,
+          "pass_at_1": 0.0,
+          "wilson_ci": [
+            0.0,
+            0.7934506856227626
+          ]
+        }
+      ]
+    }
+  },
+  "stratified_pass_at_1": 0.0,
+  "stratified_n_completed": 1,
+  "stratified_n_errored": 0,
+  "error_reason": null,
+  "against_constant": {
+    "name": "direct_baseline",
+    "value": 0.4376,
+    "per_stratum": {
+      "agnews": {
+        "verdict": "below",
+        "ci": null,
+        "side": null
+      }
+    },
+    "stratified": {
+      "mean": 0.0,
+      "verdict": "below"
+    }
+  }
+}

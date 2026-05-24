@@ -38,3 +38,36 @@ def test_freeze_round_trips_input_keys():
 def test_freeze_is_deterministic():
     spec = parse_spec_text(SPEC)
     assert freeze_spec(spec) == freeze_spec(spec)
+
+
+CLAUDE_CLI_WITH_REASONING_EFFORT = """\
+version: 1
+experiment: schema-fix-claude-cli-reasoning-effort
+agent:
+  kind: claude-cli
+  model: claude-opus-4-7
+  sampling:
+    temperature: 0.0
+  tools_allowed:
+    - Bash
+  reasoning_effort: xhigh
+benchmark:
+  kind: local
+  task_paths:
+    - examples/tasks/hello-world
+trials: 1
+observers:
+  - kind: stdout
+"""
+
+
+def test_claude_cli_agent_block_accepts_reasoning_effort():
+    spec = parse_spec_text(CLAUDE_CLI_WITH_REASONING_EFFORT)
+    assert spec.agent.reasoning_effort == "xhigh"
+
+
+def test_claude_cli_reasoning_effort_round_trips_through_freeze():
+    spec = parse_spec_text(CLAUDE_CLI_WITH_REASONING_EFFORT)
+    frozen_text = freeze_spec(spec)
+    frozen = yaml.safe_load(frozen_text)
+    assert frozen["agent"]["reasoning_effort"] == "xhigh"
