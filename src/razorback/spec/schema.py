@@ -149,85 +149,6 @@ class LocalBenchmarkBlock(BaseModel):
     task_paths: list[Path] = Field(default_factory=list)
 
 
-class DabBenchmarkBlock(BaseModel):
-    """Legacy-only schema block retained for `_legacy` imports.
-
-    Active specs no longer include this class in `BenchmarkBlock`; use
-    `benchmark.kind: harbor_dab`.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-    kind: Literal["dab"]
-    data_root: Path
-    datasets: list[str] = Field(min_length=1)
-
-    @field_validator("data_root", mode="before")
-    @classmethod
-    def _expand_data_root(cls, value: object) -> object:
-        return _expand_path(value)
-
-
-class HarborDabBenchmarkBlock(BaseModel):
-    """Phase 2 — DAB harbor adapter (sibling-package task generator).
-
-    Translates in `rk run` to a subprocess invocation of
-    `razorback-plugin-dab generate`, then a harbor `JobConfig` whose
-    `tasks:` references the emitted task directories. Razorback core
-    never imports from the plugin at runtime.
-
-    `dataset:` (AC-2) names a Harbor-style dataset definition ref of the form
-    `<name>@<version>`. When set, `data_root` becomes optional and falls back
-    to the env-default at materialization time; `datasets:` is treated as a
-    task-subset selector over the definition (empty = all datasets in the def).
-    """
-    model_config = ConfigDict(extra="forbid")
-    kind: Literal["harbor_dab"]
-    dataset: str | None = None
-    data_root: Path | None = None
-    datasets: list[str] = Field(default_factory=list)
-    workspace_variant: Literal["direct-minimal", "direct-structured", "spacedock"] = "direct-minimal"
-    hints: bool = False
-    query_mode: Literal["batch", "per-query"] = "per-query"
-
-    @field_validator("data_root", mode="before")
-    @classmethod
-    def _expand_data_root(cls, value: object) -> object:
-        if value is None:
-            return None
-        return _expand_path(value)
-
-    @field_validator("dataset")
-    @classmethod
-    def _validate_dataset_ref(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        if "@" not in value:
-            raise ValueError(
-                f"benchmark.dataset must be in the form '<name>@<version>'; "
-                f"got dataset format {value!r}"
-            )
-        name, version = value.split("@", 1)
-        if not name or not version:
-            raise ValueError(
-                f"benchmark.dataset must be '<name>@<version>' with non-empty parts; "
-                f"got dataset format {value!r}"
-            )
-        return value
-
-    @model_validator(mode="after")
-    def _dataset_or_data_root(self) -> "HarborDabBenchmarkBlock":
-        if self.dataset is None:
-            if self.data_root is None:
-                raise ValueError(
-                    "benchmark.data_root is required when benchmark.dataset is not set"
-                )
-            if not self.datasets:
-                raise ValueError(
-                    "benchmark.datasets must be non-empty when benchmark.dataset is not set"
-                )
-        return self
-
-
 class AdeBenchTaskEntry(BaseModel):
     """FU-1 AC-3 — git-task entry matching harbor's TaskConfig git-task shape.
 
@@ -344,57 +265,46 @@ _HARBOR_DATASET_REF_EXAMPLE = "adyen/dabstep@latest"
 
 
 class HarborBenchmarkBlock(BaseModel):
-    """Generic Harbor-resolved benchmark block.
+    """Generic Harbor-resolved benchmark block (`kind: harbor`).
 
-    Any harbor-published dataset is addressable through this single block:
     `dataset:` resolves via `harbor.registry.client.PackageDatasetClient`;
     optional `tasks` / `exclude_tasks` / `n_tasks` selectors apply spec-side
-    with the same semantics as harbor's `-i` / `-x` / `-l` flags. The
-    `tasks_root:` escape hatch points at a local Harbor-shaped directory
-    (same task layout the resolver emits) for dev/fixture use.
+    with the same semantics as harbor's `-i` / `-x` / `-l` flags. Spec-side
+    `tasks:` entries match `PackageTaskId.name` verbatim — no per-dataset
+    prefix stripping (heterogeneous: dabstep uses bare ints,
+    swe-bench-verified uses project-prefixed slugs).
 
-    Source selection is exclusive: exactly one of `dataset` or `tasks_root`.
-    Spec-side `tasks:` entries match `PackageTaskId.name` verbatim — no
-    per-dataset prefix stripping (which would not generalize: dabstep names
-    are bare integers, swe-bench-verified are project-prefixed, ade-bench
-    are dataset-prefixed).
-
-    Per-dataset razorback-side prep (currently only DAB, via the
-    `razorback-plugin-dab generate` subprocess) keeps its own
-    `kind: harbor_dab` block; this generic block covers the pure
-    pass-through case (dabstep, swe-bench-verified, terminal-bench-2,
-    lawbench, replicationbench, medagentbench, swe-bench-pro, ...).
+    For benchmarks that need razorback-side prep (currently only DAB), set
+    `plugin:` to the plugin's registered name. The plugin's typed args go
+    in `plugin_args`; they are validated at parse time against the plugin's
+    Pydantic model discovered via the `razorback.plugin_args` entry-point
+    group. When `plugin:` is set, `dataset:` may use the short
+    `<name>@<version>` form (the plugin owns the registry lookup); when
+    `plugin:` is None, `dataset:` must be fully qualified
+    `<org>/<name>@<ref>` for PackageDatasetClient resolution.
     """
     model_config = ConfigDict(extra="forbid")
     kind: Literal["harbor"]
     dataset: str | None = None
-    tasks_root: Path | None = None
     tasks: list[str] | None = None
     exclude_tasks: list[str] | None = None
     n_tasks: int | None = None
-
-    @field_validator("tasks_root", mode="before")
-    @classmethod
-    def _expand_tasks_root(cls, value: object) -> object:
-        if value is None:
-            return None
-        return _expand_path(value)
+    plugin: str | None = None
+    plugin_args: dict[str, object] | None = None
 
     @model_validator(mode="after")
     def _validate_source_and_ref(self) -> "HarborBenchmarkBlock":
-        if self.dataset is not None and self.tasks_root is not None:
+        if self.dataset is None:
             raise ValueError(
-                "exactly one of `dataset` (Harbor dataset ref) or `tasks_root` "
-                "(local Harbor-shaped task directory) may be set; both were provided"
+                "harbor benchmark requires `dataset` "
+                f"(e.g. {_HARBOR_DATASET_REF_EXAMPLE!r})"
             )
-        if self.dataset is None and self.tasks_root is None:
+        if self.plugin_args is not None and self.plugin is None:
             raise ValueError(
-                "harbor benchmark requires exactly one of `dataset` "
-                f"(Harbor dataset ref, e.g. {_HARBOR_DATASET_REF_EXAMPLE!r}) "
-                "or `tasks_root` (local Harbor-shaped task directory); "
-                "neither was provided"
+                "`plugin_args` requires `plugin` to name the registered plugin "
+                "the args belong to"
             )
-        if self.dataset is not None:
+        if self.plugin is None:
             from harbor.models.package.reference import PackageReference
 
             try:
@@ -418,21 +328,51 @@ class HarborBenchmarkBlock(BaseModel):
                     f"required shape is {_HARBOR_DATASET_REF_SHAPE} "
                     f"(e.g. {_HARBOR_DATASET_REF_EXAMPLE!r})"
                 )
-        if self.tasks_root is not None and not self.tasks:
-            raise ValueError(
-                "`tasks_root` (local task directory) requires a non-empty "
-                "`tasks` list naming task subdirectories"
+        else:
+            if "@" not in self.dataset:
+                raise ValueError(
+                    f"plugin-resolved dataset {self.dataset!r} must include `@<ref>`"
+                )
+            from razorback.spec.plugin_args import (
+                PluginNotFoundError,
+                get_plugin_args_model,
             )
+
+            try:
+                args_model = get_plugin_args_model(self.plugin)
+            except PluginNotFoundError as exc:
+                raise ValueError(str(exc)) from exc
+            args = self.plugin_args or {}
+            args_model(**args)
         return self
+
+
+class HarborLocalBenchmarkBlock(BaseModel):
+    """Local Harbor-shaped task directory — dev-escape (`kind: harbor-local`).
+
+    Used when iterating on a Harbor adapter before publishing it. The
+    `tasks_root` directory must contain the canonical Harbor task layout
+    (`<slug>/task.toml` + sibling files). Once the adapter publishes,
+    migrate to `kind: harbor` + `dataset: <org>/<name>@<ref>`.
+    """
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["harbor-local"]
+    tasks_root: Path
+    tasks: list[str] = Field(min_length=1)
+
+    @field_validator("tasks_root", mode="before")
+    @classmethod
+    def _expand_tasks_root(cls, value: object) -> object:
+        return _expand_path(value)
 
 
 BenchmarkBlock = Annotated[
     Union[
         LocalBenchmarkBlock,
-        HarborDabBenchmarkBlock,
         AdeBenchBenchmarkBlock,
         Spider2DbtBenchmarkBlock,
         HarborBenchmarkBlock,
+        HarborLocalBenchmarkBlock,
     ],
     Field(discriminator="kind"),
 ]

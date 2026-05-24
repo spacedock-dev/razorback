@@ -34,7 +34,7 @@ def test_write_manifest_schema_fields_present(tmp_path: Path):
         n_trials_completed=3,
         n_trials_errored=0,
         per_trial_paths=["bookreview-q1__a", "bookreview-q2__b", "bookreview-q3__c"],
-        benchmark_kind="harbor_dab",
+        benchmark_kind="harbor",
     )
     payload = json.loads((run_dir / "manifest.json").read_text())
     assert payload["run_dir_version"] == MANIFEST_SCHEMA_VERSION
@@ -52,7 +52,7 @@ def test_write_manifest_schema_fields_present(tmp_path: Path):
         "bookreview-q2__b",
         "bookreview-q3__c",
     ]
-    assert payload["benchmark_kind"] == "harbor_dab"
+    assert payload["benchmark_kind"] == "harbor"
     assert payload["created_at"].endswith("Z") or "+" in payload["created_at"]
 
 

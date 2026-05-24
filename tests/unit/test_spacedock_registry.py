@@ -55,9 +55,12 @@ agent:
   tools_allowed: []
   tools_denied: []
 benchmark:
-  kind: harbor_dab
-  data_root: /tmp/data
-  datasets: [bookreview]
+  kind: harbor
+  dataset: dab@1.0
+  plugin: dab
+  plugin_args:
+    data_root: /tmp/data
+  tasks: [bookreview]
 """
     spec = parse_spec_text(spec_text)
     assert spec.agent.kind == "spacedock_solver"
@@ -71,9 +74,12 @@ experiment: stale-v1
 agent:
   kind: {stale_kind}
 benchmark:
-  kind: harbor_dab
-  data_root: /tmp/data
-  datasets: [bookreview]
+  kind: harbor
+  dataset: dab@1.0
+  plugin: dab
+  plugin_args:
+    data_root: /tmp/data
+  tasks: [bookreview]
 """
     with pytest.raises(SpecError) as exc:
         parse_spec_text(bad_spec)
@@ -90,9 +96,12 @@ agent:
   model: claude-opus-4-5
   solver_workflow: .
 benchmark:
-  kind: harbor_dab
-  data_root: /tmp/data
-  datasets: [bookreview]
+  kind: harbor
+  dataset: dab@1.0
+  plugin: dab
+  plugin_args:
+    data_root: /tmp/data
+  tasks: [bookreview]
 """
     with pytest.raises(SpecError) as exc:
         parse_spec_text(bad_spec)
@@ -111,9 +120,12 @@ agent:
   tools_allowed: []
   frobnicator: true
 benchmark:
-  kind: harbor_dab
-  data_root: /tmp/data
-  datasets: [bookreview]
+  kind: harbor
+  dataset: dab@1.0
+  plugin: dab
+  plugin_args:
+    data_root: /tmp/data
+  tasks: [bookreview]
 """
     with pytest.raises(SpecError) as exc:
         parse_spec_text(bad_spec)

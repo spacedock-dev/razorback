@@ -1,5 +1,5 @@
 # ABOUTME: Schema tests for the generic HarborBenchmarkBlock (kind: harbor).
-# ABOUTME: Validates dataset-ref shape, source-selection rule, selectors, dispatch via discriminator.
+# ABOUTME: Validates dataset-ref shape, selectors, dispatch via discriminator.
 
 import pytest
 from pydantic import ValidationError
@@ -17,10 +17,11 @@ def test_schema_accepts_dataset_only():
         dataset="adyen/dabstep@latest",
     )
     assert block.dataset == "adyen/dabstep@latest"
-    assert block.tasks_root is None
     assert block.tasks is None
     assert block.exclude_tasks is None
     assert block.n_tasks is None
+    assert block.plugin is None
+    assert block.plugin_args is None
 
 
 def test_schema_accepts_dataset_with_task_subset():
@@ -43,46 +44,11 @@ def test_schema_accepts_dataset_with_exclude_tasks_and_n_tasks():
     assert block.n_tasks == 10
 
 
-def test_schema_accepts_local_tasks_root_with_tasks():
-    block = HarborBenchmarkBlock(
-        kind="harbor",
-        tasks_root="/tmp/harbor-shaped-tasks",
-        tasks=["35"],
-    )
-    assert block.tasks_root is not None
-    assert block.tasks == ["35"]
-    assert block.dataset is None
-
-
-def test_schema_rejects_dataset_plus_tasks_root():
-    with pytest.raises(ValidationError) as exc:
-        HarborBenchmarkBlock(
-            kind="harbor",
-            dataset="adyen/dabstep@latest",
-            tasks_root="/tmp/local",
-        )
-    msg = str(exc.value)
-    assert "dataset" in msg
-    assert "tasks_root" in msg
-
-
-def test_schema_rejects_neither_dataset_nor_tasks_root():
+def test_schema_rejects_dataset_missing():
     with pytest.raises(ValidationError) as exc:
         HarborBenchmarkBlock(kind="harbor")
     msg = str(exc.value)
     assert "dataset" in msg
-    assert "tasks_root" in msg
-
-
-def test_schema_rejects_tasks_root_without_tasks_list():
-    with pytest.raises(ValidationError) as exc:
-        HarborBenchmarkBlock(
-            kind="harbor",
-            tasks_root="/tmp/harbor-shaped-tasks",
-        )
-    msg = str(exc.value)
-    assert "tasks_root" in msg
-    assert "tasks" in msg
 
 
 def test_schema_rejects_bare_dataset_name_with_canonical_example_in_error():
@@ -158,20 +124,18 @@ def test_schema_validation_uses_harbor_package_reference_parser():
         assert block.dataset == ref
 
 
-def test_schema_coexists_with_existing_per_benchmark_kinds():
-    """Collapse-partial guarantee: HarborBenchmarkBlock lives alongside the
-    existing per-benchmark kinds (harbor_dab, ade-bench, spider2-dbt, local).
-    Each kind still dispatches to its own class via the discriminator."""
+def test_schema_coexists_with_other_kinds_in_union():
+    """`HarborBenchmarkBlock` lives alongside surviving per-benchmark kinds."""
     from razorback.spec.schema import (
         AdeBenchBenchmarkBlock,
-        HarborDabBenchmarkBlock,
+        HarborLocalBenchmarkBlock,
         LocalBenchmarkBlock,
         Spider2DbtBenchmarkBlock,
     )
 
     cases = [
         ({"kind": "harbor", "dataset": "adyen/dabstep@latest"}, HarborBenchmarkBlock),
-        ({"kind": "harbor_dab", "dataset": "dab@1.0"}, HarborDabBenchmarkBlock),
+        ({"kind": "harbor-local", "tasks_root": "/tmp", "tasks": ["t"]}, HarborLocalBenchmarkBlock),
         ({"kind": "ade-bench", "dataset": "dbt-labs/ade-bench@latest"}, AdeBenchBenchmarkBlock),
         ({"kind": "spider2-dbt", "tasks_root": "/tmp", "tasks": ["t"]}, Spider2DbtBenchmarkBlock),
         ({"kind": "local", "task_paths": []}, LocalBenchmarkBlock),

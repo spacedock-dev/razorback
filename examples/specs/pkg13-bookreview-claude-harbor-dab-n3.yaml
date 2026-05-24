@@ -9,12 +9,15 @@ agent:
     temperature: 0.0
   tools_allowed: [Bash, Read, Write, Edit, Glob, Grep]
 benchmark:
-  kind: harbor_dab
-  data_root: "${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}"
-  datasets:
+  kind: harbor
+  dataset: dab@1.0
+  plugin: dab
+  plugin_args:
+    workspace_variant: direct-minimal
+    hints: false
+    data_root: "${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}"
+  tasks:
     - bookreview
-  workspace_variant: direct-minimal
-  hints: false
 trials: 3
 experiment_meta:
   max_budget_usd: 5.0

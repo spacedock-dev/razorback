@@ -28,9 +28,12 @@ agent:
   kind: claude-cli
   model: claude-opus-4-5
 benchmark:
-  kind: harbor_dab
-  data_root: /tmp/data
-  datasets: [bookreview]
+  kind: harbor
+  dataset: dab@1.0
+  plugin: dab
+  plugin_args:
+    data_root: /tmp/data
+  tasks: [bookreview]
 trials: 1
 """
 
