@@ -170,14 +170,18 @@ Verified by:
 `/workspace/preflight.sh` mechanism in place.**
 The ade-bench block class and its translator builder are deleted;
 the solver runs `/workspace/preflight.sh` if present (filesystem
-convention, not benchmark-name conditional); ade-plugin's `generate()`
-emits this file into the materialized task view.
+convention, not benchmark-name conditional); the ade-plugin
+(located in-tree at `src/razorback/benchmarks/ade_bench/` per
+captain decision 2026-05-25 — no separate pip package required)
+registers a `razorback.plugin_args` entry point whose `generate()`
+emits `/workspace/preflight.sh` into the materialized task view.
 Verified by:
 - `grep -nR "class AdeBenchBenchmarkBlock\|_build_ade_bench\b\|benchmark_kind == [\"']ade-bench" src/razorback/` returns 0 matches.
 - `grep -n "/workspace/preflight.sh" src/razorback/_runtime/` returns ≥1 match (solver-side dispatcher).
-- `uv run python -c "from razorback_plugin_ade_bench.generate import generate; ..."` (or the plugin's canonical entry) emits `/workspace/preflight.sh` with executable bit set for a materialized task view fixture; `test -x` on the emitted path exits 0.
+- `uv run python -c "import importlib.metadata as m; assert 'ade-bench' in {ep.name for ep in m.entry_points(group='razorback.plugin_args')}"` exits 0 (entry-point discovery verified).
+- The ade-plugin's canonical `generate()` entry-point (located via the entry point above) emits `/workspace/preflight.sh` with executable bit set for a materialized task view fixture; `test -x` on the emitted path exits 0.
 - A previously-shipped ade-bench spec migrated to `kind: harbor` + `plugin: ade-bench` round-trips through `uv run rk freeze` and `uv run rk run --explain` cleanly.
-- `uv run pytest packages/razorback-plugin-ade-bench/tests/ tests/translate/test_ade_dispatch.py -v` exits 0.
+- The ade-plugin's tests pass — whether in-tree at `src/razorback/benchmarks/ade_bench/tests/` or in a `packages/razorback-plugin-ade-bench/tests/` package (implementation choice) — plus `uv run pytest tests/translate/test_ade_dispatch.py -v` exits 0.
 
 **AC-3 — `Spider2DbtBenchmarkBlock` removed; spider2-plugin wired.**
 Verified by:
