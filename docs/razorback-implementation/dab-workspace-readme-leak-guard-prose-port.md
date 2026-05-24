@@ -195,3 +195,21 @@ Cycle-3 amendment per captain redirect — T4 was approved post the cycle-1 FAIL
 ### Summary (cycle 3)
 
 3/3 variant agnews cells PASSED AC-2 with `rk audit --policy strict` clean and verbatim grep empty. All 3 took branch (a) — declined the `load_dataset` shortcut after seeing the `## Rules` section. The terser the variant, the more conservative the posture: spacedock + direct-structured built workspace-only classifiers (score 0.5 each, q1+q4 legit); direct-minimal hard-declined every query (score 0.0 for the right reason). Schema bug fixed in-entity per captain scope-widening (AC-5 added, RED→GREEN observable in commit history d7d1e89 → 8ef0270). AC-1, AC-2 (all 3 variants), AC-3, AC-4, AC-5 all met. Total live spend: 3 cells, ~87 min wallclock combined.
+
+## Stage Report: implementation (rk run --explain addendum)
+
+Cycle-4 addendum per team-lead heads-up that origin/main landed `rk run --explain` (d967c4c, 2026-05-24). Merged origin/main into k3 (merge commit captures all the new tests + run_explain.py) and used `rk run --explain --explain-format json` as a deterministic pre-flight gate on each agnews spec post-T7 schema fix. Strengthens AC-2 evidence + surfaces one new finding.
+
+- DONE: Merge of origin/main into k3 branch
+  Brings `src/razorback/cli/run_explain.py` (338 LOC) + `tests/unit/test_rk_run_explain.py` into the worktree.
+- DONE: `rk run --explain --explain-format json` captured for all 3 agnews cells
+  Commit d9c6707. Artifacts at `docs/razorback-implementation/_evidence/leak-guard-rerun/<variant>/agnews/explain.json`.
+  - **spacedock**: `agent.kwargs.harbor_agent_kwargs.reasoning_effort = "xhigh"` confirms xhigh threading through the spacedock_solver translate path. Plan-resolution snapshot otherwise matches the spec: model=claude-opus-4-7, runtime=claude, solver_workflow=examples/solver_workflows/dab_paper_matrix, tools_allowed Bash/Read/Write/Edit/Glob/Grep, tools_denied empty.
+  - **direct-structured**: `spec_kind=claude-cli`, `harbor_import_path=razorback.agents._runtime.claude:RazorbackClaudeCode`, `kwargs={"allowed_tools": "Bash,Read,Write,Edit,Glob,Grep"}`. Plan-resolution otherwise matches the spec.
+  - **direct-minimal**: identical to direct-structured.
+- FINDING: `reasoning_effort` is dropped by the translate layer on the claude-cli code path.
+  `src/razorback/translate.py:191-213` only threads `allowed_tools` into the agent kwargs for `spec_kind=claude-cli`; the `reasoning_effort` field (now accepted by my T7 schema fix) is silently discarded before reaching Harbor. The two direct-* T4 cells from earlier in this stage therefore ran WITHOUT xhigh reasoning_effort, despite the spec author's intent. This does NOT invalidate AC-2 — the leak-guard prose deterred the load_dataset shortcut regardless of reasoning depth, and `rk audit --policy strict` returned `clean` on both cells — but the spec→harbor contract is incomplete for the claude-cli path. **Out of k3 entity scope; recommend a sibling translate-threading-fix entity.**
+
+### Summary (cycle 4)
+
+`rk run --explain` (codex 2026-05-24, d967c4c) used as a deterministic pre-flight gate post-T7 schema fix. Three explain.json artifacts captured per-cell as additional AC-2 evidence. Spacedock plan resolution shows `reasoning_effort=xhigh` correctly threaded; direct-* plan resolution surfaces a new finding that the claude-cli translate path drops `reasoning_effort` before reaching harbor. AC-2 PASS unchanged (the leak-guard prose is the load-bearing deterrent, not reasoning depth); the threading bug is out-of-scope and filed as recommended sibling work.
