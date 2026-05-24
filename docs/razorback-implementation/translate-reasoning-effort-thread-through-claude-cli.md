@@ -1,11 +1,11 @@
 ---
 id: k4ncx3dt7pqvsftnv2spftrf
 title: translate.py threads reasoning_effort through to harbor on the claude-cli path
-status: plan
+status: implementation
 source: 2026-05-25 k3 cycle-4 finding via `rk run --explain` evidence — `src/razorback/translate.py:191-213` only threads `allowed_tools` for the claude-cli code path; `reasoning_effort` declared at `agent.reasoning_effort` is parsed by `ClaudeCliAgentBlock` (post-k3 schema fix at `8ef0270`) but silently dropped before reaching `harbor_agent_kwargs`. k3 cycle-4 evidence at `docs/razorback-implementation/_evidence/leak-guard-rerun/{spacedock,direct-structured,direct-minimal}/agnews/explain.json`: spacedock's resolved kwargs carry `reasoning_effort: xhigh` (different translator branch); direct-structured + direct-minimal explain JSONs omit it entirely. k3's live agnews re-runs on the two direct-* cells PASSED `rk audit --policy strict` clean and verbatim-grep empty regardless — the leak-guard prose is not reasoning-depth-dependent — but they did NOT run with the xhigh reasoning depth the spec author declared. This is a translator regression, not a schema regression; k3's AC-5 schema fix is necessary but not sufficient.
 score: 0.78
 auto-approve: false
-worktree:
+worktree: .worktrees/spacedock-ensign-translate-reasoning-effort-thread-through-claude-cli
 issue:
 pr:
 mod-block:
