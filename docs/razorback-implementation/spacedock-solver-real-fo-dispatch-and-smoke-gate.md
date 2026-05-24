@@ -10,7 +10,7 @@ score: 0.95
 worktree: .worktrees/spacedock-ensign-spacedock-solver-real-fo-dispatch-and-smoke-gate
 issue:
 pr:
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 ## Problem
