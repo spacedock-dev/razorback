@@ -140,96 +140,77 @@ per-benchmark builders become unnecessary.
 
 ## Acceptance criteria
 
-> **AC-1 through AC-4 below are STALE.** Captain widened scope twice
-> during impl-stage (2026-05-23): first to "implement, not just
-> doc," then to "no backwards-compat required + user-experience
-> first." Original AC-1..AC-4 covered a design doc + decision tree;
-> the new scope covers two user-scenario narratives + derived
-> implementation design + production migration. The new ACs below
-> (AC-1'..AC-5') replace them. The originals are preserved for
-> provenance.
+> **AC list rewritten 2026-05-25** by the first officer at captain
+> directive. Earlier iterations (filed AC-1..AC-4 "design doc shipped"
+> form, cycle-3 AC-1'..AC-5' "user-scenario narratives" form) violated
+> the workflow's doc-only anti-pattern — verification clauses named
+> "section exists" / "section lists N decision points" / "doc cites
+> harbor source files" rather than load-bearing code or behavior. The
+> earlier ACs remain visible in the entity's git history. The ACs
+> below describe the actual deliverable: the per-benchmark-block
+> collapse + plugin migration enumerated in `## §2.11`. The design
+> doc, spike findings, and decision-tree analyses already in this
+> entity body are implementation notes and stage-report content — not
+> separately gated artifacts.
 
-**AC-1' — Two user-scenario narratives shipped.**
-The design doc at `docs/superpowers/specs/2026-05-23-generic-harbor-benchmark-surface.md`
-opens with `## §1 User scenarios` containing two end-to-end
-narratives (Scenario A: dabstep with persona Aanya; Scenario B:
-swe-bench-verified with persona Ben). Each scenario walks the
-researcher from install through autoresearch-loop-live, with real
-paths, real YAML, real CLI output, and explicit "what had to be
-true for live" criteria.
-Verified by: `grep -c "^### §1\\." <doc>` returns 2; each scenario
-section is 40-80 lines; each step references concrete commands the
-researcher types (no abstract sentences like "they configure the
-benchmark").
+**AC-1 — `HarborDabBenchmarkBlock` removed; `razorback-plugin-dab`
+discovered as `kind: harbor` + `plugin: dab` consumer.**
+The block class and its translator builder are deleted; dispatch
+flows through the generic `_build_harbor` + plugin escape valve;
+the existing DAB plugin package is reachable via the `razorback.plugin_args`
+entry-point group.
+Verified by:
+- `grep -n "class HarborDabBenchmarkBlock" src/razorback/spec/schema.py` returns 0 matches.
+- `grep -n "_build_harbor_dab\b" src/razorback/translate.py` returns 0 matches.
+- `uv run python -c "import importlib.metadata as m; assert 'dab' in {ep.name for ep in m.entry_points(group='razorback.plugin_args')}"` exits 0.
+- A previously-shipped harbor_dab spec migrated to `kind: harbor` + `plugin: dab` round-trips through `uv run rk freeze` cleanly; `rk run --explain --explain-format json` on the migrated spec resolves to the same dataset ref, model, runtime, and `tools_denied` set as the pre-migration freeze (cite both `.frozen.yaml` files in the stage report).
+- `uv run pytest packages/razorback-plugin-dab/tests/ tests/translate/test_dab_dispatch.py -v` exits 0 across the 13 migrated test files plus dispatch tests.
 
-**AC-2' — Implementation design derived from scenarios.**
-The design doc's `## §2 Implementation design` derives every
-internal-API decision backwards from the scenarios. Specific
-deliverables documented:
-- The post-migration `BenchmarkBlock` shape (`harbor`,
-  `harbor-local`, `local` — three kinds plus a plugin escape
-  valve under `kind: harbor`).
-- The `rk research new` command + the scaffold template tree at
-  `docs/templates/research-project/` + the
-  `docs/templates/benchmark-defaults.toml` table.
-- The `_build_harbor` translator (in-tree per cycle-2 commit
-  `f9f3143`) and the `_build_harbor_local` sibling.
-- The plugin escape valve (`kind: harbor` + `plugin:` +
-  `plugin_args:`) — one current consumer (`razorback-plugin-dab`).
-- The deletion list (`AdeBenchBenchmarkBlock`,
-  `HarborDabBenchmarkBlock`, `Spider2DbtBenchmarkBlock`,
-  `DabBenchmarkBlock`-legacy; their builders in `translate.py`).
-Verified by: doc has `## §2 Implementation design` with sub-sections
-§2.1-§2.12; each section names a concrete file path or symbol; the
-deletion list resolves to real symbols in `src/razorback/spec/schema.py`
-and `src/razorback/translate.py`.
+**AC-2 — `AdeBenchBenchmarkBlock` removed; ade-plugin wired; generic
+`/workspace/preflight.sh` mechanism in place.**
+The ade-bench block class and its translator builder are deleted;
+the solver runs `/workspace/preflight.sh` if present (filesystem
+convention, not benchmark-name conditional); ade-plugin's `generate()`
+emits this file into the materialized task view.
+Verified by:
+- `grep -nR "class AdeBenchBenchmarkBlock\|_build_ade_bench\b\|benchmark_kind == [\"']ade-bench" src/razorback/` returns 0 matches.
+- `grep -n "/workspace/preflight.sh" src/razorback/_runtime/` returns ≥1 match (solver-side dispatcher).
+- `uv run python -c "from razorback_plugin_ade_bench.generate import generate; ..."` (or the plugin's canonical entry) emits `/workspace/preflight.sh` with executable bit set for a materialized task view fixture; `test -x` on the emitted path exits 0.
+- A previously-shipped ade-bench spec migrated to `kind: harbor` + `plugin: ade-bench` round-trips through `uv run rk freeze` and `uv run rk run --explain` cleanly.
+- `uv run pytest packages/razorback-plugin-ade-bench/tests/ tests/translate/test_ade_dispatch.py -v` exits 0.
 
-**AC-3' — Spec amendment scope named.**
-The design doc's `## §2.10 Spec amendment scope` names exactly which
-v2 spec sections change (§5 extends with §5.4 + §5.5; §6.1 minor
-revision; §1.3 clarifying bullet) and what the new prose contains.
-The cycle-1 commit `fa0374a` 15-line addition at §6.1 needs revision
-to match (drop the `prep:` discriminator language; drop the
-collapse-partial framing).
-Verified by: doc has `## §2.10 Spec amendment scope` listing the
-specific §-numbers and the diff intent; cycle-1 amendment in
-`docs/superpowers/specs/2026-05-19-razorback-on-harbor.md` is either
-revised in this entity or flagged as PENDING-CAPTAIN-APPROVAL in the
-stage report.
+**AC-3 — `Spider2DbtBenchmarkBlock` removed; spider2-plugin wired.**
+Verified by:
+- `grep -n "class Spider2DbtBenchmarkBlock\|_build_spider2" src/razorback/` returns 0 matches.
+- `uv run python -c "import importlib.metadata as m; assert 'spider2' in {ep.name for ep in m.entry_points(group='razorback.plugin_args')}"` exits 0.
+- A previously-shipped spider2-dbt spec migrated to `kind: harbor` + `plugin: spider2` round-trips through `uv run rk freeze` cleanly.
+- `uv run pytest packages/razorback-plugin-spider2/tests/ -v` exits 0 (or, if the plugin lives in-tree, the equivalent test path).
 
-**AC-4' — Decision-ready captain gate.**
-The doc ends with a `## §3 Recommendation` section the captain can
-answer YES/NO/MODIFY per decision-point (a/b/c/d): scenarios as
-design driver / `rk research new` shape / post-migration
-`BenchmarkBlock` shape / v2 spec amendment scope.
-Verified by: section exists and lists four explicit decision points.
+**AC-4 — `rk score` surfaces `taint_status` from `audit.json` +
+auto-pulls `paper_baseline` from spec frontmatter.**
+Verified by:
+- `uv run rk score <fixture-run-dir>` JSON output has a top-level `taint_status` field equal to the `audit.json` summary verdict for that run.
+- When the spec frontmatter declares `paper_baseline: <value>`, `uv run rk score <run-dir>` uses it as the `--against-constant` target without an explicit CLI flag; the JSON output's comparison block names the source as `spec.frontmatter`.
+- `uv run pytest tests/cli/test_score.py -v` exits 0 with RED→GREEN tests covering both behaviors (taint surface + paper_baseline auto-pull); both tests fail on the pre-amendment branch and pass on the post-amendment branch (cite both commit SHAs).
 
-**AC-5' — Production migration sequenced.**
-The doc's `## §2.11 Migration commits sequence` names five commits
-that ship the migration; commit 1 (`HarborBenchmarkBlock` +
-`_build_harbor`) is in-tree as of cycle 2; commits 2-5 sequence
-naturally on captain approval. Mechanical migration of the four
-existing per-benchmark blocks + their builders is enumerated.
-Verified by: each commit in §2.11 has concrete file lists; the cycle-2
-in-tree commits are cited by SHA (`6cbcaa8`, `f9f3143`); commits 2-5
-do NOT need to land in this entity (PENDING-CAPTAIN-APPROVAL).
+**AC-5 — examples/specs migrated to `kind: harbor`; sealed_hash
+break documented in commit message + design §2.4.**
+Verified by:
+- `grep -rl "^\s*kind:\s*\(harbor_dab\|ade-bench\|spider2-dbt\)\b" examples/ docs/` returns empty.
+- `for s in $(find examples -name "*.yaml" -path "*spec*"); do uv run rk freeze "$s" --allow-missing >/dev/null; done` exits 0 for every spec file.
+- `git log --oneline --grep="sealed_hash"` shows ≥1 commit on this branch whose body explains the break (per design §2.4); the body cites the affected frozen-spec set and names `rk freeze --rehash` as the migration recipe per captain decision 2026-05-24.
 
-> **Originals (STALE — preserved for provenance):**
->
-> AC-1 — Design doc shipped (per the original 12-section structure
-> with the consumer-surface inventory and 4-option decision tree).
-> Superseded by AC-1' + AC-2' which restructure the doc around user
-> scenarios.
->
-> AC-2 — Grounded research recorded. Still satisfied — the spike
-> findings + harbor-version-pinned line citations are preserved in
-> `## §4 Spike findings (preserved from cycle 2)` of the design doc.
->
-> AC-3 — Spec amendment evaluated. Superseded by AC-3' which
-> names the §5/§6.1/§1.3 scope concretely.
->
-> AC-4 — Decision-ready output for captain. Superseded by AC-4'
-> which names four explicit decision points.
+**AC-6 — v2 spec amended at §1.3 / §3.2 / §5 / §6.1 / §6.2 / §7
+per §2.10.**
+Verified by:
+- `docs/superpowers/specs/2026-05-19-razorback-on-harbor.md` carries a diff covering the six §-sections enumerated in §2.10; `git log --oneline -- docs/superpowers/specs/2026-05-19-razorback-on-harbor.md` shows the amendment commit on this branch.
+- `git diff main..HEAD -- docs/superpowers/specs/2026-05-19-razorback-on-harbor.md | wc -l` is within the ~120-line envelope §2.10 estimates (allow ±20%).
+- `grep -c "^kind: harbor\b" docs/superpowers/specs/2026-05-19-razorback-on-harbor.md` matches the count §2.10 predicts (zero per-benchmark-named example `kind:` values remain other than `local` / `harbor` / `harbor-local`).
+
+**AC-7 — Existing pytest stays green; non-migrated paths unchanged.**
+Verified by:
+- `uv run pytest tests/ -v` exits 0 modulo pre-existing failures (LFS-hydration etc.); the failure set on this branch is byte-identical to the failure set on `main` immediately before merge.
+- `LocalBenchmarkBlock` dispatch path's existing tests (`tests/translate/test_local.py` or equivalent) pass without modification; the local kind is explicitly preserved per § Out of scope.
 
 ## Test plan
 
@@ -247,8 +228,13 @@ do NOT need to land in this entity (PENDING-CAPTAIN-APPROVAL).
 - **Spec amendment review:** if the doc proposes a v2 spec change,
   validate the diff renders cleanly (`git apply --check`) and is
   internally consistent (no §-ref broken).
-- **No pytest required** — this is a doc/design entity. Existing
-  pytest must remain green (no code changes).
+- **Pytest required at every commit boundary** — this entity ships
+  code, not prose. Each of commits 4a/3/4b/4c/5/6 must leave
+  `uv run pytest tests/ -v` green modulo the pre-existing failure
+  set unchanged on `main`. The TDD discipline is per-commit (RED
+  test for deletion behavior before each block delete; RED test for
+  the new behavior — plugin entry-point discovery, generic preflight
+  dispatcher, score field surfacing — before each implementation).
 
 ## Out of scope
 
@@ -269,23 +255,27 @@ do NOT need to land in this entity (PENDING-CAPTAIN-APPROVAL).
 
 ## Depends on
 
-- (none — pure research + doc)
+- (none — code refactor on top of the in-tree `HarborBenchmarkBlock`
+  + `_build_harbor` translator already landed at cycle-2 commits
+  `b36e672` and `fe38f9f`)
 - Aware-of: `qh dab-harbor-dataset-definition` (DONE; established
   the `dataset: dab@1.0` precedent), `gb ade-bench-harbor-dataset-ref`
   (DONE; established `dataset: <org>/<name>@<ref>` for ADE). Both
-  partially toward the generic surface; the captain's pushback +
-  this design doc would finish the journey.
+  established surface pieces this entity now consolidates.
 
 ## Resume hook
 
-When this lands, the captain has a decision-ready doc that says
-either "yes, file the refactor entity, scoped as X" or "no, here's
-why the current pattern is correct." If the refactor proceeds, every
-future harbor-published benchmark (dabstep, swe-bench-verified,
-terminal-bench-2, lawbench, replicationbench, medagentbench,
-swe-bench-pro, anything published next year) becomes a one-spec
-addition with zero razorback code change. That's a meaningful
-multiplier on razorback's surface coverage.
+When this lands, the three per-benchmark `BenchmarkBlock` subclasses
+(`HarborDabBenchmarkBlock`, `AdeBenchBenchmarkBlock`,
+`Spider2DbtBenchmarkBlock`) and their `translate.py` builders are
+gone; dispatch flows through `_build_harbor` + a plugin escape valve
+discovered via the `razorback.plugin_args` entry-point group; the v2
+spec at `docs/superpowers/specs/2026-05-19-razorback-on-harbor.md`
+codifies this as canonical. Every future harbor-published benchmark
+(dabstep, swe-bench-verified, terminal-bench-2, lawbench,
+replicationbench, medagentbench, swe-bench-pro) becomes a one-spec
+addition with zero razorback-core code change — at most a new plugin
+package if benchmark-specific preflight or scoring is required.
 
 ## Plan-stage research validation (harbor==0.6.6 cross-check)
 
