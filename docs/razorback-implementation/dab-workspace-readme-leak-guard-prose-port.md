@@ -146,3 +146,21 @@ Inline plan landed: verbatim port of DAB upstream's L77–83 leak-guard paragrap
 ### Summary
 
 Deterministic work complete: T0 RED → T1 GREEN ordering observable in git history (8a6e7ac → 34cc541); all 3 workspace variants now carry the verbatim DAB-upstream leak-guard paragraph with 3 documented name swaps; 27/27 unit tests pass; full pytest reproduces baseline-only failures. AC-1, AC-3, AC-4 met. AC-2 live re-run gated on captain ack that was requested twice without reply — stage report committed with T4 marked FAILED + rationale rather than idling uncommitted per ensign discipline. Next move belongs to the captain: either ack the spend for a follow-on T4 dispatch, or accept AC-2 deferral to 7q's re-run cycle.
+
+## Stage Report: implementation (cycle 2)
+
+Resumed after captain ack on T4 (live agnews re-run; widened to 3 variants). The cycle-1 stage report above marked T4 FAILED on no-ack; this cycle supersedes that for the spacedock cell.
+
+- DONE: T4 — live agnews/spacedock re-run executed against post-T1 source (AC-2 PASS)
+  Evidence at docs/razorback-implementation/_evidence/leak-guard-rerun/spacedock/agnews/ (audit.json, result.json, score.json, reward_per_query.json). Commit b9d52d2.
+  - `rk audit --policy strict` verdict: **clean** (0 tainted, 1 clean trial agnews__JE3GiCo)
+  - AC-2 verbatim grep `grep -F 'canonical' .../claude-code.txt | grep -i 'ag news\|dataset'`: EMPTY
+  - `load_dataset` / `huggingface` mentions in claude-code.txt = 2 each, both inside the rendered README rule prose itself; never executed as Bash. `canonical=0, fancyzhx=0, "matched article_id"=0`.
+  - Branch (a): agent declined `load_dataset` outright after reading the `## Rules` section. Built a keyword classifier from workspace mongo/sqlite data only (SPORTS_HIGH/SPORTS_TEAMS lists).
+  - Score 0.5 (q1+q4 pass) — same headline as the prior cheating run, but legitimately earned without oracle lookup. Runtime 33m 11s.
+- FAILED: T4 — direct-structured/agnews + direct-minimal/agnews cells blocked on baseline schema bug
+  `ClaudeCliAgentBlock` (src/razorback/spec/schema.py:39–46) declares `extra="forbid"` and has no `reasoning_effort` field, but the spec generator (commit a6ab344 on baseline `main`) wrote `agent.reasoning_effort: xhigh` into all direct-* yamls. `rk freeze` rejects with `Extra inputs are not permitted`. Reproduces on baseline `main` HEAD 5424667; not introduced by this branch. Out of entity scope per CLAUDE.md "smallest reasonable changes." Recommend a sibling baseline-bug entity (add `reasoning_effort: str | None = None` to `ClaudeCliAgentBlock`) to unblock the direct-* breadth check as a follow-on.
+
+### Summary (cycle 2)
+
+T4 spacedock (the original cheating cell) PASSED cleanly: leak-guard prose deterred opus-4.7+xhigh from the `load_dataset` shortcut; agent built an honest workspace-data-only classifier; `rk audit --policy strict` returned `clean`; AC-2 verbatim grep returned empty. AC-2 is met for the load-bearing cell. The two direct-* cells captain widened scope to are blocked on a pre-existing baseline schema bug unrelated to this entity's prose port; recommend a follow-on baseline-bug fix + breadth re-run rather than carrying it inline. AC-1, AC-2 (spacedock), AC-3, AC-4 all green.
