@@ -93,3 +93,16 @@ Wrote the standard separate plan doc for the four-AC disk-budget task. The imple
 ### Summary
 
 Ran a bounded synthetic DAB/Harbor spike without full DAB data, scored execution, run-history deletion, or Docker pruning. The spike proves Harbor preserves the candidate read-only `main.volumes` DB-file mount, so implementation can proceed with per-file SQLite/DuckDB `main` binds and keep the symlink/source-root fallback out of the main path. Plan evidence commit id: `1bd728a`.
+
+## Stage Report: implementation
+
+- DONE: File-backed SQLite/DuckDB `db_path` payloads are omitted from bind-mode physical copies and mounted read-only into `main` at the original workdir paths.
+  Evidence: commit `78f610c` updates `generate/prepare.py` and `generate/compose.py`; `uv run pytest packages/razorback-plugin-dab/tests/unit/test_prepare_bind_materialize.py -v` passed 11/12 with 1 Darwin-only skip, and `uv run pytest packages/razorback-plugin-dab/tests/unit/test_compose_bindmount_source.py -v` passed 6/6.
+- DONE: Tests/probes prove bounded disk footprint plus source write protection, including the Harbor `main.volumes` path.
+  Evidence: `uv run pytest packages/razorback-plugin-dab/tests/integration/test_file_backed_db_readonly_mount.py -v -s` passed 1/1; probe scratch `_runs/dab-batch-materialization-disk-budget/probes/20260524T155032Z` measured T4 `888832` bytes for PATENTS/stockmarket/GITHUB_REPOS under 128 MiB and T5 `3612672` bytes for all 12 datasets under 512 MiB, with 21 read-only DB `main` mounts.
+- DONE: The original full DAB batch explain preflight is rerun or records a new non-disk blocker with command/log evidence.
+  Evidence: `DATAAGENTBENCH_DATA_ROOT=/home/exedev/dataagentbench/data uv run rk run /home/exedev/razorback/.worktrees/spacedock-ensign-dab-full-batch-codex-explain-preflight/_runs/dab-full-batch-codex-explain-preflight/specs/dab-full-batch-codex-spacedock.frozen.yaml --runs-dir _runs/dab-batch-materialization-disk-budget/explain/runs --explain --explain-format json` exited 0; JSON `_runs/dab-batch-materialization-disk-budget/explain/explain.json` is 20441 bytes and stderr is empty.
+
+### Summary
+
+Implemented the approved per-file SQLite/DuckDB `main.volumes` bind mechanism in the DAB compose generator and path-aware bind-mode materializer, with no symlink/source-root fallback and no whole-directory `query_dataset` mount. Harbor surface touched: task-authored `environment/docker-compose.yaml` for `main.volumes`, preserved through `DockerEnvironment`; adjacent regression sweep `uv run pytest packages/razorback-plugin-dab/tests/unit/ -q` passed 141/143 with 2 skips, and explain JSON assertions passed for `dab@1.0`, batch mode, 12 tasks, Codex `gpt-5.5`, and `xhigh`.
