@@ -504,20 +504,25 @@ class SpacedockSolverAgent(BaseAgent):
             raise SpacedockSolverAgentError("run() called before setup()")
         if self._freeze_checkpointing_ready:
             await self._commit_stage(environment, CHECKPOINT_RUN_BEFORE_AGENT)
-        await self._inner.run(
-            self._compose_run_instruction(instruction), environment, context
-        )
+        try:
+            await self._inner.run(
+                self._compose_run_instruction(instruction), environment, context
+            )
+        finally:
+            # Emit dispatch evidence even when the inner runtime times out while
+            # waiting on a worker. Harbor still runs the verifier after agent
+            # timeout, and the smoke gate needs the parent JSONL dispatch trace.
+            if self._runtime in {"claude", "codex"}:
+                self._maybe_write_subagent_trace_manifest()
         if self._freeze_checkpointing_ready:
             await self._commit_stage(environment, CHECKPOINT_RUN_AFTER_AGENT)
-        # AC-2 manifest write lives here because harbor's trial runner
-        # invokes only `setup` and `run` on `BaseAgent` subclasses;
+        # AC-2 manifest write lives in the finally block above because harbor's
+        # trial runner invokes only `setup` and `run` on `BaseAgent` subclasses;
         # `populate_context_post_run` is gated to `BaseInstalledAgent`
         # (harbor/trial/trial.py:466-471) and `cleanup` is not part of the
         # BaseAgent lifecycle at all. Follow-up `m2
         # spacedock-solver-base-installed-agent-feasibility` may relocate
         # this hook once SpacedockSolverAgent graduates to BaseInstalledAgent.
-        if self._runtime in {"claude", "codex"}:
-            self._maybe_write_subagent_trace_manifest()
 
     async def cleanup(self, environment):
         # `cleanup()` is NOT part of harbor's BaseAgent lifecycle (the trial
