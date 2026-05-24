@@ -63,3 +63,16 @@ filesystem, then rerun the DAB full batch explain preflight.
 
 Deleting old run results, pruning Docker images, or launching the full scored
 DAB model run.
+
+## Stage Report: plan
+
+- DONE: Plan identifies the precise disk-footprint root cause and the safest materialization mechanism to test first.
+  Evidence: `docs/razorback-implementation/plans/dab-batch-materialization-disk-budget.md` §Current Root Cause names `cp --reflink=auto` full-copy fallback for SQLite/DuckDB `db_path` files on ext4, and selects read-only per-file `main` bind mounts as the first mechanism.
+- DONE: Plan maps AC-1 through AC-4 to concrete tests/probes, including source-data write protection.
+  Evidence: the AC-to-task table maps AC-1..AC-4 to T0..T7; T3 is the write-attempt regression proving source bytes/hash are unchanged or mounted read-only.
+- DONE: Plan explicitly forbids deleting run history or launching the full scored DAB run.
+  Evidence: §Prohibited Actions forbids deleting historical run/evidence dirs, Docker pruning, and any `rk run` command without `--explain`.
+
+### Summary
+
+Wrote the standard separate plan doc for the four-AC disk-budget task. The implementation plan starts with bounded synthetic and real-data materialization probes, validates read-only file-backed DB mounts before full scale, and only then resumes the existing explain preflight without launching a scored DAB run.

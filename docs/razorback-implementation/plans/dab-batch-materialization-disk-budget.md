@@ -1,0 +1,222 @@
+# DAB Batch Materialization Disk Budget Implementation Plan
+
+**Entity:** `docs/razorback-implementation/dab-batch-materialization-disk-budget.md`
+
+**Goal:** Make the DAB full-batch `rk run --explain --explain-format json` path fit this VM's ext4 root filesystem without deleting run history, pruning Docker images, or launching the scored DAB run.
+
+**Boundary:** This task changes DAB task materialization only. It may add focused unit/integration tests, run bounded materialization probes, and rerun the predecessor explain command. It must not run `rk run` without `--explain`, `rk score`, or `rk audit` for the full DAB launch.
+
+**Spec cites:** v2 spec §6.1 (plugin-shipped DAB dataset definition, task-view materialization, `dataset: dab@1.0` identity), §6.2 (DAB `spacedock_solver` launch shape), §6.3 (`rk freeze` validation), §7.1 (run-dir `_razorback/task_views` layout), §8.1 (`rk run` pass-through/explain boundary), §8.2 (frozen provenance), §8.4 (spacedock runtime adaptation).
+
+## AC to Task Map
+
+| AC | Governing cites | Tasks | Evidence |
+| --- | --- | --- | --- |
+| AC-1 - Full DAB batch explain completes without filling `/dev/root`. | spec §6.1, §6.2, §6.3, §8.1 | T0, T5, T6 | `rk run --explain --explain-format json` for the existing full DAB Codex spec exits 0 and the predecessor plan's JSON assertions pass. |
+| AC-2 - Materialization has a bounded disk footprint on non-reflink ext4. | spec §6.1, §7.1 | T0, T1, T2, T4, T5 | Synthetic and full-definition materialization probes show task views stay under the declared physical-disk budget while SQLite/DuckDB files remain readable at the container workdir paths. |
+| AC-3 - Source data remains protected from agent writes. | spec §6.1, §7.1, §9.4 | T1, T3, T4 | Unit tests assert read-only main-service mounts for file-backed DBs; a docker-gated regression attempts a write through the mounted path and proves the source bytes/hash are unchanged. |
+| AC-4 - The DAB explain preflight can resume and finish. | spec §8.1, §8.2 | T6, T7 | The predecessor preflight worktree records green explain JSON evidence, or a new blocker class with command/log path if the failure is no longer disk exhaustion. |
+
+## Current Root Cause
+
+The predecessor `dab-full-batch-codex-explain-preflight` task resolved `dab@1.0` to 12 datasets / 54 queries and froze the intended `spacedock_solver` Codex `gpt-5.5` / `xhigh` batch spec. Its explain attempt failed before JSON emission because `/dev/root` filled during DAB task-view materialization.
+
+The disk pressure is in the DAB plugin's bind-mode workdir materializer, not in Harbor/model execution:
+
+- `prepare_dataset_tasks(query_mode="batch")` emits one task per DAB dataset and calls `_materialize_batch_task_dir`.
+- Bind mode excludes Postgres SQL dumps and Mongo dump folders via `_dump_basenames(db_config)`.
+- SQLite/DuckDB `db_path` files are intentionally not excluded today, so `_clone_or_copy_tree()` materializes them into each task workdir.
+- On Linux `_clone_or_copy_tree()` runs `cp --reflink=auto`. On this ext4 `/dev/root`, that command can return success while falling back to a full physical copy.
+- This VM currently has about 3.7 GiB free under `/home/exedev`, while the DAB source tree has about 7.9 GiB of data. The largest file-backed DB payloads alone include PATENTS SQLite (~5.17 GiB), stockmarket DuckDB (~920 MiB), GITHUB_REPOS SQLite+DuckDB (~885 MiB), DEPS_DEV_V1 SQLite+DuckDB (~524 MiB), and PANCANCER_ATLAS DuckDB (~280 MiB). A full-copy fallback for the 12 batch task views cannot fit the current ext4 budget.
+
+The safest mechanism to test first is **read-only file bind mounts for SQLite/DuckDB files in the `main` service**, with those files omitted from the physical task workdir. This preserves the existing in-container paths (`/workspace/...`), avoids hardlinks, avoids symlinks that escape the mounted task root, and lets Docker enforce `:ro` for agent write attempts. If Harbor's task-specific compose merge cannot carry `main.volumes`, stop and classify that as a mechanism blocker before trying a broader design.
+
+## Surface Map
+
+| Path | Action |
+| --- | --- |
+| `packages/razorback-plugin-dab/src/razorback_plugin_dab/generate/prepare.py` | Add path-aware classification for SQLite/DuckDB `db_path` files; omit those files from bind-mode physical copies while keeping parent directories and small safe files. |
+| `packages/razorback-plugin-dab/src/razorback_plugin_dab/generate/compose.py` | Add read-only `main` service bind mounts from `DATAAGENTBENCH_DATA_ROOT/query_<dataset>/<db_path>` to `<container_workdir>/<db_path>` for SQLite/DuckDB clients only. Do not mount Postgres/Mongo dumps into `main`. |
+| `packages/razorback-plugin-dab/tests/unit/test_prepare_bind_materialize.py` | Extend materialization tests for no physical SQLite/DuckDB copy, bounded disk delta, readable placeholder/path shape, and copy-mode regression. |
+| `packages/razorback-plugin-dab/tests/unit/test_compose_bindmount_source.py` or a new adjacent unit file | Assert `main.volumes` entries are absolute, target the existing workdir-relative DB paths, carry `:ro`, and exclude Postgres/Mongo dump sources from `main`. |
+| `packages/razorback-plugin-dab/tests/integration/test_file_backed_db_readonly_mount.py` | Docker-gated write-attempt regression for source-data protection. Skip cleanly when Docker or the selected local image is unavailable. |
+| `src/razorback/translate.py` | Read-only inspection first. Touch only if the DAB translator fails to preserve the generated compose/task shape through `TaskConfig(path=...)`. |
+| `docs/razorback-implementation/dab-full-batch-codex-explain-preflight.md` | The implementation worker may update that predecessor entity only when rerunning its assigned preflight stage or when instructed by FO; this plan-stage worker does not change it. |
+
+## Tasks
+
+### T0 - Establish the Budget Guard and Failure Shape
+
+**ACs:** AC-1, AC-2
+
+**Goal:** Add a cheap, non-destructive measurement harness before changing behavior, so implementation never proves the fix by consuming the remaining root filesystem.
+
+1. Add a helper test/probe that computes the declared file-backed DB payload total from DAB `db_config.yaml` files without copying data.
+2. Add a targeted synthetic fixture with one large SQLite file and one DuckDB file under `query_dataset/`.
+3. Record the implementation budget as: full DAB batch task-view materialization must consume **less than 512 MiB of additional physical free space** on this VM, excluding the already-present `DATAAGENTBENCH_DATA_ROOT` and Docker state.
+4. Guard live/full-definition probes with a preflight free-space check. If `/home/exedev` has less than 2 GiB free, fail with a typed `disk-budget-precheck` blocker instead of materializing.
+
+Expected red signal before the fix: bind mode either copies the synthetic file-backed DB into the task workdir or the measured full-definition projection exceeds the 512 MiB budget.
+
+### T1 - RED: Read-Only Main-Service Mount Shape for SQLite/DuckDB
+
+**ACs:** AC-2, AC-3
+
+**Goal:** Lock the mechanism before implementation: file-backed DBs are mounted into `main` read-only at the same paths agents already use.
+
+Add unit tests that generate a mixed `db_config.yaml` fixture with SQLite, DuckDB, Postgres, and Mongo clients and assert:
+
+- `main.volumes` contains one `:ro` bind mount per SQLite/DuckDB `db_path`.
+- Each source is an absolute path under the dataset's `query_<dataset>/...` directory.
+- Each target is `<container_workdir>/<db_path>`, preserving existing prompt and verifier expectations.
+- Postgres SQL dumps and Mongo dump folders remain mounted only into their sidecar services, not into `main`.
+- The generated task's `query_dataset` directory exists so the later Harbor/container mount has parent directories for file targets.
+
+Run:
+
+```bash
+uv run pytest packages/razorback-plugin-dab/tests/unit/test_compose_bindmount_source.py -v
+```
+
+Expected: fails because `main` currently has no SQLite/DuckDB read-only volumes.
+
+### T2 - GREEN: Omit File-Backed DB Copies in Bind Mode
+
+**ACs:** AC-2
+
+**Goal:** Stop `cp --reflink=auto` from deciding the disk budget for SQLite/DuckDB live DB files.
+
+Implement path-aware file-backed DB exclusion in `prepare.py`:
+
+- Derive relative `db_path` entries for `db_type in {"sqlite", "duckdb"}`.
+- In `materialize_mode="bind"`, skip those relative paths during `_clone_or_copy_tree()` while preserving parent directories and non-DB safe files.
+- Keep `materialize_mode="copy"` unchanged: copy mode still physically copies SQLite/DuckDB and dump files for provenance-strict runs.
+- Avoid basename-only exclusion if a fixture exposes two files with the same basename in different directories.
+
+Run:
+
+```bash
+uv run pytest packages/razorback-plugin-dab/tests/unit/test_prepare_bind_materialize.py -v
+```
+
+Acceptance: the synthetic large SQLite/DuckDB fixture consumes only scaffolding-sized disk, the workdir does not contain physical DB copies in bind mode, and copy mode still produces distinct inodes/full copies.
+
+### T3 - RED/GREEN: Source Write Protection Regression
+
+**ACs:** AC-3
+
+**Goal:** Prove the space-saving mechanism does not trade disk safety for source-data mutability.
+
+Add a docker-gated integration test that uses a small synthetic SQLite or DuckDB file, materializes a task in bind mode, then runs a container through the generated main-service mount shape and attempts:
+
+```bash
+printf X >> /workspace/query_dataset/<db-file>
+```
+
+The test must assert one of:
+
+- the command fails with a read-only filesystem/permission error, or
+- the source file's SHA256 is unchanged after the attempted write.
+
+Also assert a read path succeeds, for example `test -r /workspace/query_dataset/<db-file>` or reading a known header. If Docker or the selected local image is unavailable, the test skips with a message that names AC-3.
+
+Run:
+
+```bash
+uv run pytest packages/razorback-plugin-dab/tests/integration/test_file_backed_db_readonly_mount.py -v -s
+```
+
+### T4 - Focused Real-Data Materialization Probe
+
+**ACs:** AC-2, AC-3
+
+**Goal:** Exercise the largest real datasets without running Harbor or the model.
+
+Using `/home/exedev/dataagentbench/data` or the exported `DATAAGENTBENCH_DATA_ROOT`, call the DAB plugin materializer directly into a scratch path owned by this task, starting with the riskiest datasets:
+
+1. `PATENTS` (largest SQLite, ~5.17 GiB source file).
+2. `stockmarket` (large DuckDB, ~920 MiB).
+3. `GITHUB_REPOS` (large SQLite+DuckDB pair, ~885 MiB total).
+
+Measure filesystem free-space before/after with `os.statvfs`, not `du`, because apparent size is not the budget that filled `/dev/root`. Assert the physical delta stays under 128 MiB for these three datasets combined. Inspect generated compose for `:ro` `main` file mounts and no Postgres/Mongo dumps in `main`.
+
+If this probe exceeds budget, stop and classify `file-backed-main-mount-budget` before trying the full 12-dataset explain path.
+
+### T5 - Full DAB Batch Materialization Probe
+
+**ACs:** AC-1, AC-2
+
+**Goal:** Validate the exact materialization scale that blocked the predecessor explain command, still without Harbor/model execution.
+
+Run a bounded plugin-level or `rk run --explain` dry materialization over `dataset: dab@1.0`, `query_mode: batch`, and all 12 datasets. Use the same scratch root convention as T4 and the same free-space measurement. Assert:
+
+- 12 task dirs are produced.
+- The task list matches the DAB definition datasets.
+- Physical disk delta is under the declared 512 MiB budget.
+- Every SQLite/DuckDB `db_path` appears as a read-only `main` mount.
+- No scored run artifacts are produced.
+
+This task is the comprehensive mechanism gate. Do not proceed to the predecessor explain rerun until it passes.
+
+### T6 - Resume the Exact Explain Preflight
+
+**ACs:** AC-1, AC-4
+
+**Goal:** Return to the original blocked command after the smallest mechanism and full materialization probes pass.
+
+From the predecessor worktree or its approved current branch, rerun the exact explain command from `docs/razorback-implementation/plans/dab-full-batch-codex-explain-preflight.md`:
+
+```bash
+DATAAGENTBENCH_DATA_ROOT=/home/exedev/dataagentbench/data \
+  uv run rk run _runs/dab-full-batch-codex-explain-preflight/specs/dab-full-batch-codex-spacedock.frozen.yaml \
+    --runs-dir _runs/dab-full-batch-codex-explain-preflight/runs \
+    --explain --explain-format json
+```
+
+Adjust only paths needed to match the predecessor worktree's actual frozen spec and run root. Preserve its JSON assertions from T3/T4:
+
+- `schema_version == "rk-run-explain-v1"`.
+- `explain_only is true`.
+- `benchmark.dataset == "dab@1.0"`.
+- `query_mode == "batch"`.
+- `prompt.task_count == 12`.
+- `agent.runtime == "codex"`.
+- `agent.model == "gpt-5.5"`.
+- `harbor_agent_kwargs.reasoning_effort == "xhigh"`.
+- no `_job_config.yaml`, `trials/`, `result.json`, `summary.json`, `score.json`, or `audit.json`.
+
+If the command fails with a non-disk error, record the new blocker class, command, stdout/stderr path, and remaining free space. Do not retry with a full scored run.
+
+### T7 - Regression Sweep and Report
+
+**ACs:** AC-1, AC-2, AC-3, AC-4
+
+**Goal:** Package the implementation evidence cleanly for validation.
+
+Run the focused suites first, then the adjacent plugin suite:
+
+```bash
+uv run pytest packages/razorback-plugin-dab/tests/unit/test_prepare_bind_materialize.py -v
+uv run pytest packages/razorback-plugin-dab/tests/unit/test_compose_bindmount_source.py -v
+uv run pytest packages/razorback-plugin-dab/tests/integration/test_file_backed_db_readonly_mount.py -v -s
+uv run pytest packages/razorback-plugin-dab/tests/unit/ -q
+```
+
+Write the implementation stage report with:
+
+- the physical disk budget and measured deltas for T4/T5;
+- the exact explain command and JSON artifact path for T6;
+- whether the docker-gated source-write test passed or skipped, with rationale;
+- any blocker class if T6 fails for a non-disk reason.
+
+## Prohibited Actions
+
+- Do not delete prior run history or historical `_runs/`, `runs/`, or workflow evidence directories to make the explain pass.
+- Do not prune Docker images, containers, volumes, or build cache.
+- Do not launch the full scored DAB run. In this task, every `rk run` command must include `--explain`.
+- Do not replace `cp --reflink=auto` with hardlinks. Hardlinks are source-mutation unsafe on ext4.
+- Do not mount the whole `query_dataset` directory into `main`; that would re-expose Postgres/Mongo dump files that bind mode intentionally keeps out of the agent workspace.
+
+## Open Design Decision
+
+The plan chooses per-file read-only `main` bind mounts at the existing workdir paths as the first mechanism. If Harbor's compose layering refuses or drops `main.volumes`, the implementation should stop with evidence and evaluate the fallback design: mount a read-only source-data root at a stable container path and replace workdir DB files with container-visible symlinks. That fallback must get its own write-protection test before any full DAB explain rerun.
