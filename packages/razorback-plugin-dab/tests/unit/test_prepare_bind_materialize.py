@@ -51,6 +51,37 @@ def _build_bookreview_data_root(
                 remaining -= n
     else:
         sqlite_path.write_bytes(b"SQLite format 3\x00" + b"\x00" * 100)
+    (qdir / "query_dataset" / "schema_notes.txt").write_text("safe workdir file")
+    q1 = qdir / "query1"
+    q1.mkdir()
+    (q1 / "query.json").write_text('{"question": "How many books?"}')
+    return data_root
+
+
+def _build_file_backed_data_root(root: Path) -> Path:
+    data_root = root / "data"
+    qdir = data_root / "query_bookreview"
+    (qdir / "query_dataset" / "nested").mkdir(parents=True)
+    (qdir / "db_config.yaml").write_text(yaml.safe_dump({
+        "db_clients": {
+            "review_database": {
+                "db_type": "sqlite",
+                "db_path": "query_dataset/review_query.db",
+            },
+            "analytics_database": {
+                "db_type": "duckdb",
+                "db_path": "query_dataset/nested/analytics.duckdb",
+            },
+        }
+    }))
+    (qdir / "db_description.txt").write_text("Bookreview schema.")
+    (qdir / "query_dataset" / "review_query.db").write_bytes(
+        b"SQLite format 3\x00" + b"\x00" * (8 * 1024 * 1024)
+    )
+    (qdir / "query_dataset" / "nested" / "analytics.duckdb").write_bytes(
+        b"DUCK" + b"\x00" * (8 * 1024 * 1024)
+    )
+    (qdir / "query_dataset" / "nested" / "safe.txt").write_text("keep me")
     q1 = qdir / "query1"
     q1.mkdir()
     (q1 / "query.json").write_text('{"question": "How many books?"}')
@@ -117,8 +148,8 @@ def test_copy_mode_keeps_sql_dump_in_workdir(tmp_path: Path):
 
 
 def test_bind_mode_keeps_sqlite_live_db_in_workdir(tmp_path: Path):
-    """PKG-14 leaves sqlite/duckdb live-DB files in workdir — only dumps are excluded."""
-    data_root = _build_bookreview_data_root(tmp_path)
+    """AC-2: bind mode omits SQLite/DuckDB physical copies from the workdir."""
+    data_root = _build_file_backed_data_root(tmp_path)
     manifest = prepare_dataset_tasks(
         data_root=data_root,
         dataset="bookreview",
@@ -126,8 +157,30 @@ def test_bind_mode_keeps_sqlite_live_db_in_workdir(tmp_path: Path):
         materialize_mode="bind",
     )
     workdir = manifest[0]["task_dir"] / "steps" / "main" / "workdir"
+    assert not (workdir / "query_dataset" / "review_query.db").exists(), (
+        "SQLite DB must be a read-only main bind mount, not a physical copy"
+    )
+    assert not (workdir / "query_dataset" / "nested" / "analytics.duckdb").exists(), (
+        "DuckDB DB must be a read-only main bind mount, not a physical copy"
+    )
+    assert (workdir / "query_dataset" / "nested" / "safe.txt").read_text() == "keep me"
+
+
+def test_copy_mode_keeps_file_backed_dbs_in_workdir(tmp_path: Path):
+    """AC-2: copy mode keeps provenance-strict physical SQLite/DuckDB copies."""
+    data_root = _build_file_backed_data_root(tmp_path)
+    manifest = prepare_dataset_tasks(
+        data_root=data_root,
+        dataset="bookreview",
+        tasks_root=tmp_path / "tasks",
+        materialize_mode="copy",
+    )
+    workdir = manifest[0]["task_dir"] / "steps" / "main" / "workdir"
     assert (workdir / "query_dataset" / "review_query.db").exists(), (
-        "sqlite is a file-backed live DB — must remain in workdir"
+        "copy mode must retain the SQLite DB physical copy"
+    )
+    assert (workdir / "query_dataset" / "nested" / "analytics.duckdb").exists(), (
+        "copy mode must retain the DuckDB DB physical copy"
     )
 
 
@@ -189,11 +242,14 @@ def test_bind_mode_sqlite_uses_cow_materialization(tmp_path: Path):
         f"{consumed / (1024*1024):.1f}MiB of FS free space; expected <5MiB "
         f"(the {sqlite_mb}MiB sqlite must be CoW-cloned)"
     )
-    # Sanity: the sqlite file exists in workdir and is readable.
+    # Sanity: the sqlite file is omitted from the physical workdir and exposed
+    # as a read-only main-service file mount.
     task_dir = manifest[0]["task_dir"]
     sqlite_in_workdir = task_dir / "steps" / "main" / "workdir" / "query_dataset" / "review_query.db"
-    assert sqlite_in_workdir.exists()
-    assert sqlite_in_workdir.read_bytes()[:16] == b"SQLite format 3\x00"
+    assert not sqlite_in_workdir.exists()
+    compose = yaml.safe_load((task_dir / "environment" / "docker-compose.yaml").read_text())
+    main_volumes = compose["services"]["main"]["volumes"]
+    assert any(entry.endswith("/workspace/query_dataset/review_query.db:ro") for entry in main_volumes)
 
 
 def test_bind_mode_linux_uses_reflink_cp(tmp_path: Path, monkeypatch):

@@ -1,7 +1,7 @@
 ---
 id: 52w1h8zh0bwfskvheckhj218
 title: DAB batch materialization fits ext4 disk budget
-status: implementation
+status: validation
 source: 2026-05-24 DAB full batch Codex explain preflight blocker - /dev/root filled during task-view materialization
 started: 2026-05-24T05:06:33Z
 completed:
@@ -93,3 +93,29 @@ Wrote the standard separate plan doc for the four-AC disk-budget task. The imple
 ### Summary
 
 Ran a bounded synthetic DAB/Harbor spike without full DAB data, scored execution, run-history deletion, or Docker pruning. The spike proves Harbor preserves the candidate read-only `main.volumes` DB-file mount, so implementation can proceed with per-file SQLite/DuckDB `main` binds and keep the symlink/source-root fallback out of the main path. Plan evidence commit id: `1bd728a`.
+
+## Stage Report: implementation
+
+- DONE: File-backed SQLite/DuckDB `db_path` payloads are omitted from bind-mode physical copies and mounted read-only into `main` at the original workdir paths.
+  Evidence: commit `78f610c` updates `generate/prepare.py` and `generate/compose.py`; `uv run pytest packages/razorback-plugin-dab/tests/unit/test_prepare_bind_materialize.py -v` passed 11/12 with 1 Darwin-only skip, and `uv run pytest packages/razorback-plugin-dab/tests/unit/test_compose_bindmount_source.py -v` passed 6/6.
+- DONE: Tests/probes prove bounded disk footprint plus source write protection, including the Harbor `main.volumes` path.
+  Evidence: `uv run pytest packages/razorback-plugin-dab/tests/integration/test_file_backed_db_readonly_mount.py -v -s` passed 1/1; probe scratch `_runs/dab-batch-materialization-disk-budget/probes/20260524T155032Z` measured T4 `888832` bytes for PATENTS/stockmarket/GITHUB_REPOS under 128 MiB and T5 `3612672` bytes for all 12 datasets under 512 MiB, with 21 read-only DB `main` mounts.
+- DONE: The original full DAB batch explain preflight is rerun or records a new non-disk blocker with command/log evidence.
+  Evidence: `DATAAGENTBENCH_DATA_ROOT=/home/exedev/dataagentbench/data uv run rk run /home/exedev/razorback/.worktrees/spacedock-ensign-dab-full-batch-codex-explain-preflight/_runs/dab-full-batch-codex-explain-preflight/specs/dab-full-batch-codex-spacedock.frozen.yaml --runs-dir _runs/dab-batch-materialization-disk-budget/explain/runs --explain --explain-format json` exited 0; JSON `_runs/dab-batch-materialization-disk-budget/explain/explain.json` is 20441 bytes and stderr is empty.
+
+### Summary
+
+Implemented the approved per-file SQLite/DuckDB `main.volumes` bind mechanism in the DAB compose generator and path-aware bind-mode materializer, with no symlink/source-root fallback and no whole-directory `query_dataset` mount. Harbor surface touched: task-authored `environment/docker-compose.yaml` for `main.volumes`, preserved through `DockerEnvironment`; adjacent regression sweep `uv run pytest packages/razorback-plugin-dab/tests/unit/ -q` passed 141/143 with 2 skips, and explain JSON assertions passed for `dab@1.0`, batch mode, 12 tasks, Codex `gpt-5.5`, and `xhigh`.
+
+## Stage Report: validation
+
+- DONE: Every AC has independent PASS/FAIL evidence with exact commands and artifact paths, including disk budget, write protection, and explain JSON checks.
+  Evidence: `docs/razorback-implementation/validation/dab-batch-materialization-disk-budget.md` records AC-1..AC-4 PASS; fresh explain JSON `_runs/validation/dab-batch-materialization-disk-budget/explain/explain.json` exited 0, T3/T4 assertions passed, focused/full probes measured 905216 bytes under 128 MiB and 3616768 bytes under 512 MiB, and the Docker write-protection test passed.
+- DONE: Code review classifies blocking/non-blocking findings and checks the DAB materializer/compose changes stay scoped to the approved mechanism.
+  Evidence: validation report code review against `main..HEAD` (`f2a56b5..5d9fad7`) found blocking findings: none; non-blocking findings: none; diff scope is `prepare.py`, `compose.py`, and DAB tests, with no hardlinks or whole `query_dataset` main mount.
+- DONE: Gate decision is explicit and backed by rerun validation evidence, with concrete fixes if rejected.
+  Evidence: gate decision is approve to `done`; focused tests passed (`11 passed / 1 skipped`, `6 passed`, `1 passed`, plugin unit sweep `141 passed / 2 skipped`), and the only full `uv run pytest` failure is the pre-existing `razorback.score.load` collection error on unchanged mainline files.
+
+### Summary
+
+Validated commits `78f610c`, `077a025`, and `5d9fad7` from the assigned worktree. AC-1 through AC-4 pass independently with fresh explain evidence, measured disk-budget probes, source write-protection coverage, and manual application of the installed `superpowers:requesting-code-review` workflow; approve this entity to `done`.

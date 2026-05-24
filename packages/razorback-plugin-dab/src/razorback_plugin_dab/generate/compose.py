@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
@@ -51,6 +51,7 @@ def generate_compose(
     networks_used: set[str] = set()
     init_volumes_pg: list[dict[str, str]] = []
     init_volumes_mongo: list[dict[str, str]] = []
+    main_file_volumes: list[str] = []
 
     clients = (db_config or {}).get("db_clients") or {}
     pg_dbs: list[str] = []
@@ -89,8 +90,13 @@ def generate_compose(
                 init_volumes_mongo.append(
                     {"src": f"./restore-{db_name}.sh", "dst": f"/docker-entrypoint-initdb.d/00-restore-{db_name}.sh"}
                 )
-        elif kind in (None, "sqlite", "duckdb"):
-            # File-backed engines need no service; bind mount handled by workdir copy.
+        elif kind in ("sqlite", "duckdb"):
+            db_path = cfg.get("db_path")
+            if db_path:
+                src = (data_root / f"query_{dataset_name}" / db_path).resolve()
+                dst = _container_file_path(container_workdir, db_path)
+                main_file_volumes.append(f"{src}:{dst}:ro")
+        elif kind is None:
             continue
         else:
             raise ComposeError(f"unsupported db_type {kind!r} for dataset {dataset_name!r}")
@@ -149,6 +155,8 @@ def generate_compose(
         "working_dir": container_workdir,
         "networks": ["dab-net"] if networks_used else [],
     }
+    if main_file_volumes:
+        main_service["volumes"] = main_file_volumes
     if main_depends_on:
         main_service["depends_on"] = main_depends_on
     services["main"] = main_service
@@ -167,6 +175,13 @@ def generate_compose(
         compose["volumes"] = {pg_volume_name: {"name": pg_volume_name}}
 
     return yaml.safe_dump(compose, sort_keys=False, default_flow_style=False)
+
+
+def _container_file_path(container_workdir: str, db_path: str) -> str:
+    rel = PurePosixPath(db_path)
+    if rel.is_absolute() or ".." in rel.parts:
+        raise ComposeError(f"db_path must be a relative container path; got {db_path!r}")
+    return str(PurePosixPath(container_workdir) / rel)
 
 
 def _postgres_volume_name(

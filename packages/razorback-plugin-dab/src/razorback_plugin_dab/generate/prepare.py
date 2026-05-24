@@ -285,17 +285,12 @@ def _materialize_task_dir(
         render_workspace_readme(variant=workspace_variant, container_workdir=container_workdir)
     )
 
-    # PKG-14 AC-1 + AC-2: under bind mode, postgres/mongo dump files are
-    # NOT copied into the agent workdir — they are bind-mounted into the
-    # dab-postgres / dab-mongo container directly from data_root. Sqlite /
-    # duckdb live DB files stay in the workdir (the agent reads them).
-    # PKG-21 AC-1 + AC-2: under bind mode, the workdir is materialized via
-    # CoW (darwin clonefile) or hardlink (linux) so multi-GB sqlite/duckdb
-    # live DB files do not consume a per-cell physical copy.
     if materialize_mode == "bind":
         excluded_workdir_names = _dump_basenames(db_config)
+        excluded_workdir_paths = _bind_mode_excluded_paths(db_config)
     else:
         excluded_workdir_names = set()
+        excluded_workdir_paths = set()
 
     for name in _DATASET_SAFE:
         src = dataset_dir / name
@@ -304,7 +299,16 @@ def _materialize_task_dir(
         dst = workdir / name
         if src.is_dir():
             if materialize_mode == "bind":
-                _clone_or_copy_tree(src, dst, ignore_names=excluded_workdir_names)
+                _clone_or_copy_tree(
+                    src,
+                    dst,
+                    ignore_names=excluded_workdir_names,
+                    ignore_paths={
+                        path.relative_to(name)
+                        for path in excluded_workdir_paths
+                        if path.parts and path.parts[0] == name
+                    },
+                )
             else:
                 shutil.copytree(
                     src,
@@ -442,8 +446,10 @@ def _materialize_batch_task_dir(
 
     if materialize_mode == "bind":
         excluded_workdir_names = _dump_basenames(db_config)
+        excluded_workdir_paths = _bind_mode_excluded_paths(db_config)
     else:
         excluded_workdir_names = set()
+        excluded_workdir_paths = set()
 
     for name in _DATASET_SAFE:
         src = dataset_dir / name
@@ -452,7 +458,16 @@ def _materialize_batch_task_dir(
         dst = workdir / name
         if src.is_dir():
             if materialize_mode == "bind":
-                _clone_or_copy_tree(src, dst, ignore_names=excluded_workdir_names)
+                _clone_or_copy_tree(
+                    src,
+                    dst,
+                    ignore_names=excluded_workdir_names,
+                    ignore_paths={
+                        path.relative_to(name)
+                        for path in excluded_workdir_paths
+                        if path.parts and path.parts[0] == name
+                    },
+                )
             else:
                 shutil.copytree(
                     src,
@@ -711,11 +726,19 @@ def _task_toml(
     return body
 
 
-def _clone_or_copy_tree(src: Path, dst: Path, *, ignore_names: set[str]) -> None:
+def _clone_or_copy_tree(
+    src: Path,
+    dst: Path,
+    *,
+    ignore_names: set[str] | None = None,
+    ignore_paths: set[Path] | None = None,
+    _relative_root: Path = Path(),
+) -> None:
     """Materialize src into dst via a reflink-capable copy primitive.
 
-    Bind-mode workdir materializer that avoids per-cell physical copies of
-    multi-GB sqlite/duckdb live DB files where the filesystem supports it.
+    Bind-mode workdir materializer for safe dataset files that still need a
+    physical workdir copy. Multi-GB SQLite/DuckDB live DB files are excluded
+    by relative path and mounted read-only into the main container instead.
 
     Per-platform primitive:
         - darwin: ``cp -c`` → APFS clonefile (true copy-on-write).
@@ -729,9 +752,9 @@ def _clone_or_copy_tree(src: Path, dst: Path, *, ignore_names: set[str]) -> None
         - other:  raises NotImplementedError naming sys.platform — callers
           can opt into ``materialize_mode="copy"`` for ``shutil.copytree``.
 
-    Files whose basename is in ignore_names are skipped (matches the
-    ``shutil.copytree(ignore=...)`` contract used for bind-mode dump
-    exclusion).
+    Files whose basename is in ignore_names are skipped for legacy dump
+    exclusion. Files or directories whose path relative to src is in
+    ignore_paths are skipped for path-aware DB-file exclusion.
 
     Caveats:
         - ``cp -c`` exits non-zero (EOPNOTSUPP) on a darwin volume that is
@@ -740,13 +763,22 @@ def _clone_or_copy_tree(src: Path, dst: Path, *, ignore_names: set[str]) -> None
           not implement it. Target environments (harbor-DAB containers,
           Debian/Ubuntu hosts) ship GNU coreutils.
     """
+    ignore_names = ignore_names or set()
+    ignore_paths = ignore_paths or set()
     dst.mkdir(parents=True, exist_ok=True)
     for child in src.iterdir():
-        if child.name in ignore_names:
+        child_rel = _relative_root / child.name
+        if child.name in ignore_names or child_rel in ignore_paths:
             continue
         dst_child = dst / child.name
         if child.is_dir():
-            _clone_or_copy_tree(child, dst_child, ignore_names=ignore_names)
+            _clone_or_copy_tree(
+                child,
+                dst_child,
+                ignore_names=ignore_names,
+                ignore_paths=ignore_paths,
+                _relative_root=child_rel,
+            )
             continue
         if sys.platform == "darwin":
             subprocess.run(
@@ -762,6 +794,13 @@ def _clone_or_copy_tree(src: Path, dst: Path, *, ignore_names: set[str]) -> None
                 f"bind-mode workdir materialization not supported on {sys.platform!r}; "
                 "use materialize_mode='copy' for full-copy semantics"
             )
+
+
+def _bind_mode_excluded_paths(db_config: dict | None) -> set[Path]:
+    """Return dataset-relative payload paths omitted from bind-mode workdirs."""
+    excluded = _dump_relative_paths(db_config)
+    excluded.update(_file_backed_db_paths(db_config))
+    return excluded
 
 
 def _dump_basenames(db_config: dict | None) -> set[str]:
@@ -788,6 +827,40 @@ def _dump_basenames(db_config: dict | None) -> set[str]:
             if dump_folder:
                 names.add(Path(dump_folder).name)
     return names
+
+
+def _dump_relative_paths(db_config: dict | None) -> set[Path]:
+    """Return dataset-relative postgres/mongo dump payload paths."""
+    paths: set[Path] = set()
+    clients = (db_config or {}).get("db_clients") or {}
+    for cfg in clients.values():
+        if not isinstance(cfg, dict):
+            continue
+        kind = cfg.get("db_type")
+        if kind == "postgres":
+            sql_file = cfg.get("sql_file")
+            if sql_file:
+                paths.add(Path(sql_file))
+        elif kind == "mongo":
+            dump_folder = cfg.get("dump_folder")
+            if dump_folder:
+                paths.add(Path(dump_folder))
+    return paths
+
+
+def _file_backed_db_paths(db_config: dict | None) -> set[Path]:
+    """Return dataset-relative SQLite/DuckDB db_path entries."""
+    paths: set[Path] = set()
+    clients = (db_config or {}).get("db_clients") or {}
+    for cfg in clients.values():
+        if not isinstance(cfg, dict):
+            continue
+        if cfg.get("db_type") not in {"sqlite", "duckdb"}:
+            continue
+        db_path = cfg.get("db_path")
+        if db_path:
+            paths.add(Path(db_path))
+    return paths
 
 
 def _postgres_db_name(db_config: dict | None, *, dataset_name: str) -> str | None:
