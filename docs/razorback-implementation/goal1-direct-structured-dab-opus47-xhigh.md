@@ -224,3 +224,22 @@ no-loop), or N=5 of whichever wins.
 ### Summary
 
 Wrote `plans/goal1-direct-structured-dab-opus47-xhigh.md` as a standard separate-doc plan mirroring the archived `an` plan's shape (AC↔task map, surface map, tasks T1–T8, risk register, definition of done). Mechanism-validation done at the source level (5 trace points) — `direct-structured` workspace_variant is a first-class, tested path; the matrix dispatcher routes it without special-casing; specs at commit `a6ab344` already satisfy AC-1 at `reasoning_effort: xhigh` so no regen is needed. Implementation stage starts at freeze (T2). T4 (bookreview-cell smoke) is the runtime mechanism gate that catches any direct-structured-vs-claude-cli DB-access or workspace-README mismatch BEFORE the full 12-cell dispatch burns 2–3 hours; the plan explicitly names the hard-blocker conditions that escalate to captain at impl-stage gate rather than silently widening scope. Plan inherits the spacedock report's captain-approved deviations (`_runs/` runs-dir, `DATAAGENTBENCH_DATA_ROOT` env, null `cost_usd`, null `solver_workflow_hash` for `claude-cli` kind) and pre-flags them in T8's deviations section.
+
+## Stage Report: implementation
+
+- DONE: AC-1 — Specs are post-hm canonical for direct-structured matrix.
+  12/12 specs satisfy all grep verifiers (kind: harbor, plugin: dab, workspace_variant: direct-structured, reasoning_effort: xhigh, no kind: harbor_dab leftovers). `experiment_meta.paper_baseline: {name: direct, value: 0.4376}` injected into all 12 specs (commit f06f4ed). All 12 parse green against `razorback.spec.schema.Spec`.
+- FAILED: AC-2 — Per-cell freeze + `rk run --explain` pre-flight passes.
+  Partial: 12/12 `rk freeze --allow-missing` exit 0; 12/12 frozen specs share one sealed_hash (377bd09522713c54668a004eb8a06834); 12/12 `rk run --explain --explain-format json` exit 0. Evidence committed under `docs/razorback-implementation/_evidence/goal1-direct-structured-v2/per-cell-preflight/` (commit 490d6ba). BUT the reasoning_effort threading assertion FAILS 12/12: explain JSON `.agent.kwargs = {"allowed_tools": ...}` — `reasoning_effort` is absent. `src/razorback/translate.py:178-200` (claude-cli branch) does NOT thread `spec.agent.reasoning_effort` into agent kwargs. Codex branch (line 107-108) and spacedock_solver branch (line 141) DO. This is the k4 sibling concern materialized.
+- SKIPPED: AC-3 — Full 12-cell run completes with audit gating per cell.
+  Blocked on AC-2 finding. Running 12 cells at non-xhigh would silently undermine the paper-comparability claim against d8 spacedock=0.722 (which DID thread reasoning_effort via the spacedock_solver path). Captain decision required before burning the $25-40 / 2-3h budget.
+- SKIPPED: AC-4 — Audit clean across the matrix (no cheating, post-leak-guard).
+  Blocked on AC-3.
+- SKIPPED: AC-5 — Per-query headline emitted against paper direct baseline + verdict.
+  Blocked on AC-3.
+- SKIPPED: AC-6 — Provenance artifacts pin the run; sealed_hash stable on re-run.
+  Blocked on AC-3. Note: AC-6's sealed_hash uniformity is already partially observable from the preflight — 12/12 frozen specs at sealed_hash `377bd0...`. Re-freeze of any cell will reproduce this hash (cell-specific differences live in benchmark.tasks selector, which is NOT part of the agent block's sealed_hash; verified by uniform hash across cells).
+
+### Summary
+
+AC-1 GREEN. AC-2 partial: every verifier passes EXCEPT the reasoning_effort threading assertion. The translator gap means all 12 cells, if dispatched, would run at harbor's default effort instead of xhigh. The k4 sibling concern flagged in the entity prompt was real. Surfaced to team-lead via SendMessage 2026-05-24; recommended path: open sibling impl entity to patch `translate.py`'s claude-cli branch (mirror codex pattern, ~5 lines + translator-level test), then resume 7q. T3 dry-run / T4 smoke / T5 full matrix / T6-T8 aggregator+report NOT attempted; budget preserved. Two commits on `spacedock-ensign/goal1-direct-structured-dab-opus47-xhigh`: f06f4ed (AC-1) + 490d6ba (AC-2 preflight + finding).
