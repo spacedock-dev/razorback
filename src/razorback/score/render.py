@@ -51,11 +51,20 @@ from razorback.score.verdict import AgainstConstantReport, build_stratum_view
 
 
 def render_json(
-    report: StratifiedReport, verdict: AgainstConstantReport | None
+    report: StratifiedReport,
+    verdict: AgainstConstantReport | None,
+    *,
+    taint_status: dict | None = None,
+    constant_source: str | None = None,
 ) -> str:
     payload: dict[str, Any] = _report_to_jsonable(report)
     if verdict is not None:
-        payload["against_constant"] = _verdict_to_jsonable(verdict)
+        verdict_payload = _verdict_to_jsonable(verdict)
+        if constant_source is not None:
+            verdict_payload["source"] = constant_source
+        payload["against_constant"] = verdict_payload
+    if taint_status is not None:
+        payload["taint_status"] = taint_status
     return json.dumps(payload, indent=2, sort_keys=False)
 
 

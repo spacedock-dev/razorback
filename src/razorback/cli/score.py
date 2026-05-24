@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import typer
@@ -15,6 +16,53 @@ from razorback.runs.aggregate import (
 )
 from razorback.score.render import render_json, render_markdown
 from razorback.score.verdict import AgainstConstantReport, against_constant
+
+
+def _load_audit_status(run_dir: Path) -> dict | None:
+    """Read `<run-dir>/audit.json` summary; return None if absent (soft-fail)."""
+    audit_path = run_dir / "audit.json"
+    if not audit_path.is_file():
+        return None
+    try:
+        payload = json.loads(audit_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    summary = payload.get("summary")
+    if not isinstance(summary, dict):
+        return None
+    return {
+        "clean": int(summary.get("clean", 0)),
+        "tainted": int(summary.get("tainted", 0)),
+        "coverage_missing": int(summary.get("coverage_missing", 0)),
+    }
+
+
+def _load_paper_baseline(run_dir: Path) -> tuple[str, float] | None:
+    """Read `<run-dir>/spec.frozen.yaml` and return (name, value) when
+    `experiment_meta.paper_baseline` is present; None otherwise (soft-fail
+    on parse errors or missing file)."""
+    spec_path = run_dir / "spec.frozen.yaml"
+    if not spec_path.is_file():
+        return None
+    try:
+        import yaml
+
+        payload = yaml.safe_load(spec_path.read_text())
+    except (OSError, yaml.YAMLError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    meta = payload.get("experiment_meta")
+    if not isinstance(meta, dict):
+        return None
+    pb = meta.get("paper_baseline")
+    if not isinstance(pb, dict):
+        return None
+    name = pb.get("name")
+    value = pb.get("value")
+    if not isinstance(name, str) or not isinstance(value, (int, float)):
+        return None
+    return name, float(value)
 
 
 def score_command(
@@ -35,6 +83,7 @@ def score_command(
 
     constant_name: str | None = None
     constant_value: float | None = None
+    constant_source: str | None = None
     if against is not None:
         if "=" not in against:
             raise typer.BadParameter(
@@ -47,6 +96,13 @@ def score_command(
             raise typer.BadParameter(
                 f"--against-constant value must be a float, got '{raw_value}'"
             ) from exc
+        constant_source = "cli"
+    else:
+        # Auto-pull from spec.frozen.yaml's experiment_meta.paper_baseline.
+        baseline = _load_paper_baseline(run_dir)
+        if baseline is not None:
+            constant_name, constant_value = baseline
+            constant_source = "spec.frontmatter"
 
     try:
         outcomes = read_trial_outcomes(run_dir)
@@ -61,6 +117,10 @@ def score_command(
     if constant_name is not None and constant_value is not None:
         verdict = against_constant(report, name=constant_name, value=constant_value)
 
-    output = render_json(report, verdict) if fmt == "json" else render_markdown(report, verdict)
+    taint_status = _load_audit_status(run_dir)
+
+    output = render_json(
+        report, verdict, taint_status=taint_status, constant_source=constant_source
+    ) if fmt == "json" else render_markdown(report, verdict)
     typer.echo(output)
     raise typer.Exit(ExitCode.OK)
