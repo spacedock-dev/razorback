@@ -1403,3 +1403,36 @@ commit boundary (703 passed, 4 pre-existing failures, 1 pre-existing
 collection error). v2 spec amended at six sections per §2.10. Per the
 auto-approve: false frontmatter, FO holds the impl gate at this Done
 for explicit captain ack before advancing to validation.
+
+## Stage Report: validation
+
+- DONE: Per-AC verification reproduces every AC's `Verified by:` clause verbatim from AC-1..AC-7.
+  Six of seven ACs PASS with verifier-text imprecisions documented in the validation report.
+  AC-1.d's `rk run --explain` round-trip fails at translator dispatch with a real CLI mismatch:
+  the translator passes `--dataset` to `razorback-plugin-dab generate`, which has no such option.
+  Evidence: validation report's "Per-AC verdict" section; the offending lines are
+  `src/razorback/translate.py:361-363`; direct CLI probe `uv run razorback-plugin-dab generate
+  --dataset dab@1.0 --datasets bookreview` exits 2 with `No such option: --dataset`. Pytest
+  baseline (703 passed, 4 pre-existing failed, 12 skipped, 1 pre-existing collection error)
+  byte-identical to cycle-6 report.
+- DONE: Code review via `superpowers:requesting-code-review` against the 6 shipped commits.
+  Findings: 1 strength-list, 3 Important findings (translator `--dataset` flag mismatch;
+  `/workspace/preflight.sh` mechanism has no current emitter; validator does double-work on
+  dataset ref), 6 Minor findings. The 4b+4c merge-into-one-commit deviation acknowledged with
+  the impl's load-bearing-union-cleanup rationale; non-verdict-changing.
+- DONE: Validation report committed to
+  `docs/razorback-implementation/validation/generic-harbor-benchmark-surface-design.md` with
+  PASS/FAIL per AC + code review findings + `## Gate decision: REJECT` line at the bottom.
+
+### Summary
+
+Six of seven ACs (AC-2 through AC-7) pass against the shipped code modulo verifier-text
+imprecisions (paths drifted from the captain's "in-tree + entry-points, no new pip packages"
+shape). AC-1 fails at the live `rk run --explain` round-trip portion of its `Verified by:`
+clause: the translator passes `--dataset` to the dab plugin CLI, which has no such option, and
+the mock-subprocess unit tests never exercised the real plugin contract. The fix is small but
+must land before this branch reaches `main` — any live `kind: harbor + plugin: dab` invocation
+will hit the same seam. Recommendation to the captain: REJECT back to implementation for a
+narrow fix-cycle (drop or align the `--dataset` flag; add a non-mock dispatch integration
+test). The other 6 commits stand on their own.
+
