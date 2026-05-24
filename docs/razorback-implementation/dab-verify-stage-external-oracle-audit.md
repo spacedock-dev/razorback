@@ -8,7 +8,7 @@ auto-approve: false
 worktree: .worktrees/spacedock-ensign-dab-verify-stage-external-oracle-audit
 issue:
 pr:
-mod-block: merge:pr-merge
+mod-block: 
 started: 2026-05-23T22:58:25Z
 completed:
 verdict:
