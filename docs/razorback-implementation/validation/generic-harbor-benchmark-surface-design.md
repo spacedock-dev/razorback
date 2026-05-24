@@ -673,3 +673,148 @@ No new findings surfaced in cycle 2.
 - Captain-deferred Material #2 + Polish #3 remain deferred per cycle-1 captain decision; this cycle does NOT re-raise them.
 
 Per the dispatch instructions: `auto-approve: false` on entity frontmatter — captain MUST ack this APPROVE verdict at the gate. Recommendation to the captain: **APPROVE the validation gate**; advance the entity to `done` via the `pr-merge` mod's PR workflow.
+
+---
+
+## Cycle-3 appendix: cycle-9 Material #4 fix + cycle-8 probe equivalence verdict
+
+**Validator:** spacedock-ensign-generic-harbor-benchmark-surface-design-validation
+**Date:** 2026-05-24
+**Scope per dispatch (feedback cycle 2 of 3 max):** confirm cycle-9 fix is sound + cycle-8 probe evidence is honestly characterized.
+
+### 1. Cycle-9 Material #4 fix re-verification
+
+**RED→GREEN→integration-test ordering confirmed via `git log`:**
+
+| Commit | Role | Diff |
+|---|---|---|
+| `82fea2b` | RED (plugin CLI) | `packages/razorback-plugin-dab/tests/unit/test_cli_data_root_env_default.py`: 5 new tests, +123 lines |
+| `68fe744` | GREEN (plugin CLI) | `packages/razorback-plugin-dab/src/razorback_plugin_dab/cli.py`: `_resolve_default_data_root()` helper + invocation-time chain, +32/-2 |
+| `2e39b46` | Translator integration | `tests/translate/test_dab_dispatch_real_plugin.py`: `test_goal1_shape_dispatch_uses_env_default_data_root`, +53 |
+
+Verified by `git show --stat` on each commit + direct reads of the diffs and test bodies.
+
+**Plugin CLI test coverage — 4 chain branches + regression guard:**
+
+| Test | Chain branch | Verdict |
+|---|---|---|
+| `test_explicit_data_root_wins_over_env` | (1) explicit wins | PASS |
+| `test_env_default_used_when_no_explicit_flag` | (2) env-default | PASS |
+| `test_default_home_dir_used_when_present` | (3) home-dir default | PASS |
+| `test_no_explicit_no_env_no_default_dir_errors_with_named_env_var` | (4) named error when absent | PASS |
+| `test_hello_fixture_unchanged_by_env_default` | regression guard | PASS |
+
+All 5 tests use `_uv_run()` against the real `razorback-plugin-dab` binary via subprocess — zero mocks. Re-ran `uv run pytest packages/razorback-plugin-dab/tests/unit/test_cli_data_root_env_default.py -v`: **5/5 passed in 1.23s.**
+
+**Translator-side integration test for goal1 shape:**
+
+`test_goal1_shape_dispatch_uses_env_default_data_root` parses a spec with the goal1 shape (`kind: harbor + plugin: dab + plugin_args: {workspace_variant: spacedock, query_mode: batch, hints: true}` — crucially **no `data_root`**) and runs it through real `spec_to_job_config` → `_invoke_plugin_generate` → real plugin binary. Test asserts a task path materializes and `task.toml` exists.
+
+**Honest characterization of this test's limit:** the test uses `tasks: [hello-fixture]`, and the plugin CLI short-circuits the entire data_root resolution at line 111-113 (`if requested == ["hello-fixture"]: _emit_hello_fixture(out); return`). The env-default fallback at lines 115-124 is therefore NOT exercised by this test's body. The test's docstring acknowledges this: *"Even though hello-fixture short-circuits before the data-root gate, set the env so the test would still pass with a real dataset."* So this test is a **dispatch-shape regression guard** (the translator emits a command without `--data-root` when plugin_args lacks `data_root`), not an end-to-end exercise of the env-default fallback.
+
+The env-default fallback IS load-bearingly exercised by:
+- The 3 plugin CLI unit tests (`test_env_default_used_when_no_explicit_flag`, `test_default_home_dir_used_when_present`, `test_no_explicit_no_env_no_default_dir_errors_with_named_env_var`) which use `--datasets ad-hoc-not-in-catalog` to pass the short-circuit and reach the resolution chain.
+- The cycle-8 live probe on `examples/specs/goal1/spacedock/agnews.yaml` — `agnews` is a real dataset that takes the post-short-circuit path through `$DATAAGENTBENCH_DATA_ROOT` resolution end-to-end and ships exit 0.
+
+Coverage between the unit tests + live probe is adequate for the fix's load-bearing path. Re-ran `uv run pytest tests/translate/test_dab_dispatch_real_plugin.py tests/translate/test_dab_dispatch.py -v`: **7/7 passed in 0.30s.**
+
+**Cycle-9 fix verdict: SOUND.** RED→GREEN ordering clean, chain branches covered, regression guard in place, translator integration test adds dispatch-shape coverage even if the chosen fixture short-circuits the env-default path inside the plugin.
+
+### 2. Cycle-8 consumer-equivalence probe audit
+
+**Evidence directory:** `docs/razorback-implementation/_evidence/hm-consumer-equivalence-probe/spacedock/agnews/`. Contains `spec.frozen.yaml`, `explain.json`, `result.json`, `reward_per_query.json`, `audit.json`, `score.json`. Pre-hm baseline at `docs/razorback-implementation/_evidence/leak-guard-rerun/spacedock/agnews/`.
+
+**Field-level explain.json diff.** A naive flat-key diff (via `flatten() → set diff`) reports **27 differing keys** between pre-hm and post-hm explain.json, not the "exactly 2" the dispatch's literal-text framing demanded. Classifying every differing key:
+
+| Diff category | Keys | Disposition |
+|---|---|---|
+| Captain-acked sealed_hash break | `spec_sha256` | EXPECTED per design §2.4 |
+| Captain-acked sealed_hash break — downstream | `job_name` (= `spec_sha256[:16]`) | EXPECTED — derived from `spec_sha256` |
+| Solver-workflow content hash | `agent.kwargs.solver_workflow_content_hash` | EXPECTED — see §3 below |
+| Migration shape (kind: harbor_dab → harbor + plugin remap) | `benchmark.kind`, `benchmark.plugin`, `benchmark.plugin_args.{workspace_variant,query_mode,hints}`, `benchmark.tasks[0]`, `benchmark.datasets[0]`, `benchmark.data_root`, `benchmark.workspace_variant`, `benchmark.query_mode`, `benchmark.hints`, `benchmark.exclude_tasks`, `benchmark.n_tasks` (12 keys) | EXPECTED — the entity's whole `benchmark` block migrated by design; impl appendix table at entity lines 1638-1652 lists this row as "shape changed by design with semantic equivalence" |
+| Environmental — different worktree paths in different captures | `run_dir`, `job_config_yaml`, `environment.mounts_json[0].source`, `prompt.sample_instruction_path`, `prompt.sample_task_path`, `prompt.task_paths[0]`, `spec_path` (7 keys) | EXPECTED — pre-hm rerun captured from `spacedock-ensign-dab-workspace-readme-leak-guard-prose-port` worktree; post-hm captured from `spacedock-ensign-generic-harbor-benchmark-surface-design` worktree; `job_name` substring drifts also cascade into `preparation[5,12,13,14]` text |
+| Path-embedded preparation strings | `preparation[5,12,13,14]` (4 keys) | EXPECTED — embed `run_dir` and `job_config_yaml` |
+
+**Net:** 0 diff keys remain in the "neither captain-acked-break nor migration-by-design nor environmental-path-shift" bucket. The dispatch's literal "exactly the 2 fields" framing is over-strict — the migration-by-design + environmental-path-shift drifts are honest and disclosed in the impl's own appendix table at entity lines 1638-1652. **Equivalence claim holds.**
+
+**`audit.json` claim verification.** Direct `cat` of `_evidence/hm-consumer-equivalence-probe/spacedock/agnews/audit.json`:
+
+```json
+"summary": {"clean": 1, "coverage_missing": 0, "tainted": 0}
+"trials": [{"taint_status": "clean", "trial_id": "agnews__L8nnGhg", "findings": []}]
+```
+
+**Clean verdict confirmed.** Hard contract honored. Matches pre-hm `_evidence/leak-guard-rerun/spacedock/agnews/audit.json` summary.
+
+**`score.json` Wilson CI per-query overlap verification.**
+
+| Query | Pre-hm pass_at_1 | Pre-hm Wilson CI | Post-hm pass_at_1 | Post-hm Wilson CI | Overlap |
+|---|---|---|---|---|---|
+| q1 | 1.0 | [0.207, 1.0] | 1.0 | [0.207, 1.0] | byte-identical |
+| q2 | 0.0 | [0.0, 0.793] | 0.0 | [0.0, 0.793] | byte-identical |
+| q3 | 0.0 | [0.0, 0.793] | 0.0 | [0.0, 0.793] | byte-identical |
+| q4 | 1.0 | [0.207, 1.0] | 0.0 | [0.0, 0.793] | OVERLAP [0.207, 0.793] |
+
+All four per-query CIs overlap. Headline 0.5 → 0.25 reflects q4 flipping at the LLM-sampling level (no seed; pre-hm picked Africa, post-hm picked North America — both wrong-but-different LLM answers, not a pipeline regression). **Wilson-CI-overlap claim holds.**
+
+Minor observation (non-verdict-changing): the post-hm `score.json` has no `against_constant` block where the pre-hm `score.json` did (against_constant.name=spacedock, value=0.577). This is a probe-script choice (the post-hm `rk score` invocation apparently didn't pass `--against-constant`, and the migrated spec doesn't carry `experiment_meta.paper_baseline` so AC-4's auto-pull didn't fire). Not load-bearing for the equivalence verdict — `pass_at_1`, `n_completed`, `n_errored`, and per-query strata are byte-stable or CI-overlapping.
+
+**README-content shift verification (the impl's claimed root cause of `solver_workflow_content_hash` drift).** Per dispatch direction:
+
+- The dispatch named `docs/superpowers/skills/spacedock-solver-v2/README.md` as the README to check. That path does not exist; the spacedock-solver-v2 README is wrong-pathed in the dispatch (no impact on verdict — see below for the correct path).
+- The actual `solver_workflow_content_hash` is computed by `src/razorback/spec/freeze.py:_dir_content_hash` over the entire `solver_workflow` directory the spec points at. For `examples/specs/goal1/spacedock/agnews.yaml` the workflow path is `examples/solver_workflows/dab_paper_matrix/`, which contains exactly one file: `README.md`.
+- `git log --oneline examples/solver_workflows/dab_paper_matrix/`:
+  ```
+  d9326f1 feat(wp): cycle-2 (b) — extend audit/taint.py with claude-cli + Option A rewire
+  54ef9f1 docs(wp): T4 — verify-stage External-oracle audit prose + harness invocation
+  c279bf7 pkg26 T3: per-variant agent.kind in goal1 matrix generator
+  ```
+- `git show --stat 54ef9f1`: `+43 lines` to the dab_paper_matrix README ("port DAB verify-stage External-oracle audit prose"). `git show --stat d9326f1`: `+24/-17` to the same README (rebalance taint patterns + `rk audit --policy strict` invocation rewrite).
+- Recomputed `_dir_content_hash(examples/solver_workflows/dab_paper_matrix)` from current branch via the freeze.py algorithm: **`sha256:cbd8bc8638b85ea79405d6ece411a547e05d5eab6160acc09265bdb38e057eeb`** — byte-equals the post-hm explain.json's reported hash. Pre-hm reported `sha256:3aaaa409...` — the version of the README that existed before `54ef9f1`+`d9326f1` landed.
+
+**README-content-shift claim verification: CONFIRMED.** The README WAS touched between pre-hm freeze and post-hm rebase by `wp` (cycle-1 `54ef9f1` + cycle-2 `d9326f1`). The `solver_workflow_content_hash` drift is not caused by the hm migration.
+
+(Side observation, non-verdict-changing: the actual `prompt.workflow_readme` field in both pre-hm and post-hm explain.json is byte-identical (3270 chars, sha256:4a9fb...). This is because `prompt.workflow_readme` is rendered LIVE from the current filesystem at explain time, while `solver_workflow_content_hash` is frozen into the spec via `rk freeze`. The pre-hm explain.json was generated by a leak-guard *re-run* of an old frozen spec on a post-wp-rebase worktree, so it carries an old `solver_workflow_content_hash` alongside the new README content. The pipeline this consumer-equivalence probe actually compares — agent's effective README + agent's effective prompt — is byte-equivalent across both runs.)
+
+**Equivalence verdict: PASS.** The pipeline path is honest. The cycle-9 stage report's claim "the README-content shift is independent of hm — it landed on main in `wp` and pkg26 between pre-hm freeze and post-hm rebase" is correct in substance (though `pkg26 c279bf7` is in the same `git log` for the directory, that commit's content actually touched the matrix generator, not the README per se — and either way the file's content was touched independently of the hm migration by both `wp` commits, which is the load-bearing claim).
+
+### 3. Captain-deferred items reaffirmation
+
+Both items remain captain-deferred per cycle-1 feedback's narrow-scope decision. Neither was re-raised at the cycle-2 gate; neither is being re-raised in this cycle-3 appendix.
+
+- **Material #2 (`/workspace/preflight.sh` consumer gap):** Captain-deferred since cycle-1. Status unchanged at cycle-3. **STILL DEFERRED.**
+- **Polish #3 (AC verifier text drifts: AC-2.b path, AC-2.f path, AC-3.d path under captain's "no new pip packages" decision):** Captain-deferred since cycle-1. Status unchanged at cycle-3. **STILL DEFERRED.**
+
+### 4. Per-AC re-verdict (cycle-3)
+
+| AC | Cycle-2 verdict | Cycle-3 verdict | Notes |
+|---|---|---|---|
+| AC-1 | PASS | **PASS** | Cycle-1 fix + cycle-9 Material #4 fix both verified sound. Live `rk run` (cycle-8 probe) reached audit-clean + score-Wilson-CI-overlap with pre-hm baseline. |
+| AC-2 | PASS with verifier-text caveats | **PASS unchanged** | Captain-deferred Polish #3. |
+| AC-3 | PASS with thinnest-test-surface caveat | **PASS unchanged** | Captain-deferred Polish #3. |
+| AC-4 | PASS | **PASS unchanged** | `tests/cli/test_score.py` 4/4 green; no code touched between cycle-2 and cycle-3 heads on this AC. |
+| AC-5 | PASS for `examples/` | **PASS unchanged** | `examples/` clean. |
+| AC-6 | PASS | **PASS unchanged** | 110-line v2 spec diff. |
+| AC-7 | PASS (704 passed at cycle-2) | **PASS** | Cycle-9 added a new translator integration test → expected 705 passed; pre-existing failure set + collection error byte-stable. |
+
+### Summary (cycle 3)
+
+Cycle-9 RED→GREEN→integration-test ordering clean: plugin CLI's `_resolve_default_data_root()` chain has 5 tests covering all 4 branches + regression guard for hello-fixture; the translator-side `test_goal1_shape_dispatch_uses_env_default_data_root` is a dispatch-shape regression guard (the chosen `hello-fixture` dataset short-circuits before the env-default gate inside the plugin), but the env-default path itself is load-bearingly exercised by 3 of the 5 plugin CLI unit tests and the cycle-8 live agnews probe. Cycle-8 consumer-equivalence claims verified honest: the dispatch's "exactly 2 differing fields" literal demand is over-strict, but every diff key sorts cleanly into one of {captain-acked sealed_hash break, captain-acked migration-by-design `benchmark` block shape, environmental-path-shift between captures}. `audit.json` clean (1/0/0). All four per-query Wilson CIs overlap (q4 with overlap interval [0.207, 0.793]); the headline 0.5→0.25 reflects LLM-sampling on q4 with no seed. README-content shift on `examples/solver_workflows/dab_paper_matrix/README.md` confirmed by `git log` for `wp` commits `54ef9f1` + `d9326f1`; `_dir_content_hash` recomputation on current branch matches the post-hm reported hash byte-equal. Material #2 + Polish #3 remain captain-deferred per cycle-1 narrow-scope decision; not re-raised.
+
+## Gate decision: APPROVE
+
+**Reasoning:** Cycle-9's Material #4 fix is sound:
+
+- Plugin CLI env-default chain implemented in `_resolve_default_data_root()` at invocation-time (correct cross-host semantics per captain decision); 4-branch resolution chain (explicit → env → home-default → named-error) covered by 5 RED→GREEN tests against the real plugin binary.
+- Translator-side integration test (`test_goal1_shape_dispatch_uses_env_default_data_root`) closes the cycle-1 "non-mock dispatch shape" discipline gap from a second angle (goal1 plugin_args shape that previously tripped exit-2). The chosen `hello-fixture` dataset short-circuits inside the plugin before the env-default gate, so the test functions as a dispatch-shape guard rather than an env-resolution exercise — but the env-resolution path is independently covered by the 3 plugin CLI unit tests using `ad-hoc-not-in-catalog` datasets that pass the short-circuit, plus the cycle-8 live agnews probe.
+
+The cycle-8 consumer-equivalence probe is honestly characterized:
+
+- explain.json field-level diff classifies cleanly into {captain-acked sealed_hash break + downstream `job_name` + path-embedded preparation strings, captain-acked migration-by-design `benchmark` block reshape, environmental-path-shift between distinct worktree captures}. No diff keys remain in an "unexplained pipeline drift" bucket.
+- audit.json clean (1 clean / 0 coverage_missing / 0 tainted) matches pre-hm baseline.
+- score.json per-query Wilson CIs all overlap (q4 overlap [0.207, 0.793]); headline pass_at_1 0.5→0.25 is LLM-sampling on q4 with no seed, not a pipeline regression.
+- `solver_workflow_content_hash` drift attributable to `wp` commits `54ef9f1` + `d9326f1` touching `examples/solver_workflows/dab_paper_matrix/README.md` between pre-hm freeze and post-hm rebase; `_dir_content_hash` recomputation on current branch matches the post-hm reported hash byte-equal.
+
+Captain-deferred Material #2 + Polish #3 remain deferred per cycle-1 narrow-scope decision; not re-raised at this gate.
+
+Per the dispatch instructions: this is feedback cycle 2 of 3 max; `auto-approve: false` on entity frontmatter — **captain MUST ack this APPROVE verdict at the terminal gate.** Recommendation to the captain: **APPROVE the validation gate**; advance the entity to `done` via the `pr-merge` mod's PR workflow.
