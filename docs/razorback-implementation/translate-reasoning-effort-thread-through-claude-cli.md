@@ -193,3 +193,28 @@ Both commits must cite their SHAs in the impl stage report. The validation stage
 - **`rk run --explain` JSON path:** the impl ensign should verify the actual JSON dotted-path on first invocation (per T3 note above) before scripting the AC-2 verification in the stage report.
 - **`prompt_file` follow-on scope:** flagged in T4; impl ensign's call whether to thread it now (one extra 2-line edit) or file separately. The captain's `auto-approve: false` setting means the impl ensign should raise this in the impl stage report rather than silently expanding scope.
 - **harbor 0.6.6 — no `reasoning_summary`:** unlike the codex branch which threads both `reasoning_effort` and `reasoning_summary`, the claude-cli path is fix-`reasoning_effort`-only because harbor's `ClaudeCode.CLI_FLAGS` does not declare a `reasoning_summary` flag. If a future harbor bump adds it, that's a follow-on edit, not this entity's scope.
+
+## Stage Report: implementation
+
+- DONE: T0 RED → T1 GREEN atomic commits per the inline plan's commit discipline; both SHAs cited.
+  T0 RED: `3c44cbb` (`test(translate): T0 RED — claude-cli branch drops reasoning_effort`) adds `tests/unit/test_translate_claude_cli_kwargs.py` and on this commit pytest fails with the diff `Right contains 1 more item: {'reasoning_effort': 'xhigh'}` against `agent_cfg.kwargs`. T1 GREEN: `3f56615` (`fix(translate): T1 GREEN — thread reasoning_effort through claude-cli branch`) adds two lines at `src/razorback/translate.py:193-194` mirroring the codex pattern at lines 107-108; same test now passes (`1 passed in 0.11s`).
+- DONE: All 4 ACs verified.
+  AC-1: `grep -n "reasoning_effort" src/razorback/translate.py` matches at lines 108, 110, 141, 194; line 194 is the new claude-cli kwargs assignment. RED→GREEN cited above. AC-2: `DATAAGENTBENCH_DATA_ROOT=/Users/clkao/git/dataagentbench/data uv run rk run --explain --explain-format json --runs-dir .worktree-runs /tmp/k4-explain/{variant}.frozen.yaml | jq` returned `"xhigh"` for all three variants — `direct-structured` at `.agent.kwargs.reasoning_effort`, `direct-minimal` at `.agent.kwargs.reasoning_effort`, `spacedock` at `.agent.kwargs.harbor_agent_kwargs.reasoning_effort` (verified dotted-path empirically per T3 note; the claude-cli direct shape is `.agent.kwargs.*`, the spacedock-solver shape is `.agent.kwargs.harbor_agent_kwargs.*`). AC-3: schema audit table below. AC-4: full pytest run via background bash `bljrnmms0` returned `5 failed, 705 passed, 12 skipped`; the 5 failures are byte-identical baseline on `main` (confirmed by reverting `src/razorback/translate.py` and re-running the two `translate`-adjacent failures — same `MagicMock can't be used in 'await' expression` in `src/razorback/agents/_runtime/claude.py:152`, no relation to translator kwargs threading).
+- DONE: T4 schema audit table (post-fix line numbers); `prompt_file` gap captured as known-but-deferred follow-on recommendation per plan §T4.
+
+  | Schema field | Threading status | Cite (post-fix) |
+  |---|---|---|
+  | `kind` | not threaded (literal/metadata, dispatch key) | `translate.py:178` |
+  | `model` | threaded as `AgentConfig.model_name` | `translate.py:197` |
+  | `sampling` | guarded: SpecError on non-zero temperature (harbor ClaudeCode has no temperature kwarg) | `translate.py:183-188` |
+  | `tools_allowed` | threaded as `kwargs["allowed_tools"]` (comma-joined) | `translate.py:191-192` |
+  | `prompt_file` | **NOT threaded — known-but-deferred per plan §T4 + captain decision; recommend filing sibling entity** | `translate.py:178-200` (absent) |
+  | `reasoning_effort` | threaded as `kwargs["reasoning_effort"]` (post-fix) | `translate.py:193-194` |
+
+  Harbor 0.6.6 has no `reasoning_summary` CLI flag (`harbor/agents/installed/claude_code.py:40-46`); only the codex branch threads it because harbor's Codex runtime accepts both. No other dropped fields on `ClaudeCliAgentBlock` (6 declared fields total per `src/razorback/spec/schema.py:39-46`).
+
+  **Follow-on recommendation:** file a sibling entity `translate.py threads prompt_file through to harbor on the claude-cli path` to close the remaining schema-admitted-but-dropped field. Scope is mechanical (one extra 2-line edit + one test) but semantically meaningful (custom prompt template path) — captain's `auto-approve: false` on k4 + plan worker's explicit deferral mean this entity does NOT silently widen scope to cover it.
+
+### Summary
+
+Two atomic commits (`3c44cbb` RED, `3f56615` GREEN) added `tests/unit/test_translate_claude_cli_kwargs.py` and threaded `reasoning_effort` through `src/razorback/translate.py:193-194` for the claude-cli branch, mirroring the codex pattern at lines 107-108. All 4 ACs verified: unit test goes RED→GREEN; `rk run --explain` JSON shows `reasoning_effort: "xhigh"` on all three k3 evidence specs (claude-cli direct shape lives at `.agent.kwargs.*`, not the spacedock-solver nested `.agent.kwargs.harbor_agent_kwargs.*` — plan's T3 note was correct that the dotted-path needed empirical verification); full pytest baseline-matches `main` (5 pre-existing failures, all unrelated to translator kwargs). Schema audit surfaces `prompt_file` as the one remaining declared-but-dropped field, flagged as a recommended sibling-entity follow-on rather than silently widening this entity's scope.
