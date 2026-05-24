@@ -57,3 +57,16 @@ No full DAB model run is part of this task.
 ## Out of scope
 
 Executing or scoring the full DAB dataset run.
+
+## Stage Report: plan
+
+- DONE: Plan identifies the intended DAB full/batch spec or how to locate it from dataset definitions.
+  Plan doc `docs/razorback-implementation/plans/dab-full-batch-codex-explain-preflight.md` T0/T1 uses `benchmark.dataset: dab@1.0`, no `data_root` identity field, and verifies the plugin definition's 12 datasets / 54 queries.
+- DONE: Plan defines exact `rk run --explain --explain-format json` evidence for solver, batch mode, model, effort, and prompt mode.
+  Plan T2/T3 gives the exact command and JSON assertions for `query_mode: batch`, `spacedock-workflow`, `spacedock_solver`, `runtime: codex`, `model: gpt-5.5`, `reasoning_effort: xhigh`, and `spacedock-codex-first-officer`.
+- DONE: Plan preserves the no-Harbor/no-model boundary and records the next full-run command or blocker.
+  Plan T4 asserts no `_job_config.yaml`, `trials/`, model events, result, summary, score, or audit artifacts; T5 records the next `rk run` command or blocker class/log path.
+
+### Summary
+
+Wrote the standard separate plan doc for the four-AC preflight task. The implementation plan is evidence-only: create/freeze a run-local full DAB Codex spacedock spec, run explain JSON, inspect fields, prove the filesystem boundary, and stop before any full DAB model run.
