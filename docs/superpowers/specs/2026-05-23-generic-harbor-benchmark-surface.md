@@ -786,6 +786,25 @@ so the second plugin doesn't have to invent it.
   agent block configures them. The interface stays; the call
   site moves from `_build_ade_bench` to `_build_harbor`.
 
+**Generic preflight via `/workspace/preflight.sh`** (captain
+2026-05-24 decision on cycle-3 commit-4 blast-radius question 2).
+Pre-migration, `SpacedockSolverAgent._run_ade_workspace_preflight`
+(`src/razorback/agents/spacedock_solver.py:348-375`) was gated on
+`benchmark_kind == "ade-bench"` and exec'd
+`preflight_script_text()` (ADE-specific). Post-migration the kind
+is `"harbor"` for all harbor-published benchmarks, so the
+benchmark-kind gate breaks.
+
+Replacement: `SpacedockSolverAgent` checks for
+`/workspace/preflight.sh` and execs it (timeout 120s) if present.
+No benchmark-specific knowledge in razorback core. The
+ade-bench-plugin's `generate` output emits
+`/workspace/preflight.sh` carrying today's
+`preflight_script_text()` content; future plugins can opt in to
+the same convention without touching solver code. Decouples
+solver from plugin entirely; decouples plugin from solver
+lifecycle. Lands in commit 4b.
+
 **Agent-kind interaction with the smoke gate** (staff-review
 fix). The scaffolded `drivers/matrix.sh.tmpl` smoke gate
 (§2.3 step 3) checks `subagent-trace-manifest.json captured >
@@ -895,42 +914,61 @@ from ~80 in the cycle-3 first pass).
 
 ### §2.11 Migration commits sequence
 
-Six commits ship the migration (each ~independently reviewable):
+Six logical commits ship the migration (commit 4 splits into 4a/4b/4c
+per captain's blast-radius decision; commits reorder so 4a lands
+before 3 because migrated specs reference `plugin:` which doesn't
+exist until 4a ships):
 
 1. `_build_harbor` + `HarborBenchmarkBlock` (already shipped:
-   commits `6cbcaa8`, `f9f3143`; rebased onto current main
-   in this cycle's revision).
+   commits `6cbcaa8`, `f9f3143`; rebased onto current main).
 2. `rk research new` command + `docs/templates/research-project/`
    tree + `docs/templates/benchmark-defaults.toml`. Per-template
-   contents per §2.3.
+   contents per §2.3. **Shipped.**
 3. **Migrate existing example specs in `examples/specs/`** from
    `kind: ade-bench` / `kind: harbor_dab` / `kind: spider2-dbt`
-   to the new shape. Delete the deprecated kind-specific specs
-   that have no analogue. Re-freeze any frozen specs the matrix
-   dispatchers consume. **This commit explicitly captures the
-   agent-side sealed_hash break** (per §2.4): commit message
-   names that the view-manifest `benchmark_kind` field changes
-   from `"ade-bench"` / `"harbor_dab"` / `"spider2-dbt"` to
-   `"harbor"` / `"harbor-local"`, every pre-migration
-   freeze-CAS entry becomes orphaned, and consumers must
-   `rk freeze --rehash` every frozen spec they intend to
-   resume. The commit body includes the consumer-facing
-   migration recipe.
-4. Delete `AdeBenchBenchmarkBlock`, `Spider2DbtBenchmarkBlock`,
-   `HarborDabBenchmarkBlock` (replaced by `HarborBenchmarkBlock`
-   + `HarborLocalBenchmarkBlock` + plugin escape), delete
-   `DabBenchmarkBlock` (legacy SUPERSEDED). Wire `plugin:`
-   dispatch in `_build_harbor` per §2.6's typed `plugin_args`
-   + `trial_name_map_v2` contracts. Add the
-   `razorback.plugin_args` entry-point registry.
+   to the new shape (lands AFTER 4a so the `plugin:` field exists).
+   Delete deprecated kind-specific specs that have no analogue.
+   Re-freeze any frozen specs the matrix dispatchers consume.
+   **This commit explicitly captures the agent-side sealed_hash
+   break** (per §2.4): commit message names that the view-manifest
+   `benchmark_kind` field changes from `"ade-bench"` / `"harbor_dab"` /
+   `"spider2-dbt"` to `"harbor"` / `"harbor-local"`, every
+   pre-migration freeze-CAS entry becomes orphaned, and consumers
+   must `rk freeze --rehash` every frozen spec they intend to
+   resume. The commit body includes the consumer-facing migration
+   recipe + the note that 7q's frozen specs are migrated as
+   historical artifacts (existing 7q run-dirs at
+   `_runs/goal1-direct-structured-opus47-xhigh/` keep their data;
+   the post-migration sealed_hash applies to the pending agnews
+   re-run after k3/wp ship).
+4a. **harbor_dab → dab-plugin.** Add `plugin:` + `plugin_args:`
+    fields to `HarborBenchmarkBlock` with model_validator that
+    re-parses `plugin_args` against the plugin's typed Pydantic
+    model discovered via the `razorback.plugin_args` entry point
+    (per §2.6). Add `HarborLocalBenchmarkBlock` per §2.5. Delete
+    `HarborDabBenchmarkBlock` + legacy `DabBenchmarkBlock` +
+    `_build_harbor_dab`. Wire dab-plugin dispatch in `_build_harbor`.
+    Add `trial_name_map_v2` emission in razorback-plugin-dab
+    generate output. Migrate harbor_dab tests.
+4b. **ade-bench → ade-plugin + generic `/workspace/preflight.sh`.**
+    Per §2.7: `SpacedockSolverAgent` executes
+    `/workspace/preflight.sh` if present, no benchmark-specific
+    knowledge. ade-plugin's `generate` output emits the script
+    from today's `preflight_script_text()`. Delete
+    `AdeBenchBenchmarkBlock` + `_build_ade_bench` +
+    `benchmarks/ade_bench/` package. Migrate ade-bench tests.
+4c. **spider2-dbt → spider2-plugin.** Delete
+    `Spider2DbtBenchmarkBlock` + `_build_spider2_dbt` +
+    `benchmarks/spider2_dbt/`. Wire spider2-plugin dispatch.
+    Migrate spider2 tests.
 5. Surface `taint_status:` in `rk score` output (reads
    `audit.json` from the run-dir, soft-fails when absent).
    Auto-pull `experiment_meta.paper_baseline` when set on the
    frozen spec.
 6. v2 spec amendment per §2.10 (six §-sections touched).
 
-Commit 1 is in-tree. Commits 2-6 sequence naturally once
-captain approves this design.
+Commits 1 + 2 are in-tree. Commits 4a → 3 → 4b → 4c → 5 → 6
+sequence next.
 
 ### §2.12 What this entity does NOT cover
 

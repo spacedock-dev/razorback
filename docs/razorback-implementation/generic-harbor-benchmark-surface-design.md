@@ -1016,3 +1016,81 @@ The plan-stage research, ideation spike, production schema +
 builder, and cycle-3 scenarios all remain valid — the revision
 extends rather than replaces. Captain ack of §3 decision
 points (a-e) unblocks commits 2-6 of the §2.11 sequence.
+
+## Stage Report: implementation (cycle 4 — captain greenlight + commit 2 + scope flag)
+
+### Scope revision
+
+Captain ack on all five §3 decision points (a/b/c/d/e) +
+explicit captain disposition on three commit-4 concerns
+surfaced post-ack:
+
+1. **Commit-4 split = (B)**: 4a/4b/4c sub-commits per kind
+   (harbor_dab → 4a; ade-bench → 4b w/ generic preflight;
+   spider2-dbt → 4c). Bisect-safe; each ~independently
+   reviewable. Design doc §2.11 updated.
+2. **ADE preflight = generic `/workspace/preflight.sh`**.
+   Solver runs the script if present, no benchmark-specific
+   knowledge. ade-plugin's `generate` emits it. Lands in 4b.
+   Design doc §2.7 updated with the mechanism.
+3. **7q frozen-spec re-freeze accepted**. Old sealed_hashes
+   orphaned per `rk freeze --rehash` recipe. Existing 7q
+   run-dirs keep their data; pending agnews re-run after
+   k3/wp ship will use post-migration sealed_hash. Design
+   doc §2.4 + commit 3 message document the discontinuity.
+
+### Work in this cycle
+
+- DONE: Commit 2/6 of §2.11 sequence — `rk research new` +
+  scaffold templates + `paper_baseline` field on
+  ExperimentMetaBlock. New module
+  `src/razorback/cli/research.py`. Template tree at
+  `docs/templates/research-project/`. Benchmark-defaults at
+  `docs/templates/benchmark-defaults.toml` seeded with
+  adyen/dabstep + swe-bench/swe-bench-verified. 9 new
+  RED→GREEN tests at
+  `tests/unit/test_rk_research_new.py`; 29/29 owned tests
+  green (schema + translator + scaffold). Commit on branch.
+
+- DONE: Design doc §2.7 (generic preflight mechanism) +
+  §2.11 (4a/4b/4c split + reordering: 4a lands before 3
+  because migrated specs reference `plugin:` which only
+  exists post-4a).
+
+- DONE: Survey of commit-4 blast radius — 14 test files +
+  5 source files + 64 specs across examples/ touch the
+  doomed classes. Three options surfaced to team-lead;
+  captain picked (B) split + generic preflight + accept
+  the 7q break.
+
+- DEFERRED-TO-NEXT-SESSION: Commits 4a → 3 → 4b → 4c → 5
+  → 6 of the §2.11 sequence. Reason: cumulative context
+  budget for this session is heavy (cycle 1 + cycle 2 +
+  cycle 3 + cycle 3 revision design work + commit 2 + the
+  captain-resolution iteration); commit 4a alone is a
+  500-800 LOC change touching schema + translator +
+  entry-point registry + the razorback-plugin-dab package
+  + 13 harbor_dab tests. Splitting across sessions is
+  cheaper than risking a partial-state commit. The design
+  doc + entity body + commit-2 in-tree give the next
+  session a clean handoff: commit 4a is the next concrete
+  unit of work; tasks #96 (4a), #100 (4b), #101 (4c), #95
+  (commit 3, post-4a), #97 (commit 5), #98 (commit 6),
+  #99 (stage report + Done) are queued.
+
+### Summary
+
+Cycle 4 landed captain greenlight on the cycle-3 design,
+shipped commit 2/6 (scaffold templates + `rk research new`
+command + `paper_baseline` schema field), surfaced commit-4
+blast radius to team-lead, captured captain's three
+clarifications (split, generic preflight, accept break) in
+the design doc. Remaining migration work (commits 4a → 3 →
+4b → 4c → 5 → 6) is staged for the next session; no in-
+tree partial state.
+
+The captain-ack-at-every-gate flow is intact: this cycle
+does NOT signal validation-ready Done. The next session
+ships commits 4a-6 + the validation-ready Stage Report;
+FO holds the impl gate at THAT Done for explicit captain
+ack per `auto-approve: false`.
