@@ -24,21 +24,84 @@ _CODEX_SUPPORTED_KWARGS = {
     for descriptor in [*Codex.CLI_FLAGS, *getattr(Codex, "ENV_VARS", [])]
 }
 
+CODEX_SPACEDOCK_REMOTE_SKILLS_DIR = "/tmp/razorback-agents/skills"
+CODEX_SPACEDOCK_PLUGIN_NAMESPACE = "spacedock"
+CODEX_SPACEDOCK_FIRST_OFFICER_SKILL_PATH = (
+    f"{CODEX_SPACEDOCK_REMOTE_SKILLS_DIR}/"
+    f"{CODEX_SPACEDOCK_PLUGIN_NAMESPACE}/skills/first-officer/SKILL.md"
+)
+
 
 class RazorbackCodex(Codex):
     """Codex installed agent with benchmark-safe defaults layered on top."""
+
+    def __init__(
+        self,
+        *,
+        enable_multi_agent: bool = False,
+        spacedock_plugin_dirs: list[Path | str] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        self._enable_multi_agent = enable_multi_agent
+        self._spacedock_plugin_dirs = [
+            Path(p).expanduser() for p in (spacedock_plugin_dirs or [])
+        ]
+        super().__init__(**kwargs)
 
     def build_cli_flags(self) -> str:
         # Extends Codex.build_cli_flags: web search is disabled for offline benchmark solving.
         # This prevents solver answers from depending on live web access.
         base = super().build_cli_flags()
         web_search_disabled = f"-c {shlex.quote('web_search=\"disabled\"')}"
+        multi_agent = "--enable multi_agent" if self._enable_multi_agent else ""
         # The adapter writes a vetted hook into the isolated CODEX_HOME at run
         # setup time. Exec mode otherwise refuses untrusted hooks interactively.
         hook_trust_bypass = "--dangerously-bypass-hook-trust"
         return " ".join(
-            part for part in (base, web_search_disabled, hook_trust_bypass) if part
+            part
+            for part in (
+                base,
+                web_search_disabled,
+                multi_agent,
+                hook_trust_bypass,
+            )
+            if part
         )
+
+    async def setup(self, environment: BaseEnvironment) -> None:
+        await super().setup(environment)
+        await self._stage_spacedock_plugin_dirs(environment)
+
+    async def _stage_spacedock_plugin_dirs(self, environment: BaseEnvironment) -> None:
+        if not self._spacedock_plugin_dirs:
+            return
+        if len(self._spacedock_plugin_dirs) != 1:
+            raise SpacedockSolverAgentError(
+                "codex spacedock runtime expects exactly one spacedock plugin dir"
+            )
+        if not hasattr(environment, "upload_dir"):
+            raise SpacedockSolverAgentError(
+                "codex spacedock runtime requires environment.upload_dir to stage "
+                "the spacedock plugin into the Harbor trial"
+            )
+
+        plugin_dir = self._spacedock_plugin_dirs[0]
+        _validate_spacedock_plugin_dir(plugin_dir)
+        remote_plugin_dir = (
+            f"{CODEX_SPACEDOCK_REMOTE_SKILLS_DIR}/"
+            f"{CODEX_SPACEDOCK_PLUGIN_NAMESPACE}"
+        )
+        await environment.exec(
+            command=(
+                f"rm -rf {shlex.quote(remote_plugin_dir)} && "
+                f"mkdir -p {shlex.quote(CODEX_SPACEDOCK_REMOTE_SKILLS_DIR)}"
+            )
+        )
+        await environment.upload_dir(str(plugin_dir), remote_plugin_dir)
+        # Harbor's Codex agent copies self.skills_dir/* into
+        # $HOME/.agents/skills immediately before `codex exec`, so this remote
+        # tree becomes the namespaced `spacedock` skill package for the run.
+        self.skills_dir = CODEX_SPACEDOCK_REMOTE_SKILLS_DIR
 
     async def install(self, environment: BaseEnvironment) -> None:
         # Extends Codex.install only to clear benchmark proxy variables during
@@ -104,6 +167,8 @@ def build_inner_agent(
     model: str,
     harbor_agent_kwargs: dict[str, Any],
     extra_env: dict[str, str],
+    enable_multi_agent: bool = False,
+    spacedock_plugin_dirs: list[Path | str] | None = None,
 ) -> Codex:
     """Construct harbor's Codex agent with Razorback's kwarg contract.
 
@@ -117,8 +182,25 @@ def build_inner_agent(
         logs_dir=Path(logs_dir),
         model_name=model,
         extra_env=dict(extra_env),
+        enable_multi_agent=enable_multi_agent,
+        spacedock_plugin_dirs=spacedock_plugin_dirs,
         **kw,
     )
+
+
+def _validate_spacedock_plugin_dir(plugin_dir: Path) -> None:
+    required = (
+        plugin_dir / ".codex-plugin" / "plugin.json",
+        plugin_dir / "skills" / "first-officer" / "SKILL.md",
+        plugin_dir / "skills" / "ensign" / "SKILL.md",
+        plugin_dir / "agents" / "first-officer.md",
+        plugin_dir / "agents" / "ensign.md",
+    )
+    for path in required:
+        if not path.exists():
+            raise SpacedockSolverAgentError(
+                f"codex spacedock runtime cannot stage incomplete plugin; missing {path}"
+            )
 
 
 def _codex_kwargs(harbor_agent_kwargs: dict[str, Any]) -> dict[str, Any]:
