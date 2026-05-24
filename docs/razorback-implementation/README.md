@@ -97,6 +97,7 @@ below; see **Task Template** for a copy-paste starter.
 | `issue` | string | GitHub issue reference (optional cross-reference) |
 | `pr` | string | GitHub PR reference (set when a PR is opened for the task branch) |
 | `mod-block` | string | Pending mod-declared blocking action, format `{lifecycle_point}:{mod_name}` |
+| `auto-approve` | bool | Optional. Per-entity override of the sprint-wide auto-approval state. Default: inherits whatever the captain has set sprint-wide. Set to `false` on entities whose gate decisions need explicit captain ack regardless of sprint-wide pre-authorization (e.g., entities touching the captain-facing API surface, the spec, or workflow scaffolding). The first officer reads this field at every gate and refuses to auto-approve when `false`. |
 
 ### ID Style
 
@@ -237,6 +238,41 @@ decision is bound to those clauses:
   file path, or test the validator runs to confirm the clause
 - `verdict: PASSED` is set only when every AC passes its `Verified
   by:` check
+- **Every AC's `Verified by:` clause must name a code, test,
+  configuration, or measurement artifact** — not a prose deliverable.
+  Pass: "function `X.y()` returns Z on input W"; "`uv run pytest
+  tests/T` exits 0"; "`grep -F 'pattern' src/file.py` returns N
+  matches"; "`summary.json[stratified_pass_at_1] == X` byte-equal
+  to `rk score` output." Reject at filing time: "a doc exists at
+  path X"; "section Y describes Z"; "the design is approved." If
+  a doc is genuinely a deliverable, it must be paired with a
+  load-bearing code/behavior AC the doc informs.
+
+### Doc-only entities are anti-pattern
+
+Every entity ships a behavior change (code, test, configuration,
+captured measurement, or an explicit decision the captain records).
+A pure design document is not enough — designs live as **plan-stage
+output** of an implement-bound entity, not as their own stage.
+
+The cost of doc-only entities is real: the FO files an entity, the
+plan stage spends a cycle scoping doc-writing tasks, the entity
+advances to implementation and creates a worktree just to write a
+markdown file, the validation stage gates on prose. Then the captain
+inevitably says "actually, implement it too" and the scope widens
+mid-stream — paying the ceremony cost twice.
+
+If a design's surfaces need captain veto power before code lands,
+**file an implement-bound entity and set `auto-approve: false` in
+its frontmatter**. The FO gates plan-stage approval and the planned
+ideation-spike-and-surfaces-enumeration sub-steps on explicit captain
+ack. The same captain control without the doc-only entity ceremony.
+
+The narrow exception: pure-research spikes (e.g., "is library X
+usable for our context?") that ship NO code regardless of the
+research outcome. File these explicitly as research-spike entities
+with one stage and a single "captain reads + decides" AC. Use the
+exception rarely — the default `task` flow is implement-bound.
 
 ## Workflow State
 
@@ -268,6 +304,7 @@ worktree:
 issue:
 pr:
 mod-block:
+auto-approve:   # optional; omit for sprint-wide default, set to `false` to gate every decision on captain ack
 ---
 
 ## Problem
