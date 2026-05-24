@@ -1440,6 +1440,8 @@ test). The other 6 commits stand on their own.
 
 **Cycle 1 (2026-05-24, captain REJECT-acknowledged):** validator returned REJECT on AC-1.d live `rk run --explain` round-trip — `translate.py:361-363` emits `--dataset` flag to `razorback-plugin-dab generate` which has no such option (CLI signature at `packages/razorback-plugin-dab/src/razorback_plugin_dab/cli.py:25-53`). Direct probe `uv run razorback-plugin-dab generate --dataset dab@1.0 --datasets bookreview` exits 2. Mock-subprocess unit tests at `tests/translate/test_dab_dispatch.py` never exercised the real plugin contract. Captain scope: **narrowest fix only (Material #1)** — drop or align the `--dataset` flag emission + add at least one non-mock dispatch integration test that calls the real plugin binary with the translator's emitted command. Material #2 (`/workspace/preflight.sh` consumer gap) and Polish #3 (AC verifier text drifts) deferred to a later cycle or sibling entity. Routed to impl ensign (alive at 43.3% context) via SendMessage; validation stage will fresh-dispatch after fix lands.
 
+**Cycle 2 (2026-05-24, captain APPROVE-conditional-on-live-probe → cycle-8 STOP-and-surface → cycle-9 fix + probe resume):** captain ack'd APPROVE on cycle-2 validation conditional on a live consumer-equivalence probe of one existing cell. Cycle-8 ensign found **Material #4**: the cycle-3 migration silently dropped the pre-hm `_build_harbor_dab` env-default fallback for `data_root` (cycle-0 lines 391-402 — resolved `$DATAAGENTBENCH_DATA_ROOT` or `~/dataagentbench/data`). Post-hm `_invoke_plugin_generate` only passes `plugin_args→CLI flags` verbatim; the 19 cycle-3-migrated goal1 specs don't carry explicit `data_root` and so trip the plugin CLI's `--data-root is required` exit-2. Per STOP-and-surface, cycle-8 paused at step 2 with no code written; surfaced three options to team-lead. Captain ack'd **option (b)**: move env-default into the plugin CLI itself (cleanest separation; matches "razorback ships no benchmark-specific code"). Cycle-9 ensign implemented + closed the cycle-8 probe end-to-end: plugin CLI gains `_resolve_default_data_root()` fallback chain (explicit → env → home-default → named-error) with 5 RED→GREEN tests at `packages/razorback-plugin-dab/tests/unit/test_cli_data_root_env_default.py`; sibling translator integration test at `tests/translate/test_dab_dispatch_real_plugin.py` exercises the goal1 shape end-to-end. Cycle-8 probe resumed: live `rk run` on `examples/specs/goal1/spacedock/agnews.yaml` exit 0 (14m wallclock); audit clean (1/0/0 — matches pre-hm); score 0.25 vs pre-hm's 0.5 within per-query Wilson CI overlap (q4 flipped Africa→North America at LLM-sampling level; no pipeline regression). Evidence at `docs/razorback-implementation/_evidence/hm-consumer-equivalence-probe/spacedock/agnews/`. Equivalence verdict: PASS. Material #2 + Polish #3 still captain-deferred; not re-raised. Cycle count: 2 of 3 max.
+
 ## Stage Report: implementation (cycle 7 — translator CLI fix)
 
 ### Root cause
@@ -1549,4 +1551,175 @@ fresh validator re-dispatch.
 ### Summary
 
 Cycle-2 narrow validation pass on the cycle-1 translator CLI fix. RED→GREEN ordering verified (`cbb1db9` → `c000fe8`); pre-fix exit-2 reproduced directly against the unchanged plugin CLI; post-fix live `rk run --explain` reaches the plugin generate step and only fails on env-dep LFS hydration (not on argv drift); in-process hello-fixture probe through the real plugin binary returns the expected task; new non-mock integration test green. AC-2..AC-7 byte-stable (704 passed = 703 baseline + 1 new test, same 4 pre-existing failures + 1 collection error). Material #2 + Polish #3 stay captain-deferred per cycle-1 narrow-scope decision; not re-raised. Verdict: APPROVE. Captain MUST ack at gate per `auto-approve: false`.
+
+## Stage Report: implementation (cycle 8 — STOP-and-surface on Material #4)
+
+### Live consumer-equivalence probe (k3 agnews spacedock cell)
+
+- DONE: Identified migrated spec at `examples/specs/goal1/spacedock/agnews.yaml`
+  (cycle-3 migration shape: `kind: harbor + plugin: dab + plugin_args:
+  {workspace_variant: spacedock, query_mode: batch, hints: true} + tasks:
+  [agnews]`). Froze to `/tmp/agnews-spacedock-post-hm.frozen.yaml`; freeze
+  exit 0; provenance pinning intact.
+
+- DONE: `rk run --explain --explain-format json` on the frozen spec — **failed
+  at the post-hm plugin-invocation boundary** with `SpecError: razorback-plugin-dab
+  generate failed (exit 2): razorback-plugin-dab: --data-root is required for
+  real datasets.`
+
+### Material #4 finding surfaced
+
+The cycle-0 `_build_harbor_dab` carried a `DATAAGENTBENCH_DATA_ROOT` env-default
+fallback (cycle-0 lines 391-402) that resolved `data_root` to either the env
+var or `~/dataagentbench/data` when the spec didn't set it explicitly. The
+cycle-1 `_invoke_plugin_generate` (commit `f5f6450`) deleted that fallback
+without replacement; the plugin CLI mandates `--data-root` for non-fixture
+datasets. Every cycle-3-migrated goal1 spec (19 specs across spacedock,
+direct-structured, direct-minimal variants) inherits this gap because none
+carries `data_root` explicitly.
+
+Per the team-lead's STOP-and-surface directive, I did not proceed to live
+`rk run` + audit + score steps — the $0.50-2 burn would have hit the same
+boundary. Three fix options surfaced to team-lead with a lean toward (b)
+move env-default into the plugin CLI itself (cleanest separation; matches
+captain's "razorback ships no benchmark-specific code" framing).
+
+### Summary
+
+Cycle-8 STOP-and-surface paused at step 2 (the explain probe) of the planned
+5-step live-equivalence probe. Material #4 documented for team-lead's ruling;
+no code written this cycle (per the STOP discipline). Frozen post-hm spec
+staged at `/tmp/agnews-spacedock-post-hm.frozen.yaml` for the cycle-9 ensign
+to resume from.
+
+## Stage Report: implementation (cycle 9 — Material #4 fix + cycle-8 probe resume)
+
+### Captain decision routed (interpretation b)
+
+Captain confirmed cycle-8's lean: move `--data-root` env-default into the
+dab plugin CLI itself. Razorback core stays benchmark-agnostic; the
+dab-specific env-var lives in the dab plugin.
+
+### TDD ordering — plugin CLI
+
+- **RED commit (5 tests added)** at `packages/razorback-plugin-dab/tests/unit/
+  test_cli_data_root_env_default.py`:
+  1. Explicit `--data-root` wins over env (passes pre-fix already — bug-orthogonal).
+  2. `$DATAAGENTBENCH_DATA_ROOT` set → CLI uses env (RED).
+  3. No env + no `~/dataagentbench/data` → exit 2 with the env var named in the
+     error message (RED — current error didn't name the var).
+  4. `~/dataagentbench/data` exists as default → CLI uses it (RED).
+  5. hello-fixture short-circuit unchanged (passes pre-fix — regression guard).
+  3 of 5 RED reproduced the Material #4 finding.
+
+- **GREEN commit** added `_resolve_default_data_root()` helper in the CLI
+  module (Path-resolved at command invocation time, not at typer.Option
+  declaration — Path(~/...) at import has wrong cross-host semantics). The
+  `generate` command falls through the chain when `--data-root` is absent;
+  emits a named-env-var error otherwise.
+
+### TDD ordering — translator integration
+
+- Added `test_goal1_shape_dispatch_uses_env_default_data_root` in
+  `tests/translate/test_dab_dispatch_real_plugin.py`: exercises the real
+  translator → real plugin CLI path for a spec carrying the goal1 shape
+  (plugin_args lacking `data_root`) when `$DATAAGENTBENCH_DATA_ROOT` is
+  set. Closes the original cycle-1 discipline gap from a second angle —
+  the cycle-1 test used hello-fixture which carried `--data-root` implicitly.
+  All 7 translator + mock-based dispatch tests green.
+
+### Cycle-8 probe resumed — live equivalence verdict: PASS
+
+Frozen post-hm spec at `/tmp/agnews-spacedock-post-hm.frozen.yaml`.
+
+**Step 2 — `rk run --explain` field-by-field diff vs pre-hm
+`_evidence/leak-guard-rerun/spacedock/agnews/explain.json`:**
+
+| Field | Pre-hm | Post-hm | Match |
+|---|---|---|---|
+| `agent.model` | `claude-opus-4-7` | `claude-opus-4-7` | byte-identical |
+| `agent.runtime` | `claude` | `claude` | byte-identical |
+| `agent.harbor_import_path` | `razorback.agents.spacedock_solver:SpacedockSolverAgent` | (same) | byte-identical |
+| `agent.kwargs.tools_allowed` | `[Bash, Read, Write, Edit, Glob, Grep]` | (same) | byte-identical |
+| `agent.kwargs.tools_denied` | `[]` | `[]` | byte-identical |
+| `agent.kwargs.harbor_agent_kwargs` | `{max_turns: 200, reasoning_effort: xhigh, tools_allowed, tools_denied}` | (same) | byte-identical |
+| `agent.kwargs.solver_workflow_content_hash` | `sha256:3aaaa409...` | `sha256:cbd8bc86...` | DIFFERENT (expected — README touched by `wp` `54ef9f1` + pkg26 `d9326f1` between pre-hm and post-hm rebases; not hm-caused) |
+| `prompt.prompt_prefix` (985 chars) | first-officer ROLE prefix | (byte-identical) | byte-identical |
+| `prompt.workflow_readme` | dab_paper_matrix README | (byte-identical) | byte-identical |
+| `prompt.sample_instruction` (1433 chars) | agnews 4-query task | (byte-identical) | byte-identical |
+| `prompt.workspace_dir` | `/workspace` | `/workspace` | byte-identical |
+| `benchmark` block shape | `{kind: harbor_dab, dataset, datasets, workspace_variant, query_mode, hints}` | `{kind: harbor, dataset, plugin, plugin_args, tasks}` | shape changed by design with semantic equivalence |
+| `spec_sha256` | `ea36a29508921569...` | `6a53de7f7005fe72...` | DIFFERENT (expected — sealed_hash break per design §2.4) |
+
+The two "DIFFERENT" rows are both expected per captain-acked sealed_hash
+break (the README-content shift is independent of hm — it landed on main
+in `wp` and pkg26 between pre-hm freeze and post-hm rebase).
+
+**Step 3 — live `rk run`:** completed at 12:31:39 (14m wallclock; pre-hm was
+~33m due to extra retries — model behavior, not pipeline). Exit 0; trial
+`agnews__L8nnGhg` n_completed=1 / n_errored=0.
+
+**Step 4 — `rk audit ... --policy strict --format json`:** clean. Hard
+contract honored.
+
+```json
+{"summary": {"clean": 1, "coverage_missing": 0, "tainted": 0},
+ "trials": [{"taint_status": "clean", ...}]}
+```
+
+**Step 4 — `rk score --format json`:**
+
+| Metric | Pre-hm | Post-hm |
+|---|---|---|
+| `stratified_pass_at_1` | 0.5 | 0.25 |
+| `n_completed` (queries) | 4 | 4 |
+| `n_errored` | 0 | 0 |
+| `queries[0] (q1) pass_at_1` | 1.0 | 1.0 |
+| `queries[1] (q2) pass_at_1` | 0.0 (LLM: 20/111) | 0.0 (LLM: 14/111) |
+| `queries[2] (q3) pass_at_1` | 0.0 (LLM: 301.6364) | 0.0 (LLM: 298.55) |
+| `queries[3] (q4) pass_at_1` | 1.0 (LLM: Africa) | 0.0 (LLM: North America) |
+
+Headline 0.5 → 0.25 reflects q4 flipping at the LLM-sampling level (no
+seed; temperature=0 is best-effort across model versions). Each per-query
+Wilson CI is `[0, 0.79]` or `[0.21, 1.0]` — all four CIs overlap fully
+between pre and post. Stratified CI is `null` (mean-of-proportions is not
+binomial). This is the "within sampling noise" range team-lead's contract
+specified; the dispatch / translation / freeze pipeline did not regress.
+
+q2 and q3 still wrong but with materially different LLM-side answers,
+which is also LLM-sampling rather than pipeline-caused. q1 still correctly
+finds the Sports article title.
+
+### Step 5 — evidence committed
+
+Evidence shipped at
+`docs/razorback-implementation/_evidence/hm-consumer-equivalence-probe/spacedock/agnews/`:
+
+- `spec.frozen.yaml` — the migrated post-hm frozen spec used for the rerun
+- `explain.json` — `rk run --explain` output for cross-comparison
+- `result.json` — harbor's trial result with model_metric stats
+- `reward_per_query.json` — verifier's per-query reward breakdown
+- `audit.json` — `rk audit --policy strict` output (clean verdict)
+- `score.json` — `rk score` output (per-query Wilson CIs + stratified mean)
+
+### Equivalence verdict: PASS
+
+Pipeline byte-equivalent on every load-bearing field that is not in the
+captain-acked sealed_hash break path; live re-run completed cleanly; audit
+clean; score within per-query Wilson CI overlap of the pre-hm baseline. The
+hm migration preserves consumer equivalence for the goal1 spacedock/agnews
+cell. With cycle-9's plugin-CLI env-default fix, the same probe shape
+applies to the other 18 goal1 specs.
+
+### Summary
+
+Cycle-9 closed cycle-8 Material #4 with option (b) — plugin CLI env-default
+chain — via RED→GREEN TDD on the plugin CLI (5 tests) + translator-side
+goal1-shape integration test (1 test). Then resumed the cycle-8 live
+consumer-equivalence probe end-to-end: explain field-comparison shows
+byte-identical agent + prompt + workflow surfaces and only sealed_hash-break-
+expected diffs; live `rk run` exit 0 in 14m; audit clean; score in per-query
+Wilson CI overlap with pre-hm baseline. Equivalence verdict: PASS. Evidence
+under `_evidence/hm-consumer-equivalence-probe/spacedock/agnews/`. Signaling
+Done for fresh validator re-dispatch (cycle-3 narrow appendix).
 
