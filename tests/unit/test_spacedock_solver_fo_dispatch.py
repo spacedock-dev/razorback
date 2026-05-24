@@ -6,6 +6,21 @@ import pytest
 from razorback.agents.spacedock_solver import SpacedockSolverAgent
 
 
+def _plugin_dir(tmp_path):
+    plugin = tmp_path / "spacedock-plugin"
+    for rel in (
+        ".codex-plugin/plugin.json",
+        "skills/first-officer/SKILL.md",
+        "skills/ensign/SKILL.md",
+        "agents/first-officer.md",
+        "agents/ensign.md",
+    ):
+        path = plugin / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("placeholder\n")
+    return plugin
+
+
 def _kw(tmp_path, **overrides):
     workflow = tmp_path / "solver"
     workflow.mkdir(exist_ok=True)
@@ -32,14 +47,33 @@ def _kw(tmp_path, **overrides):
 def test_claude_runtime_builds_inner_with_fo_subagent_and_plugin_dir(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ):
-    monkeypatch.setenv(
-        "RAZORBACK_SPACEDOCK_PLUGIN_DIR", "/Users/clkao/git/spacedock"
-    )
+    plugin = _plugin_dir(tmp_path)
+    monkeypatch.setenv("RAZORBACK_SPACEDOCK_PLUGIN_DIR", str(plugin))
     agent = SpacedockSolverAgent(**_kw(tmp_path))
     inner = agent._build_inner_agent()
     flags = inner.build_cli_flags()
     assert "--agent spacedock:first-officer" in flags
-    assert "--plugin-dir /Users/clkao/git/spacedock" in flags
+    assert f"--plugin-dir {plugin}" in flags
+
+
+def test_codex_runtime_builds_inner_with_multi_agent_and_plugin_dir(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
+    plugin = _plugin_dir(tmp_path)
+    monkeypatch.setenv("RAZORBACK_SPACEDOCK_PLUGIN_DIR", str(plugin))
+    agent = SpacedockSolverAgent(
+        **_kw(
+            tmp_path,
+            runtime="codex",
+            model="gpt-5.5",
+            harbor_agent_kwargs={"reasoning_effort": "xhigh"},
+            extra_env={"OPENAI_API_KEY": "x"},
+        )
+    )
+    inner = agent._build_inner_agent()
+    flags = inner.build_cli_flags()
+    assert "--enable multi_agent" in flags
+    assert inner._spacedock_plugin_dirs == [plugin]
 
 
 def test_claude_runtime_refuses_when_plugin_dir_env_unset(

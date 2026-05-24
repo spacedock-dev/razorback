@@ -1,5 +1,5 @@
 # ABOUTME: SpacedockSolverAgent.run writes subagent-trace-manifest.json at
-# ABOUTME: logs_dir.parents[3] after the inner agent finishes.
+# ABOUTME: logs_dir.parents[1] after the inner runtime writes dispatch JSONL.
 
 import json
 from pathlib import Path
@@ -13,6 +13,12 @@ T0_FIXTURE = """\
 {"type":"system","subtype":"init","tools":["Task","Bash","Agent"]}
 {"type":"assistant","message":{"model":"claude-opus-4-7","id":"msg_1","role":"assistant","content":[{"type":"tool_use","id":"toolu_a","name":"Agent","input":{"subagent_type":"spacedock:ensign","prompt":"do the probe stage"}}]}}
 {"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.26}
+"""
+
+CODEX_FIXTURE = """\
+{"type":"thread.started","thread_id":"thread-parent"}
+{"type":"item.completed","item":{"id":"item_spawn","type":"collab_tool_call","tool":"spawn_agent","prompt":"dispatch_agent_id: spacedock:ensign\\nworker_key: spacedock-ensign\\n","status":"completed"}}
+{"type":"item.started","item":{"id":"item_wait","type":"collab_tool_call","tool":"wait","status":"in_progress"}}
 """
 
 
@@ -37,15 +43,26 @@ class _FakeInnerAgent:
     """Stub stand-in for the inner claude agent. Writes a synthetic
     claude-code.txt during run() to mimic the real inner agent's side effect."""
 
-    def __init__(self, logs_dir: Path, fixture: str):
+    def __init__(
+        self,
+        logs_dir: Path,
+        fixture: str,
+        *,
+        filename: str = "claude-code.txt",
+        raises: BaseException | None = None,
+    ):
         self._logs_dir = logs_dir
         self._fixture = fixture
+        self._filename = filename
+        self._raises = raises
 
     async def setup(self, environment):
         return None
 
     async def run(self, instruction, environment, context):
-        (self._logs_dir / "claude-code.txt").write_text(self._fixture)
+        (self._logs_dir / self._filename).write_text(self._fixture)
+        if self._raises is not None:
+            raise self._raises
 
     async def cleanup(self, environment):
         return None
@@ -87,11 +104,9 @@ async def test_run_writes_manifest_adjacent_to_provenance(
 
 
 @pytest.mark.asyncio
-async def test_run_for_codex_runtime_does_not_write_manifest(
+async def test_run_for_codex_runtime_writes_manifest(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ):
-    """The manifest write is gated to runtime=claude; codex cells must not
-    get a stray manifest (per plan §Risk register)."""
     cell_run_dir = tmp_path / "cell-run"
     logs_dir = cell_run_dir / "trial-001__aaaa1234" / "agent"
     logs_dir.mkdir(parents=True)
@@ -107,8 +122,48 @@ async def test_run_for_codex_runtime_does_not_write_manifest(
     kw["model"] = "gpt-5.1-codex"
     kw["extra_env"] = {"OPENAI_API_KEY": "x"}
     agent = SpacedockSolverAgent(logs_dir=logs_dir, **kw)
-    agent._inner = _FakeInnerAgent(logs_dir, T0_FIXTURE)
+    agent._inner = _FakeInnerAgent(logs_dir, CODEX_FIXTURE, filename="codex.txt")
 
     await agent.run(instruction="probe", environment=None, context=None)
 
-    assert not (cell_run_dir / "subagent-trace-manifest.json").exists()
+    manifest_path = cell_run_dir / "subagent-trace-manifest.json"
+    assert manifest_path.exists()
+    payload = json.loads(manifest_path.read_text())
+    assert payload["captured"] == 1
+    assert payload["capture_source"] == "razorback-codex-cli-trace"
+
+
+@pytest.mark.asyncio
+async def test_run_writes_manifest_when_inner_agent_raises(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
+    cell_run_dir = tmp_path / "cell-run"
+    logs_dir = cell_run_dir / "trial-001__aaaa1234" / "agent"
+    logs_dir.mkdir(parents=True)
+
+    kw = _common_kwargs(tmp_path)
+    kw["runtime"] = "codex"
+    kw["harbor_agent_kwargs"] = {
+        "max_turns": 200,
+        "tools_allowed": [],
+        "tools_denied": [],
+        "reasoning_effort": "high",
+    }
+    kw["model"] = "gpt-5.1-codex"
+    kw["extra_env"] = {"OPENAI_API_KEY": "x"}
+    agent = SpacedockSolverAgent(logs_dir=logs_dir, **kw)
+    agent._inner = _FakeInnerAgent(
+        logs_dir,
+        CODEX_FIXTURE,
+        filename="codex.txt",
+        raises=TimeoutError("inner timed out"),
+    )
+
+    with pytest.raises(TimeoutError, match="inner timed out"):
+        await agent.run(instruction="probe", environment=None, context=None)
+
+    manifest_path = cell_run_dir / "subagent-trace-manifest.json"
+    assert manifest_path.exists()
+    payload = json.loads(manifest_path.read_text())
+    assert payload["captured"] == 1
+    assert payload["dispatches"][0]["subagent_type"] == "spacedock:ensign"

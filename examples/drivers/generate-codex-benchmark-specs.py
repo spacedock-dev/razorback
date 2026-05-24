@@ -18,6 +18,7 @@ from razorback_plugin_dab.datasets import DAB_DATASETS
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SOLVER_WORKFLOW = "./examples/solver_workflows/codex-benchmark-solver"
 CODEX_MODEL = "gpt-5.5"
+DEFAULT_SPACEDOCK_AGENT_TIMEOUT_SEC = 1800
 WORKSPACE_VARIANTS = ("direct-minimal", "direct-structured", "spacedock")
 AGENT_KINDS = ("codex", "spacedock_solver")
 
@@ -76,6 +77,7 @@ def emit_ade_bench_dataset_spec(
     agent_kind: str = "codex",
     solver_workflow: str | None = None,
     docker_image_override: str | None = None,
+    agent_timeout_sec: float | None = None,
 ) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     spec_path = out_dir / f"{_slug_for_filename(row.task_slug)}.yaml"
@@ -97,6 +99,7 @@ def emit_ade_bench_dataset_spec(
         reasoning_effort=reasoning_effort,
         agent_kind=agent_kind,
         solver_workflow=solver_workflow,
+        agent_timeout_sec=agent_timeout_sec,
     )
     _write_yaml(
         spec_path,
@@ -144,6 +147,7 @@ def emit_dab_spec(
     solver_workflow: str | None = None,
     workspace_variant: str = "direct-structured",
     hints: bool = False,
+    agent_timeout_sec: float | None = None,
 ) -> Path:
     if workspace_variant not in WORKSPACE_VARIANTS:
         raise ValueError(f"workspace_variant must be one of {', '.join(WORKSPACE_VARIANTS)}")
@@ -163,6 +167,7 @@ def emit_dab_spec(
         reasoning_effort=reasoning_effort,
         agent_kind=agent_kind or _default_agent_kind_for_workspace(workspace_variant),
         solver_workflow=solver_workflow,
+        agent_timeout_sec=agent_timeout_sec,
     )
     _write_yaml(spec_path, payload, about=f"Codex DAB N=1 cell for dataset={row.dataset}.")
     return spec_path
@@ -176,6 +181,7 @@ def emit_ade_bench_spec(
     reasoning_effort: str | None = None,
     agent_kind: str = "codex",
     solver_workflow: str | None = None,
+    agent_timeout_sec: float | None = None,
 ) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     spec_path = out_dir / f"{_slug_for_filename(row.task_slug)}.yaml"
@@ -193,6 +199,7 @@ def emit_ade_bench_spec(
         reasoning_effort=reasoning_effort,
         agent_kind=agent_kind,
         solver_workflow=solver_workflow,
+        agent_timeout_sec=agent_timeout_sec,
     )
     _write_yaml(spec_path, payload, about=f"Codex ade-bench N=1 cell for task={row.task_slug}.")
     return spec_path
@@ -207,6 +214,7 @@ def _base_spec(
     reasoning_effort: str | None = None,
     agent_kind: str = "codex",
     solver_workflow: str | None = None,
+    agent_timeout_sec: float | None = None,
 ) -> dict:
     if agent_kind not in AGENT_KINDS:
         raise ValueError(f"agent_kind must be one of {', '.join(AGENT_KINDS)}")
@@ -228,6 +236,12 @@ def _base_spec(
             "tools_allowed": [],
             "tools_denied": [],
         }
+    effective_timeout_sec = agent_timeout_sec
+    if agent_kind == "spacedock_solver" and effective_timeout_sec is None:
+        effective_timeout_sec = DEFAULT_SPACEDOCK_AGENT_TIMEOUT_SEC
+    if effective_timeout_sec is not None:
+        agent["override_timeout_sec"] = effective_timeout_sec
+        agent["max_timeout_sec"] = effective_timeout_sec
     if reasoning_effort is not None:
         agent["reasoning_effort"] = reasoning_effort
     return {
@@ -356,6 +370,16 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--agent-timeout-sec",
+        type=float,
+        default=None,
+        help=(
+            "Agent execution timeout to emit under the agent block. "
+            f"Defaults to {DEFAULT_SPACEDOCK_AGENT_TIMEOUT_SEC}s for "
+            "spacedock_solver specs and unset for direct codex specs."
+        ),
+    )
+    parser.add_argument(
         "--workspace-variant",
         choices=WORKSPACE_VARIANTS,
         default="direct-structured",
@@ -387,6 +411,7 @@ def main() -> int:
                         solver_workflow=args.solver_workflow,
                         workspace_variant=args.workspace_variant,
                         hints=args.hints,
+                        agent_timeout_sec=args.agent_timeout_sec,
                     )
                 )
     else:
@@ -420,6 +445,7 @@ def main() -> int:
                             agent_kind=args.agent_kind or "codex",
                             solver_workflow=args.solver_workflow,
                             docker_image_override=args.ade_docker_image_override,
+                            agent_timeout_sec=args.agent_timeout_sec,
                         )
                     )
         else:
@@ -441,6 +467,7 @@ def main() -> int:
                             reasoning_effort=args.reasoning_effort,
                             agent_kind=args.agent_kind or "codex",
                             solver_workflow=args.solver_workflow,
+                            agent_timeout_sec=args.agent_timeout_sec,
                         )
                     )
 

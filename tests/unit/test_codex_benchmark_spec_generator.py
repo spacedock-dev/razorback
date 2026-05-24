@@ -132,6 +132,10 @@ def test_emit_specs_allow_spacedock_solver_workflow_selection(tmp_path: Path) ->
         ade_payload["agent"]["solver_workflow"]
         == "./examples/solver_workflows/codex-ade-dbt-repair"
     )
+    assert dab_payload["agent"]["override_timeout_sec"] == 1800
+    assert dab_payload["agent"]["max_timeout_sec"] == 1800
+    assert ade_payload["agent"]["override_timeout_sec"] == 1800
+    assert ade_payload["agent"]["max_timeout_sec"] == 1800
 
 
 def test_checked_in_dab_smoke_spec_uses_direct_codex_minimal_without_hints() -> None:
@@ -424,6 +428,8 @@ def test_emit_dab_codex_spec_allows_workspace_and_hints_variants(tmp_path: Path)
     assert payload["benchmark"]["workspace_variant"] == "spacedock"
     assert payload["benchmark"]["hints"] is True
     assert payload["agent"]["kind"] == "spacedock_solver"
+    assert payload["agent"]["override_timeout_sec"] == 1800
+    assert payload["agent"]["max_timeout_sec"] == 1800
 
 
 def test_plan_ade_bench_dataset_specs_emits_one_row_per_slug() -> None:
@@ -471,6 +477,30 @@ def test_emit_ade_bench_dataset_codex_spec_uses_dataset_field(tmp_path: Path) ->
     assert payload["benchmark"]["tasks"] == ["airbnb001"]
     assert payload["benchmark"]["docker_image_override"] == "shared-dbt-duckdb:latest"
     assert "tasks_root" not in payload["benchmark"]
+
+
+def test_emit_ade_bench_dataset_spacedock_spec_allows_timeout_override(
+    tmp_path: Path,
+) -> None:
+    generator = _load_generator()
+    row = generator.AdeBenchDatasetSpecRow(
+        task_slug="airbnb001",
+        dataset_ref="dbt-labs/ade-bench@latest",
+        trials=1,
+    )
+
+    spec_path = generator.emit_ade_bench_dataset_spec(
+        row,
+        out_dir=tmp_path / "out",
+        agent_kind="spacedock_solver",
+        solver_workflow="./examples/solver_workflows/codex-ade-dbt-minimal",
+        agent_timeout_sec=2400,
+    )
+    payload = yaml.safe_load(spec_path.read_text())
+
+    assert payload["agent"]["kind"] == "spacedock_solver"
+    assert payload["agent"]["override_timeout_sec"] == 2400
+    assert payload["agent"]["max_timeout_sec"] == 2400
 
 
 def test_cli_dataset_ref_emits_canonical_ade_spec(tmp_path: Path, monkeypatch) -> None:

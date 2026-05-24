@@ -1,5 +1,5 @@
-# ABOUTME: Per-cell subagent trace-manifest writer. Parses claude-code.txt JSONL,
-# ABOUTME: counts Task/Agent tool_use events, emits subagent-trace-manifest.json.
+# ABOUTME: Per-cell subagent trace-manifest writer. Parses runtime JSONL logs,
+# ABOUTME: counts dispatch events, emits subagent-trace-manifest.json.
 
 from __future__ import annotations
 
@@ -10,23 +10,33 @@ from typing import Any
 
 
 SCHEMA_VERSION = "razorback-subagent-traces-v1"
-CAPTURE_SOURCE = "razorback-claude-cli-trace"
+CLAUDE_CAPTURE_SOURCE = "razorback-claude-cli-trace"
+CODEX_CAPTURE_SOURCE = "razorback-codex-cli-trace"
 
 # Claude CLI 2.1.148 emits the dispatch primitive as `Agent` on the wire even
 # when session-init advertises it as `Task`. Older CLIs emit `Task`. Count both.
 _DISPATCH_NAMES = ("Task", "Agent")
+_CODEX_DISPATCH_TOOLS = ("spawn_agent", "spawn")
 
 
-def _find_claude_code_txt(cell_dir: Path) -> Path:
+def _find_runtime_log(cell_dir: Path) -> tuple[Path, str]:
     direct = cell_dir / "steps" / "main" / "agent" / "claude-code.txt"
     if direct.is_file():
-        return direct
+        return direct, "claude"
     matches = list(cell_dir.rglob("claude-code.txt"))
-    if not matches:
-        raise FileNotFoundError(
-            f"no claude-code.txt under {cell_dir}; cannot write trace manifest"
-        )
-    return matches[0]
+    if matches:
+        return matches[0], "claude"
+
+    direct = cell_dir / "steps" / "main" / "agent" / "codex.txt"
+    if direct.is_file():
+        return direct, "codex"
+    matches = list(cell_dir.rglob("codex.txt"))
+    if matches:
+        return matches[0], "codex"
+
+    raise FileNotFoundError(
+        f"no claude-code.txt or codex.txt under {cell_dir}; cannot write trace manifest"
+    )
 
 
 def _parse_events(path: Path):
@@ -83,23 +93,96 @@ def _extract_dispatches(events: list[dict]) -> list[dict[str, Any]]:
     return dispatches
 
 
+def _prompt_field(prompt: str, field: str) -> str | None:
+    prefix = f"{field}:"
+    for raw_line in prompt.splitlines():
+        line = raw_line.strip()
+        if line.startswith(prefix):
+            return line.split(":", 1)[1].strip()
+    return None
+
+
+def _codex_dispatch_type(item: dict[str, Any], prompt: str) -> str:
+    for key in ("subagent_type", "agent_type", "dispatch_agent_id"):
+        value = item.get(key)
+        if isinstance(value, str) and value:
+            return value
+    nested = item.get("input")
+    if isinstance(nested, dict):
+        for key in ("subagent_type", "agent_type", "dispatch_agent_id"):
+            value = nested.get(key)
+            if isinstance(value, str) and value:
+                return value
+    parsed = _prompt_field(prompt, "dispatch_agent_id")
+    if parsed:
+        return parsed
+    if "spacedock:ensign" in prompt:
+        return "spacedock:ensign"
+    return ""
+
+
+def _extract_codex_dispatches(events: list[dict]) -> list[dict[str, Any]]:
+    dispatches: list[dict[str, Any]] = []
+    for ev in events:
+        if ev.get("type") != "item.completed":
+            continue
+        item = ev.get("item")
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") != "collab_tool_call":
+            continue
+        if item.get("tool") not in _CODEX_DISPATCH_TOOLS:
+            continue
+        prompt = item.get("prompt") or ""
+        if not isinstance(prompt, str):
+            prompt = ""
+        prompt_sha256 = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+        dispatches.append(
+            {
+                "tool_use_id": item.get("id") or "",
+                "subagent_type": _codex_dispatch_type(item, prompt),
+                "prompt_sha256": prompt_sha256,
+                "spawn_index": len(dispatches),
+            }
+        )
+    return dispatches
+
+
+def _extract_codex_parent_model(events: list[dict]) -> str | None:
+    for ev in events:
+        if ev.get("type") != "turn_context":
+            continue
+        payload = ev.get("payload") or {}
+        model = payload.get("model")
+        if isinstance(model, str) and model:
+            return model
+    return None
+
+
 def write_subagent_trace_manifest(cell_dir: Path) -> dict[str, Any]:
-    """Parse the cell's claude-code.txt and write subagent-trace-manifest.json.
+    """Parse the cell's runtime JSONL and write subagent-trace-manifest.json.
 
     Returns the in-memory manifest dict. Raises FileNotFoundError when no
-    claude-code.txt is present under cell_dir.
+    supported runtime JSONL is present under cell_dir.
     """
     cell_dir = Path(cell_dir)
-    txt_path = _find_claude_code_txt(cell_dir)
+    txt_path, runtime = _find_runtime_log(cell_dir)
     events = list(_parse_events(txt_path))
-    dispatches = _extract_dispatches(events)
+    if runtime == "claude":
+        dispatches = _extract_dispatches(events)
+        parent_model = _extract_parent_model(events)
+        capture_source = CLAUDE_CAPTURE_SOURCE
+    else:
+        dispatches = _extract_codex_dispatches(events)
+        parent_model = _extract_codex_parent_model(events)
+        capture_source = CODEX_CAPTURE_SOURCE
     manifest = {
         "schema_version": SCHEMA_VERSION,
         "expected": None,
         "captured": len(dispatches),
         "dispatches": dispatches,
-        "parent_agent": {"model": _extract_parent_model(events)},
-        "capture_source": CAPTURE_SOURCE,
+        "parent_agent": {"model": parent_model},
+        "capture_source": capture_source,
     }
     out_path = cell_dir / "subagent-trace-manifest.json"
     out_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
