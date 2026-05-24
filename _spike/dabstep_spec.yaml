@@ -1,0 +1,31 @@
+version: 1
+experiment: dabstep-spike
+
+provenance:
+  pin_model_version: false
+  pin_image_digest: false
+  pin_agent_cli_hash: false
+  pin_prompt_content: false
+
+agent:
+  kind: spacedock_solver
+  runtime: claude
+  model: claude-haiku-4-5
+  sampling:
+    temperature: 0.0
+  solver_workflow: ./solvers/dab-baseline-v3/
+  max_turns: 8
+  max_budget_usd: 1
+  tools_allowed: []
+
+benchmark:
+  kind: harbor
+  dataset: adyen/dabstep@latest
+  tasks: ["35"]
+
+environment:
+  kind: docker
+
+trials: 1
+concurrency:
+  trials: 1

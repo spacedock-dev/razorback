@@ -16,13 +16,15 @@ agent:
   - Grep
   reasoning_effort: xhigh
 benchmark:
-  kind: harbor_dab
+  kind: harbor
   dataset: dab@1.0
-  datasets:
+  plugin: dab
+  plugin_args:
+    workspace_variant: direct-minimal
+    query_mode: batch
+    hints: true
+  tasks:
   - music_brainz_20k
-  workspace_variant: direct-minimal
-  hints: true
-  query_mode: batch
 trials: 1
 experiment_meta:
   max_budget_usd: 20.0

@@ -4,7 +4,6 @@
 import asyncio
 import json
 import os
-import shlex
 from pathlib import Path
 from typing import Any, Literal
 
@@ -12,7 +11,6 @@ from harbor.agents.base import BaseAgent
 from harbor.environments.base import BaseEnvironment
 
 from razorback.agents.seal import compute_sealed_hash, prompt_sha256  # noqa: F401
-from razorback.benchmarks.ade_bench.preflight import preflight_script_text
 from razorback.errors import RazorbackError, SeedMismatchError
 from razorback.freeze_dir_default import resolve_default_freeze_dir
 
@@ -466,23 +464,25 @@ class SpacedockSolverAgent(BaseAgent):
 
         self._freeze_checkpointing_ready = True
         await self._commit_stage(environment, CHECKPOINT_SETUP_READY)
-        await self._run_ade_workspace_preflight(environment)
+        await self._run_workspace_preflight(environment)
 
         if self._inner is None:
             self._inner = self._build_inner_agent()
         await self._inner.setup(environment)
 
-    async def _run_ade_workspace_preflight(self, environment: BaseEnvironment) -> None:
-        if self._benchmark_kind != "ade-bench" or not self._benchmark_task_id:
-            return
+    async def _run_workspace_preflight(self, environment: BaseEnvironment) -> None:
+        """Generic preflight: exec /workspace/preflight.sh if present.
 
-        delimiter = "RAZORBACK_ADE_PREFLIGHT_PY"
+        Filesystem convention, not benchmark-name conditional. Plugins that
+        need pre-agent task validation drop an executable
+        `/workspace/preflight.sh` into the materialized task view; the solver
+        execs it once per task with a 120s budget. Absence is a no-op.
+        """
         command = (
-            f"cat >/tmp/razorback_ade_preflight.py <<'{delimiter}'\n"
-            f"{preflight_script_text()}\n"
-            f"{delimiter}\n"
-            "python /tmp/razorback_ade_preflight.py "
-            f"--task-id {shlex.quote(self._benchmark_task_id)} --workspace /app"
+            "if [ -x /workspace/preflight.sh ]; then "
+            "/workspace/preflight.sh; "
+            "else exit 0; "
+            "fi"
         )
         result = await environment.exec(command, timeout_sec=120)
         if result.return_code == 0:
@@ -497,8 +497,8 @@ class SpacedockSolverAgent(BaseAgent):
             if part and part.strip()
         )
         raise SpacedockSolverAgentError(
-            "ADE workspace preflight failed before codex exec/agent runtime "
-            f"for task {self._benchmark_task_id}: {output}"
+            "workspace preflight (/workspace/preflight.sh) failed "
+            f"before agent runtime: {output}"
         )
 
     async def run(self, instruction, environment, context):

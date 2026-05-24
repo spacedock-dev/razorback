@@ -10,14 +10,17 @@ agent:
     top_p: null
     seed: null
 benchmark:
-  kind: harbor_dab
-  data_root: /path/to/dataagentbench/data
-  datasets:
-    - bookreview
-  workspace_variant: direct-minimal
-  hints: false
+  kind: harbor
+  dataset: dab@1.0
+  plugin: dab
+  plugin_args:
+    workspace_variant: direct-minimal
+    hints: false
+    data_root: /path/to/dataagentbench/data
+  tasks:
+  - bookreview
 trials: 1
 observers:
-  - kind: jsonl
-    path: events.jsonl
-  - kind: stdout
+- kind: jsonl
+  path: events.jsonl
+- kind: stdout

@@ -2,38 +2,36 @@
 # ABOUTME: kind: harbor_dab + dataset: dab@1.0 (see goal1-paper-matrix specs).
 version: 1
 experiment: m5-dab-dev-claude
-
 agent:
   kind: claude-cli
   model: claude-opus-4-5
   sampling:
     temperature: 0.0
   tools_allowed: []
-
 benchmark:
-  kind: harbor_dab
-  data_root: "${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}"
-  datasets:
-    - agnews
-    - bookreview
-    - crmarenapro
-    - DEPS_DEV_V1
-    - GITHUB_REPOS
-    - googlelocal
-    - music_brainz_20k
-    - PANCANCER_ATLAS
-    - PATENTS
-    - stockindex
-    - stockmarket
-    - yelp
-
+  kind: harbor
+  dataset: dab@1.0
+  plugin: dab
+  plugin_args:
+    data_root: ${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}
+  tasks:
+  - agnews
+  - bookreview
+  - crmarenapro
+  - DEPS_DEV_V1
+  - GITHUB_REPOS
+  - googlelocal
+  - music_brainz_20k
+  - PANCANCER_ATLAS
+  - PATENTS
+  - stockindex
+  - stockmarket
+  - yelp
 trials: 1
-
 observers:
-  - kind: jsonl
-    path: events.jsonl
-  - kind: stdout
-
+- kind: jsonl
+  path: events.jsonl
+- kind: stdout
 provenance:
   pin_model_version: true
   pin_image_digest: true

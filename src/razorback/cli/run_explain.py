@@ -152,18 +152,21 @@ def _preparation_plan(spec, job_config, *, run_dir: Path, job_config_yaml: Path)
         "Translate Razorback spec to Harbor JobConfig.",
     ]
     benchmark_kind = getattr(spec.benchmark, "kind", None)
-    if benchmark_kind == "ade-bench":
+    plugin = getattr(spec.benchmark, "plugin", None)
+    if benchmark_kind == "harbor" and plugin:
         steps.append(
-            "Resolve/materialize ADE Harbor task views, including environment, "
-            "tests, instruction.md, and view_manifest.json."
+            f"Invoke razorback-plugin-{plugin} generate to materialize Harbor task "
+            "directories from the typed plugin_args."
         )
-    elif benchmark_kind == "harbor_dab":
+    elif benchmark_kind == "harbor":
         steps.append(
-            "Invoke razorback-plugin-dab generate to materialize Harbor task "
-            "directories for the requested datasets/query mode."
+            "Resolve harbor dataset ref via PackageDatasetClient and apply "
+            "spec-side selectors (tasks / exclude_tasks / n_tasks)."
         )
-    elif benchmark_kind == "spider2-dbt":
-        steps.append("Materialize Spider2-DBT Harbor task views.")
+    elif benchmark_kind == "harbor-local":
+        steps.append(
+            "Read local Harbor-shaped task directories from `tasks_root`."
+        )
     else:
         steps.append("Use local task paths directly.")
 

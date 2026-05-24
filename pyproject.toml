@@ -22,6 +22,10 @@ dependencies = [
 [project.scripts]
 rk = "razorback.cli:app"
 
+[project.entry-points."razorback.plugin_args"]
+ade-bench = "razorback.benchmarks.ade_bench.plugin_args:AdeBenchPluginArgs"
+spider2 = "razorback.benchmarks.spider2_dbt.plugin_args:Spider2PluginArgs"
+
 [dependency-groups]
 dev = [
     "pytest>=8.0",

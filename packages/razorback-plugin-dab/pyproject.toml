@@ -17,6 +17,9 @@ dependencies = [
 [project.scripts]
 razorback-plugin-dab = "razorback_plugin_dab.cli:app"
 
+[project.entry-points."razorback.plugin_args"]
+dab = "razorback_plugin_dab.plugin_args:DabPluginArgs"
+
 [dependency-groups]
 dev = [
     "pytest>=8.0",

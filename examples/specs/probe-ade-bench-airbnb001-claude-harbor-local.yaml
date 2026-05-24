@@ -21,11 +21,10 @@ agent:
     - Glob
     - Grep
 benchmark:
-  kind: ade-bench
+  kind: harbor-local
   tasks_root: ./tests/fixtures/ade_bench/tasks
   tasks:
     - adebench-fixture-001
-  batch_mode: per-task
 trials: 1
 concurrency:
   trials: 1

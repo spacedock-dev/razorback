@@ -57,7 +57,13 @@ goal-1 and goal-2 reproductions land.
   layer does the work.
 - Razorback is not a benchmark library. Benchmarks live in harbor's
   catalog as adapters publishable via `harbor publish`. Razorback
-  ships no benchmark adapters.
+  ships **one** benchmark block (`kind: harbor`) for registry-resolved
+  datasets plus one local escape (`kind: harbor-local`) for Harbor-shaped
+  local task directories and one raw-task escape (`kind: local`) for
+  pre-Harbor dev fixtures. Per-benchmark Pydantic classes are
+  deliberately not a razorback surface; benchmarks that need
+  razorback-side task materialization (currently only DAB) register a
+  typed `plugin:` entry-point on `kind: harbor`.
 - Razorback is not a workflow engine. Spacedock is. Razorback ships
   workflow README templates; the workflow semantics belong to
   spacedock.
@@ -187,6 +193,7 @@ Surface that ships first (sufficient for one-sided reproduction
 runs and establishing measurements):
 
 ```
+rk research new <slug> --from <dataset-ref> [options]
 rk run <frozen-spec.yaml> [--runs-dir <dir>] [--ordering-hints <prior-run-dir>]
 rk freeze <spec.yaml>
 rk score <run-dir> [--format markdown|json] [--alpha 0.05]
@@ -196,6 +203,15 @@ rk runs list [--root <dir>] [--experiment <name>]
 rk runs show <run-dir>
 rk runs cost <root>
 ```
+
+`rk score` reads `<run-dir>/audit.json` if present and surfaces a
+top-level `taint_status: {clean, tainted, coverage_missing}` field on
+its JSON output so the scaffold's matrix dispatcher can refuse to
+ship a verdict that silently dropped a tainted trial. When the frozen
+spec carries `experiment_meta.paper_baseline`, `rk score` auto-applies
+it as `--against-constant` without an explicit CLI flag; the verdict
+block records `source: "spec.frontmatter"` (or `"cli"` on explicit
+override) for transparency.
 
 **`rk run --ordering-hints <prior-run-dir>`** reads per-task elapsed
 wallclock from a prior run's artifacts and dispatches longest-known
@@ -540,6 +556,32 @@ Razorback ships two workflow README templates under
 them per (research project, benchmark) by copying the template and
 filling in project-specific fields.
 
+### 5.0 `rk research new` — scaffold a per-benchmark research repo
+
+`rk research new <slug> --from <dataset-ref>` writes a complete
+per-benchmark research scaffold under `~/<slug>-research/` (override
+with `--into`). The scaffold tree at `docs/templates/research-project/`
+seeds:
+
+- `specs/baseline.yaml.j2` — the baseline frozen spec template with
+  `kind: harbor` + `dataset: <dataset-ref>` filled, plus the
+  `agent.append_system_prompt` ROLE-prefix TODO marker.
+- `solver_workflows/baseline/README.md.j2` — the load-bearing
+  spacedock workflow README the `spacedock_solver` agent reads via
+  `_compose_run_instruction`. Required sections: `## Stages`,
+  `## Reset declaration`, `## External-oracle audit`, optional
+  `## ROLE prefix`.
+- `drivers/matrix.sh.tmpl` — per-cell pipeline modeled on
+  `examples/drivers/dab-paper-matrix.sh` with smoke-gate +
+  audit-strict + score-against-paper-baseline non-removable steps.
+- `razorback-research.toml.j2`, `hypotheses/README.md`,
+  top-level `README.md.j2`.
+
+Benchmark defaults (max_turns, max_budget_usd, reasoning_effort,
+paper_baseline name+value) come from
+`docs/templates/benchmark-defaults.toml`; benchmarks not in the table
+get conservative defaults plus TODO markers.
+
 ### 5.1 Experiment workflow
 
 **Purpose.** Owns one hypothesis's full lifecycle: propose a solver
@@ -701,6 +743,23 @@ v2) records `dataset_ref`, `dataset_content_hash` (dataset-level
 sha256), and per-task `task_content_hash` so frozen specs pin both
 layers of identity.
 
+**Generic Harbor surface (`kind: harbor`).** Any harbor-published
+dataset is addressable through a single generic block: `kind: harbor`
++ `dataset: <org>/<name>@<ref>` + optional task selectors (`tasks`,
+`exclude_tasks`, `n_tasks` — matching harbor's `-i` / `-x` / `-l`
+flags) + optional typed `plugin:` + `plugin_args:` escape for
+benchmarks that require razorback-side task materialization
+(currently DAB, via the `razorback-plugin-dab` subprocess; the typed
+args are discovered via the `razorback.plugin_args` entry-point
+group). The per-benchmark blocks `harbor_dab`, `ade-bench`, and
+`spider2-dbt` are retired; `kind: harbor` (or `kind: harbor-local`
+for local Harbor-shaped directories) is the canonical path. New
+harbor-published benchmarks (dabstep, swe-bench-verified,
+terminal-bench-2, lawbench, replicationbench, medagentbench,
+swe-bench-pro, ...) cost zero razorback code per addition. See
+[`2026-05-23-generic-harbor-benchmark-surface.md`](./2026-05-23-generic-harbor-benchmark-surface.md)
+for the migration shape and plugin-args entry-point contract.
+
 ```yaml
 version: 1
 experiment: dab-paper-reproduction
@@ -728,10 +787,14 @@ agent:
 benchmark:
   # Three ref tiers: tag (@latest), revision (@1), digest (@sha256:...).
   # Use digest for paper-grade reproducibility (resolver refuses content drift).
-  kind: harbor_dab
-  dataset: dab@1.0
-  datasets: [bookreview, agnews, crmarenapro]  # subset selector over dataset def
-  query_mode: per-query                          # behavior-side, orthogonal to dataset identity
+  kind: harbor
+  dataset: dab@1.0                               # plugin-resolved short ref
+  plugin: dab                                    # typed plugin_args follow
+  plugin_args:
+    workspace_variant: spacedock
+    query_mode: per-query                        # behavior-side, orthogonal to dataset identity
+    hints: false
+  tasks: [bookreview, agnews, crmarenapro]       # subset selector matches harbor -i
 
 environment:
   # passes through to harbor's environment config
@@ -849,6 +912,8 @@ Verified by `tests/integration/test_worktree_teardown_preserves_runs.py`.
 ├── manifest.json                 # razorback writes post-harbor
 ├── per_trial_outcomes.json       # razorback writes post-harbor
 ├── events.jsonl                  # razorback concatenates from per-trial event streams
+├── audit.json                    # razorback writes via `rk audit`; baseline-required for autoresearch loop
+├── subagent-trace-manifest.json  # razorback writes per-trial when agent.kind == spacedock_solver
 └── _razorback/                   # razorback's sibling subtree under the run-dir; harbor never touches
     └── task_views/<view-id>/     # generic task-view materializer output
         ├── view_manifest.json    # schema v2: dataset_ref + dataset_content_hash + task_content_hash

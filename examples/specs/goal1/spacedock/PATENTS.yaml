@@ -22,13 +22,15 @@ agent:
   tools_denied: []
   reasoning_effort: xhigh
 benchmark:
-  kind: harbor_dab
+  kind: harbor
   dataset: dab@1.0
-  datasets:
+  plugin: dab
+  plugin_args:
+    workspace_variant: spacedock
+    query_mode: batch
+    hints: true
+  tasks:
   - PATENTS
-  workspace_variant: spacedock
-  hints: true
-  query_mode: batch
 trials: 1
 experiment_meta:
   max_budget_usd: 20.0

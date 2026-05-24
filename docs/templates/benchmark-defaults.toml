@@ -1,0 +1,16 @@
+# ABOUTME: Per-benchmark defaults the `rk research new` scaffold reads.
+# ABOUTME: TOML keys are <org>.<short_name> ; entries unknown to the scaffold get conservative defaults plus a TODO marker.
+
+[adyen.dabstep]
+max_turns = 16
+max_budget_usd = 2
+reasoning_effort = "default"
+paper_baseline_name = "paper"
+paper_baseline_value = 0.476
+
+[swe-bench.swe-bench-verified]
+max_turns = 40
+max_budget_usd = 12
+reasoning_effort = "xhigh"
+paper_baseline_name = "paper"
+paper_baseline_value = 0.563

@@ -1,0 +1,70 @@
+version: 1
+experiment: goal1-spacedock-agnews
+agent:
+  kind: spacedock_solver
+  runtime: claude
+  model: claude-opus-4-7
+  sampling:
+    temperature: 0.0
+    top_p: null
+    seed: null
+  solver_workflow: examples/solver_workflows/dab_paper_matrix
+  solver_workflow_content_hash: sha256:cbd8bc8638b85ea79405d6ece411a547e05d5eab6160acc09265bdb38e057eeb
+  max_turns: 200
+  max_budget_usd: null
+  override_timeout_sec: null
+  override_setup_timeout_sec: null
+  max_timeout_sec: null
+  tools_allowed:
+  - Bash
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  tools_denied: []
+  append_system_prompt: null
+  reasoning_effort: xhigh
+  reasoning_summary: null
+  resume_from_freeze: null
+  sealed_hash: 17289310dd252039156efa72dec49b7b
+  spacedock_skill_version: 1.0.0
+  prompt_content_hashes: {}
+benchmark:
+  kind: harbor
+  dataset: dab@1.0
+  tasks:
+  - agnews
+  exclude_tasks: null
+  n_tasks: null
+  plugin: dab
+  plugin_args:
+    workspace_variant: spacedock
+    query_mode: batch
+    hints: true
+trials: 1
+concurrency:
+  trials: 1
+observers:
+- kind: jsonl
+  path: events.jsonl
+- kind: stdout
+  path: null
+provenance:
+  pin_model_version: true
+  pin_image_digest: true
+  pin_agent_cli_hash: true
+  pin_git_sha: true
+  model_resolved_version: null
+  model_resolved_at: null
+  image_digest: sha256:d29dec396ea6651ca4a622e87e5e9607819e8e894868daa733818e534af961cc
+  agent_cli_hash: sha256:f4a1860d3d9b01653dde4183e2f1216ca9e0c1a404dd63caa4edf07c904102aa
+  harness_git_sha: a4483ab5ae42c8a411d2078584c1a7d0d083e16b
+  harbor_version: 0.6.6
+  prompt_file_hashes: {}
+  plugins: []
+  solver_workflow_hash: sha256:cbd8bc8638b85ea79405d6ece411a547e05d5eab6160acc09265bdb38e057eeb
+experiment_meta:
+  max_budget_usd: 20.0
+  estimated_cost_usd: 2.0
+  paper_baseline: null

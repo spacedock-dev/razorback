@@ -21,6 +21,29 @@ WORKSPACE_VARIANTS = ("direct-minimal", "direct-structured", "spacedock")
 QUERY_MODES = ("batch", "per-query")
 
 
+def _resolve_default_data_root() -> Path | None:
+    """Resolve a default DAB data root when `--data-root` is absent on CLI.
+
+    Resolution chain (returns the first hit):
+      1. `$DATAAGENTBENCH_DATA_ROOT` if set + non-empty → that path.
+      2. `~/dataagentbench/data` if it exists as a directory → that path.
+      3. None — caller must surface a named-env-var error to the operator.
+
+    Evaluated at command invocation time (not at typer.Option declaration
+    time) so the resolution stays per-process and respects $HOME overrides
+    in test environments.
+    """
+    import os
+
+    env_value = os.environ.get("DATAAGENTBENCH_DATA_ROOT")
+    if env_value:
+        return Path(env_value).expanduser()
+    home_default = Path("~/dataagentbench/data").expanduser()
+    if home_default.is_dir():
+        return home_default
+    return None
+
+
 @app.command()
 def generate(
     datasets: str = typer.Option(
@@ -90,8 +113,15 @@ def generate(
         return
 
     if data_root is None:
-        typer.echo("razorback-plugin-dab: --data-root is required for real datasets.", err=True)
-        raise typer.Exit(code=2)
+        data_root = _resolve_default_data_root()
+        if data_root is None:
+            typer.echo(
+                "razorback-plugin-dab: --data-root is required. Pass --data-root "
+                "or set $DATAAGENTBENCH_DATA_ROOT to the DAB data directory "
+                "(or ensure ~/dataagentbench/data exists).",
+                err=True,
+            )
+            raise typer.Exit(code=2)
 
     known = {d.name for d in catalog.DAB_DATASETS}
     unknown = [d for d in requested if d not in known]

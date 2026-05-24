@@ -45,3 +45,7 @@ app.command("score")(score_command)
 from razorback.provenance.freeze_cmd import freeze_command
 
 app.command("freeze")(freeze_command)
+
+from razorback.cli.research import research_app
+
+app.add_typer(research_app, name="research")
