@@ -59,3 +59,56 @@ def test_real_plugin_dispatch_emits_hello_fixture(tmp_path: Path) -> None:
     assert (emitted / "task.toml").is_file()
     assert (emitted / "instruction.md").is_file()
     assert (emitted / "tests" / "test.sh").is_file()
+
+
+def _goal1_shape_spec_text() -> str:
+    """Mirrors the goal1 spec shape exactly: plugin_args carries the three
+    behavioral knobs (workspace_variant/query_mode/hints) but NOT data_root.
+    The plugin CLI's env-default fallback must satisfy data_root from
+    DATAAGENTBENCH_DATA_ROOT."""
+    return """\
+version: 1
+experiment: cycle9-goal1-shape-env-default
+agent:
+  kind: nop
+benchmark:
+  kind: harbor
+  dataset: dab@1.0
+  plugin: dab
+  plugin_args:
+    workspace_variant: spacedock
+    query_mode: batch
+    hints: true
+  tasks: [hello-fixture]
+trials: 1
+"""
+
+
+def test_goal1_shape_dispatch_uses_env_default_data_root(tmp_path: Path, monkeypatch) -> None:
+    """Cycle-9 cycle-8-Material-#4 fix verifier.
+
+    A spec carrying the goal1 shape (plugin_args without `data_root`)
+    must succeed when `$DATAAGENTBENCH_DATA_ROOT` is set. This exercises
+    the plugin CLI's env-default fallback through the real translator +
+    real plugin binary (no subprocess mock).
+
+    Uses `hello-fixture` for the dataset so the test stays env-free at
+    the data-content level — but exercises the data_root resolution path
+    because plugin_args lacks an explicit value, so the translator emits
+    no `--data-root` flag and the plugin CLI must resolve via env.
+    """
+    # Even though hello-fixture short-circuits before the data-root gate,
+    # set the env so the test would still pass with a real dataset.
+    monkeypatch.setenv("DATAAGENTBENCH_DATA_ROOT", str(tmp_path / "fake-data"))
+    (tmp_path / "fake-data").mkdir()
+
+    spec = parse_spec_text(_goal1_shape_spec_text())
+    tasks_root = tmp_path / "tasks"
+    job_cfg, _ = spec_to_job_config(
+        spec,
+        job_name="cycle9-goal1-shape-env-default",
+        jobs_dir=tmp_path / "jobs",
+        tasks_root=tasks_root,
+    )
+    assert len(job_cfg.tasks) == 1
+    assert (job_cfg.tasks[0].path / "task.toml").is_file()
