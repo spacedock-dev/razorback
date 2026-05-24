@@ -69,3 +69,31 @@ Changing score semantics or relaunching the full ADE/DAB score run.
 ### Summary
 
 Created a separate standard plan document for the four-AC task. The plan moves the dispatch manifest target from the job root to each trial directory, adds strict-audit trial coverage discovery from run `manifest.json`, preserves legacy single-trial readability, and leaves scoring behavior untouched.
+
+## Stage Report: implementation
+
+- DONE: Per-trial Spacedock dispatch manifests and writer metadata are implemented with tests.
+  `cee0990` updates `subagent_traces.py` and `spacedock_solver.py`; writer subset passed `9 passed`.
+- DONE: Smoke/audit coverage handles per-trial, missing-trial, and legacy single-trial layouts.
+  `9104b70` covers smoke validation and `d9d4be2` covers strict audit; acceptance subset passed `34 passed`.
+- DONE: Score semantics and full ADE/DAB relaunch behavior remain untouched.
+  No score reducer or full-run driver changes; score-adjacent guard passed `13 passed`.
+
+### Summary
+
+Implemented trial-scoped Spacedock dispatch manifests with additive `trial`, `prompt_mode`, and `trace_artifacts` metadata, and moved the Harbor post-run writer from the job root to each trial directory. Added run-dir smoke validation and a new `razorback.audit.dispatch_manifests` helper so strict audit enumerates Spacedock trials from `manifest.json` and fails closed on missing, malformed, or zero-capture dispatch coverage while preserving the legacy single-trial root fallback. Full ADE/DAB relaunch and score semantics remained out of scope per the approved plan.
+
+## Stage Report: validation
+
+- DONE: Validation independently reruns the manifest writer, smoke, audit, and score-guard test subsets.
+  Writer subset `9 passed`; smoke subset `9 passed`; audit subset `16 passed`; score guard `13 passed`.
+- DONE: Validation checks AC-1 through AC-4 with exact command output and files changed.
+  Evidence recorded in `docs/razorback-implementation/validation/spacedock-dispatch-manifest-per-trial.md`.
+- DONE: Validation report gives APPROVE or REJECT with blocking findings separated from non-blocking notes.
+  Report gate is APPROVE; blocking findings: none; non-blocking findings: none.
+- FAILED: Full project `uv run pytest` requested by the validation stage definition.
+  Collection failed on pre-existing `tests/unit/test_task_identity_scoring.py` import of missing `razorback.score.load`; branch did not touch score package files.
+
+### Summary
+
+Validated the implementation range `dc3750d60e1867c19f2a1b4425e245666f5c7608..68d9e8cbf9203283892ad9d03edf31905ce8493a` against AC-1 through AC-4, including the T7 acceptance subset and score-adjacent guard. The validation gate is APPROVE to done, with the unrelated full-suite collection failure documented as residual baseline risk.

@@ -1,6 +1,7 @@
-# ABOUTME: SpacedockSolverAgent.run writes subagent-trace-manifest.json at
-# ABOUTME: logs_dir.parents[1] after the inner runtime writes dispatch JSONL.
+# ABOUTME: SpacedockSolverAgent.run writes a per-trial
+# ABOUTME: subagent-trace-manifest.json after the inner runtime writes dispatch JSONL.
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -20,6 +21,33 @@ CODEX_FIXTURE = """\
 {"type":"item.completed","item":{"id":"item_spawn","type":"collab_tool_call","tool":"spawn_agent","prompt":"dispatch_agent_id: spacedock:ensign\\nworker_key: spacedock-ensign\\n","status":"completed"}}
 {"type":"item.started","item":{"id":"item_wait","type":"collab_tool_call","tool":"wait","status":"in_progress"}}
 """
+
+
+def _claude_fixture(tool_use_id: str, prompt: str) -> str:
+    events = [
+        {"type": "system", "subtype": "init", "tools": ["Task", "Bash", "Agent"]},
+        {
+            "type": "assistant",
+            "message": {
+                "model": "claude-opus-4-7",
+                "id": "msg_1",
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": tool_use_id,
+                        "name": "Agent",
+                        "input": {
+                            "subagent_type": "spacedock:ensign",
+                            "prompt": prompt,
+                        },
+                    }
+                ],
+            },
+        },
+        {"type": "result", "subtype": "success", "is_error": False},
+    ]
+    return "\n".join(json.dumps(event) for event in events) + "\n"
 
 
 def _common_kwargs(tmp_path):
@@ -94,10 +122,14 @@ async def test_run_writes_manifest_adjacent_to_provenance(
 
     await agent.run(instruction="probe", environment=None, context=None)
 
-    manifest_path = cell_run_dir / "subagent-trace-manifest.json"
+    manifest_path = logs_dir.parent / "subagent-trace-manifest.json"
     assert manifest_path.exists()
+    assert not (cell_run_dir / "subagent-trace-manifest.json").exists()
     payload = json.loads(manifest_path.read_text())
     assert payload["captured"] == 1
+    assert payload["trial"]["trial_id"] == "trial-001__aaaa1234"
+    assert payload["prompt_mode"] == "spacedock-claude-first-officer"
+    assert payload["trace_artifacts"][0]["path"] == "agent/claude-code.txt"
     assert payload["dispatches"][0]["subagent_type"] == "spacedock:ensign"
     assert payload["parent_agent"]["model"] == "claude-opus-4-7"
     assert payload["schema_version"] == "razorback-subagent-traces-v1"
@@ -126,11 +158,13 @@ async def test_run_for_codex_runtime_writes_manifest(
 
     await agent.run(instruction="probe", environment=None, context=None)
 
-    manifest_path = cell_run_dir / "subagent-trace-manifest.json"
+    manifest_path = logs_dir.parent / "subagent-trace-manifest.json"
     assert manifest_path.exists()
+    assert not (cell_run_dir / "subagent-trace-manifest.json").exists()
     payload = json.loads(manifest_path.read_text())
     assert payload["captured"] == 1
     assert payload["capture_source"] == "razorback-codex-cli-trace"
+    assert payload["prompt_mode"] == "spacedock-codex-first-officer"
 
 
 @pytest.mark.asyncio
@@ -162,8 +196,54 @@ async def test_run_writes_manifest_when_inner_agent_raises(
     with pytest.raises(TimeoutError, match="inner timed out"):
         await agent.run(instruction="probe", environment=None, context=None)
 
-    manifest_path = cell_run_dir / "subagent-trace-manifest.json"
+    manifest_path = logs_dir.parent / "subagent-trace-manifest.json"
     assert manifest_path.exists()
+    assert not (cell_run_dir / "subagent-trace-manifest.json").exists()
     payload = json.loads(manifest_path.read_text())
     assert payload["captured"] == 1
     assert payload["dispatches"][0]["subagent_type"] == "spacedock:ensign"
+
+
+@pytest.mark.asyncio
+async def test_parallel_spacedock_runs_write_distinct_trial_manifests(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("RAZORBACK_SPACEDOCK_PLUGIN_DIR", str(tmp_path))
+
+    run_dir = tmp_path / "run"
+    trial_a_logs = run_dir / "trial-a__aaaa" / "agent"
+    trial_b_logs = run_dir / "trial-b__bbbb" / "agent"
+    trial_a_logs.mkdir(parents=True)
+    trial_b_logs.mkdir(parents=True)
+
+    kw = _common_kwargs(tmp_path)
+    agent_a = SpacedockSolverAgent(logs_dir=trial_a_logs, **kw)
+    agent_b = SpacedockSolverAgent(logs_dir=trial_b_logs, **kw)
+    agent_a._inner = _FakeInnerAgent(
+        trial_a_logs,
+        _claude_fixture("toolu_trial_a", "do trial A"),
+    )
+    agent_b._inner = _FakeInnerAgent(
+        trial_b_logs,
+        _claude_fixture("toolu_trial_b", "do trial B"),
+    )
+
+    await asyncio.gather(
+        agent_a.run(instruction="probe A", environment=None, context=None),
+        agent_b.run(instruction="probe B", environment=None, context=None),
+    )
+
+    assert not (run_dir / "subagent-trace-manifest.json").exists()
+    payloads = {}
+    for trial_name in ("trial-a__aaaa", "trial-b__bbbb"):
+        manifest_path = run_dir / trial_name / "subagent-trace-manifest.json"
+        assert manifest_path.exists()
+        payload = json.loads(manifest_path.read_text())
+        payloads[trial_name] = payload
+        assert payload["trial"]["trial_id"] == trial_name
+        assert payload["prompt_mode"] == "spacedock-claude-first-officer"
+        assert payload["trace_artifacts"][0]["path"] == "agent/claude-code.txt"
+        assert payload["captured"] == 1
+
+    assert payloads["trial-a__aaaa"]["dispatches"][0]["tool_use_id"] == "toolu_trial_a"
+    assert payloads["trial-b__bbbb"]["dispatches"][0]["tool_use_id"] == "toolu_trial_b"

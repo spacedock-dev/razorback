@@ -153,3 +153,53 @@ def test_rk_audit_strict_ignores_job_log_setup_install(
     payload = _parse_json_stdout(result)
     assert payload["summary"] == {"clean": 1, "tainted": 0, "coverage_missing": 0}
     assert payload["trials"][0]["findings"] == []
+
+
+def test_rk_audit_strict_fails_on_missing_spacedock_trial_manifest(
+    spacedock_dispatch_gap_run_dir,
+):
+    result = runner.invoke(
+        app,
+        ["audit", str(spacedock_dispatch_gap_run_dir), "--policy", "strict"],
+    )
+    assert result.exit_code == 23
+    payload = _parse_json_stdout(result)
+    assert payload["summary"]["coverage_missing"] == 1
+    missing = [
+        trial
+        for trial in payload["trials"]
+        if trial["taint_status"] == "coverage_missing"
+    ][0]
+    assert missing["trial_id"] == "trial-b__bbbb"
+    assert missing["findings"][0]["missing_reason"] == (
+        "spacedock_dispatch_manifest_absent"
+    )
+
+
+def test_rk_audit_strict_passes_when_spacedock_trial_manifests_present(
+    spacedock_dispatch_complete_run_dir,
+):
+    result = runner.invoke(
+        app,
+        ["audit", str(spacedock_dispatch_complete_run_dir), "--policy", "strict"],
+    )
+    assert result.exit_code == 0, result.stdout
+    payload = _parse_json_stdout(result)
+    assert payload["summary"] == {"clean": 2, "tainted": 0, "coverage_missing": 0}
+    assert [trial["trial_id"] for trial in payload["trials"]] == [
+        "trial-a__aaaa",
+        "trial-b__bbbb",
+    ]
+
+
+def test_rk_audit_strict_accepts_legacy_single_spacedock_root_manifest(
+    spacedock_dispatch_legacy_single_run_dir,
+):
+    result = runner.invoke(
+        app,
+        ["audit", str(spacedock_dispatch_legacy_single_run_dir), "--policy", "strict"],
+    )
+    assert result.exit_code == 0, result.stdout
+    payload = _parse_json_stdout(result)
+    assert payload["summary"] == {"clean": 1, "tainted": 0, "coverage_missing": 0}
+    assert payload["trials"][0]["trial_id"] == "trial-a__aaaa"

@@ -7,6 +7,7 @@ from pathlib import Path
 import typer
 
 from razorback.audit import claude_code
+from razorback.audit import dispatch_manifests
 from razorback.audit import harbor_codex
 from razorback.audit import taint
 from razorback.errors import ExitCode
@@ -25,6 +26,11 @@ def _discover_trial_roots(run_dir: Path) -> list[Path]:
     """
     seen: set[Path] = set()
     roots: list[Path] = []
+    for candidate in dispatch_manifests.listed_spacedock_trial_roots(run_dir):
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        roots.append(candidate)
     for sentinel in _TRIAL_SENTINELS:
         for hit in sorted(run_dir.rglob(sentinel)):
             if sentinel == "traces/manifest.json":
@@ -103,6 +109,7 @@ def _audit_run_dir(run_dir: Path, policy: str) -> dict:
             *report["findings"],
             *harbor_codex.scan_trial(trial_root),
             *claude_code.scan_trial(trial_root),
+            *dispatch_manifests.scan_trial(run_dir, trial_root),
         ]
         status = _reduce_trial_status(findings)
         summary[status] += 1
