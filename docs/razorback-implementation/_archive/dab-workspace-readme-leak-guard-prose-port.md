@@ -1,17 +1,18 @@
 ---
 id: k34cqr2myjsh6aaqm6fhz5nw
 title: DAB workspace READMEs — port upstream leak-guard prose (forbid external-oracle lookups by name)
-status: validation
+status: done
 source: 2026-05-23 7q validation cheating-audit finding — agnews CONFIRMED downloaded `fancyzhx/ag_news` via `load_dataset` and matched MongoDB article_id↔train/test ordering to derive labels; razorback's `direct-structured`/`direct-minimal`/`spacedock` workspace READMEs at `packages/razorback-plugin-dab/src/razorback_plugin_dab/generate/workspace_readme.py` lack the leak-guard prose that DAB upstream's `~/git/dataagentbench/benchmark/workspace-readmes/workspace-readme.md` carries (lines 77-83 — names `datasets.load_dataset`/`hf://` forbidden + "even if the workspace data appears to come from a public dataset" + "UNABLE TO DETERMINE" escape). Auto-approve: false because workspace prompts are captain-facing surface.
 score: 0.92
 auto-approve: false
-worktree: .worktrees/spacedock-ensign-dab-workspace-readme-leak-guard-prose-port
+worktree: 
 issue:
 pr: #1
 mod-block: 
 started: 2026-05-23T22:58:25Z
-completed:
-verdict:
+completed: 2026-05-24T15:23:02Z
+verdict: PASSED
+archived: 2026-05-24T15:23:02Z
 ---
 
 ## Problem
