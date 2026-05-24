@@ -29,7 +29,71 @@ The disk pressure is in the DAB plugin's bind-mode workdir materializer, not in 
 - On Linux `_clone_or_copy_tree()` runs `cp --reflink=auto`. On this ext4 `/dev/root`, that command can return success while falling back to a full physical copy.
 - This VM currently has about 3.7 GiB free under `/home/exedev`, while the DAB source tree has about 7.9 GiB of data. The largest file-backed DB payloads alone include PATENTS SQLite (~5.17 GiB), stockmarket DuckDB (~920 MiB), GITHUB_REPOS SQLite+DuckDB (~885 MiB), DEPS_DEV_V1 SQLite+DuckDB (~524 MiB), and PANCANCER_ATLAS DuckDB (~280 MiB). A full-copy fallback for the 12 batch task views cannot fit the current ext4 budget.
 
-The safest mechanism to test first is **read-only file bind mounts for SQLite/DuckDB files in the `main` service**, with those files omitted from the physical task workdir. This preserves the existing in-container paths (`/workspace/...`), avoids hardlinks, avoids symlinks that escape the mounted task root, and lets Docker enforce `:ro` for agent write attempts. If Harbor's task-specific compose merge cannot carry `main.volumes`, stop and classify that as a mechanism blocker before trying a broader design.
+The plan-time spike below proves Harbor 0.6.6 preserves read-only `main.volumes` from a DAB-generated task compose file through Harbor's DockerEnvironment compose merge. The implementation should therefore start from **read-only file bind mounts for SQLite/DuckDB files in the `main` service**, with those files omitted from the physical task workdir. This preserves the existing in-container paths (`/workspace/...`), avoids hardlinks, avoids symlinks that escape the mounted task root, and lets Docker enforce `:ro` for agent write attempts.
+
+## Plan-Time Spike Evidence
+
+**Purpose:** Answer the rejected plan-gate question before implementation: does the smallest real DAB/Harbor path preserve a read-only `main.volumes` file mount and make it readable but write-protected at the intended workdir path?
+
+**Command run from repo root:** `uv run python - <<'PY' ... PY`
+
+The bounded script created `/tmp/rb-dab-main-volumes-spike/data/query_bookreview` with a synthetic `db_config.yaml` containing `db_type: sqlite` and `db_path: query_dataset/tiny.sqlite`, then called:
+
+```python
+prepare_dataset_tasks(
+    data_root=Path("/tmp/rb-dab-main-volumes-spike/data"),
+    dataset="bookreview",
+    tasks_root=Path("/tmp/rb-dab-main-volumes-spike/tasks"),
+    docker_image="python:3.12",
+    container_workdir="/workspace",
+    materialize_mode="bind",
+    query_mode="batch",
+)
+```
+
+After generation, the script injected the proposed candidate mount into the generated file `/tmp/rb-dab-main-volumes-spike/tasks/bookreview/environment/docker-compose.yaml`:
+
+```yaml
+services:
+  main:
+    volumes:
+    - /tmp/rb-dab-main-volumes-spike/data/query_bookreview/query_dataset/tiny.sqlite:/workspace/query_dataset/tiny.sqlite:ro
+```
+
+It then instantiated Harbor's real Docker path:
+
+```python
+DockerEnvironment(
+    environment_dir=task_dir / "environment",
+    environment_name="rb-dab-main-volumes-spike",
+    session_id="rb-dab-main-volumes-spike",
+    trial_paths=TrialPaths(trial_dir=Path("/tmp/rb-dab-main-volumes-spike/trial")),
+    task_env_config=EnvironmentConfig(
+        docker_image="python:3.12",
+        workdir="/workspace",
+        allow_internet=True,
+    ),
+)
+```
+
+and ran `start(force_build=False)`, Harbor's merged `docker compose config --format json`, `test -r /workspace/query_dataset/tiny.sqlite && head -c 16 ...`, `printf X >> /workspace/query_dataset/tiny.sqlite`, and `mount | grep tiny.sqlite`.
+
+**Result:** pass. Harbor's merged main service volumes included Harbor's three log/artifact binds plus the task-authored DB bind:
+
+```json
+{
+  "type": "bind",
+  "source": "/tmp/rb-dab-main-volumes-spike/data/query_bookreview/query_dataset/tiny.sqlite",
+  "target": "/workspace/query_dataset/tiny.sqlite",
+  "read_only": true
+}
+```
+
+The read probe exited `0` and returned the SQLite header bytes `53 51 4c 69 74 65 20 66 6f 72 6d 61 74 20 33 00`. The write probe exited `1` with `Read-only file system`. The source SHA256 stayed `56c5c0984ef99e386244c2cadb8d311e5c66d7176b816d9fc1c2db23e1359f18` before and after the attempted write. `mount | grep tiny.sqlite` showed `/workspace/query_dataset/tiny.sqlite type ext4 (ro,relatime)`.
+
+**Files inspected:** `/tmp/rb-dab-main-volumes-spike/tasks/bookreview/environment/docker-compose.yaml`, Harbor's merged `docker compose config --format json` output, and `/tmp/rb-dab-main-volumes-spike/data/query_bookreview/query_dataset/tiny.sqlite`.
+
+**Design consequence:** `main.volumes` is not dropped. Do not use the fallback symlink/source-root design for this task unless implementation discovers a narrower DAB-specific regression that this spike did not cover.
 
 ## Surface Map
 
@@ -62,7 +126,7 @@ Expected red signal before the fix: bind mode either copies the synthetic file-b
 
 **ACs:** AC-2, AC-3
 
-**Goal:** Lock the mechanism before implementation: file-backed DBs are mounted into `main` read-only at the same paths agents already use.
+**Goal:** Codify the proven spike mechanism before implementation: file-backed DBs are mounted into `main` read-only at the same paths agents already use.
 
 Add unit tests that generate a mixed `db_config.yaml` fixture with SQLite, DuckDB, Postgres, and Mongo clients and assert:
 
@@ -101,13 +165,13 @@ uv run pytest packages/razorback-plugin-dab/tests/unit/test_prepare_bind_materia
 
 Acceptance: the synthetic large SQLite/DuckDB fixture consumes only scaffolding-sized disk, the workdir does not contain physical DB copies in bind mode, and copy mode still produces distinct inodes/full copies.
 
-### T3 - RED/GREEN: Source Write Protection Regression
+### T3 - RED/GREEN: Harbor Source Write Protection Regression
 
 **ACs:** AC-3
 
 **Goal:** Prove the space-saving mechanism does not trade disk safety for source-data mutability.
 
-Add a docker-gated integration test that uses a small synthetic SQLite or DuckDB file, materializes a task in bind mode, then runs a container through the generated main-service mount shape and attempts:
+Add a docker-gated integration test based on the plan-time spike: use a small synthetic SQLite or DuckDB file, materialize a task in bind mode, then run Harbor's DockerEnvironment or an equivalent Harbor compose stack through the generated main-service mount shape and attempt:
 
 ```bash
 printf X >> /workspace/query_dataset/<db-file>
@@ -118,7 +182,7 @@ The test must assert one of:
 - the command fails with a read-only filesystem/permission error, or
 - the source file's SHA256 is unchanged after the attempted write.
 
-Also assert a read path succeeds, for example `test -r /workspace/query_dataset/<db-file>` or reading a known header. If Docker or the selected local image is unavailable, the test skips with a message that names AC-3.
+Also assert a read path succeeds, for example `test -r /workspace/query_dataset/<db-file>` or reading a known header, and inspect the merged compose config for `read_only: true` on the DB target. If Docker or the selected local image is unavailable, the test skips with a message that names AC-3.
 
 Run:
 
@@ -217,6 +281,6 @@ Write the implementation stage report with:
 - Do not replace `cp --reflink=auto` with hardlinks. Hardlinks are source-mutation unsafe on ext4.
 - Do not mount the whole `query_dataset` directory into `main`; that would re-expose Postgres/Mongo dump files that bind mode intentionally keeps out of the agent workspace.
 
-## Open Design Decision
+## Fallback Boundary
 
-The plan chooses per-file read-only `main` bind mounts at the existing workdir paths as the first mechanism. If Harbor's compose layering refuses or drops `main.volumes`, the implementation should stop with evidence and evaluate the fallback design: mount a read-only source-data root at a stable container path and replace workdir DB files with container-visible symlinks. That fallback must get its own write-protection test before any full DAB explain rerun.
+The previously open Harbor compose-preservation decision is resolved by the plan-time spike: per-file read-only `main` bind mounts are the implementation mechanism. If implementation later finds a narrower failure, stop with a typed blocker and only then evaluate the fallback design: mount a read-only source-data root at a stable container path and replace workdir DB files with container-visible symlinks. That fallback must get its own write-protection test before any full DAB explain rerun.

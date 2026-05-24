@@ -80,3 +80,16 @@ Wrote the standard separate plan doc for the four-AC disk-budget task. The imple
 ### Feedback Cycles
 
 - 2026-05-24T15:29:33Z - plan gate rejected. The plan identifies a plausible mechanism but did not perform a spike to prove Harbor preserves read-only `main.volumes` and that the mounted DB path is readable/write-protected. Send back to plan for a bounded synthetic spike before implementation approval.
+
+## Stage Report: plan (cycle 2)
+
+- DONE: The spike actually exercises generated task/compose behavior rather than only source-reading or theorizing.
+  Evidence: `uv run python - <<'PY' ... PY` created `/tmp/rb-dab-main-volumes-spike`, called `prepare_dataset_tasks(...)`, injected the candidate `main.volumes` file mount into generated `/tmp/rb-dab-main-volumes-spike/tasks/bookreview/environment/docker-compose.yaml`, then started Harbor `DockerEnvironment`.
+- DONE: Evidence shows readable path plus write protection, or names the blocker/fallback when that proof fails.
+  Evidence: Harbor merged config retained `/tmp/rb-dab-main-volumes-spike/data/query_bookreview/query_dataset/tiny.sqlite:/workspace/query_dataset/tiny.sqlite:ro`; read exited 0 with SQLite header bytes, append exited 1 with `Read-only file system`, and source SHA256 stayed `56c5c0984ef99e386244c2cadb8d311e5c66d7176b816d9fc1c2db23e1359f18`.
+- DONE: The revised plan starts implementation from the spike result and removes the unproven open design decision.
+  Evidence: `docs/razorback-implementation/plans/dab-batch-materialization-disk-budget.md` now has `## Plan-Time Spike Evidence` and `## Fallback Boundary`; the former `## Open Design Decision` is removed.
+
+### Summary
+
+Ran a bounded synthetic DAB/Harbor spike without full DAB data, scored execution, run-history deletion, or Docker pruning. The spike proves Harbor preserves the candidate read-only `main.volumes` DB-file mount, so implementation can proceed with per-file SQLite/DuckDB `main` binds and keep the symlink/source-root fallback out of the main path. Commit id: this plan-cycle commit.
