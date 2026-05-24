@@ -56,3 +56,16 @@ the touched files.
 ## Out of scope
 
 Changing score semantics or relaunching the full ADE/DAB score run.
+
+## Stage Report: plan
+
+- DONE: Plan identifies the per-trial manifest writer and strict-audit discovery changes.
+  Plan written at `docs/razorback-implementation/plans/spacedock-dispatch-manifest-per-trial.md`; see Surface Map and Tasks T1-T6.
+- DONE: Plan maps concrete tests or fixtures to AC-1 through AC-4.
+  AC map covers T1/T2 for AC-1 and AC-2, T5/T6 for AC-3, and T3/T4/T7 for AC-4 with named pytest files and fixtures.
+- DONE: Plan keeps score semantics and full score relaunch out of scope.
+  Plan Decisions and T7 explicitly exclude score reducer changes and full ADE/DAB score relaunches.
+
+### Summary
+
+Created a separate standard plan document for the four-AC task. The plan moves the dispatch manifest target from the job root to each trial directory, adds strict-audit trial coverage discovery from run `manifest.json`, preserves legacy single-trial readability, and leaves scoring behavior untouched.
