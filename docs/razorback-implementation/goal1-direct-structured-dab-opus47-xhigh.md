@@ -35,68 +35,123 @@ direct-structured` workspace README.
 
 ## Acceptance criteria
 
-**AC-1 — Specs are post-sprint canonical and aligned with spacedock cell.**
+> **AC list rewritten 2026-05-24 by FO at captain directive** ("redo
+> 7q from the right way"). Earlier cycle's ACs referenced
+> `kind: harbor_dab` + pre-audit-gating workflow + pre-leak-guard
+> workspace READMEs. Since the prior REJECT (cheating-audit finding
+> on agnews), these have shipped to main: k3 (workspace-readme
+> leak-guard prose + schema `reasoning_effort` accept), wp (extended
+> audit/taint.py with claude-cli scanner + `rk audit --policy strict`
+> wired in `dab-paper-matrix.sh` between rk-run and rk-score), hm
+> (collapse per-benchmark blocks into `kind: harbor + plugin: dab`
+> with `razorback.plugin_args` entry-point + `rk score` surfaces
+> `taint_status` + auto-pulls `paper_baseline` from spec frontmatter
+> + dab plugin CLI `--data-root` env-default chain), and codex's
+> `rk run --explain` cheap-pre-flight surface. The ACs below describe
+> the post-everything-stack redo. Earlier AC-1..AC-5 visible in the
+> entity's git history.
+
+**AC-1 — Specs are post-hm canonical for direct-structured matrix.**
 The 12 direct-structured specs at
-`examples/specs/goal1/direct-structured/*.yaml` carry `agent.kind:
-claude-cli`, `agent.model: claude-opus-4-7`, `agent.reasoning_effort:
-xhigh`, `benchmark.kind: harbor_dab`, `benchmark.dataset: dab@1.0`,
-`benchmark.workspace_variant: direct-structured`,
-`benchmark.query_mode: batch`, `trials: 1`. Already on disk from the
-`an` cycle-1 regeneration (commit `a6ab344 regen: 36 dab paper matrix
-specs with reasoning_effort: xhigh`).
-Verified by: `grep -l 'workspace_variant: direct-structured'
-examples/specs/goal1/direct-structured/*.yaml` returns all 12;
-`grep -l 'reasoning_effort: xhigh' examples/specs/goal1/direct-structured/*.yaml`
-returns all 12.
+`examples/specs/goal1/direct-structured/*.yaml` carry the post-hm
+shape: `agent.kind: claude-cli`, `agent.model: claude-opus-4-7`,
+`agent.reasoning_effort: xhigh`, `benchmark.kind: harbor`,
+`benchmark.dataset: dab@1.0`, `benchmark.plugin: dab`,
+`benchmark.plugin_args` carrying `workspace_variant: direct-structured`
++ `query_mode: batch`, `trials: 1`, and a top-level
+`experiment_meta.paper_baseline: 0.4376` (so `rk score` auto-pulls
+the constant per hm commit 5). Verified by:
+- `grep -l "kind: harbor$" examples/specs/goal1/direct-structured/*.yaml` returns all 12.
+- `grep -l "plugin: dab$" examples/specs/goal1/direct-structured/*.yaml` returns all 12.
+- `grep -l "workspace_variant: direct-structured" examples/specs/goal1/direct-structured/*.yaml` returns all 12.
+- `grep -l "reasoning_effort: xhigh" examples/specs/goal1/direct-structured/*.yaml` returns all 12.
+- `grep -l "paper_baseline: 0.4376" examples/specs/goal1/direct-structured/*.yaml` returns all 12 (file or migrate if absent — captain's hm commit 5 surface enables this; was added to spec frontmatter in the hm migration).
+- `grep -l "kind: harbor_dab" examples/specs/goal1/direct-structured/*.yaml` returns 0 (sanity — no pre-hm leftovers).
 
-**AC-2 — Each spec freezes cleanly.**
-`rk freeze` runs against each of the 12 spec files and produces
-`spec.frozen.yaml` + `provenance.yaml` adjacent. No `SpecError` or
-`AliasDriftError` raised.
-Verified by: a shell loop runs `rk freeze` per spec and captures exit
-codes; all 12 = 0; 12 frozen.yaml files appear on disk under
-`examples/specs/goal1/direct-structured/*.frozen.yaml`.
+**AC-2 — Per-cell freeze + `rk run --explain` pre-flight passes.**
+For each of the 12 specs, `rk freeze` produces `spec.frozen.yaml` +
+`provenance.yaml` adjacent (clean exit 0; no SpecError or AliasDriftError);
+`rk run --explain --explain-format json` on the frozen spec resolves
+to the expected agent/runtime/dataset/workspace_variant/plugin_args
+shape with `reasoning_effort: xhigh` threaded into
+`harbor_agent_kwargs` (validates k4's intent is met without explicit
+sibling work because k3 schema + hm commit 4a translator both shipped).
+Verified by:
+- A shell loop runs `rk freeze` + `rk run --explain --explain-format json`
+  on each of the 12 specs; 12/12 exit 0; resulting frozen YAMLs + explain
+  JSONs committed under `docs/razorback-implementation/_evidence/goal1-direct-structured-v2/per-cell-preflight/`.
+- For each cell, `explain.json` has
+  `.agent.harbor_agent_kwargs.reasoning_effort == "xhigh"` (jq assertion
+  in the stage report).
+- For each cell, `explain.json` has
+  `.benchmark.plugin == "dab"` and
+  `.benchmark.plugin_args.workspace_variant == "direct-structured"`.
 
-**AC-3 — Full 12-cell run completes.**
+**AC-3 — Full 12-cell run completes with audit gating per cell.**
 `examples/drivers/dab-paper-matrix.sh --variants direct-structured
---max-cell-budget-usd 10.0 --continue-on-fail` executes against the
-existing matrix root at
-`/Users/clkao/git/razorback/_runs/goal1-direct-structured-opus47-xhigh/`
-(or sibling); each cell produces a run-dir with `summary.json`,
+--max-cell-budget-usd 10.0 --continue-on-fail` executes against a
+fresh matrix root (e.g., `_runs/goal1-direct-structured-redo-2026-05-24/`).
+The driver runs rk-run → `rk audit --policy strict` (wp's gate) →
+rk-score per cell. Each cell produces a run-dir with `summary.json`,
 `provenance.yaml`, per-trial `result.json` + `reward_per_query.json`,
-and `score.json`. Failure of an individual cell does not block
-subsequent cells. The verifier-fix from `d6fbfdd` is already in main,
-so no `common_scaffold` ImportError gap.
-Verified by: 12 run-dirs exist; their `summary.json` files are
-parseable JSON; freeze CAS root contains the corresponding
-`sealed_hash` subdirs; `dispatch-ledger.tsv` records `status: ok` for
-all 12.
+`audit.json`, and `score.json`. Cell-level failure does not block
+subsequent cells (`--continue-on-fail`).
+Verified by:
+- 12 run-dirs exist; their `summary.json` files parse as JSON.
+- Per-cell `audit.json` exists; `dispatch-ledger.tsv` records
+  `status: ok` for all 12 cells with audit verdict.
+- Per-cell `score.json` exists and has `taint_status` field surfaced
+  from `audit.json` (validates hm commit 5's surfacing path).
 
-**AC-4 — Per-query headline emitted against paper direct baseline.**
-The goal1 aggregator (post-`d8` re-wire, now consuming
-`reduce_per_query_stratified`) runs against the matrix root and
-prints a per-query pooled pass@1 + per-cell sub-table + Wilson CI +
-verdict against `paper direct_baseline = 0.4376`. The captain-facing
-report at
-`docs/razorback-implementation/_evidence/goal1-direct-structured-dab-opus47-xhigh-report.md`
-carries the headline + per-cell table + provenance block, mirroring
-the shape of the spacedock report at
+**AC-4 — Audit clean across the matrix (no cheating, post-leak-guard).**
+Aggregate the 12 `audit.json` verdicts. Every cell `clean`; in
+particular the agnews cell (the prior cheating finding) comes back
+`clean` against the same `rk audit --policy strict` policy that
+flagged it pre-k3-leak-guard. If any cell shows `tainted`, the
+stage report names the trace path + the taint reason + the
+cheating-attack-surface implication.
+Verified by:
+- `jq -r '.taint_status' _runs/.../<cell>/audit.json` reports `clean`
+  for all 12 cells (per-cell evidence list in the stage report).
+- The agnews cell's `claude-code.txt` trace shows either branch (a)
+  declined `load_dataset` outright OR branch (b) attempted and
+  self-corrected, per the same k3 AC-2 verifier shape. Stage report
+  names which branch.
+
+**AC-5 — Per-query headline emitted against paper direct baseline + verdict.**
+The goal1 aggregator runs against the matrix root and prints a
+per-query pooled pass@1 + per-cell sub-table + Wilson CI + verdict
+against `paper direct_baseline = 0.4376`. The captain-facing report
+at `docs/razorback-implementation/_evidence/goal1-direct-structured-v2/report.md`
+carries the headline + per-cell table + audit verdict block +
+provenance block, mirroring the shape of the spacedock report at
 `docs/razorback-implementation/_evidence/goal1-rerun-dab-spacedock-opus47-xhigh-report.md`.
-Verified by: report exists at the cited path with the four sections;
-verdict line names `direct_baseline=0.4376` and the
+The verdict line names `direct_baseline=0.4376` and the
 above/inside/below classification.
+Verified by:
+- Report exists at the cited path with the five required sections
+  (headline, per-cell table, audit verdict block, provenance,
+  follow-ups).
+- Verdict line cites `paper direct_baseline=0.4376` + classification.
+- `rk score --against-constant` is NOT passed on the CLI; the
+  comparison is auto-pulled from each spec's `experiment_meta.paper_baseline`
+  per hm commit 5 (the `source: "spec.frontmatter"` tag appears in
+  the score JSON output).
 
-**AC-5 — Provenance artifacts pin the run.**
-Every cell's `provenance.yaml` records `solver_workflow_content_hash`
-(may be null/missing for `claude-cli` agent kind — that's
-expected and the report's deviations section names it),
-`harbor_agent_kwargs_hash`, the `reasoning_effort: xhigh` setting,
-and the resolved opus-4.7 model version (`pin_model_version: true`).
-A future re-run from the same spec reproduces the same `sealed_hash`
-and discovers the existing freeze tree.
-Verified by: per-cell `provenance.yaml` enumerated in the final
-report; the four claude-cli-relevant fields present per cell;
-sealed_hash stability noted.
+**AC-6 — Provenance artifacts pin the run; sealed_hash stable on re-run.**
+Every cell's `provenance.yaml` records `harbor_agent_kwargs_hash`,
+the `reasoning_effort: xhigh` setting threaded through, the
+resolved opus-4.7 model version (`pin_model_version: true`), the
+post-hm `kind: harbor + plugin: dab` shape via the plugin_args
+hash. `solver_workflow_content_hash` is null for the `claude-cli`
+agent kind (expected; named in report deviations). A future re-run
+from the same frozen spec discovers the existing freeze tree and
+reproduces the same `sealed_hash`.
+Verified by:
+- Per-cell `provenance.yaml` enumerated in the final report; the
+  claude-cli-relevant fields present per cell.
+- A re-freeze + re-run of one sampled cell produces the same
+  `sealed_hash` as the original (sample one cell, e.g., `bookreview`).
 
 ## Test plan
 
