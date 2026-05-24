@@ -487,3 +487,189 @@ translator's emitted command, and (c) optionally addresses Important finding #2
 (`/workspace/preflight.sh` consumer gap) and the verifier-text drifts under
 "Outstanding concerns" item #3. The other 6 commits and 6 ACs stand on their own; the rejection
 scope is narrow.
+
+---
+
+# Validation appendix: cycle 2 — post-fix re-verification
+
+- Entity: `docs/razorback-implementation/generic-harbor-benchmark-surface-design.md`
+- Branch: `spacedock-ensign/generic-harbor-benchmark-surface-design`
+- Head (cycle-2 validation target): `8b92112` (cycle-7 stage report wrap)
+- Cycle-1 fix commits under review: `cbb1db9` (RED, new integration test) → `c000fe8` (GREEN, drop `--dataset` argv)
+- Validator: spacedock-ensign-generic-harbor-benchmark-surface-design-validation
+- Date: 2026-05-24
+- Captain auto-approve: false — captain MUST ack at gate regardless of verdict.
+- Cycle count: 2 of 3 max.
+
+This appendix verifies the cycle-1 narrow-scope fix (Material #1: translator `--dataset` CLI drift). Material #2 (`/workspace/preflight.sh` consumer gap) and Polish #3 (AC verifier text drifts) remain captain-deferred per the cycle-1 feedback record; they are NOT re-raised as REJECT triggers in this cycle. AC-2..AC-7 evidence from the cycle-1 baseline above stands; this appendix re-runs a no-regression spot-check.
+
+## Cycle-1 fix re-verification (Material #1 → AC-1.d)
+
+### RED→GREEN ordering on the fix commits
+
+```
+$ git log --oneline cbb1db9 c000fe8 -2
+c000fe8 hm cycle-1 GREEN: drop --dataset from plugin CLI emission
+cbb1db9 hm cycle-1 RED: real-plugin dispatch integration test
+```
+
+RED commit lands the new non-mock integration test at `tests/translate/test_dab_dispatch_real_plugin.py`; GREEN commit drops the `--dataset` argv emission from `_invoke_plugin_generate` (`src/razorback/translate.py:355-358`) and removes the now-dead `dataset` keyword from the function signature. Ordering matches the cycle-1 contract.
+
+### Pre-fix repro (validator's exit-2 still reproducible directly against the plugin CLI)
+
+The plugin CLI signature has not changed — the rejected option is an inherent contract of the plugin binary the translator must conform to. Direct probe re-runs:
+
+```
+$ uv run razorback-plugin-dab generate --out /tmp/dab-probe-cycle2 --dataset dab@1.0 --datasets bookreview
+Usage: razorback-plugin-dab generate [OPTIONS]
+Try 'razorback-plugin-dab generate --help' for help.
+╭─ Error ──────────────────────────────────────────────────────────────────────╮
+│ No such option: --dataset (Possible options: --data-root, --datasets)        │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+Reproduces the validator's cycle-1 exit-2 finding verbatim. Translator's emitted argv at cycle-1 head WOULD have hit this; at cycle-2 head it doesn't (see below).
+
+### New integration test is real-subprocess (no mock)
+
+`tests/translate/test_dab_dispatch_real_plugin.py` calls `spec_to_job_config` which routes through `_invoke_plugin_generate`'s `subprocess.run(cmd, ...)` without monkeypatching. The spec uses `plugin: dab` + `tasks: [hello-fixture]` (the plugin's hello-fixture dataset ships in-package; no DAB data root required). Direct read of the test file confirms zero `mock` / `monkeypatch` / `MagicMock` references; the only stdlib import beyond `pathlib`/`pytest` is the module under test.
+
+```
+$ uv run pytest tests/translate/test_dab_dispatch_real_plugin.py tests/translate/test_dab_dispatch.py -v
+6 passed in 0.19s
+  test_real_plugin_dispatch_emits_hello_fixture PASSED
+  test_dab_plugin_dispatch_invokes_subprocess_and_builds_tasks PASSED
+  test_dab_plugin_dispatch_reads_trial_name_map_v2_when_emitted PASSED
+  test_dab_plugin_dispatch_propagates_plugin_failure PASSED
+  test_dab_plugin_dispatch_requires_tasks_root PASSED
+  test_dab_plugin_dispatch_emits_batch_mode_when_one_task_carries_many_queries PASSED
+```
+
+New integration test green; the five pre-existing mock-based dispatch tests also stay green — the fix is backward-compatible with the test surface.
+
+### Live `rk run --explain` round-trip reaches the plugin generate step
+
+```
+$ uv run rk freeze examples/specs/_deterministic-smoke.yaml --allow-missing \
+    --out /tmp/_det-smoke-cycle2.frozen.yaml
+wrote /tmp/_det-smoke-cycle2.frozen.yaml
+
+$ grep -A 6 "^benchmark:" /tmp/_det-smoke-cycle2.frozen.yaml
+benchmark:
+  kind: harbor
+  dataset: dab@1.0
+  tasks:
+  - bookreview
+  exclude_tasks: null
+  n_tasks: null
+
+$ uv run rk run --explain --explain-format json --runs-dir .test-tmp/cycle2-runs \
+    /tmp/_det-smoke-cycle2.frozen.yaml
+…
+SpecError: razorback-plugin-dab generate failed (exit 2): razorback-plugin-dab:
+  dataset bookreview not hydrated, found LFS pointer at
+  ${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}/query_bookreview/db_config.yaml.
+Hydrate with:
+  cd ${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data} && git lfs pull
+```
+
+The failure mode is now the env-dependent LFS-hydration gate FROM INSIDE THE PLUGIN — not the cycle-1 `No such option: --dataset` from typer's argv parser. The translator reaches the plugin generate step cleanly; the live AC-1.d round-trip past the plugin boundary is unblocked. Verified end-to-end on the data-independent path via an in-process probe:
+
+```
+$ uv run python -c "
+from pathlib import Path
+from razorback.translate import _invoke_plugin_generate
+tasks_root = Path('.test-tmp/cycle2-helloprobe/tasks')
+trial_map = _invoke_plugin_generate(plugin='dab', plugin_args={},
+                                    spec_tasks=['hello-fixture'], tasks_root=tasks_root)
+print('emitted tasks:', sorted(p.name for p in tasks_root.iterdir() if p.is_dir()))
+"
+emitted tasks: ['hello-fixture']
+```
+
+End-to-end SUCCESS through the real plugin binary; AC-1.d's "reaches the plugin generate step" intent is verified.
+
+## AC-2..AC-7 no-regression spot-check
+
+Cycle-1 fix touched only `src/razorback/translate.py` (9 lines) plus the new test file. No other source file changed between cycle-1 head (`aafb045`) and cycle-2 head (`8b92112`). The cycle-1 validation report's AC-2..AC-7 evidence remains binding. Spot-check verifies the key invariants hold:
+
+```
+$ grep -cn "class HarborDabBenchmarkBlock" src/razorback/spec/schema.py
+0     (AC-1.a stable)
+
+$ grep -cn "_build_harbor_dab\b" src/razorback/translate.py
+0     (AC-1.b stable)
+
+$ uv run python -c "import importlib.metadata as m; assert 'dab' in {ep.name for ep in m.entry_points(group='razorback.plugin_args')}"
+(exit 0, AC-1.c stable)
+
+$ grep -cn "class Spider2DbtBenchmarkBlock\|_build_spider2" src/razorback/spec/schema.py src/razorback/translate.py
+0:0   (AC-3.a stable)
+
+$ uv run python -c "import importlib.metadata as m; assert 'spider2' in {ep.name for ep in m.entry_points(group='razorback.plugin_args')}"
+(exit 0, AC-3.b stable)
+
+$ uv run python -c "import importlib.metadata as m; assert 'ade-bench' in {ep.name for ep in m.entry_points(group='razorback.plugin_args')}"
+(exit 0, AC-2.c stable)
+
+$ uv run pytest tests/cli/test_score.py -v
+4 passed in 0.45s    (AC-4 stable)
+
+$ grep -rlE "^\s*kind:\s*(harbor_dab|ade-bench|spider2-dbt)\b" examples/
+(empty, AC-5.a stable)
+
+$ git diff origin/main..HEAD -- docs/superpowers/specs/2026-05-19-razorback-on-harbor.md | wc -l
+110   (AC-6 stable; 110 ≤ 144 envelope ceiling)
+
+$ grep -cE "^\s*kind:\s*harbor\b" docs/superpowers/specs/2026-05-19-razorback-on-harbor.md
+1     (AC-6 stable)
+```
+
+AC-7 pytest baseline:
+
+```
+$ uv run pytest tests/ --tb=line --ignore=tests/unit/test_task_identity_scoring.py
+4 failed, 704 passed, 12 skipped, 22 warnings in 35.00s
+
+FAILED tests/integration/test_spacedock_solver_freeze_dir_mechanism.py::test_codex_runtime_dispatch_constructs_inner_agent
+FAILED tests/integration/test_spacedock_solver_freeze_dir_mechanism.py::test_harbor_jobs_resume_round_trip_with_new_trial_name
+FAILED tests/integration/test_worktree_teardown_preserves_runs.py::test_worktree_remove_force_does_not_destroy_runs
+FAILED tests/unit/test_generate_matrix_specs.py::test_matrix_specs_carry_query_mode_batch
++ collection error: tests/unit/test_task_identity_scoring.py (pre-existing 'razorback.score.load')
+```
+
+**704 passed** (cycle-1 baseline was 703; +1 = the new `test_real_plugin_dispatch_emits_hello_fixture` integration test, exactly as the cycle-7 stage report predicted). The 4 pre-existing failures + 1 collection error are byte-identical to cycle-1.
+
+## Per-AC re-verdict (cycle 2)
+
+| AC | Cycle-1 verdict | Cycle-2 verdict | Notes |
+|----|-----------------|-----------------|-------|
+| AC-1 | (was: PASS-with-AC-1.d-blocker) | **PASS** | AC-1.d translator CLI drift fixed in c000fe8; non-mock integration test added in cbb1db9; live `rk run --explain` reaches plugin generate step; in-process probe through real plugin binary returns expected task. |
+| AC-2 | PASS with verifier-text caveats | **PASS unchanged** | No code touched between cycle-1 and cycle-2 heads on this AC's scope. Verifier-text drifts (AC-2.b path `src/razorback/_runtime/`, AC-2.f `tests/translate/test_ade_dispatch.py`) — captain-deferred per cycle-1 feedback (Polish #3). |
+| AC-3 | PASS with thinnest-test-surface caveat | **PASS unchanged** | Schema delete + entry-point registration stable; AC-3.d path `packages/razorback-plugin-spider2/tests/` does not exist per captain's "no new pip packages" decision — captain-deferred per Polish #3. |
+| AC-4 | PASS | **PASS unchanged** | 4/4 tests at `tests/cli/test_score.py` green. |
+| AC-5 | PASS for examples/, partial for docs/ | **PASS unchanged** | `examples/` clean (0 hits); archived `docs/razorback-implementation/{plans,_archive,validation}/` references are intentionally historical per impl cycle-6 deviation note. |
+| AC-6 | PASS | **PASS unchanged** | 110-line diff, within §2.10's 96-144 envelope. |
+| AC-7 | PASS (703 passed) | **PASS** (704 passed, +1 = new integration test) | 4 pre-existing failures + 1 collection error byte-identical to cycle-1. |
+
+## Outstanding concerns disposition (cycle 2)
+
+1. **Material #1 (translator/plugin CLI drift): RESOLVED.** Cycle-1 fix landed; new non-mock integration test added; live round-trip reaches plugin generate step. AC-1 fully resolved.
+2. **Material #2 (`/workspace/preflight.sh` consumer gap): DEFERRED-ACK.** Captain narrowed cycle-1 scope to Material #1 only; Material #2 is captain-acknowledged for deferral to a later cycle or sibling entity. NOT re-raised as REJECT trigger in cycle 2; still acceptable.
+3. **Polish #3 (AC verifier text drifts AC-2.b / AC-2.f / AC-3.d): DEFERRED-ACK.** Captain narrowed cycle-1 scope to Material #1 only; verifier-text edits captain-acknowledged for deferral. NOT re-raised as REJECT trigger in cycle 2; still acceptable. The intent of each verifier is met at the captain-decision-shape adjacent path documented in the cycle-1 report's per-AC sections.
+4. **Legacy compat shim retained (cycle-1 Minor #5): unchanged.** Acceptable.
+5. **`AdeBenchTaskEntry` non-union helper class retained (cycle-1 Minor #6): unchanged.** Acceptable.
+
+No new findings surfaced in cycle 2.
+
+## Gate decision: APPROVE
+
+**Reasoning:** Cycle-1's narrow-scope fix (Material #1) lands correctly:
+
+- The translator-to-plugin CLI contract is now correct — `--dataset` no longer emitted by `_invoke_plugin_generate`; the spec-level `dataset:` ref stays a freeze-provenance concept consumed by view-manifest dataset_ref + sealed_hash inputs, not a plugin invocation parameter.
+- The mock-subprocess discipline gap that hid the drift is closed by `tests/translate/test_dab_dispatch_real_plugin.py`, which invokes the real plugin binary via the translator's own dispatch helper. Direct read of the test file confirms zero mocking/monkeypatching.
+- The validator's cycle-1 exit-2 repro is still reproducible against the plugin CLI directly (confirming the contract didn't change at the plugin side) but is NO LONGER reproducible from the translator's emitted argv at cycle-2 head — the live `rk run --explain` round-trip now passes through the translator dispatch and only fails on the env-dependent LFS-hydration gate inside the plugin (not on argv).
+- AC-2..AC-7 are byte-stable; pytest baseline rises 703→704 by exactly +1 (the new integration test), as the cycle-7 stage report predicted. 4 pre-existing failures + 1 collection error byte-identical to cycle 1.
+- Captain-deferred Material #2 + Polish #3 remain deferred per cycle-1 captain decision; this cycle does NOT re-raise them.
+
+Per the dispatch instructions: `auto-approve: false` on entity frontmatter — captain MUST ack this APPROVE verdict at the gate. Recommendation to the captain: **APPROVE the validation gate**; advance the entity to `done` via the `pr-merge` mod's PR workflow.
