@@ -1084,3 +1084,102 @@ does NOT signal validation-ready Done. The next session
 ships commits 4a-6 + the validation-ready Stage Report;
 FO holds the impl gate at THAT Done for explicit captain
 ack per `auto-approve: false`.
+
+## Stage Report: implementation (cycle 5 — scope-clarification pause)
+
+### Pre-flight discoveries before committing code
+
+- DONE: Establish AC-7 baseline pytest pass set on current main
+  (697 passed, 2 failed, 1 collection error).
+  Failures: `tests/integration/test_worktree_teardown_preserves_runs.py::
+  test_worktree_remove_force_does_not_destroy_runs` and
+  `tests/unit/test_generate_matrix_specs.py::
+  test_matrix_specs_carry_query_mode_batch`.
+  Collection error: `tests/unit/test_task_identity_scoring.py` —
+  `ModuleNotFoundError: No module named 'razorback.score.load'`
+  (introduced 2026-05-23 by codex commit 97b375b — the test landed
+  before its companion `razorback.score.load` module; pre-existing
+  on main, not in this entity's scope to fix). This trio is the
+  AC-7 baseline byte-identical-on-merge.
+
+- DONE: Read the cycle-4 deferred commit-list (`4a → 3 → 4b → 4c →
+  5 → 6`), the captain-decreed split, the generic
+  `/workspace/preflight.sh` mechanism, the entity-body §2.11
+  spec, and the design doc §2.4/§2.6/§2.7. Surveyed the
+  test-loaded `examples/specs/*harbor_dab*.yaml` paths
+  (test_runs_aggregate.py:29 and test_cli_run_default_runs_dir.py:16)
+  to plan the 4a→3 commit-boundary pytest-green strategy
+  (migrate the 2 test-loaded fixture specs as part of 4a; defer
+  the remaining ~60 specs to commit 3 immediately after).
+
+- PAUSED-PRE-FLIGHT: Two team-lead messages sent before launching
+  any code change:
+  1. Context-budget transparency: 6-commit §2.11 sequence at full
+     TDD discipline + AC-7 verification per boundary is plausibly
+     a single 1M-context session but tight. Plan: hard-stop
+     discipline at each §2.11 commit boundary if context tightens.
+  2. **Scope blocker — AC-2/AC-3 reference plugin packages that
+     do not exist in this repo.** AC-2 verifier
+     `uv run pytest packages/razorback-plugin-ade-bench/tests/`
+     and AC-3 verifier
+     `uv run pytest packages/razorback-plugin-spider2/tests/`
+     reference directories that have to be CREATED (only
+     `packages/razorback-plugin-dab/` exists today; ade-bench
+     and spider2-dbt are in-tree at
+     `src/razorback/benchmarks/{ade_bench,spider2_dbt}/`).
+     Two interpretations surfaced: (1) spin up two new pip
+     packages with full pyproject/src/tests/entry-point
+     scaffolding (large LOC, multi-session); (2) keep ade-bench /
+     spider2-dbt code in-tree but route through a generic
+     `razorback.plugin_args` entry-point mechanism (smaller LOC,
+     fits the captain's "simple config" framing). The AC text
+     literally describes (1); the §2.11 commit-LOC estimates
+     match (2). Awaiting team-lead clarification before starting
+     commit 4a — wrong interpretation rewrites all of commits 4b
+     + 4c.
+
+### Why pause now rather than start commit 4a
+
+The dispatch instructs: "If you hit context-budget concerns
+mid-flight at a natural §2.11 commit boundary, STOP and
+surface — do NOT compress work or skip atomic-commit
+discipline." The AC-2/AC-3 interpretation gap is a
+pre-implementation scope question that, answered after
+commit 4a, would invalidate commit 4a's plugin-args entry-point
+contract (since the entry-point group name and shape depend on
+whether the plugins are separate pip packages or in-tree
+modules). Surfacing at the boundary is cheaper than redoing
+the work.
+
+### Resume hook for the next ensign
+
+Once team-lead resolves the AC-2/AC-3 interpretation:
+- If (1): commits 4b and 4c each grow by ~300-500 LOC of plugin
+  scaffolding work (new pyproject, src tree, CLI command,
+  entry-point registration, ~10 tests per plugin); §2.11 commit
+  list grows from 6 to effectively 8 (4b/4c each become "create
+  package + migrate code into it + delete in-tree benchmark
+  module + re-wire dispatch").
+- If (2): commits 4b/4c stay roughly as currently sized — the
+  `razorback.plugin_args` entry-point registry resolves to
+  in-tree modules; the plugin-package boundary is a future
+  refactor.
+
+Either way, commit 4a's design depends on the interpretation
+(the plugin-args entry-point group's discovery target shape
+changes between in-tree-only and pip-package-only consumers).
+
+### Summary
+
+Fresh ensign resumed at full context budget per dispatch.
+Did pre-flight reading (entity body, design doc §2.4/§2.6/§2.7/§2.11,
+schema.py, translate.py, spacedock_solver.py, packages/razorback-plugin-dab/),
+established AC-7 baseline (697 pass, 2 fail, 1 collection error
+— all pre-existing on main). Surfaced two scope concerns to
+team-lead before writing code: (1) context-budget honesty about
+the 6-commit-TDD-discipline scope; (2) AC-2/AC-3 reference
+plugin packages that don't exist in the repo, which forks the
+entire commit-4b/4c shape. Did NOT start commit 4a — the
+scope-blocker resolution determines 4a's entry-point contract
+shape; starting 4a before resolution would be guessing. No
+in-tree code changes this cycle.
