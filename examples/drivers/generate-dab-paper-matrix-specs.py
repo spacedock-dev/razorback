@@ -45,9 +45,10 @@ def _build_agent_block(variant: str) -> dict:
 def build_spec(
     variant: str,
     dataset: str,
-    dataset_ref: str,
+    dataset_ref: str | None = None,
     reasoning_effort: str | None = None,
 ) -> dict:
+    dataset_ref = dataset_ref or load_default_definition().ref
     experiment = f"goal1-{variant}-{dataset.lower()}"
     agent = _build_agent_block(variant)
     if reasoning_effort is not None:

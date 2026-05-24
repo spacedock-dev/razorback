@@ -19,6 +19,7 @@ from razorback.errors import SpecError
 from razorback.spec.agent_kwargs import build_spacedock_harbor_agent_kwargs
 from razorback.spec.schema import (
     AdeBenchBenchmarkBlock,
+    CodexAgentBlock,
     HarborDabBenchmarkBlock,
     LocalBenchmarkBlock,
     NopAgentBlock,
@@ -36,6 +37,9 @@ SPACEDOCK_SOLVER_ENVIRONMENT_IMPORT_PATH = (
 )
 RAZORBACK_CLAUDE_CODE_IMPORT_PATH = (
     "razorback.agents._runtime.claude:RazorbackClaudeCode"
+)
+RAZORBACK_CODEX_IMPORT_PATH = (
+    "razorback.agents._runtime.codex:RazorbackCodex"
 )
 SPACEDOCK_SOLVER_CONTAINER_FREEZE_ROOT = "/razorback-freeze"
 
@@ -108,6 +112,27 @@ def _build_agent_config(
     if isinstance(spec.agent, NopAgentBlock):
         return AgentConfig(name=AgentName.NOP.value), {}
 
+    if isinstance(spec.agent, CodexAgentBlock):
+        if project_root is None:
+            raise SpecError("codex agent requires project_root for .env auth discovery.")
+        resolution = resolve_codex_auth(project_root=project_root, home=home)
+        kwargs: dict[str, Any] = {}
+        if spec.agent.reasoning_effort is not None:
+            kwargs["reasoning_effort"] = spec.agent.reasoning_effort
+        if spec.agent.reasoning_summary is not None:
+            kwargs["reasoning_summary"] = spec.agent.reasoning_summary
+        agent_cfg = AgentConfig(
+            import_path=RAZORBACK_CODEX_IMPORT_PATH,
+            model_name=spec.agent.model,
+            override_timeout_sec=spec.agent.override_timeout_sec,
+            override_setup_timeout_sec=spec.agent.override_setup_timeout_sec,
+            max_timeout_sec=spec.agent.max_timeout_sec,
+            kwargs=kwargs,
+            env=dict(resolution.env),
+        )
+        task_env = dict(PROXY_BLOCK_ENV)
+        return agent_cfg, task_env
+
     if isinstance(spec.agent, SpacedockSolverAgentBlock):
         if project_root is None:
             raise SpecError(
@@ -154,6 +179,9 @@ def _build_agent_config(
         agent_cfg = AgentConfig(
             import_path=SPACEDOCK_SOLVER_IMPORT_PATH,
             model_name=spec.agent.model,
+            override_timeout_sec=spec.agent.override_timeout_sec,
+            override_setup_timeout_sec=spec.agent.override_setup_timeout_sec,
+            max_timeout_sec=spec.agent.max_timeout_sec,
             kwargs=kwargs,
             env=dict(resolution.env),
         )
@@ -488,6 +516,13 @@ def _build_spider2_dbt(
 
 
 def _environment_config(agent_cfg: AgentConfig, run_dir: Path) -> EnvironmentConfig:
+    if agent_cfg.import_path == RAZORBACK_CODEX_IMPORT_PATH:
+        return EnvironmentConfig(
+            import_path=SPACEDOCK_SOLVER_ENVIRONMENT_IMPORT_PATH,
+            delete=False,
+            env=dict(PROXY_BLOCK_ENV),
+        )
+
     if agent_cfg.import_path != SPACEDOCK_SOLVER_IMPORT_PATH:
         return EnvironmentConfig(delete=False)
 

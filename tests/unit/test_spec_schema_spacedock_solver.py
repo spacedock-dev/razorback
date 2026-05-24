@@ -18,11 +18,17 @@ def test_spacedock_solver_block_parses(tmp_path):
         solver_workflow=workflow,
         max_turns=200,
         max_budget_usd=10,
+        override_timeout_sec=1200,
+        override_setup_timeout_sec=300,
+        max_timeout_sec=1200,
         tools_allowed=[],
         tools_denied=[],
     )
     assert block.runtime == "claude"
     assert block.kind == "spacedock_solver"
+    assert block.override_timeout_sec == 1200
+    assert block.override_setup_timeout_sec == 300
+    assert block.max_timeout_sec == 1200
 
 
 def test_spacedock_solver_runtime_enum_enforced():
@@ -32,6 +38,33 @@ def test_spacedock_solver_runtime_enum_enforced():
             runtime="unsupported",
             model="x",
             solver_workflow=".",
+        )
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["override_timeout_sec", "override_setup_timeout_sec", "max_timeout_sec"],
+)
+def test_spacedock_solver_timeout_fields_must_be_positive(field):
+    with pytest.raises(ValidationError):
+        SpacedockSolverAgentBlock(
+            kind="spacedock_solver",
+            runtime="codex",
+            model="gpt-5.5",
+            solver_workflow=".",
+            **{field: 0},
+        )
+
+
+def test_spacedock_solver_max_timeout_cannot_be_less_than_override():
+    with pytest.raises(ValidationError, match="max_timeout_sec"):
+        SpacedockSolverAgentBlock(
+            kind="spacedock_solver",
+            runtime="codex",
+            model="gpt-5.5",
+            solver_workflow=".",
+            override_timeout_sec=1200,
+            max_timeout_sec=600,
         )
 
 

@@ -6,6 +6,12 @@ The benchmark instruction is appended below these workflow instructions. The
 graded artifact is the final dbt project source state; do not create an answer
 file unless the task explicitly asks for one.
 
+Do not fetch public reference material while solving. This includes `curl`,
+`wget`, `git clone`, `git ls-remote`, package-source downloads, browser or web
+lookup of upstream projects, and searches for published solutions. Use only the
+local task workspace: installed packages, `dbt_packages/`, package manifests,
+compiled artifacts, logs, macros, models, seeds, profiles, and project data.
+
 Preserve existing dbt dependencies, package files, profiles, seeds, and macros
 unless the task explicitly requires changing them. Hidden verifier tests may
 depend on the existing project structure and package namespaces.

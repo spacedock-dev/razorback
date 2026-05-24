@@ -66,17 +66,18 @@ def test_ade_bench_dry_run_rejects_upstream_local_task_root(tmp_path: Path) -> N
     assert "tasks/*/task.yaml roots are retired" in message
 
 
-def test_emit_dab_codex_spec_uses_canonical_codex_solver_and_harbor_dab(tmp_path: Path) -> None:
+def test_emit_dab_codex_spec_uses_direct_codex_and_harbor_dab(tmp_path: Path) -> None:
     generator = _load_generator()
     row = generator.plan_dab_specs(data_root=tmp_path / "dab-data")[1]
 
     spec_path = generator.emit_dab_spec(row, out_dir=tmp_path / "out")
     payload = yaml.safe_load(spec_path.read_text())
 
-    assert payload["agent"]["kind"] == "spacedock_solver"
-    assert payload["agent"]["runtime"] == "codex"
+    assert payload["agent"]["kind"] == "codex"
     assert payload["agent"]["model"] == "gpt-5.5"
-    assert payload["agent"]["solver_workflow"] == "./examples/solver_workflows/codex-benchmark-solver"
+    assert "runtime" not in payload["agent"]
+    assert "solver_workflow" not in payload["agent"]
+    assert "sealed_hash" not in payload["agent"]
     assert payload["benchmark"]["kind"] == "harbor_dab"
     assert payload["benchmark"]["datasets"] == ["bookreview"]
     assert payload["benchmark"]["data_root"] == str(tmp_path / "dab-data")
@@ -99,7 +100,7 @@ def test_codex_ade_dbt_repair_workflow_is_checked_in() -> None:
     assert "answers.json" not in text
 
 
-def test_emit_specs_allow_solver_workflow_selection(tmp_path: Path) -> None:
+def test_emit_specs_allow_spacedock_solver_workflow_selection(tmp_path: Path) -> None:
     generator = _load_generator()
     dab_row = generator.plan_dab_specs(data_root=tmp_path / "dab-data")[0]
     ade_tasks_root = tmp_path / "harbor-data" / "ade-bench"
@@ -111,11 +112,13 @@ def test_emit_specs_allow_solver_workflow_selection(tmp_path: Path) -> None:
     dab_spec_path = generator.emit_dab_spec(
         dab_row,
         out_dir=tmp_path / "out" / "dab",
+        agent_kind="spacedock_solver",
         solver_workflow="./examples/solver_workflows/codex-benchmark-solver",
     )
     ade_spec_path = generator.emit_ade_bench_spec(
         ade_row,
         out_dir=tmp_path / "out" / "ade",
+        agent_kind="spacedock_solver",
         solver_workflow="./examples/solver_workflows/codex-ade-dbt-repair",
     )
 
@@ -131,14 +134,28 @@ def test_emit_specs_allow_solver_workflow_selection(tmp_path: Path) -> None:
     )
 
 
-def test_checked_in_dab_smoke_spec_uses_structured_workspace_without_hints() -> None:
+def test_checked_in_dab_smoke_spec_uses_direct_codex_minimal_without_hints() -> None:
     spec_path = REPO_ROOT / "examples" / "specs" / "codex-dab-smoke.yaml"
     payload = yaml.safe_load(spec_path.read_text())
 
+    assert payload["agent"]["kind"] == "codex"
+    assert "solver_workflow" not in payload["agent"]
     assert payload["benchmark"]["kind"] == "harbor_dab"
     assert payload["benchmark"]["datasets"] == ["bookreview"]
-    assert payload["benchmark"]["workspace_variant"] == "direct-structured"
+    assert payload["benchmark"]["workspace_variant"] == "direct-minimal"
     assert payload["benchmark"]["hints"] is False
+
+
+def test_checked_in_ade_codex_spec_uses_direct_codex_shape() -> None:
+    spec_path = REPO_ROOT / "examples" / "specs" / "ade-bench-harbor-dataset-codex.yaml"
+
+    payload = yaml.safe_load(spec_path.read_text())
+
+    assert payload["agent"]["kind"] == "codex"
+    assert "solver_workflow" not in payload["agent"]
+    assert payload["agent"]["reasoning_effort"] == "xhigh"
+    assert "docker_image_override" not in payload["benchmark"]
+    assert "shared-dbt-duckdb" not in spec_path.read_text()
 
 
 def test_emit_dab_codex_spec_allows_model_override(tmp_path: Path) -> None:
@@ -223,6 +240,8 @@ def test_cli_can_emit_custom_ade_solver_workflow(tmp_path: Path, monkeypatch) ->
             str(tmp_path / "ade-bench"),
             "--out-root",
             str(tmp_path / "specs"),
+            "--agent-kind",
+            "spacedock_solver",
             "--solver-workflow",
             "./examples/solver_workflows/codex-ade-dbt-repair",
             "--write",
@@ -272,6 +291,7 @@ def test_cli_can_emit_dab_workspace_and_hints_variants(
     assert generator.main() == 0
 
     payload = yaml.safe_load((tmp_path / "specs" / "dab" / "bookreview.yaml").read_text())
+    assert payload["agent"]["kind"] == "spacedock_solver"
     assert payload["benchmark"]["workspace_variant"] == "spacedock"
     assert payload["benchmark"]["hints"] is True
 
@@ -336,8 +356,9 @@ def test_emit_ade_bench_codex_spec_never_uses_local_task_entry(tmp_path: Path) -
     spec_path = generator.emit_ade_bench_spec(row, out_dir=tmp_path / "out")
     payload = yaml.safe_load(spec_path.read_text())
 
-    assert payload["agent"]["kind"] == "spacedock_solver"
-    assert payload["agent"]["runtime"] == "codex"
+    assert payload["agent"]["kind"] == "codex"
+    assert "runtime" not in payload["agent"]
+    assert "solver_workflow" not in payload["agent"]
     assert payload["agent"]["model"] == "gpt-5.5"
     assert payload["benchmark"]["kind"] == "ade-bench"
     assert payload["benchmark"]["tasks_root"] == str(tasks_root)
@@ -359,6 +380,7 @@ def test_emit_ade_bench_codex_spec_uses_harbor_shaped_task_root(tmp_path: Path) 
     spec_path = generator.emit_ade_bench_spec(
         rows[0],
         out_dir=tmp_path / "out",
+        agent_kind="spacedock_solver",
         solver_workflow="./examples/solver_workflows/codex-ade-dbt-repair",
     )
     payload = yaml.safe_load(spec_path.read_text())
@@ -401,6 +423,7 @@ def test_emit_dab_codex_spec_allows_workspace_and_hints_variants(tmp_path: Path)
 
     assert payload["benchmark"]["workspace_variant"] == "spacedock"
     assert payload["benchmark"]["hints"] is True
+    assert payload["agent"]["kind"] == "spacedock_solver"
 
 
 def test_plan_ade_bench_dataset_specs_emits_one_row_per_slug() -> None:
@@ -440,8 +463,9 @@ def test_emit_ade_bench_dataset_codex_spec_uses_dataset_field(tmp_path: Path) ->
     )
     payload = yaml.safe_load(spec_path.read_text())
 
-    assert payload["agent"]["kind"] == "spacedock_solver"
-    assert payload["agent"]["runtime"] == "codex"
+    assert payload["agent"]["kind"] == "codex"
+    assert "runtime" not in payload["agent"]
+    assert "solver_workflow" not in payload["agent"]
     assert payload["benchmark"]["kind"] == "ade-bench"
     assert payload["benchmark"]["dataset"] == "dbt-labs/ade-bench@latest"
     assert payload["benchmark"]["tasks"] == ["airbnb001"]

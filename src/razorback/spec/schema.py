@@ -45,6 +45,49 @@ class ClaudeCliAgentBlock(BaseModel):
     prompt_file: Path | None = None
 
 
+class CodexAgentBlock(BaseModel):
+    """Direct Codex agent block.
+
+    This is the minimal Codex path: it translates straight to RazorbackCodex
+    without solver workflow prompting or sealed/checkpoint semantics.
+    """
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["codex"]
+    model: str = "gpt-5.5"
+    sampling: SamplingBlock = Field(default_factory=SamplingBlock)
+    reasoning_effort: str | None = None
+    reasoning_summary: str | None = None
+    override_timeout_sec: float | None = Field(default=None, gt=0)
+    override_setup_timeout_sec: float | None = Field(default=None, gt=0)
+    max_timeout_sec: float | None = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def _only_noop_sampling(self) -> "CodexAgentBlock":
+        if (
+            self.sampling.temperature not in (None, 0.0)
+            or self.sampling.top_p is not None
+            or self.sampling.seed is not None
+        ):
+            raise ValueError(
+                "agent.kind: codex does not support sampling controls; keep "
+                "sampling at temperature=0.0, top_p=null, seed=null."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _timeout_cap_allows_override(self) -> "CodexAgentBlock":
+        if (
+            self.override_timeout_sec is not None
+            and self.max_timeout_sec is not None
+            and self.max_timeout_sec < self.override_timeout_sec
+        ):
+            raise ValueError(
+                "agent.max_timeout_sec must be greater than or equal to "
+                "agent.override_timeout_sec"
+            )
+        return self
+
+
 class SpacedockSolverAgentBlock(BaseModel):
     """Spec-level agent block for canonical spacedock_solver (spec §6.2 + §4).
 
@@ -61,6 +104,9 @@ class SpacedockSolverAgentBlock(BaseModel):
     solver_workflow_content_hash: str | None = None
     max_turns: int = 200
     max_budget_usd: float | None = None
+    override_timeout_sec: float | None = Field(default=None, gt=0)
+    override_setup_timeout_sec: float | None = Field(default=None, gt=0)
+    max_timeout_sec: float | None = Field(default=None, gt=0)
     tools_allowed: list[str] = Field(default_factory=list)
     tools_denied: list[str] = Field(default_factory=list)
     append_system_prompt: str | None = None
@@ -71,11 +117,25 @@ class SpacedockSolverAgentBlock(BaseModel):
     spacedock_skill_version: str | None = None
     prompt_content_hashes: dict[str, str] = Field(default_factory=dict)
 
+    @model_validator(mode="after")
+    def _timeout_cap_allows_override(self) -> "SpacedockSolverAgentBlock":
+        if (
+            self.override_timeout_sec is not None
+            and self.max_timeout_sec is not None
+            and self.max_timeout_sec < self.override_timeout_sec
+        ):
+            raise ValueError(
+                "agent.max_timeout_sec must be greater than or equal to "
+                "agent.override_timeout_sec"
+            )
+        return self
+
 
 AgentBlock = Annotated[
     Union[
         NopAgentBlock,
         ClaudeCliAgentBlock,
+        CodexAgentBlock,
         SpacedockSolverAgentBlock,
     ],
     Field(discriminator="kind"),
