@@ -76,3 +76,7 @@ DAB model run.
 ### Summary
 
 Wrote the standard separate plan doc for the four-AC disk-budget task. The implementation plan starts with bounded synthetic and real-data materialization probes, validates read-only file-backed DB mounts before full scale, and only then resumes the existing explain preflight without launching a scored DAB run.
+
+### Feedback Cycles
+
+- 2026-05-24T15:29:33Z - plan gate rejected. The plan identifies a plausible mechanism but did not perform a spike to prove Harbor preserves read-only `main.volumes` and that the mounted DB path is readable/write-protected. Send back to plan for a bounded synthetic spike before implementation approval.
