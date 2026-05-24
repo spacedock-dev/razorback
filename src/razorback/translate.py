@@ -294,7 +294,6 @@ def _build_harbor(
         task_paths, trial_name_map = _invoke_plugin_generate(
             plugin=block.plugin,
             plugin_args=block.plugin_args or {},
-            dataset=block.dataset,
             spec_tasks=block.tasks,
             tasks_root=Path(tasks_root),
         )
@@ -333,7 +332,6 @@ def _invoke_plugin_generate(
     *,
     plugin: str,
     plugin_args: dict[str, object],
-    dataset: str | None,
     spec_tasks: list[str] | None,
     tasks_root: Path,
 ) -> tuple[list[Path], dict[str, tuple[str, int] | tuple[str, list[int]]]]:
@@ -358,9 +356,10 @@ def _invoke_plugin_generate(
         "uv", "run", f"razorback-plugin-{plugin}", "generate",
         "--out", str(tasks_root.resolve()),
     ]
-    if dataset is not None:
-        # The plugin owns dataset-ref interpretation (e.g., "dab@1.0").
-        cmd.extend(["--dataset", dataset])
+    # Note: `dataset` (the spec-level ref like "dab@1.0") is NOT passed to the
+    # plugin CLI — it's a spec-level identity concept used by the freeze
+    # provenance, not a plugin invocation parameter. The plugin's task-set
+    # selector is `--datasets` (plural), populated from spec_tasks below.
     if spec_tasks:
         cmd.extend(["--datasets", ",".join(spec_tasks)])
     for key, value in plugin_args.items():
