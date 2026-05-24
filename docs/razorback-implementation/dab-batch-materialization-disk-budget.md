@@ -106,3 +106,16 @@ Ran a bounded synthetic DAB/Harbor spike without full DAB data, scored execution
 ### Summary
 
 Implemented the approved per-file SQLite/DuckDB `main.volumes` bind mechanism in the DAB compose generator and path-aware bind-mode materializer, with no symlink/source-root fallback and no whole-directory `query_dataset` mount. Harbor surface touched: task-authored `environment/docker-compose.yaml` for `main.volumes`, preserved through `DockerEnvironment`; adjacent regression sweep `uv run pytest packages/razorback-plugin-dab/tests/unit/ -q` passed 141/143 with 2 skips, and explain JSON assertions passed for `dab@1.0`, batch mode, 12 tasks, Codex `gpt-5.5`, and `xhigh`.
+
+## Stage Report: validation
+
+- DONE: Every AC has independent PASS/FAIL evidence with exact commands and artifact paths, including disk budget, write protection, and explain JSON checks.
+  Evidence: `docs/razorback-implementation/validation/dab-batch-materialization-disk-budget.md` records AC-1..AC-4 PASS; fresh explain JSON `_runs/validation/dab-batch-materialization-disk-budget/explain/explain.json` exited 0, T3/T4 assertions passed, focused/full probes measured 905216 bytes under 128 MiB and 3616768 bytes under 512 MiB, and the Docker write-protection test passed.
+- DONE: Code review classifies blocking/non-blocking findings and checks the DAB materializer/compose changes stay scoped to the approved mechanism.
+  Evidence: validation report code review against `main..HEAD` (`f2a56b5..5d9fad7`) found blocking findings: none; non-blocking findings: none; diff scope is `prepare.py`, `compose.py`, and DAB tests, with no hardlinks or whole `query_dataset` main mount.
+- DONE: Gate decision is explicit and backed by rerun validation evidence, with concrete fixes if rejected.
+  Evidence: gate decision is approve to `done`; focused tests passed (`11 passed / 1 skipped`, `6 passed`, `1 passed`, plugin unit sweep `141 passed / 2 skipped`), and the only full `uv run pytest` failure is the pre-existing `razorback.score.load` collection error on unchanged mainline files.
+
+### Summary
+
+Validated commits `78f610c`, `077a025`, and `5d9fad7` from the assigned worktree. AC-1 through AC-4 pass independently with fresh explain evidence, measured disk-budget probes, source write-protection coverage, and manual application of the installed `superpowers:requesting-code-review` workflow; approve this entity to `done`.
