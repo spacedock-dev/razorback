@@ -1436,3 +1436,7 @@ will hit the same seam. Recommendation to the captain: REJECT back to implementa
 narrow fix-cycle (drop or align the `--dataset` flag; add a non-mock dispatch integration
 test). The other 6 commits stand on their own.
 
+### Feedback Cycles
+
+**Cycle 1 (2026-05-24, captain REJECT-acknowledged):** validator returned REJECT on AC-1.d live `rk run --explain` round-trip — `translate.py:361-363` emits `--dataset` flag to `razorback-plugin-dab generate` which has no such option (CLI signature at `packages/razorback-plugin-dab/src/razorback_plugin_dab/cli.py:25-53`). Direct probe `uv run razorback-plugin-dab generate --dataset dab@1.0 --datasets bookreview` exits 2. Mock-subprocess unit tests at `tests/translate/test_dab_dispatch.py` never exercised the real plugin contract. Captain scope: **narrowest fix only (Material #1)** — drop or align the `--dataset` flag emission + add at least one non-mock dispatch integration test that calls the real plugin binary with the translator's emitted command. Material #2 (`/workspace/preflight.sh` consumer gap) and Polish #3 (AC verifier text drifts) deferred to a later cycle or sibling entity. Routed to impl ensign (alive at 43.3% context) via SendMessage; validation stage will fresh-dispatch after fix lands.
+
