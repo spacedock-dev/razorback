@@ -1,0 +1,18 @@
+{
+  "policy": "strict",
+  "run_dir": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-dab-workspace-readme-leak-guard-prose-port/runs/leak-guard-rerun/spacedock/agnews/goal1-spacedock-agnews/ea36a29508921569",
+  "schema_version": "rk-audit-v1",
+  "summary": {
+    "clean": 1,
+    "coverage_missing": 0,
+    "tainted": 0
+  },
+  "trials": [
+    {
+      "findings": [],
+      "taint_status": "clean",
+      "trial_id": "agnews__JE3GiCo",
+      "trial_path": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-dab-workspace-readme-leak-guard-prose-port/runs/leak-guard-rerun/spacedock/agnews/goal1-spacedock-agnews/ea36a29508921569/agnews__JE3GiCo"
+    }
+  ]
+}
