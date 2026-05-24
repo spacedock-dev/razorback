@@ -1,0 +1,18 @@
+{
+  "q1": {
+    "reward": 0.0,
+    "reason": "Ground truth 'The Rundown' not found in LLM output: UNABLE TO DETERMINE"
+  },
+  "q2": {
+    "reward": 0.0,
+    "reason": "Ground truth '0.14414414414414414' (tol=0.0001) not found in LLM output: UNABLE TO DETERMINE"
+  },
+  "q3": {
+    "reward": 0.0,
+    "reason": "Ground truth numeric value '336.6363636363636' (tol=0.01) not found in LLM output: UNABLE TO DETERMINE"
+  },
+  "q4": {
+    "reward": 0.0,
+    "reason": "Ground truth 'Africa' not found in LLM output: UNABLE TO DETERMINE"
+  }
+}
