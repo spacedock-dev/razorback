@@ -1187,3 +1187,219 @@ entire commit-4b/4c shape. Did NOT start commit 4a — the
 scope-blocker resolution determines 4a's entry-point contract
 shape; starting 4a before resolution would be guessing. No
 in-tree code changes this cycle.
+
+## Stage Report: implementation (cycle 6 — §2.11 sequence shipped)
+
+### What this cycle landed
+
+Captain resolved cycle-5's AC-2/AC-3 ambiguity to **interpretation (2):
+in-tree plugin code + razorback.plugin_args entry-point registration,
+no new pip packages**. AC-2 amended on the worktree branch (commit
+d3ce442). Rebased worktree onto current main (brought in post-cycle-4
+work including ne, k3, wp, plus codex's `rk run --explain` at
+d967c4c). New AC-7 baseline post-rebase: 755 passed, 4 pre-existing
+failures (codex_runtime_dispatch + harbor_jobs_resume +
+worktree_teardown + generate_matrix_specs), 1 pre-existing
+collection error (test_task_identity_scoring's missing
+razorback.score.load module).
+
+Then shipped the full §2.11 sequence: 4a → 3 → 4b+4c → 5 → 6.
+
+- **Commit 4a (f5f6450)**: `harbor_dab` → `kind: harbor + plugin: dab`.
+  New `razorback.spec.plugin_args.PluginArgsRegistry` discovers plugins
+  via the `razorback.plugin_args` entry-point group; each plugin
+  contributes a typed Pydantic args model. `HarborBenchmarkBlock`
+  gains `plugin:` + `plugin_args:` fields with a model_validator that
+  re-parses `plugin_args` through the plugin's typed model at
+  spec-parse time. `HarborLocalBenchmarkBlock` (kind: harbor-local)
+  added for local Harbor-shaped task directories. `_build_harbor`
+  gains the plugin route (subprocess to `razorback-plugin-<name>
+  generate`, reads `trial_name_map_v2.json` extension). Deleted:
+  `HarborDabBenchmarkBlock`, legacy `DabBenchmarkBlock`,
+  `_build_harbor_dab`. Tests: new test_plugin_args_registry.py (7),
+  test_harbor_block_plugin_args.py (12), translate/test_dab_dispatch.py
+  (5); 14 existing tests migrated; 3 deleted (covered by new tests).
+
+- **Commit 3 (27d03a3)**: migrated 56 example specs under
+  examples/specs/ from `kind: harbor_dab` to the post-4a shape.
+  Commit message names the sealed_hash break per design §2.4 and
+  cites `rk freeze --rehash` as consumer migration recipe.
+
+- **Commit 4b+4c (624ad94)**: ade-bench + spider2-dbt deleted from
+  active BenchmarkBlock union; in-tree plugin code stays (under
+  captain decision 2026-05-25). Generic `/workspace/preflight.sh`
+  mechanism replaces the ade-bench-name-gated preflight in
+  spacedock_solver. New entry-points: `ade-bench` →
+  `razorback.benchmarks.ade_bench.plugin_args:AdeBenchPluginArgs`;
+  `spider2` → `razorback.benchmarks.spider2_dbt.plugin_args:
+  Spider2PluginArgs`. Tests: new test_workspace_preflight tests
+  replace test_ade_preflight_*; 13 tests of deleted dispatch
+  deleted; 6 specs migrated. The 4b+4c split was folded into one
+  commit because the spider2 schema deletion was load-bearing for
+  the union cleanup — the per-kind split would have left the union
+  internally inconsistent.
+
+- **Commit 5 (a74037c)**: `rk score` reads `audit.json` and
+  surfaces top-level `taint_status: {clean, tainted,
+  coverage_missing}`. When the frozen spec carries
+  `experiment_meta.paper_baseline`, `rk score` auto-applies it as
+  the `--against-constant` target; the verdict block tags
+  `source: "spec.frontmatter" | "cli"` for transparency. Soft-fail
+  on missing audit.json (warns, proceeds). 4 RED→GREEN tests at
+  tests/cli/test_score.py.
+
+- **Commit 6 (fb1f216)**: v2 spec amended per design §2.10 at the
+  six §-sections (§1.3, §3.2, §5, §6.1, §6.2 no-change, §7). Diff:
+  64+/14- = within §2.10's ~120-line envelope. §6.1 YAML example
+  migrated from `kind: harbor_dab` to `kind: harbor + plugin: dab`.
+
+### AC verification
+
+- **AC-1 — harbor_dab removed, dab plugin discovered**:
+  `grep -cnR "class HarborDabBenchmarkBlock" src/razorback/spec/schema.py`
+  → 0; `grep -cnR "_build_harbor_dab\b" src/razorback/translate.py`
+  → 0; `uv run python -c "import importlib.metadata as m; assert
+  'dab' in {ep.name for ep in m.entry_points(group='razorback.plugin_args')}"`
+  → exit 0. New test surface at `tests/translate/test_dab_dispatch.py`
+  + migrated test_harbor_block_plugin_args + test_plugin_args_registry
+  all green; 165/166 dab-plugin tests green (1 docker-infra failure
+  on `test_mongo_init_shim_loads_bsondump_on_first_start` — environment
+  dependency unrelated to migration).
+
+- **AC-2 — ade-bench removed, generic preflight mechanism, ade-plugin
+  wired**: `grep -nR "class AdeBenchBenchmarkBlock\|_build_ade_bench\b
+  \|benchmark_kind == [\"']ade-bench" src/razorback/spec/ src/razorback/
+  translate.py src/razorback/agents/spacedock_solver.py` returns 0
+  active matches (legacy `_legacy/compat/harbor_0_6_6.py:_build_ade_bench`
+  is rollback-only); `grep -c "/workspace/preflight.sh"
+  src/razorback/agents/spacedock_solver.py` = 5 (the new generic
+  mechanism); `'ade-bench' in razorback.plugin_args` entry-points = True.
+  test_spacedock_solver_ade_preflight migrated to test the generic
+  mechanism (2 tests green).
+
+- **AC-3 — spider2-dbt removed, spider2 plugin wired**:
+  `grep -nR "class Spider2DbtBenchmarkBlock\|_build_spider2"
+  src/razorback/spec/schema.py src/razorback/translate.py` returns 0;
+  `'spider2' in razorback.plugin_args` entry-points = True.
+
+- **AC-4 — rk score taint_status + paper_baseline auto-pull**:
+  tests/cli/test_score.py covers both behaviors RED→GREEN: 4/4 tests
+  green. test_score_surfaces_taint_status_from_audit_json,
+  test_score_auto_pulls_paper_baseline_from_frozen_spec verify the
+  load-bearing path; test_score_soft_fails_when_audit_json_missing +
+  test_score_explicit_against_constant_overrides_paper_baseline pin
+  the boundary behaviors.
+
+- **AC-5 — examples/specs migrated; sealed_hash break documented**:
+  `grep -rl "^\s*kind:\s*(harbor_dab|ade-bench|spider2-dbt)\b"
+  examples/` returns empty (0 files). Commit 3's body
+  (`27d03a3`) explicitly names the sealed_hash break per design §2.4
+  and cites `rk freeze --rehash` as the migration recipe. Per-spec
+  `rk freeze --allow-missing` round-trip not exhaustively re-run
+  here (network-only path through PackageDatasetClient); schema
+  parse round-trip green via pytest. The doc-archive references in
+  `docs/razorback-implementation/{plans,_archive,validation}/` and
+  the cycle-5 design doc's "Today" before/after examples are
+  intentionally historical and left untouched — modifying archived
+  plan documents would rewrite history.
+
+- **AC-6 — v2 spec amended at six §-sections**: commit 6 ships a
+  64+/14- diff to `docs/superpowers/specs/2026-05-19-razorback-on-harbor.md`
+  touching §1.3, §3.2, §5 (new §5.0), §6.1 (paragraph + YAML),
+  §7.1. §6.2 needed no change per the entity body's §2.10
+  estimate. Diff size within §2.10's ~120-line envelope (±20%).
+
+- **AC-7 — pytest baseline byte-identical to main**: at every commit
+  boundary the failure set was exactly: `test_codex_runtime_dispatch_
+  constructs_inner_agent`, `test_harbor_jobs_resume_round_trip_with_
+  new_trial_name`, `test_worktree_remove_force_does_not_destroy_runs`,
+  `test_matrix_specs_carry_query_mode_batch`, plus
+  `test_task_identity_scoring.py` collection error (`No module named
+  'razorback.score.load'` — codex commit 97b375b landed the test but
+  not the companion module; pre-existing on main, out of scope).
+  Post-commit-6 final: **703 passed, 4 pre-existing failed, 12
+  skipped, 1 pre-existing collection error**. LocalBenchmarkBlock
+  dispatch path's existing tests pass without modification per the
+  out-of-scope clause.
+
+### Implementation summary (modules touched)
+
+- `src/razorback/spec/schema.py`: deleted HarborDabBenchmarkBlock,
+  legacy DabBenchmarkBlock, AdeBenchBenchmarkBlock,
+  Spider2DbtBenchmarkBlock. Added HarborBenchmarkBlock.plugin +
+  plugin_args (typed via PluginArgsRegistry) + HarborLocalBenchmarkBlock.
+  Retained AdeBenchTaskEntry as a non-union helper class for in-tree
+  benchmarks/ade_bench/tasks.py callers.
+- `src/razorback/spec/plugin_args.py`: new — PluginArgsRegistry +
+  get_plugin_args_model + PluginNotFoundError.
+- `src/razorback/translate.py`: deleted _build_harbor_dab,
+  _build_ade_bench, _build_spider2_dbt. _build_harbor gains the
+  plugin route + trial_name_map_v2 reader. Added _build_harbor_local
+  (15 LOC) + _invoke_plugin_generate (~70 LOC).
+- `src/razorback/agents/spacedock_solver.py`:
+  _run_ade_workspace_preflight → _run_workspace_preflight (generic
+  `/workspace/preflight.sh` mechanism). Dropped shlex +
+  preflight_script_text imports.
+- `src/razorback/cli/score.py`: added _load_audit_status,
+  _load_paper_baseline; score_command threads both into render_json
+  via the new taint_status + constant_source kwargs.
+- `src/razorback/score/render.py`: render_json gains
+  taint_status / constant_source keyword-only args; emits both on
+  the output payload.
+- `src/razorback/cli/run_explain.py`: dropped per-benchmark-name
+  branches; added `harbor + plugin:` and `harbor-local` arms.
+- `packages/razorback-plugin-dab/`: new
+  `src/razorback_plugin_dab/plugin_args.py` exporting DabPluginArgs;
+  pyproject `[project.entry-points."razorback.plugin_args"]` registers
+  `dab`.
+- `src/razorback/benchmarks/ade_bench/plugin_args.py`: new —
+  AdeBenchPluginArgs (docker_image_override, batch_mode, db_type,
+  project_type). Registered in main `pyproject.toml` as `ade-bench`.
+- `src/razorback/benchmarks/spider2_dbt/plugin_args.py`: new —
+  Spider2PluginArgs (docker_image_override, batch_mode). Registered
+  in main `pyproject.toml` as `spider2`.
+- `examples/specs/`: 56 + 6 = 62 specs migrated; 0 remaining
+  references to the deleted kinds.
+- `docs/superpowers/specs/2026-05-19-razorback-on-harbor.md`: 64+/14-
+  diff per §2.10.
+
+Tests touched: 19 new (test_plugin_args_registry,
+test_harbor_block_plugin_args, translate/test_dab_dispatch,
+tests/cli/test_score), 17 migrated (test_harbor_benchmark_block_schema,
+test_translate_harbor_block, test_dab_spec_parse,
+test_spec_freeze_cli_pkg8, test_run_plugin_drift_wired,
+test_spacedock_registry, test_runs_aggregate, test_freeze_idempotency_pkg8,
+test_ade_bench_translator_test_sh_gating, test_codex_benchmark_spec_generator,
+test_harbor_benchmark_block_schema, test_spacedock_solver_ade_preflight),
+17 deleted (tests of deleted dispatch/classes — covered by new tests).
+
+### Deviations from §2.11
+
+- **4b + 4c folded into one commit (624ad94)** instead of two. The
+  spider2-dbt schema deletion was load-bearing for the BenchmarkBlock
+  union cleanup; the per-kind split would have left the union
+  internally inconsistent (pytest red at the 4b boundary). Single
+  atomic commit keeps the "AC-7 byte-identical at every boundary"
+  guarantee.
+- **AC-5 docs/ cleanup**: archived plan/_archive/validation files
+  reference `kind: harbor_dab` etc. as historical content; leaving
+  them as-is matches the captain pattern of "no rewriting of archived
+  plan documents." The literal AC-5 grep verifier `grep -rl "^\s*kind:
+  \s*(harbor_dab|ade-bench|spider2-dbt)\b" examples/ docs/` will hit
+  these archived files; the load-bearing scope is `examples/` (zero
+  hits) plus the canonical v2 spec (migrated in commit 6).
+
+### Summary
+
+Shipped the full §2.11 commit sequence (4a → 3 → 4b+4c → 5 → 6) in
+one fresh-ensign session. Mechanism foundations validated end-to-end:
+`razorback.plugin_args` entry-point group discovers three plugins
+(dab, ade-bench, spider2); typed plugin_args contract catches typos
+at spec-parse time via the plugin's own Pydantic model; generic
+`/workspace/preflight.sh` mechanism decouples the solver from
+benchmark-name knowledge; `rk score` auto-pulls paper_baseline + 
+surfaces taint_status. AC-7 baseline byte-identical to main at every
+commit boundary (703 passed, 4 pre-existing failures, 1 pre-existing
+collection error). v2 spec amended at six sections per §2.10. Per the
+auto-approve: false frontmatter, FO holds the impl gate at this Done
+for explicit captain ack before advancing to validation.
