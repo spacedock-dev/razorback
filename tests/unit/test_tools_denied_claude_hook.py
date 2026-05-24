@@ -3,6 +3,7 @@
 
 from pathlib import Path
 
+import pytest
 from harbor.agents.installed.claude_code import ClaudeCode
 
 from razorback.agents.spacedock_solver import SpacedockSolverAgent
@@ -45,7 +46,10 @@ def _base_kwargs(tmp_path: Path, *, tools_denied: list[str]) -> dict:
     )
 
 
-def test_claude_runtime_installs_four_dab_denials_verbatim_in_order(tmp_path):
+def test_claude_runtime_installs_four_dab_denials_verbatim_in_order(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("RAZORBACK_SPACEDOCK_PLUGIN_DIR", str(tmp_path))
     """AC-2: a SpacedockSolverAgent with runtime=claude installs tools_denied
     as the inner agent's disallowed_tools (harbor's PreToolUse surface).
     Cite spec §6.2.
@@ -73,7 +77,10 @@ def test_claude_runtime_installs_four_dab_denials_verbatim_in_order(tmp_path):
         )
 
 
-def test_claude_runtime_empty_tools_denied_still_installs_default_block_list(tmp_path):
+def test_claude_runtime_empty_tools_denied_still_installs_default_block_list(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("RAZORBACK_SPACEDOCK_PLUGIN_DIR", str(tmp_path))
     """Empty tools_denied still emits disallowed_tools — RazorbackClaudeCode installs
     its DEFAULT DISALLOWED_TOOLS list (curl/wget/huggingface) unconditionally,
     which is the spec'd block-list for the razorback claude-cli surface.

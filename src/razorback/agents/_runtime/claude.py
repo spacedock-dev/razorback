@@ -35,6 +35,8 @@ class RazorbackClaudeCode(ClaudeCode):
         tools_allowed: list[str] | None = None,
         sampling_temperature: float | None = None,
         extra_env: dict[str, str] | None = None,
+        plugin_dirs: list[Path | str] | None = None,
+        sub_agent: str | None = None,
         **kwargs: Any,
     ) -> None:
         env = dict(extra_env or {})
@@ -47,6 +49,8 @@ class RazorbackClaudeCode(ClaudeCode):
             list(tools_allowed) if tools_allowed else list(DEFAULT_ALLOWED_TOOLS)
         )
         self._sampling_temperature = sampling_temperature
+        self._plugin_dirs = [str(p) for p in (plugin_dirs or [])]
+        self._sub_agent = sub_agent
 
         kwargs.setdefault("allowed_tools", ",".join(self._tools_allowed))
         # Harbor's build_cli_flags emits CLI flag values UNQUOTED. The razorback
@@ -68,6 +72,17 @@ class RazorbackClaudeCode(ClaudeCode):
 
         self._razorback_extra_env = env
         self._exec_env: dict[str, str] = {}
+
+    def build_cli_flags(self) -> str:
+        base = super().build_cli_flags()
+        extras: list[str] = []
+        for path in self._plugin_dirs:
+            extras.append(f"--plugin-dir {path}")
+        if self._sub_agent:
+            extras.append(f"--agent {self._sub_agent}")
+        if not extras:
+            return base
+        return f"{base} {' '.join(extras)}" if base else " ".join(extras)
 
     @staticmethod
     def name() -> str:
@@ -112,6 +127,31 @@ class RazorbackClaudeCode(ClaudeCode):
             self._version = result.stdout.strip() if hasattr(result, "stdout") else None
         except Exception:
             self._version = None
+        await self._stage_plugin_dirs(environment)
+
+    async def _stage_plugin_dirs(self, environment) -> None:
+        """Upload each host-side plugin_dir into the agent container.
+
+        `--plugin-dir <path>` must resolve INSIDE the trial environment where
+        `claude` runs. The constructor accepts host paths; setup stages them to
+        an in-container path that is then substituted on every flag render.
+        Without this step the host path leaks into a docker container that
+        cannot see it, and claude refuses to load the plugin.
+        """
+        if not self._plugin_dirs or not hasattr(environment, "upload_dir"):
+            return
+        staged: list[str] = []
+        for host_path in self._plugin_dirs:
+            host = Path(host_path)
+            if not host.is_dir():
+                raise RazorbackClaudeCodeError(
+                    f"plugin_dir {host} is not a host directory; cannot stage."
+                )
+            container_path = f"/tmp/razorback-plugins/{host.name}"
+            await environment.exec(f"mkdir -p /tmp/razorback-plugins")
+            await environment.upload_dir(str(host), container_path)
+            staged.append(container_path)
+        self._plugin_dirs = staged
 
     def populate_context_post_run(self, context: AgentContext) -> None:
         super().populate_context_post_run(context)
@@ -143,6 +183,8 @@ def build_inner_agent(
     model: str,
     harbor_agent_kwargs: dict[str, Any],
     extra_env: dict[str, str],
+    plugin_dirs: list[Path | str] | None = None,
+    sub_agent: str | None = None,
 ) -> RazorbackClaudeCode:
     """Construct razorback's ClaudeCode runtime helper for spacedock_solver.
 
@@ -174,6 +216,10 @@ def build_inner_agent(
             kw["disallowed_tools"] = ",".join(value)
             continue
         kw[name] = value
+    if plugin_dirs:
+        kw["plugin_dirs"] = list(plugin_dirs)
+    if sub_agent:
+        kw["sub_agent"] = sub_agent
     return RazorbackClaudeCode(
         logs_dir=Path(logs_dir),
         model_name=model,

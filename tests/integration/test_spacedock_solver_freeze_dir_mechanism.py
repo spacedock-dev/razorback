@@ -101,6 +101,7 @@ async def test_harbor_jobs_resume_round_trip_with_new_trial_name(
 ):
     """AC-6 mechanism: re-executed trial with a NEW trial_name reads the SAME freeze tree."""
     monkeypatch.setenv("RAZORBACK_FREEZE_DIR", str(tmp_path / "freeze-cas"))
+    monkeypatch.setenv("RAZORBACK_SPACEDOCK_PLUGIN_DIR", str(tmp_path))
     logs_a = _make_harbor_run_dir(tmp_path, "bookreview-0001__abc1234")
     workflow = tmp_path / "solver"
     workflow.mkdir()

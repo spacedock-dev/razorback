@@ -186,6 +186,37 @@ else:
       # Per-cell audit + score; record failures but do not abort the matrix on these.
       if [[ -n "$result_json" ]]; then
         cell_run_dir="$(dirname "$result_json")"
+
+        # AC-3: spacedock-variant cells must show >=1 subagent dispatch (Task/Agent
+        # tool_use) in the inner claude session. The post-run hook in
+        # SpacedockSolverAgent.cleanup writes subagent-trace-manifest.json one
+        # level above the per-trial dir (adjacent to provenance.yaml). The
+        # validator's exit code 2 means the cell silently degraded back to
+        # single-agent execution — REJECT it rather than scoring it as a real
+        # spacedock crew-loop result.
+        if [[ "$v" == "spacedock" ]]; then
+          # The trace manifest is written by SpacedockSolverAgent.cleanup at
+          # logs_dir.parents[3], which equals cell_run_dir (the per-cell-run
+          # dir adjacent to provenance.yaml — same dir as result.json's parent
+          # under the matrix's ${cell_runs}/*/*/result.json glob).
+          smoke_rc=0
+          uv run --project "$REPO_ROOT" python -m razorback.agents.subagent_smoke \
+            "$cell_run_dir" > "${cell_run_dir}/subagent-smoke.log" 2>&1 || smoke_rc=$?
+          if (( smoke_rc != 0 )); then
+            status="subagent-dispatch-missing"
+            failed_cells=$((failed_cells+1))
+            ok_cells=$((ok_cells-1))
+            printf '%s\t%s\t%d\t%s\n' "$v" "$d" "$smoke_rc" "$spec_frozen" >> "$FAILURES_LOG"
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+              "$v" "$d" "$spec_frozen" "$cell_runs" "$status" "$smoke_rc" "$cost_usd" >> "$LEDGER"
+            echo "REJECT [$cell_index/$total] $v/$d — $status (see ${cell_run_dir}/subagent-smoke.log)" >&2
+            if (( ! CONTINUE_ON_FAIL )); then
+              exit 6
+            fi
+            continue
+          fi
+        fi
+
         audit_rc=0
         uv run --project "$REPO_ROOT" rk audit "$cell_run_dir" --policy strict --format json \
           > "${cell_run_dir}/audit.json" 2> "${cell_run_dir}/audit.stderr" || audit_rc=$?
