@@ -183,22 +183,19 @@ else:
     else
       ok_cells=$((ok_cells+1))
 
-      # Per-cell audit + score; record failures but do not abort the matrix on these.
+      # Per-cell verify-stage gate runs BEFORE rk score; a failing gate rolls
+      # the cell back from ok_cells to failed_cells and skips scoring.
       if [[ -n "$result_json" ]]; then
         cell_run_dir="$(dirname "$result_json")"
 
-        # AC-3: spacedock-variant cells must show >=1 subagent dispatch (Task/Agent
-        # tool_use) in the inner claude session. The post-run hook in
-        # SpacedockSolverAgent.cleanup writes subagent-trace-manifest.json one
+        # Gate 1 (ne): spacedock-variant cells must show >=1 subagent dispatch
+        # (Task/Agent tool_use) in the inner claude session. The post-run hook
+        # in SpacedockSolverAgent.run writes subagent-trace-manifest.json one
         # level above the per-trial dir (adjacent to provenance.yaml). The
         # validator's exit code 2 means the cell silently degraded back to
         # single-agent execution — REJECT it rather than scoring it as a real
         # spacedock crew-loop result.
         if [[ "$v" == "spacedock" ]]; then
-          # The trace manifest is written by SpacedockSolverAgent.cleanup at
-          # logs_dir.parents[3], which equals cell_run_dir (the per-cell-run
-          # dir adjacent to provenance.yaml — same dir as result.json's parent
-          # under the matrix's ${cell_runs}/*/*/result.json glob).
           smoke_rc=0
           uv run --project "$REPO_ROOT" python -m razorback.agents.subagent_smoke \
             "$cell_run_dir" > "${cell_run_dir}/subagent-smoke.log" 2>&1 || smoke_rc=$?
@@ -217,10 +214,36 @@ else:
           fi
         fi
 
+        # Gate 2 (wp): External-oracle audit — rk audit --policy strict scans
+        # the cell's trajectory for the DAB verify-stage forbidden-pattern list
+        # (huggingface, load_dataset, hf://, from datasets import, named
+        # canonical-data pip installs, web tools, etc.). Fires for ALL variants
+        # — NOT variant-gated. razorback.audit.claude_code adapts the claude-cli
+        # trace shape; razorback.audit.taint owns the patterns.
+        # Exit-code mapping: 0 clean / 23 cheating / other non-zero error.
         audit_rc=0
         uv run --project "$REPO_ROOT" rk audit "$cell_run_dir" --policy strict --format json \
           > "${cell_run_dir}/audit.json" 2> "${cell_run_dir}/audit.stderr" || audit_rc=$?
-        # If strict policy returned 23 the audit.json is still written; we keep both.
+        if (( audit_rc == 23 )); then
+          status="external-oracle-cheating"
+          ok_cells=$((ok_cells-1))
+          failed_cells=$((failed_cells+1))
+          printf '%s\t%s\t%d\t%s\n' "$v" "$d" "$audit_rc" "$spec_frozen" >> "$FAILURES_LOG"
+          printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "$v" "$d" "$spec_frozen" "$cell_runs" "$status" "$audit_rc" "$cost_usd" >> "$LEDGER"
+          echo "REJECT [$cell_index/$total] $v/$d external-oracle-cheating — see ${cell_run_dir}/audit.json" >&2
+          continue
+        elif (( audit_rc != 0 )); then
+          status="external-oracle-audit-error"
+          ok_cells=$((ok_cells-1))
+          failed_cells=$((failed_cells+1))
+          printf '%s\t%s\t%d\t%s\n' "$v" "$d" "$audit_rc" "$spec_frozen" >> "$FAILURES_LOG"
+          printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "$v" "$d" "$spec_frozen" "$cell_runs" "$status" "$audit_rc" "$cost_usd" >> "$LEDGER"
+          echo "ERROR  [$cell_index/$total] $v/$d external-oracle-audit-error rc=$audit_rc — see ${cell_run_dir}/audit.stderr" >&2
+          continue
+        fi
+
         # Score: --against-constant per variant.
         case "$v" in
           spacedock) target="spacedock=0.577" ;;

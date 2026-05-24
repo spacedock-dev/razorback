@@ -6,6 +6,7 @@ from pathlib import Path
 
 import typer
 
+from razorback.audit import claude_code
 from razorback.audit import harbor_codex
 from razorback.audit import taint
 from razorback.errors import ExitCode
@@ -39,7 +40,34 @@ def _discover_trial_roots(run_dir: Path) -> list[Path]:
             continue
         seen.add(candidate)
         roots.append(candidate)
+    claude_code_roots = claude_code.discover_trial_roots(run_dir)
+    for candidate in claude_code_roots:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        roots.append(candidate)
+    # The claude-cli runtime symlinks ``claude-output.jsonl`` to
+    # ``claude-code.txt`` under ``steps/main/agent/`` for PKG-26 audit-sentinel
+    # parity. The sentinel rglob above therefore double-discovers that nested
+    # agent directory as a ghost trial. Drop those ghosts when a strict ancestor
+    # is already a claude_code trial root — the cell-level root carries the
+    # findings; the nested ghost would be a redundant CLEAN row.
+    if claude_code_roots:
+        claude_set = set(claude_code_roots)
+        roots = [
+            r for r in roots
+            if r in claude_set
+            or not any(_is_strict_descendant(r, ancestor) for ancestor in claude_set)
+        ]
     return roots
+
+
+def _is_strict_descendant(path: Path, ancestor: Path) -> bool:
+    try:
+        rel = path.relative_to(ancestor)
+    except ValueError:
+        return False
+    return rel != Path(".")
 
 
 def _reduce_trial_status(findings: list[dict]) -> str:
@@ -71,7 +99,11 @@ def _audit_run_dir(run_dir: Path, policy: str) -> dict:
     summary = {"clean": 0, "tainted": 0, "coverage_missing": 0}
     for trial_root in _discover_trial_roots(run_dir):
         report = taint.scan_attempt(trial_root, taint_policy="audit")
-        findings = [*report["findings"], *harbor_codex.scan_trial(trial_root)]
+        findings = [
+            *report["findings"],
+            *harbor_codex.scan_trial(trial_root),
+            *claude_code.scan_trial(trial_root),
+        ]
         status = _reduce_trial_status(findings)
         summary[status] += 1
         trials.append({

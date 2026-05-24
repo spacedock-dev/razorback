@@ -1,10 +1,18 @@
-# ABOUTME: Port of dataagentbench/benchmark/lib/taint.py (verbatim, 2026-05-20).
+# ABOUTME: Port of dataagentbench/benchmark/lib/taint.py with razorback divergence.
 # ABOUTME: Layer 3 of the leak-protection stack (spec §9.4); driven by rk audit (§3.2).
 
 """Port of dataagentbench/benchmark/lib/taint.py.
 
 Source: /Users/clkao/git/dataagentbench/benchmark/lib/taint.py (561 LoC, ported 2026-05-20).
-Upstream behavior preserved verbatim; only the import path to subagent_traces is re-pointed.
+
+Razorback divergence from upstream:
+- FORBIDDEN_SHELL_PATTERNS narrows the pip-install rule to the four named
+  canonical-data libraries (datasets/huggingface/transformers/evaluate) plus
+  the huggingface-cli/hf binaries. Upstream flags ANY ``pip install X`` as
+  cheating; the razorback principle is that generic compute libraries
+  (rapidfuzz, scikit-learn, duckdb, etc.) are CLEAN — only the named
+  canonical-data libs are forbidden. The list mirrors
+  razorback.agents.claude_invoke.DISALLOWED_TOOLS so audit and runtime agree.
 """
 import json
 from pathlib import Path
@@ -16,11 +24,21 @@ from io import StringIO
 from razorback.audit import subagent_traces
 
 
+# Named canonical-data libraries that razorback forbids by name. Mirrors
+# ``Bash(pip install datasets*)`` etc. in razorback.agents.claude_invoke.
+_FORBIDDEN_LIB_NAMES = ("datasets", "huggingface", "huggingface_hub", "transformers", "evaluate")
+_FORBIDDEN_LIB_ALTERNATION = "|".join(re.escape(name) for name in _FORBIDDEN_LIB_NAMES)
+
 FORBIDDEN_SHELL_PATTERNS = {
     "forbidden_lookup": [
         re.compile(r"(?m)(?:^|[;&|]\s*)(?:curl|wget)\b"),
-        re.compile(r"(?m)(?:^|[;&|]\s*)(?:python(?:3)?\s+-m\s+pip|pip(?:3)?)\s+install\b"),
+        re.compile(
+            r"(?m)(?:^|[;&|]\s*)(?:python(?:3)?\s+-m\s+pip|pip(?:3)?)\s+install\b"
+            r"(?:\s+-[^\s;&|]+)*"  # consume any flag args before the package name
+            rf"\s+(?:{_FORBIDDEN_LIB_ALTERNATION})(?:\b|[*=<>~])"
+        ),
         re.compile(r"(?m)(?:^|[;&|]\s*)npm\s+install\b"),
+        re.compile(r"(?m)(?:^|[;&|]\s*)(?:huggingface-cli|hf)\b"),
     ],
 }
 
