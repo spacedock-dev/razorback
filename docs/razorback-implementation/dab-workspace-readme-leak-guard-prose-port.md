@@ -213,3 +213,27 @@ Cycle-4 addendum per team-lead heads-up that origin/main landed `rk run --explai
 ### Summary (cycle 4)
 
 `rk run --explain` (codex 2026-05-24, d967c4c) used as a deterministic pre-flight gate post-T7 schema fix. Three explain.json artifacts captured per-cell as additional AC-2 evidence. Spacedock plan resolution shows `reasoning_effort=xhigh` correctly threaded; direct-* plan resolution surfaces a new finding that the claude-cli translate path drops `reasoning_effort` before reaching harbor. AC-2 PASS unchanged (the leak-guard prose is the load-bearing deterrent, not reasoning depth); the threading bug is out-of-scope and filed as recommended sibling work.
+
+## Stage Report: validation
+
+Validation reproduced every AC's `Verified by:` clause verbatim against impl cycle-3 + cycle-4 artifacts on branch HEAD `d8671d3`. Baseline for AC-4 = post-merge `main` HEAD `5c4edfb9f102f567d0ebb37c9d19c508b556ea16`.
+
+- DONE: AC-1 — per-variant render assert + grep
+  3/3 variants `OK`; `grep -F 'UNABLE TO DETERMINE' workspace_readme.py` returns 3 matches (lines 29/62/105).
+- DONE: AC-2 — rk audit clean + verbatim grep empty + branch (a) decline (all 3 cells)
+  audit.json per cell: spacedock `{clean:1, tainted:0}`, direct-structured `{clean:2, tainted:0}`, direct-minimal `{clean:2, tainted:0}`. AC-2 verbatim grep `grep -F 'canonical' .../claude-code.txt | grep -i 'ag news\|dataset'` returns EMPTY for all 3. JSON-parsed tool_use Bash exec count for `load_dataset` = 0/0/0; the single `load_dataset` mention per cell is the rendered `## Rules` prose, not an executed command. Branch (a) decline applies to every cell.
+- DONE: AC-3 — leak-guard pytest GREEN
+  `uv run pytest packages/razorback-plugin-dab/tests/unit/test_workspace_readme_leak_guard.py -v` = 21 passed in 0.01s (7 phrases × 3 variants).
+- DONE: AC-4 — full pytest reproduces baseline
+  Worktree: `1 failed, 165 passed, 3 skipped in 65.63s`; baseline `main` HEAD `5c4edfb9` reproduces byte-identical `AssertionError: shim did not load BSON; final count=-1` for the same `test_mongo_init_shim_loads_bsondump_on_first_start`. No branch-introduced regressions.
+- DONE: AC-5 — schema RED→GREEN + fresh rk freeze
+  `uv run pytest tests/unit/test_freeze.py -v` = 4 passed including both new claude-cli `reasoning_effort` cases; fresh `rk freeze` on `examples/specs/goal1/direct-{structured,minimal}/agnews.yaml --allow-missing` both exit 0; `agnews.frozen.yaml` preserves `reasoning_effort: xhigh`.
+- DONE: Code review (`superpowers:requesting-code-review`)
+  Diff scope = 4 files / 93 insertions. Strengths: verbatim upstream port with 3 documented mechanical name swaps; per-variant character preserved; T0 RED → T1 GREEN + T6 RED → T7 GREEN ordering observable in git history; schema diff is 1 line mirroring sibling pattern; ABOUTME comments present. Minor (non-blocking): leak-guard test asserts phrase presence not paragraph structure; `reasoning_effort: str | None = None` is untyped (consistent with sibling fields). **No blocking findings.**
+- NOTED: Cycle-4 finding (translate.py drops reasoning_effort on claude-cli path) is out-of-scope per AC-5's stated contract (parse + freeze round-trip), which is what AC-5 explicitly verifies. The translate-threading bug is a sibling-entity concern per the cycle-4 stage report.
+
+### Summary
+
+Validation report at `docs/razorback-implementation/validation/dab-workspace-readme-leak-guard-prose-port.md` (commit `65b2c0a`) carries per-AC reproduced output cited verbatim from the validator's own re-run, plus code-review findings. All 5 ACs PASS; the lone test failure (mongo_init_docker) is environmental and reproduces byte-identical on baseline `main`. Captain pre-authorized merge-on-PASS; this gate decision triggers terminalization with no further captain ack required.
+
+## Gate decision: APPROVE
