@@ -44,6 +44,15 @@ def test_writer_counts_two_task_events(tmp_path):
     _write_claude_code_txt(agent_dir / "claude-code.txt", events)
     manifest = write_subagent_trace_manifest(cell_dir)
     assert manifest["schema_version"] == "razorback-subagent-traces-v1"
+    assert manifest["trial"]["trial_id"] == "cell"
+    assert manifest["prompt_mode"] is None
+    assert manifest["trace_artifacts"] == [
+        {
+            "kind": "parent_log",
+            "runtime": "claude",
+            "path": "steps/main/agent/claude-code.txt",
+        }
+    ]
     assert manifest["captured"] == 2
     assert manifest["expected"] is None
     assert len(manifest["dispatches"]) == 2
@@ -144,6 +153,15 @@ def test_writer_counts_codex_spawn_agent_events(tmp_path):
 
     assert manifest["captured"] == 1
     assert manifest["capture_source"] == "razorback-codex-cli-trace"
+    assert manifest["trial"]["trial_id"] == "cell"
+    assert manifest["prompt_mode"] is None
+    assert manifest["trace_artifacts"] == [
+        {
+            "kind": "parent_log",
+            "runtime": "codex",
+            "path": "steps/main/agent/codex.txt",
+        }
+    ]
     assert manifest["dispatches"][0]["tool_use_id"] == "spawn-model"
     assert manifest["dispatches"][0]["subagent_type"] == "spacedock:ensign"
     assert manifest["dispatches"][0]["spawn_index"] == 0

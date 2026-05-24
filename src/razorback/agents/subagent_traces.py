@@ -159,14 +159,26 @@ def _extract_codex_parent_model(events: list[dict]) -> str | None:
     return None
 
 
-def write_subagent_trace_manifest(cell_dir: Path) -> dict[str, Any]:
-    """Parse the cell's runtime JSONL and write subagent-trace-manifest.json.
+def _relative_trace_artifact(path: Path, trial_dir: Path, runtime: str) -> dict[str, str]:
+    return {
+        "kind": "parent_log",
+        "runtime": runtime,
+        "path": path.relative_to(trial_dir).as_posix(),
+    }
+
+
+def write_subagent_trace_manifest(
+    trial_dir: Path,
+    *,
+    prompt_mode: str | None = None,
+) -> dict[str, Any]:
+    """Parse the trial's runtime JSONL and write subagent-trace-manifest.json.
 
     Returns the in-memory manifest dict. Raises FileNotFoundError when no
-    supported runtime JSONL is present under cell_dir.
+    supported runtime JSONL is present under trial_dir.
     """
-    cell_dir = Path(cell_dir)
-    txt_path, runtime = _find_runtime_log(cell_dir)
+    trial_dir = Path(trial_dir)
+    txt_path, runtime = _find_runtime_log(trial_dir)
     events = list(_parse_events(txt_path))
     if runtime == "claude":
         dispatches = _extract_dispatches(events)
@@ -178,12 +190,17 @@ def write_subagent_trace_manifest(cell_dir: Path) -> dict[str, Any]:
         capture_source = CODEX_CAPTURE_SOURCE
     manifest = {
         "schema_version": SCHEMA_VERSION,
+        "trial": {"trial_id": trial_dir.name},
+        "prompt_mode": prompt_mode,
+        "trace_artifacts": [
+            _relative_trace_artifact(txt_path, trial_dir, runtime),
+        ],
         "expected": None,
         "captured": len(dispatches),
         "dispatches": dispatches,
         "parent_agent": {"model": parent_model},
         "capture_source": capture_source,
     }
-    out_path = cell_dir / "subagent-trace-manifest.json"
+    out_path = trial_dir / "subagent-trace-manifest.json"
     out_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return manifest
