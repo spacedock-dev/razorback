@@ -92,4 +92,4 @@ Wrote the standard separate plan doc for the four-AC disk-budget task. The imple
 
 ### Summary
 
-Ran a bounded synthetic DAB/Harbor spike without full DAB data, scored execution, run-history deletion, or Docker pruning. The spike proves Harbor preserves the candidate read-only `main.volumes` DB-file mount, so implementation can proceed with per-file SQLite/DuckDB `main` binds and keep the symlink/source-root fallback out of the main path. Commit id: this plan-cycle commit.
+Ran a bounded synthetic DAB/Harbor spike without full DAB data, scored execution, run-history deletion, or Docker pruning. The spike proves Harbor preserves the candidate read-only `main.volumes` DB-file mount, so implementation can proceed with per-file SQLite/DuckDB `main` binds and keep the symlink/source-root fallback out of the main path. Plan evidence commit id: `1bd728a`.
