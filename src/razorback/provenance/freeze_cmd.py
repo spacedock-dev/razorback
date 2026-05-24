@@ -143,6 +143,8 @@ def _solver_workflow_path(spec) -> Path | None:
 
 
 def _agent_cli_bin(spec) -> str:
+    if spec.agent.kind == "codex":
+        return "codex"
     if spec.agent.kind == "claude-cli":
         return "claude"
     if spec.agent.kind == "spacedock_solver":

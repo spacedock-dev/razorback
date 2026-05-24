@@ -253,6 +253,44 @@ def test_freeze_omits_solver_workflow_hash_for_non_spacedock_spec(
     assert "solver_workflow_hash" not in prov
 
 
+def test_freeze_direct_codex_does_not_stamp_solver_or_sealed_fields(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _stub_existing_resolvers(monkeypatch)
+    import razorback.provenance.freeze_cmd as fc
+
+    spec_file = tmp_path / "codex.yaml"
+    spec_file.write_text(
+        """\
+version: 1
+experiment: direct-codex-freeze
+agent:
+  kind: codex
+  model: gpt-5.5
+  reasoning_effort: xhigh
+benchmark:
+  kind: local
+  task_paths: []
+trials: 1
+"""
+    )
+    monkeypatch.setattr(fc, "resolve_plugin_inventory", lambda: FAKE_PLUGINS)
+    monkeypatch.setattr(fc, "resolve_solver_workflow_hash", lambda _p: None)
+
+    result = runner.invoke(app, ["freeze", str(spec_file)])
+    assert result.exit_code == 0, result.output
+
+    frozen = yaml.safe_load(spec_file.with_suffix(".frozen.yaml").read_text())
+    prov = yaml.safe_load((spec_file.parent / "provenance.yaml").read_text())
+    assert frozen["agent"]["kind"] == "codex"
+    assert frozen["agent"]["reasoning_effort"] == "xhigh"
+    assert "solver_workflow" not in frozen["agent"]
+    assert "solver_workflow_content_hash" not in frozen["agent"]
+    assert "sealed_hash" not in frozen["agent"]
+    assert frozen["provenance"].get("solver_workflow_hash") is None
+    assert "solver_workflow_hash" not in prov
+
+
 def test_freeze_refuses_when_plugins_resolver_returns_none(
     spec_file, monkeypatch
 ) -> None:

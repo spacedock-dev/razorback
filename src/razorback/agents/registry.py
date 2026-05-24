@@ -4,7 +4,7 @@
 from pathlib import Path
 from typing import Literal, Type
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from razorback.errors import RazorbackError
 
@@ -41,6 +41,31 @@ class SpacedockSolverAgentConfig(BaseModel):
     prompt_content_hashes: dict[str, str] = Field(default_factory=dict)
 
 
+class CodexAgentConfig(BaseModel):
+    """Registry-level kwargs for direct agent.kind: codex."""
+    model_config = ConfigDict(extra="forbid")
+    model: str = Field(default="gpt-5.5", min_length=1)
+    sampling: _SamplingKwargs = Field(default_factory=_SamplingKwargs)
+    reasoning_effort: str | None = None
+    reasoning_summary: str | None = None
+    override_timeout_sec: float | None = Field(default=None, gt=0)
+    override_setup_timeout_sec: float | None = Field(default=None, gt=0)
+    max_timeout_sec: float | None = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def _only_noop_sampling(self) -> "CodexAgentConfig":
+        if (
+            self.sampling.temperature not in (None, 0.0)
+            or self.sampling.top_p is not None
+            or self.sampling.seed is not None
+        ):
+            raise ValueError(
+                "agent.kind: codex does not support sampling controls; keep "
+                "sampling at temperature=0.0, top_p=null, seed=null."
+            )
+        return self
+
+
 class AgentKindEntry:
     """Config schema + import path. import_path=None means harbor-bundled."""
 
@@ -50,6 +75,10 @@ class AgentKindEntry:
 
 
 _REGISTRY: dict[str, AgentKindEntry] = {
+    "codex": AgentKindEntry(
+        CodexAgentConfig,
+        "razorback.agents._runtime.codex:RazorbackCodex",
+    ),
     "spacedock_solver": AgentKindEntry(
         SpacedockSolverAgentConfig,
         "razorback.agents.spacedock_solver:SpacedockSolverAgent",
