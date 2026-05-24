@@ -1440,3 +1440,101 @@ test). The other 6 commits stand on their own.
 
 **Cycle 1 (2026-05-24, captain REJECT-acknowledged):** validator returned REJECT on AC-1.d live `rk run --explain` round-trip — `translate.py:361-363` emits `--dataset` flag to `razorback-plugin-dab generate` which has no such option (CLI signature at `packages/razorback-plugin-dab/src/razorback_plugin_dab/cli.py:25-53`). Direct probe `uv run razorback-plugin-dab generate --dataset dab@1.0 --datasets bookreview` exits 2. Mock-subprocess unit tests at `tests/translate/test_dab_dispatch.py` never exercised the real plugin contract. Captain scope: **narrowest fix only (Material #1)** — drop or align the `--dataset` flag emission + add at least one non-mock dispatch integration test that calls the real plugin binary with the translator's emitted command. Material #2 (`/workspace/preflight.sh` consumer gap) and Polish #3 (AC verifier text drifts) deferred to a later cycle or sibling entity. Routed to impl ensign (alive at 43.3% context) via SendMessage; validation stage will fresh-dispatch after fix lands.
 
+## Stage Report: implementation (cycle 7 — translator CLI fix)
+
+### Root cause
+
+Cycle-0's `_invoke_plugin_generate` at `src/razorback/translate.py:357-365`
+emitted both `--dataset <ref>` and `--datasets <subset>` to
+`razorback-plugin-dab generate`. The plugin CLI at
+`packages/razorback-plugin-dab/src/razorback_plugin_dab/cli.py:25-53`
+defines only `--datasets` (plural, the task-set selector) and
+`--data-root`. The `--dataset` (singular) flag was a translator-side
+invention that mapped to no CLI option; subprocess returned exit 2
+with `No such option: --dataset` and `_invoke_plugin_generate` wrapped
+it as `SpecError`. The five existing unit tests at
+`tests/translate/test_dab_dispatch.py` all mocked `subprocess.run`, so
+the translator's emitted argv was never validated against the real
+plugin binary — the contract drift was invisible to the green pytest
+baseline.
+
+The `dataset` field on `HarborBenchmarkBlock` is a spec-level identity
+concept consumed by the freeze provenance (sealed_hash inputs +
+view_manifest's `dataset_ref` field), not a plugin invocation
+parameter. The fix routes around the plugin CLI entirely for this
+field: drop the `--dataset` emission, keep `--datasets` for the
+task-set selector. ~3 load-bearing LOC removed (plus the `dataset:`
+keyword on the function signature, now dead).
+
+### TDD ordering
+
+- **RED commit `cbb1db9`** added `tests/translate/test_dab_dispatch_real_plugin.py`
+  with one test exercising `spec_to_job_config` end-to-end through the
+  real `razorback-plugin-dab` binary using the plugin's `hello-fixture`
+  dataset (no DAB data root required; ships in the plugin package).
+  At this commit pytest fails: `SpecError: razorback-plugin-dab generate
+  failed (exit 2): No such option: --dataset` — exactly reproduces the
+  validator's repro.
+- **GREEN commit `c000fe8`** drops the `--dataset` argv emission in
+  `_invoke_plugin_generate` and drops the now-dead `dataset` keyword
+  from the function signature. Updates the call site in `_build_harbor`
+  to match. At this commit the RED test goes green; the 5 mock-based
+  tests at `tests/translate/test_dab_dispatch.py` continue to pass
+  unchanged; full pytest baseline rises from 703 → 704 passed (the
+  +1 is the new integration test); the 4 pre-existing failures stay
+  byte-identical.
+
+### Live verifier (AC-1.d round-trip)
+
+`uv run rk freeze examples/specs/_deterministic-smoke.yaml --allow-missing`
+exit 0; emits `_deterministic-smoke.frozen.yaml` carrying the
+post-migration `kind: harbor + plugin: dab + plugin_args + tasks:
+[bookreview]` shape with full provenance pinning. `uv run rk run
+--explain --explain-format json --runs-dir <under-/Users/>
+_deterministic-smoke.frozen.yaml` now **reaches the plugin generate
+step without CLI drift**: the only failure mode is the env-dependent
+`dataset bookreview not hydrated, found LFS pointer` — the plugin's
+own hydration gate firing because the sandbox lacks DAB data, not a
+contract failure. Confirmed by an in-process call to
+`_invoke_plugin_generate(plugin='dab', plugin_args={},
+spec_tasks=['hello-fixture'], tasks_root=…)` returning the expected
+`[hello-fixture]` task path: end-to-end SUCCESS.
+
+### AC re-verification
+
+- **AC-1**: `grep -cnR "class HarborDabBenchmarkBlock"
+  src/razorback/spec/schema.py` → 0;
+  `grep -cnR "_build_harbor_dab\b" src/razorback/translate.py` → 0;
+  `uv run python -c "import importlib.metadata as m; assert 'dab' in
+  {ep.name for ep in m.entry_points(group='razorback.plugin_args')}"`
+  → exit 0; new non-mock integration test +
+  pre-existing mock unit tests all green; live `rk freeze` + `rk run
+  --explain` round-trip reaches the plugin boundary cleanly (no CLI
+  drift). AC-1.d fully resolved.
+- **AC-2..AC-7**: unchanged from cycle-6 stage report — single-file
+  scope per the captain's narrow-bounce decision; no other commits
+  touched in this cycle.
+
+### Dispatch checklist accounting
+
+- Material #1 (translator CLI fix): **DONE** — RED commit `cbb1db9` +
+  GREEN commit `c000fe8`. Mock-subprocess discipline gap closed by
+  the new non-mock integration test at
+  `tests/translate/test_dab_dispatch_real_plugin.py`.
+- Material #2 (`/workspace/preflight.sh` consumer gap): **OUT-OF-SCOPE
+  for cycle 1** per captain decision (deferred to a later cycle or
+  sibling entity).
+- Polish #3 (AC verifier text drifts in AC-2.b / AC-2.f / AC-3.d):
+  **OUT-OF-SCOPE for cycle 1** per captain decision.
+
+### Summary
+
+Translator's plugin-route argv emission was the live failure surface.
+RED → GREEN against the real plugin binary in two atomic commits with
+a non-mock integration test closing the discipline gap. Live `rk
+freeze` + `rk run --explain` round-trip on a migrated harbor_dab spec
+now reaches the plugin boundary without CLI drift. 704 pytest passed
+(+1 vs cycle-6's 703), 4 pre-existing failures stable. The other six
+commits from the cycle-6 sequence are unchanged. Signaling Done for
+fresh validator re-dispatch.
+
