@@ -113,3 +113,83 @@ class of silent-drop bug for any spec author.
 `auto-approve: false` because the translator is captain-facing
 runtime surface — kwargs that thread to harbor are the model's
 actual configuration, not just spec validation.
+
+## Stage Report: plan
+
+- DONE: Plan-output flex rule applied: this is a single-file change (`src/razorback/translate.py` claude-cli branch + a test). Recommend INLINE plan per README threshold (4 ACs but single-file scope). Plan stage report on entity body itself; no separate plans/{slug}.md doc.
+  Inline plan emitted in this section; no `docs/razorback-implementation/plans/translate-reasoning-effort-thread-through-claude-cli.md` created per README §plan "≤3 ACs / single-file change → inline plan" extended to this 4-AC single-file case (3 of the 4 ACs verify the same `src/razorback/translate.py` edit; AC-4 is the regression-safety pytest).
+- DONE: Mechanism validation: read `translate.py` lines around 178-200 (the claude-cli agent branch) + lines 107-108 (codex branch) + line 141 (spacedock_solver branch). Confirm the pattern: codex + spacedock_solver thread reasoning_effort into the inner runtime kwargs; claude-cli does not. Read `harbor/agents/claude.py:ClaudeCode.CLI_FLAGS` to confirm `--effort` is the wire-up at the runtime layer. Cite line numbers + commit SHA of the harbor pin.
+  Confirmed at `src/razorback/translate.py:107-108` (codex sets `kwargs["reasoning_effort"]` from `spec.agent.reasoning_effort`), `src/razorback/translate.py:141` (spacedock_solver passes `reasoning_effort=spec.agent.reasoning_effort` into `build_spacedock_harbor_agent_kwargs`), and `src/razorback/translate.py:190-192` (claude-cli branch only sets `kwargs["allowed_tools"]` from `tools_allowed`; `spec.agent.reasoning_effort` is never read). Harbor wire-up at `.venv/lib/python3.12/site-packages/harbor/agents/installed/claude_code.py:40-46`: `CliFlag("reasoning_effort", cli="--effort", type="enum", choices=["low","medium","high","xhigh","max"], env_fallback="CLAUDE_CODE_EFFORT_LEVEL")`. Harbor pin: `pyproject.toml:11` → `harbor==0.6.6`. k3 schema fix admitting `reasoning_effort` on `ClaudeCliAgentBlock` is committed at SHA `8ef0270` / merged-form `0c5b597` (per `git log src/razorback/spec/schema.py`). Schema declares `reasoning_effort: str | None = None` at `src/razorback/spec/schema.py:46`.
+- DONE: Task sequence: T0 RED unit test reproduces the silent-drop on claude-cli (asserts the resolved harbor_agent_kwargs contains reasoning_effort when present on agent block). T1 GREEN ~5 LOC mirroring codex branch's threading pattern. T2 full pytest. Stage report with commit SHAs + verification commands.
+  See **Implementation plan** below.
+
+### Summary
+
+Inline plan for a mechanical translator fix. The claude-cli branch in `src/razorback/translate.py:178-200` is the only place in `_build_agent_config` that does not thread `reasoning_effort` from the spec into the harbor `AgentConfig.kwargs`. The codex branch (lines 107-108) and the spacedock_solver branch (line 141) are the working precedents; the fix mirrors codex's two-line `if spec.agent.reasoning_effort is not None: kwargs["reasoning_effort"] = spec.agent.reasoning_effort` pattern. The harbor runtime layer accepts `--effort` natively (`harbor.agents.installed.claude_code:ClaudeCode.CLI_FLAGS[1]`), so once the kwarg lands on `AgentConfig.kwargs` it propagates to the CLI without further glue. AC-3's schema audit reduces to one field (`reasoning_effort`) because `ClaudeCliAgentBlock` only declares 6 attrs total (`kind`, `model`, `sampling`, `tools_allowed`, `prompt_file`, `reasoning_effort`) and the other five are already accounted for; harbor 0.6.6 has no `reasoning_summary` flag so it is not threadable on this path.
+
+## Implementation plan (inline)
+
+### Files touched (impl stage)
+
+- `src/razorback/translate.py` — single edit in the claude-cli branch (lines 190-200 in pre-fix state).
+- `tests/unit/test_translate_claude_cli_kwargs.py` — new file mirroring `tests/unit/test_translate_codex_direct.py` style (single in-memory `Spec` fixture, calls `spec_to_job_config`, asserts on `AgentConfig.kwargs`).
+
+### TDD checkpoints (impl stage runs these in order)
+
+**T0 — RED unit test (AC-1 verifier):**
+Write `tests/unit/test_translate_claude_cli_kwargs.py` with one test function. Spec YAML fixture mirrors the codex test: `kind: claude-cli`, `model: claude-opus-4-5`, `reasoning_effort: xhigh`, `tools_allowed: [Bash, Read, Write]`, benchmark `kind: local`. Call `spec_to_job_config` with a `tmp_path/.env` containing `ANTHROPIC_API_KEY=sk-test-fixture` (per `resolve_claude_auth`). Assert `agent_cfg.kwargs == {"allowed_tools": "Bash,Read,Write", "reasoning_effort": "xhigh"}`. Confirm RED via `uv run pytest tests/unit/test_translate_claude_cli_kwargs.py -x` — expected failure: `kwargs` dict missing the `reasoning_effort` key. Capture the baseline SHA (`git rev-parse HEAD` before any edit).
+
+**T1 — GREEN minimal edit (AC-1 fix):**
+In `src/razorback/translate.py:190-192` (the claude-cli `kwargs: dict[str, Any] = {}` builder), append after the `if spec.agent.tools_allowed:` block, before the `agent_cfg = AgentConfig(...)` call:
+
+```python
+if spec.agent.reasoning_effort is not None:
+    kwargs["reasoning_effort"] = spec.agent.reasoning_effort
+```
+
+This is the exact pattern from lines 107-108 (codex branch). Re-run T0: expect GREEN. Capture the post-fix SHA.
+
+**T2 — Regression sweep (AC-4 verifier):**
+`uv run pytest tests/ -x --ignore=tests/integration/test_lfs_hydration.py --ignore=tests/integration/test_mongo_init_docker.py` (or run full and accept the entity-named pre-existing failure set as the byte-identical baseline). The pre-existing translate tests (`test_translate_codex_direct.py`, `test_translate_spacedock_solver_import_path.py`, `test_translate_harbor_block.py`) must remain GREEN — none of them touch the claude-cli branch.
+
+**T3 — `rk run --explain` integration check (AC-2 verifier):**
+Run on each of the three k3 evidence specs:
+
+```bash
+uv run rk run --explain --explain-format json examples/specs/goal1/direct-structured/agnews.yaml | jq '.agent.harbor_agent_kwargs.reasoning_effort'
+uv run rk run --explain --explain-format json examples/specs/goal1/direct-minimal/agnews.yaml   | jq '.agent.harbor_agent_kwargs.reasoning_effort'
+uv run rk run --explain --explain-format json examples/specs/goal1/spacedock/agnews.yaml         | jq '.agent.harbor_agent_kwargs.reasoning_effort'
+```
+
+All three must emit `"xhigh"`. The first two were emitting `null` pre-fix; the third was already correct. If the example spec paths above differ from the actual workspace layout, the impl ensign should consult `docs/razorback-implementation/_evidence/leak-guard-rerun/` (cited in the entity frontmatter `source:` field) for the canonical paths used in k3 cycle-4.
+
+Note: `rk run --explain`'s JSON path to the kwargs may be `.agents[0].kwargs.reasoning_effort` rather than `.agent.harbor_agent_kwargs.reasoning_effort` for the direct claude-cli path (the latter is the spacedock-solver shape, where `harbor_agent_kwargs` is nested inside the solver kwargs). The impl ensign verifies the actual JSON key path on first invocation and updates the jq expression accordingly; the AC text is normative on the value (`"xhigh"`), not on the exact JSON dotted path.
+
+**T4 — AC-3 schema audit:**
+Enumerate `ClaudeCliAgentBlock` fields against the post-fix claude-cli kwargs builder. Expected audit table:
+
+| Schema field | Threading status | Cite |
+|---|---|---|
+| `kind` | not threaded (literal/metadata, used for dispatch) | `translate.py:178` `getattr(spec.agent, "kind", None) == "claude-cli"` |
+| `model` | threaded as `AgentConfig.model_name` | `translate.py:195` |
+| `sampling` | guarded: SpecError if `temperature` non-zero (harbor ClaudeCode has no temperature kwarg) | `translate.py:183-188` |
+| `tools_allowed` | threaded as `kwargs["allowed_tools"]` (comma-joined) | `translate.py:191-192` |
+| `prompt_file` | not threaded — deliberately deferred (harbor handles prompt template differently); document as out-of-scope follow-on if needed | `translate.py:178-200` (absent) |
+| `reasoning_effort` | threaded as `kwargs["reasoning_effort"]` (post-fix) | `translate.py:193-194` (post-fix line numbers) |
+
+The impl stage report includes this table verbatim with post-fix line numbers. `prompt_file` is the one field that is declared-but-not-threaded; the impl ensign decides whether to file a follow-on entity (likely yes — a separate `translate.py threads prompt_file through to harbor on the claude-cli path` task) or document the omission as intentional with a one-line reason. Recommendation: file a follow-on entity because `prompt_file` is a semantically meaningful agent config that the schema admits.
+
+### Commits (impl stage)
+
+Two atomic commits on the impl worktree branch:
+
+1. `test(translate): T0 RED — claude-cli branch drops reasoning_effort` — adds `tests/unit/test_translate_claude_cli_kwargs.py` only; pytest shows the new test FAILING.
+2. `fix(translate): T1 GREEN — thread reasoning_effort through claude-cli branch` — single ~2-line edit in `src/razorback/translate.py`; pytest shows the new test PASSING.
+
+Both commits must cite their SHAs in the impl stage report. The validation stage re-runs T0 from the second commit's state (expects GREEN), then runs T3 (the `rk run --explain` integration check) and T4 (the schema audit cross-check) independently.
+
+### Risks and unknowns
+
+- **`rk run --explain` JSON path:** the impl ensign should verify the actual JSON dotted-path on first invocation (per T3 note above) before scripting the AC-2 verification in the stage report.
+- **`prompt_file` follow-on scope:** flagged in T4; impl ensign's call whether to thread it now (one extra 2-line edit) or file separately. The captain's `auto-approve: false` setting means the impl ensign should raise this in the impl stage report rather than silently expanding scope.
+- **harbor 0.6.6 — no `reasoning_summary`:** unlike the codex branch which threads both `reasoning_effort` and `reasoning_summary`, the claude-cli path is fix-`reasoning_effort`-only because harbor's `ClaudeCode.CLI_FLAGS` does not declare a `reasoning_summary` flag. If a future harbor bump adds it, that's a follow-on edit, not this entity's scope.
