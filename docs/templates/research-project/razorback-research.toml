@@ -1,0 +1,14 @@
+# razorback-research.toml — named-reference registry seed
+# Operators `rk registry add <kind> <name> <path>` to bind references.
+# Common bindings:
+#   @baseline   → baseline run-dir (populated after the first full run)
+#   @latest     → most recent run-dir
+#
+# Example (uncomment and update after first baseline run):
+# [[refs]]
+# kind = "run"
+# name = "baseline"
+# path = "runs/${slug}-baseline/${slug}-baseline_<sealed-hash>/"
+
+slug = "${slug}"
+dataset = "${dataset_ref}"

@@ -462,17 +462,27 @@ class ProvenanceBlock(BaseModel):
     solver_workflow_hash: str | None = None
 
 
+class PaperBaselineBlock(BaseModel):
+    """Published baseline a researcher targets — `rk score` auto-applies
+    this as `--against-constant <name>=<value>` when set."""
+    model_config = ConfigDict(extra="forbid")
+    name: str
+    value: float
+
+
 class ExperimentMetaBlock(BaseModel):
-    """Phase 4a — experiment-level budget metadata.
+    """Phase 4a — experiment-level budget metadata + paper baseline ref.
 
     `max_budget_usd` is the per-experiment cap the `rk run` budget gate
     (`--max-budget-usd-running`) refuses against. `estimated_cost_usd`
     is populated by `rk freeze` (PKG-8) and consumed by the gate as the
-    pre-launch cost estimate.
+    pre-launch cost estimate. `paper_baseline` carries the published
+    baseline `rk score` auto-applies when present.
     """
     model_config = ConfigDict(extra="forbid")
     max_budget_usd: float | None = None
     estimated_cost_usd: float | None = None
+    paper_baseline: PaperBaselineBlock | None = None
 
 
 class ConcurrencyBlock(BaseModel):

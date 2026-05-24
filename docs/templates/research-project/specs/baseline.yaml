@@ -1,0 +1,24 @@
+version: 1
+experiment: ${slug}-baseline
+agent:
+  kind: spacedock_solver
+  runtime: ${solver_runtime}
+  model: ${target_model}
+  sampling:
+    temperature: 0.0
+  solver_workflow: ./solver_workflows/baseline
+  max_turns: ${max_turns}
+  max_budget_usd: ${max_budget_usd}
+  reasoning_effort: ${reasoning_effort}
+benchmark:
+  kind: harbor
+  dataset: ${dataset_ref}
+trials: 1
+concurrency:
+  trials: 4
+experiment_meta:
+  max_budget_usd: ${experiment_max_budget_usd}
+  paper_baseline:
+    name: ${paper_baseline_name}
+    value: ${paper_baseline_value}
+${todo_marker}
