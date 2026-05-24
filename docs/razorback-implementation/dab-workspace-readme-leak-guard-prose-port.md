@@ -170,3 +170,28 @@ Resumed after captain ack on T4 (live agnews re-run; widened to 3 variants). The
 ### Summary (cycle 2)
 
 T4 spacedock (the original cheating cell) PASSED cleanly: leak-guard prose deterred opus-4.7+xhigh from the `load_dataset` shortcut; agent built an honest workspace-data-only classifier; `rk audit --policy strict` returned `clean`; AC-2 verbatim grep returned empty. AC-2 is met for the load-bearing cell. The two direct-* cells captain widened scope to are blocked on a pre-existing baseline schema bug unrelated to this entity's prose port; recommend a follow-on baseline-bug fix + breadth re-run rather than carrying it inline. AC-1, AC-2 (spacedock), AC-3, AC-4 all green.
+
+## Stage Report: implementation (T4 amendment)
+
+Cycle-3 amendment per captain redirect — T4 was approved post the cycle-1 FAILED report. This cycle covers (a) the schema bug discovered during T4 direct-* freeze, (b) the in-entity widening to fix it, (c) the T6/T7 RED→GREEN, (d) per-cell T4 evidence for all 3 variants, (e) AC-5 verified.
+
+- DONE: T6 RED schema test
+  Commit d7d1e89. Added `test_claude_cli_agent_block_accepts_reasoning_effort` + `test_claude_cli_reasoning_effort_round_trips_through_freeze` to `tests/unit/test_freeze.py`; both fail RED before T7 with `SpecError: agent.claude-cli.reasoning_effort Extra inputs are not permitted`.
+- DONE: T7 schema GREEN
+  Commit 8ef0270. Added `reasoning_effort: str | None = None` to `ClaudeCliAgentBlock` (`src/razorback/spec/schema.py:46`), matching the same field on `SpacedockSolverAgentBlock`. `extra="forbid"` preserved. Both T6 tests now GREEN; the four `test_freeze.py` tests pass.
+- DONE: Entity body widened + AC-5 added
+  Commit 9da1f80. `## Problem` carries a "Scope expansion" paragraph naming the schema fix as part of the deliverable; `## Acceptance criteria` carries AC-5 pinning the round-trip contract.
+- DONE: AC-2 — T4 spacedock/agnews
+  Commits b9d52d2 (evidence) + dcd017e (cycle-2 report). `rk audit --policy strict` clean; verbatim grep empty; branch (a) decline; score 0.5 earned legitimately via workspace-only keyword classifier. Runtime 33m 11s.
+- DONE: AC-2 — T4 direct-structured/agnews
+  Commit d0699fa. `rk audit --policy strict` clean (0 tainted, 2 clean trials); verbatim grep empty; branch (a) decline; agent built workspace-only keyword-classifier+LR pipeline; load_dataset/hf://huggingface = 2 each (rule-prose only); fancyzhx/canonical/matched article_id = 0; score 0.5 (q1+q4 honest). Runtime 51m 43s.
+- DONE: AC-2 — T4 direct-minimal/agnews
+  Commit d0699fa. `rk audit --policy strict` clean (0 tainted, 2 clean trials); verbatim grep empty; branch (a) HARD decline — agent wrote `UNABLE TO DETERMINE` for all 4 queries without attempting classification (the terser variant + leak-guard prose elicits a more conservative posture than the structured variant). Score 0.0 for the RIGHT reason. Runtime 2m 17s.
+- DONE: AC-5 — `ClaudeCliAgentBlock.reasoning_effort` round-trip
+  Both T6 tests GREEN; `uv run rk freeze` succeeds on both direct-* yamls (frozen.yaml emitted; provenance.yaml emitted).
+- DONE: AC-4 — full pytest stable
+  `uv run pytest packages/razorback-plugin-dab/tests/` = 165 passed, 3 skipped, 1 failed; the single failure is `integration/test_mongo_init_docker.py::test_mongo_init_shim_loads_bsondump_on_first_start` which reproduces 1:1 on baseline `main` HEAD 5424667. No branch-introduced regressions.
+
+### Summary (cycle 3)
+
+3/3 variant agnews cells PASSED AC-2 with `rk audit --policy strict` clean and verbatim grep empty. All 3 took branch (a) — declined the `load_dataset` shortcut after seeing the `## Rules` section. The terser the variant, the more conservative the posture: spacedock + direct-structured built workspace-only classifiers (score 0.5 each, q1+q4 legit); direct-minimal hard-declined every query (score 0.0 for the right reason). Schema bug fixed in-entity per captain scope-widening (AC-5 added, RED→GREEN observable in commit history d7d1e89 → 8ef0270). AC-1, AC-2 (all 3 variants), AC-3, AC-4, AC-5 all met. Total live spend: 3 cells, ~87 min wallclock combined.
