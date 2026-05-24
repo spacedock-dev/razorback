@@ -892,3 +892,127 @@ commits 2-5 are PENDING-CAPTAIN-APPROVAL pending ack of the
 four decision points in design doc §3 Recommendation. Original
 AC-1..AC-4 marked STALE; new AC-1'..AC-5' reflect the widened
 scope.
+
+## Stage Report: implementation (cycle 3 revision — post-ne + staff review)
+
+### Scope revision
+
+ne (spacedock-solver real FO dispatch + smoke gate) merged to
+main earlier this session. Staff design review against the
+cycle-3 design landed at
+`docs/razorback-implementation/_evidence/staff-review-hm-design.md`
+flagging four constructs with named-changes-needed:
+`query_mode` typing (plugin-args contract), freeze/sealed_hash
+discontinuity (un-named in cycle-3 first pass), `taint.py`
+absent from autoresearch lifecycle (despite already shipping),
+and `solver_workflows/baseline/README.md.j2` contents
+unspecified (load-bearing for both scenarios).
+
+Captain authorized a single-pass revision over the design doc:
+no decomposition, no plan-to-plan task tree. Rebased worktree
+branch onto current main (1 conflict in
+`src/razorback/translate.py` import block — both
+`CodexAgentBlock` and `HarborBenchmarkBlock` kept; 20/20
+schema + translator tests stayed green post-rebase).
+
+- DONE: Rebase worktree branch onto current main (36 commits
+  ahead at fetch time; brought in ne's wiring,
+  ade-task-view-data-isolation, dab-readme-leak-guard plan,
+  external-oracle-audit plan + impl, plus the staff review).
+  One import-block conflict in `src/razorback/translate.py`
+  resolved by keeping both `CodexAgentBlock` (from main) and
+  `HarborBenchmarkBlock` (from cycle 2). 20/20 schema +
+  translator tests green post-rebase.
+
+- DONE: §1.1 + §1.2 scenarios surface `rk audit --policy
+  strict` + `taint_status:` in `rk score` output + the
+  per-cell smoke-gate precondition for "live." Step 2/3/5 in
+  both scenarios chain `rk run → rk audit → rk score`. "What
+  had to be true for live" gained items (f) and (g) covering
+  the audit and smoke-gate preconditions. ne's wiring treated
+  as current behavior; no "if it ships" language.
+
+- DONE: §2.3 (`rk research new`) extended with per-template
+  contents for `solver_workflows/baseline/README.md.j2`
+  (required sections: stages, reset declaration,
+  External-oracle audit prose aligned with `wp`, optional ROLE
+  prefix) + `drivers/matrix.sh.tmpl` (per-cell pipeline
+  modeled on `examples/drivers/dab-paper-matrix.sh` with
+  smoke-gate + audit-strict + score steps) +
+  `razorback-research.toml.j2` + `hypotheses/README.md` +
+  top-level `README.md.j2`. Staff-review-flagged
+  unspecified-but-load-bearing surfaces now concrete.
+
+- DONE: §2.4 (`_build_harbor`) gained the freeze inputs /
+  sealed_hash discontinuity paragraph: agent-side
+  `benchmark_kind` field shift orphans pre-migration
+  freeze-CAS entries; captured as commit 3 of §2.11 with
+  consumer-facing `rk freeze --rehash` migration recipe.
+  Spec-side `tasks` / `exclude_tasks` selectors documented as
+  NOT entering spec-side seal but DO entering agent-side via
+  `child_task_ids_hash`.
+
+- DONE: §2.6 (plugin escape valve) tightened from free-form
+  `dict[str, Any]` to typed `plugin_args` per plugin: Pydantic
+  model contributed by the plugin package via
+  `razorback.plugin_args` entry point; razorback re-parses
+  `plugin_args` at spec-validation time and raises `SpecError`
+  on failure. Added the `trial_name_map_v2` plugin-emitted
+  shape so the aggregator's batch-mode path survives migration
+  (plugin emits `{tasks: [{slug, query_ids: list[int]}]}`
+  extension in its view-manifest; `_build_harbor` reads it
+  post-generate).
+
+- DONE: §2.7 added agent-kind interaction with the smoke
+  gate: spacedock_solver trials get smoke-gated (captured >
+  0); claude-cli trials skip the smoke gate per ne's choice
+  (no subagent crew to trace) but `rk audit` still fires
+  (benchmark/agent-kind agnostic). Scaffold defaults to
+  `spacedock_solver`.
+
+- DONE: §2.8 (`rk score` autoresearch hook) surfaces
+  `taint_status:` from `audit.json`. Hard-fail in the matrix
+  driver if `audit.json` missing; soft-fail (warn + proceed)
+  for direct `rk score` invocations.
+
+- DONE: §2.10 (spec amendment scope) grown from three
+  §-sections to six (added §3.2 + §7 for CLI surface and
+  run-dir contract updates); ~120-line diff.
+
+- DONE: §2.11 (migration commits sequence) grown from five to
+  six commits: commit 3 (spec migration) explicitly captures
+  sealed_hash break + `rk freeze --rehash` guidance; commit 5
+  added for `rk score` taint surfacing + auto-pull
+  paper_baseline; commit 6 is the spec amendment. Commit 1
+  still in-tree.
+
+- DONE: §3 Recommendation rewritten — five captain decision
+  points now (a/b/c/d/e). (c) and (d) are load-bearing
+  (post-migration schema + sealed_hash break acknowledgement);
+  (a)/(b) are UX/process; (e) is doc-only.
+
+- PENDING-CAPTAIN-APPROVAL: Five decision points in §3. FO
+  holds the gate per `auto-approve: false` frontmatter. On
+  approval, commits 2-6 of the §2.11 sequence ship.
+
+### Summary
+
+Single-pass revision over the design doc per the captain's
+"stop the ceremony, just write" rule. Pulled ne's merged main
+into the worktree branch (1 import conflict resolved; 20/20
+tests green post-rebase). Updated six sections of the design
+doc per the staff review's four named-changes: §1.1/§1.2
+scenarios now show `rk audit` + `taint_status:` (the staff
+review's omission finding); §2.3 specifies per-template
+contents the staff review flagged as load-bearing but
+unspecified; §2.4 names the sealed_hash discontinuity; §2.6
+tightens the plugin contract to typed args + trial-map
+emission; §2.7 covers the claude-cli smoke-gate scope; §2.8
+surfaces taint in `rk score`; §2.10/§2.11 grow to reflect the
+larger spec amendment + the sealed_hash migration commit; §3
+rewrites the five captain decision points.
+
+The plan-stage research, ideation spike, production schema +
+builder, and cycle-3 scenarios all remain valid — the revision
+extends rather than replaces. Captain ack of §3 decision
+points (a-e) unblocks commits 2-6 of the §2.11 sequence.
