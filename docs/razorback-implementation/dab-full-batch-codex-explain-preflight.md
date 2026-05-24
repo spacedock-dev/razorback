@@ -1,9 +1,9 @@
 ---
 id: et8q8rd845hkn8p2bdhb9k9w
 title: DAB full batch Codex explain preflight
-status: backlog
+status: plan
 source: 2026-05-24 captain directive - explain the DAB full/batch Codex run before launching gpt-5.5/xhigh
-started:
+started: 2026-05-24T04:29:18Z
 completed:
 verdict:
 score: 0.9
