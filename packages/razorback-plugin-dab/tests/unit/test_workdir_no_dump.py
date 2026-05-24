@@ -55,14 +55,22 @@ def test_postgres_sql_dump_absent_from_workdir(tmp_path: Path):
     assert leaked_sql == [], f"AC-1: stray .sql under workdir: {leaked_sql}"
 
 
-def test_sqlite_live_db_still_in_workdir(tmp_path: Path):
+def test_sqlite_live_db_is_read_only_main_mount(tmp_path: Path):
     data_root = _build_bookreview(tmp_path)
     manifest = prepare_dataset_tasks(
         data_root=data_root, dataset="bookreview", tasks_root=tmp_path / "tasks"
     )
-    workdir = manifest[0]["task_dir"] / "steps" / "main" / "workdir"
-    assert (workdir / "query_dataset" / "review_query.db").exists(), (
-        "sqlite is a file-backed live DB — must remain in workdir for the agent"
+    task_dir = manifest[0]["task_dir"]
+    workdir = task_dir / "steps" / "main" / "workdir"
+    assert not (workdir / "query_dataset" / "review_query.db").exists(), (
+        "sqlite DB must not be physically copied into the bind-mode workdir"
+    )
+    compose = yaml.safe_load((task_dir / "environment" / "docker-compose.yaml").read_text())
+    assert any(
+        entry.endswith("/workspace/query_dataset/review_query.db:ro")
+        for entry in compose["services"]["main"]["volumes"]
+    ), (
+        "sqlite DB must be exposed to the agent via a read-only main mount"
     )
 
 
