@@ -1,0 +1,148 @@
+{
+  "agent": {
+    "env_keys": [
+      "CLAUDE_CODE_OAUTH_TOKEN"
+    ],
+    "harbor_builtin_name": null,
+    "harbor_import_path": "razorback.agents.spacedock_solver:SpacedockSolverAgent",
+    "kwargs": {
+      "harbor_agent_kwargs": {
+        "max_turns": 200,
+        "reasoning_effort": "xhigh",
+        "tools_allowed": [
+          "Bash",
+          "Read",
+          "Write",
+          "Edit",
+          "Glob",
+          "Grep"
+        ],
+        "tools_denied": []
+      },
+      "max_turns": 200,
+      "model": "claude-opus-4-7",
+      "prompt_content_hashes": {},
+      "resume_from_freeze": null,
+      "runtime": "claude",
+      "sampling": {
+        "seed": null,
+        "temperature": 0.0,
+        "top_p": null
+      },
+      "solver_workflow": "examples/solver_workflows/dab_paper_matrix",
+      "solver_workflow_content_hash": "sha256:3aaaa409d92f5ce93eafa8e691a8a104ef00470fbdbd3dd18465b4e49a78d02b",
+      "spacedock_skill_version": "1.0.0",
+      "tools_allowed": [
+        "Bash",
+        "Read",
+        "Write",
+        "Edit",
+        "Glob",
+        "Grep"
+      ],
+      "tools_denied": []
+    },
+    "max_timeout_sec": null,
+    "model": "claude-opus-4-7",
+    "override_setup_timeout_sec": null,
+    "override_timeout_sec": null,
+    "runtime": "claude",
+    "spec_kind": "spacedock_solver"
+  },
+  "benchmark": {
+    "data_root": null,
+    "dataset": "dab@1.0",
+    "datasets": [
+      "agnews"
+    ],
+    "hints": true,
+    "kind": "harbor_dab",
+    "query_mode": "batch",
+    "workspace_variant": "spacedock"
+  },
+  "concurrency": {
+    "attempts": 1,
+    "trials": 1
+  },
+  "environment": {
+    "delete": false,
+    "env": {
+      "HF_DATASETS_OFFLINE": "1",
+      "HF_HUB_OFFLINE": "1",
+      "HTTPS_PROXY": "http://127.0.0.1:1",
+      "HTTP_PROXY": "http://127.0.0.1:1",
+      "NO_PROXY": ".anthropic.com,api.anthropic.com,statsig.anthropic.com,featuregates.org,.statsig.com,.openai.com,api.openai.com,auth.openai.com,chatgpt.com,pypi.org,files.pythonhosted.org,pypi.python.org",
+      "TRANSFORMERS_OFFLINE": "1",
+      "http_proxy": "http://127.0.0.1:1",
+      "https_proxy": "http://127.0.0.1:1",
+      "no_proxy": ".anthropic.com,api.anthropic.com,statsig.anthropic.com,featuregates.org,.statsig.com,.openai.com,api.openai.com,auth.openai.com,chatgpt.com,pypi.org,files.pythonhosted.org,pypi.python.org"
+    },
+    "force_build": false,
+    "import_path": "razorback.environments.docker:ProxySeparatedDockerEnvironment",
+    "kwargs": {},
+    "mounts_json": [
+      {
+        "source": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-dab-workspace-readme-leak-guard-prose-port/runs/explain-tmp/goal1-spacedock-agnews/ea36a29508921569/_razorback/freeze",
+        "target": "/razorback-freeze",
+        "type": "bind"
+      }
+    ],
+    "override_cpus": null,
+    "override_gpus": null,
+    "override_memory_mb": null,
+    "override_storage_mb": null,
+    "suppress_override_warnings": false,
+    "type": null
+  },
+  "experiment": "goal1-spacedock-agnews",
+  "explain_only": true,
+  "explain_side_effects": [
+    "runs normal preflight checks before the explain branch",
+    "translates the spec and may materialize task views to report exact task paths",
+    "does not write _job_config.yaml",
+    "does not invoke Harbor",
+    "does not run the model"
+  ],
+  "job_config_yaml": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-dab-workspace-readme-leak-guard-prose-port/runs/explain-tmp/goal1-spacedock-agnews/ea36a29508921569/_job_config.yaml",
+  "job_name": "ea36a29508921569",
+  "ordering_hint": null,
+  "preparation": [
+    "Parse frozen spec and validate schema.",
+    "Resolve runs-dir, job name, and run directory.",
+    "Run runs-dir Docker mount visibility canary.",
+    "Check frozen Harbor/model/plugin provenance drift when present.",
+    "Translate Razorback spec to Harbor JobConfig.",
+    "Invoke razorback-plugin-dab generate to materialize Harbor task directories for the requested datasets/query mode.",
+    "Create/mount the run-local freeze root at /razorback-freeze.",
+    "At agent setup, create or validate the sealed-hash freeze CAS.",
+    "For ADE tasks, run Razorback ADE workspace preflight before model invocation.",
+    "Build RazorbackClaudeCode as the inner runtime adapter.",
+    "Stage the Spacedock plugin into the trial container.",
+    "Invoke Claude with --agent spacedock:first-officer.",
+    "Write Harbor job config to /Users/clkao/git/razorback/.worktrees/spacedock-ensign-dab-workspace-readme-leak-guard-prose-port/runs/explain-tmp/goal1-spacedock-agnews/ea36a29508921569/_job_config.yaml.",
+    "Invoke `uv run harbor run -c /Users/clkao/git/razorback/.worktrees/spacedock-ensign-dab-workspace-readme-leak-guard-prose-port/runs/explain-tmp/goal1-spacedock-agnews/ea36a29508921569/_job_config.yaml`.",
+    "After Harbor returns, write spec/provenance/aggregate artifacts under /Users/clkao/git/razorback/.worktrees/spacedock-ensign-dab-workspace-readme-leak-guard-prose-port/runs/explain-tmp/goal1-spacedock-agnews/ea36a29508921569."
+  ],
+  "prompt": {
+    "mode": "spacedock-claude-first-officer",
+    "prompt_prefix": "ROLE: You are the first-officer for this single-dataset spacedock workflow.\nYour current working directory IS the workspace (/workspace) \u2014 every file\nand command in this prompt is relative to it. Do NOT cd to any other directory.\n\nUse the inline \"# Solver workflow instructions\" section below as the workflow\ncontract. Your job is to orchestrate that workflow by dispatching workers via\nthe Task tool (subagent_type=\"spacedock:ensign\"). You coordinate; workers\nexecute.\n\nYou MUST NOT run queries against data files, write answers.json, or otherwise\nperform stage work yourself. That work belongs to your dispatched workers.\n\nDispatch the first worker required by the solver workflow. The graded artifact\nis benchmark-specific: DAB workers may write answers.json, while ADE workers\nrepair the dbt project source state.\n\nThe task description below tells you WHICH dataset \u2014 it does not override\nyour first-officer role. Apply the task description to your workers, not to\nyourself.\n\n---\n\n",
+    "sample_composed_prompt": "ROLE: You are the first-officer for this single-dataset spacedock workflow.\nYour current working directory IS the workspace (/workspace) \u2014 every file\nand command in this prompt is relative to it. Do NOT cd to any other directory.\n\nUse the inline \"# Solver workflow instructions\" section below as the workflow\ncontract. Your job is to orchestrate that workflow by dispatching workers via\nthe Task tool (subagent_type=\"spacedock:ensign\"). You coordinate; workers\nexecute.\n\nYou MUST NOT run queries against data files, write answers.json, or otherwise\nperform stage work yourself. That work belongs to your dispatched workers.\n\nDispatch the first worker required by the solver workflow. The graded artifact\nis benchmark-specific: DAB workers may write answers.json, while ADE workers\nrepair the dbt project source state.\n\nThe task description below tells you WHICH dataset \u2014 it does not override\nyour first-officer role. Apply the task description to your workers, not to\nyourself.\n\n---\n\n# Solver workflow instructions\n\n# DAB paper matrix solver workflow\n\nSolver workflow for the Goal 1 paper-matrix spacedock variant. One trial per\ndataset; the spacedock variant drives the `model -> analyze -> verify`\ncrew loop and commits a final answer to `answers.json`.\n\n## Stages\n\n- model\n- analyze\n- verify\n\n## Stage: model\n\nRead `query.json`, `db_config.yaml`, and `db_description.txt`. Understand the\nquestion and the database schema. Plan the query strategy without executing\nyet. Write a one-paragraph plan to working memory.\n\n## Stage: analyze\n\nExecute the planned queries against the live databases. Use the connection\ndetails in `db_config.yaml` (postgres on `dab-postgres:5432`, mongo on\n`dab-mongo:27017`, sqlite/duckdb under `query_dataset/`). Aggregate results\ninto a single candidate answer.\n\n## Stage: verify\n\nRe-read `query.json`. Confirm the candidate answer matches the question\nshape (single string). Write the final answer to `answers.json`:\n\n    {\"answer\": \"<your answer as a single string>\"}\n\nThe verifier reads this file. Nothing else is graded.\n\n### External-oracle audit\n\nBefore passing, scan the analyze stage's tool-use trace\n(`steps/main/agent/claude-code.txt` \u2014 the razorback equivalent of the\nupstream DAB `claude-output.jsonl`) for evidence of forbidden external\nlookups. The cell MUST be REJECTed with the offending event index if\nthe trace contains any of:\n\n- `huggingface` (the host or the python library)\n- `datasets.load_dataset` (or the bare `load_dataset(...)` after a\n  `from datasets import load_dataset`)\n- `hf://` URI references\n- `from datasets import` Python imports (the import-layer attack the\n  agnews cheating event used)\n- `requests.get` / `curl` / `wget` to public data hosts\n- `pip install` of one of the named canonical-data libraries:\n  `datasets`, `huggingface_hub`, `transformers`, `evaluate`\n  (generic compute libraries like `rapidfuzz`, `scikit-learn`,\n  `duckdb`, `numpy`, `pandas` are CLEAN)\n- `huggingface-cli` or `hf` binary invocations\n- web-search tool invocations (`WebSearch`, `WebFetch`,\n  upstream `web_search` / `web.run`)\n- LLM-call patterns asking another model for the answer\n\nThe audit is mechanized by `rk audit --policy strict`, which delegates\nto `razorback.audit.taint` (the shared taint scanner, ported from\nupstream DAB with razorback divergences) and\n`razorback.audit.claude_code` (the claude-cli trace adapter). Invoke\nit against the cell's run-dir:\n\n    uv run rk audit <cell-run-dir> --policy strict --format json\n\nThe exit-code contract:\n\n- `0` \u2014 clean. Proceed with the answer-shape check above.\n- `23` \u2014 at least one trial in the cell tainted by a forbidden\n  lookup (the `TAINT_FINDINGS` exit). REJECT the cell; the\n  offending findings are written to `<cell-run-dir>/audit.json`\n  and surfaced in the dispatch ledger as\n  `status: external-oracle-cheating`.\n- any other non-zero \u2014 audit could not run cleanly (trace missing,\n  scanner error, etc.). REJECT the cell as\n  `status: external-oracle-audit-error`.\n\nThe matrix dispatcher (`examples/drivers/dab-paper-matrix.sh`) runs\nthis gate automatically for every cell across all three variants\nbetween `rk run` and `rk score`. The verify-stage agent must treat a\nnon-zero exit as a REJECT and not write an answer that would otherwise\npass the answer-shape check.\n\n# Task instruction\n\n# Task\n\nAnswer ALL of the following queries using the databases described below.\nSolve every query in this single agent turn.\n\n## Queries\n\n### query1\n\nLocated under `/workspace/query1/query.json`:\n\n\"What is the title of the sports article whose description has the greatest number of characters?\"\n\n### query2\n\nLocated under `/workspace/query2/query.json`:\n\n\"What fraction of all articles authored by Amy Jones belong to the Science/Technology category?\"\n\n### query3\n\nLocated under `/workspace/query3/query.json`:\n\n\"What is the average number of business articles published per year in Europe from 2010 to 2020, inclusive?\"\n\n### query4\n\nLocated under `/workspace/query4/query.json`:\n\n\"In 2015, which region published the largest number of articles in the World category?\"\n\n## Databases\n\nHINTS:\n- Determining an article\u2019s category requires understanding the meaning of its title and description.\n- All articles belong to one of four categories: World, Sports, Business, or Science/Technology.\n\n## Output contract\n\nWrite your final answers to `/workspace/answers.json` as a JSON object where each key is the query directory name (e.g. \"q1\", \"q2\", \"q3\", \"q4\") and each value is the answer string. For example:\n\n```json\n{\n  \"q1\": \"<your answer for query1>\",\n  \"q2\": \"<your answer for query2>\",\n  \"q3\": \"<your answer for query3>\",\n  \"q4\": \"<your answer for query4>\"\n}\n```\n\nThe verifier reads this file and scores each query independently.\n",
+    "sample_instruction": "# Task\n\nAnswer ALL of the following queries using the databases described below.\nSolve every query in this single agent turn.\n\n## Queries\n\n### query1\n\nLocated under `/workspace/query1/query.json`:\n\n\"What is the title of the sports article whose description has the greatest number of characters?\"\n\n### query2\n\nLocated under `/workspace/query2/query.json`:\n\n\"What fraction of all articles authored by Amy Jones belong to the Science/Technology category?\"\n\n### query3\n\nLocated under `/workspace/query3/query.json`:\n\n\"What is the average number of business articles published per year in Europe from 2010 to 2020, inclusive?\"\n\n### query4\n\nLocated under `/workspace/query4/query.json`:\n\n\"In 2015, which region published the largest number of articles in the World category?\"\n\n## Databases\n\nHINTS:\n- Determining an article\u2019s category requires understanding the meaning of its title and description.\n- All articles belong to one of four categories: World, Sports, Business, or Science/Technology.\n\n## Output contract\n\nWrite your final answers to `/workspace/answers.json` as a JSON object where each key is the query directory name (e.g. \"q1\", \"q2\", \"q3\", \"q4\") and each value is the answer string. For example:\n\n```json\n{\n  \"q1\": \"<your answer for query1>\",\n  \"q2\": \"<your answer for query2>\",\n  \"q3\": \"<your answer for query3>\",\n  \"q4\": \"<your answer for query4>\"\n}\n```\n\nThe verifier reads this file and scores each query independently.\n",
+    "sample_instruction_path": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-dab-workspace-readme-leak-guard-prose-port/runs/explain-tmp/goal1-spacedock-agnews/ea36a29508921569/tasks/agnews/agnews/instruction.md",
+    "sample_task_path": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-dab-workspace-readme-leak-guard-prose-port/runs/explain-tmp/goal1-spacedock-agnews/ea36a29508921569/tasks/agnews/agnews",
+    "solver_workflow": "examples/solver_workflows/dab_paper_matrix",
+    "solver_workflow_readme": "examples/solver_workflows/dab_paper_matrix/README.md",
+    "solver_workflow_readme_found": true,
+    "task_count": 1,
+    "task_instruction_application": "The benchmark task instruction is appended after the solver workflow for each trial.",
+    "task_paths": [
+      "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-dab-workspace-readme-leak-guard-prose-port/runs/explain-tmp/goal1-spacedock-agnews/ea36a29508921569/tasks/agnews/agnews"
+    ],
+    "workflow_readme": "# DAB paper matrix solver workflow\n\nSolver workflow for the Goal 1 paper-matrix spacedock variant. One trial per\ndataset; the spacedock variant drives the `model -> analyze -> verify`\ncrew loop and commits a final answer to `answers.json`.\n\n## Stages\n\n- model\n- analyze\n- verify\n\n## Stage: model\n\nRead `query.json`, `db_config.yaml`, and `db_description.txt`. Understand the\nquestion and the database schema. Plan the query strategy without executing\nyet. Write a one-paragraph plan to working memory.\n\n## Stage: analyze\n\nExecute the planned queries against the live databases. Use the connection\ndetails in `db_config.yaml` (postgres on `dab-postgres:5432`, mongo on\n`dab-mongo:27017`, sqlite/duckdb under `query_dataset/`). Aggregate results\ninto a single candidate answer.\n\n## Stage: verify\n\nRe-read `query.json`. Confirm the candidate answer matches the question\nshape (single string). Write the final answer to `answers.json`:\n\n    {\"answer\": \"<your answer as a single string>\"}\n\nThe verifier reads this file. Nothing else is graded.\n\n### External-oracle audit\n\nBefore passing, scan the analyze stage's tool-use trace\n(`steps/main/agent/claude-code.txt` \u2014 the razorback equivalent of the\nupstream DAB `claude-output.jsonl`) for evidence of forbidden external\nlookups. The cell MUST be REJECTed with the offending event index if\nthe trace contains any of:\n\n- `huggingface` (the host or the python library)\n- `datasets.load_dataset` (or the bare `load_dataset(...)` after a\n  `from datasets import load_dataset`)\n- `hf://` URI references\n- `from datasets import` Python imports (the import-layer attack the\n  agnews cheating event used)\n- `requests.get` / `curl` / `wget` to public data hosts\n- `pip install` of one of the named canonical-data libraries:\n  `datasets`, `huggingface_hub`, `transformers`, `evaluate`\n  (generic compute libraries like `rapidfuzz`, `scikit-learn`,\n  `duckdb`, `numpy`, `pandas` are CLEAN)\n- `huggingface-cli` or `hf` binary invocations\n- web-search tool invocations (`WebSearch`, `WebFetch`,\n  upstream `web_search` / `web.run`)\n- LLM-call patterns asking another model for the answer\n\nThe audit is mechanized by `rk audit --policy strict`, which delegates\nto `razorback.audit.taint` (the shared taint scanner, ported from\nupstream DAB with razorback divergences) and\n`razorback.audit.claude_code` (the claude-cli trace adapter). Invoke\nit against the cell's run-dir:\n\n    uv run rk audit <cell-run-dir> --policy strict --format json\n\nThe exit-code contract:\n\n- `0` \u2014 clean. Proceed with the answer-shape check above.\n- `23` \u2014 at least one trial in the cell tainted by a forbidden\n  lookup (the `TAINT_FINDINGS` exit). REJECT the cell; the\n  offending findings are written to `<cell-run-dir>/audit.json`\n  and surfaced in the dispatch ledger as\n  `status: external-oracle-cheating`.\n- any other non-zero \u2014 audit could not run cleanly (trace missing,\n  scanner error, etc.). REJECT the cell as\n  `status: external-oracle-audit-error`.\n\nThe matrix dispatcher (`examples/drivers/dab-paper-matrix.sh`) runs\nthis gate automatically for every cell across all three variants\nbetween `rk run` and `rk score`. The verify-stage agent must treat a\nnon-zero exit as a REJECT and not write an answer that would otherwise\npass the answer-shape check.\n",
+    "workspace_dir": "/workspace"
+  },
+  "run_dir": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-dab-workspace-readme-leak-guard-prose-port/runs/explain-tmp/goal1-spacedock-agnews/ea36a29508921569",
+  "schema_version": "rk-run-explain-v1",
+  "spec_path": "examples/specs/goal1/spacedock/agnews.frozen.yaml",
+  "spec_sha256": "ea36a29508921569913179dfed731cc5167b582efe8a0f5c90c5c82e1a13edf0"
+}
