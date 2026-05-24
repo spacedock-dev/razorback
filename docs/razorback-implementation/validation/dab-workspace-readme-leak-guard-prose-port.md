@@ -189,4 +189,14 @@ Diff scope (branch since merge-base `d967c4c9`):
 
 **Blocking findings: none.**
 
+## Cycle-4 translator finding (out-of-scope, sibling entity filed)
+
+Cycle-4's `rk run --explain` pre-flight surfaced that `translate.py:191-213` silently drops `reasoning_effort` on the claude-cli code path: the `direct-structured` and `direct-minimal` `explain.json` artifacts at `docs/razorback-implementation/_evidence/leak-guard-rerun/<variant>/agnews/explain.json` show no `reasoning_effort` in `harbor_agent_kwargs`, while spacedock's correctly threads it. This means the two direct-* AC-2 cells ran without xhigh reasoning_effort despite the spec author's intent.
+
+This does **NOT** affect any AC verdict:
+- AC-2 — `rk audit --policy strict` returned `clean` on all 3 cells, verbatim grep returned EMPTY on all 3, and branch (a) decline applies to all 3. The leak-guard prose is not reasoning-depth-dependent; it deterred the `load_dataset` shortcut on direct-structured and direct-minimal even without xhigh.
+- AC-5 — the AC explicitly gates on `parse_spec_text` accept + `freeze_spec` round-trip, both of which my reproduced output confirms PASS. The translator-layer drop is downstream of the AC-5 contract.
+
+Team-lead has filed sibling entity `k4 translate-reasoning-effort-thread-through-claude-cli` to fix the translator drop. Discovered during k3 cycle-4 via `rk run --explain`; not blocking k3 verdict.
+
 ## Gate decision: APPROVE
