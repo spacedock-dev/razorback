@@ -161,6 +161,52 @@ def _write_harbor_codex_trial(
         (trial_dir / "job.log").write_text(job_log)
 
 
+def _write_spacedock_run_inventory(run_dir, trial_names):
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "manifest.json").write_text(json.dumps({
+        "run_dir_version": 1,
+        "per_trial_paths": trial_names,
+        "benchmark_kind": "dab",
+    }) + "\n")
+    (run_dir / "spec.frozen.yaml").write_text(
+        "agent:\n  kind: spacedock_solver\n  runtime: codex\n",
+        encoding="utf-8",
+    )
+
+
+def _write_result_json(trial_dir):
+    trial_dir.mkdir(parents=True, exist_ok=True)
+    (trial_dir / "result.json").write_text("{}\n", encoding="utf-8")
+
+
+def _write_spacedock_dispatch_manifest(target_dir, *, captured=1):
+    target_dir.mkdir(parents=True, exist_ok=True)
+    (target_dir / "subagent-trace-manifest.json").write_text(json.dumps({
+        "schema_version": "razorback-subagent-traces-v1",
+        "trial": {"trial_id": target_dir.name},
+        "prompt_mode": "spacedock-codex-first-officer",
+        "trace_artifacts": [
+            {
+                "kind": "parent_log",
+                "runtime": "codex",
+                "path": "agent/codex.txt",
+            }
+        ],
+        "expected": None,
+        "captured": captured,
+        "dispatches": [
+            {
+                "tool_use_id": "spawn-model",
+                "subagent_type": "spacedock:ensign",
+                "prompt_sha256": "a" * 64,
+                "spawn_index": 0,
+            }
+        ],
+        "parent_agent": {"model": "gpt-5.1-codex"},
+        "capture_source": "razorback-codex-cli-trace",
+    }) + "\n")
+
+
 @pytest.fixture
 def three_trial_run_dir(tmp_path):
     """Run-dir with three trials: clean, tainted (pip install datasets), coverage_missing."""
@@ -278,4 +324,36 @@ def harbor_codex_setup_install_only_run_dir(tmp_path):
             "setup: pip install harbor\n"
         ),
     )
+    return run_dir
+
+
+@pytest.fixture
+def spacedock_dispatch_gap_run_dir(tmp_path):
+    """Spacedock run-dir with one listed trial missing dispatch provenance."""
+    run_dir = tmp_path / "run"
+    _write_spacedock_run_inventory(run_dir, ["trial-a__aaaa", "trial-b__bbbb"])
+    _write_result_json(run_dir / "trial-a__aaaa")
+    _write_result_json(run_dir / "trial-b__bbbb")
+    _write_spacedock_dispatch_manifest(run_dir / "trial-a__aaaa")
+    return run_dir
+
+
+@pytest.fixture
+def spacedock_dispatch_complete_run_dir(tmp_path):
+    """Spacedock run-dir with dispatch provenance for every listed trial."""
+    run_dir = tmp_path / "run"
+    _write_spacedock_run_inventory(run_dir, ["trial-a__aaaa", "trial-b__bbbb"])
+    for trial_name in ("trial-a__aaaa", "trial-b__bbbb"):
+        _write_result_json(run_dir / trial_name)
+        _write_spacedock_dispatch_manifest(run_dir / trial_name)
+    return run_dir
+
+
+@pytest.fixture
+def spacedock_dispatch_legacy_single_run_dir(tmp_path):
+    """Legacy single-trial Spacedock run with root dispatch provenance."""
+    run_dir = tmp_path / "run"
+    _write_spacedock_run_inventory(run_dir, ["trial-a__aaaa"])
+    _write_result_json(run_dir / "trial-a__aaaa")
+    _write_spacedock_dispatch_manifest(run_dir)
     return run_dir
