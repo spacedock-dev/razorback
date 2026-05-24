@@ -1,5 +1,5 @@
-# ABOUTME: T10/T11 integration — matrix dispatcher's spacedock smoke hook REJECTs
-# ABOUTME: cells whose subagent-trace-manifest reports captured == 0.
+# ABOUTME: T10/T11 integration — matrix dispatcher's spacedock smoke hook
+# ABOUTME: REJECTs runs whose dispatch manifests report captured == 0.
 
 import json
 import re
@@ -15,7 +15,8 @@ DRIVER = REPO_ROOT / "examples" / "drivers" / "dab-paper-matrix.sh"
 
 def test_dispatcher_hook_invokes_smoke_validator_via_subprocess(tmp_path):
     """The matrix dispatcher embeds 'razorback.agents.subagent_smoke' as the
-    smoke gate command for the spacedock variant. Catch accidental hook
+    smoke gate command for the spacedock variant. The validator accepts run
+    dirs and resolves per-trial manifests internally. Catch accidental hook
     removal during refactors."""
     body = DRIVER.read_text()
     assert "razorback.agents.subagent_smoke" in body
@@ -43,6 +44,7 @@ def test_smoke_validator_rejects_zero_captured_cell(tmp_path):
         [
             "uv",
             "run",
+            "--frozen",
             "--project",
             str(REPO_ROOT),
             "python",
@@ -80,6 +82,7 @@ def test_smoke_validator_passes_one_captured_cell(tmp_path):
         [
             "uv",
             "run",
+            "--frozen",
             "--project",
             str(REPO_ROOT),
             "python",
