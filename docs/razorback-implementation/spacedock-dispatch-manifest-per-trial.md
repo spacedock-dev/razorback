@@ -69,3 +69,16 @@ Changing score semantics or relaunching the full ADE/DAB score run.
 ### Summary
 
 Created a separate standard plan document for the four-AC task. The plan moves the dispatch manifest target from the job root to each trial directory, adds strict-audit trial coverage discovery from run `manifest.json`, preserves legacy single-trial readability, and leaves scoring behavior untouched.
+
+## Stage Report: implementation
+
+- DONE: Per-trial Spacedock dispatch manifests and writer metadata are implemented with tests.
+  `cee0990` updates `subagent_traces.py` and `spacedock_solver.py`; writer subset passed `9 passed`.
+- DONE: Smoke/audit coverage handles per-trial, missing-trial, and legacy single-trial layouts.
+  `9104b70` covers smoke validation and `d9d4be2` covers strict audit; acceptance subset passed `34 passed`.
+- DONE: Score semantics and full ADE/DAB relaunch behavior remain untouched.
+  No score reducer or full-run driver changes; score-adjacent guard passed `13 passed`.
+
+### Summary
+
+Implemented trial-scoped Spacedock dispatch manifests with additive `trial`, `prompt_mode`, and `trace_artifacts` metadata, and moved the Harbor post-run writer from the job root to each trial directory. Added run-dir smoke validation and a new `razorback.audit.dispatch_manifests` helper so strict audit enumerates Spacedock trials from `manifest.json` and fails closed on missing, malformed, or zero-capture dispatch coverage while preserving the legacy single-trial root fallback. Full ADE/DAB relaunch and score semantics remained out of scope per the approved plan.
