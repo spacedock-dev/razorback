@@ -1,16 +1,17 @@
 ---
 id: hmh8cq1mjkzbhpt6vnga8a03
 title: Collapse per-benchmark blocks into generic kind: harbor + plugin migration
-status: validation
+status: done
 source: Captain directive 2026-05-23 — "let's say we have a consumer repo, targeting dabstep (another harbor-listed dataset), would this work today? or does it need more wiring in razorback?" → captain pushed back on the "needs new BenchmarkBlock class" answer with "no this is too complicated. i'd assume if dabstep is already on harbor, there should be just simple config, no additional classes/plugin needed." Captain then provided concrete URL `https://hub.harborframework.com/datasets/adyen/dabstep/latest` and asked for a design doc + grounded research + spec amendment if material.
 started: 2026-05-23T22:25:35Z
-completed:
-verdict:
+completed: 2026-05-24T21:36:29Z
+verdict: PASSED
 score: 0.92
-worktree: .worktrees/spacedock-ensign-generic-harbor-benchmark-surface-design
+worktree: 
 issue:
 pr: #2
 mod-block: 
+archived: 2026-05-24T21:36:29Z
 ---
 
 ## Problem
