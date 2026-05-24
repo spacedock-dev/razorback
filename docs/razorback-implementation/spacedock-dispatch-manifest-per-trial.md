@@ -1,7 +1,7 @@
 ---
 id: bpb83at5rrcm0z77maf6bbqb
 title: Spacedock dispatch manifests are per trial
-status: implementation
+status: validation
 source: 2026-05-24 ADE full-run audit gap - parallel Spacedock run wrote one job-level subagent-trace-manifest.json
 started: 2026-05-24T04:29:17Z
 completed:
