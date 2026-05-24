@@ -26,6 +26,8 @@ The razorback workspace READMEs in `packages/razorback-plugin-dab/src/razorback_
 
 DAB upstream's workspace README at `~/git/dataagentbench/benchmark/workspace-readmes/workspace-readme.md` carries the leak-guard prose (lines 77-83 verbatim — quoted in the entity body of any plan-stage doc). This entity ports that prose into all three razorback variants.
 
+**Scope expansion (captain widened during T4):** dispatching the direct-* cells exposed a baseline schema bug — `ClaudeCliAgentBlock` (`src/razorback/spec/schema.py`) has `extra="forbid"` and never declared `reasoning_effort`, while the goal-1 spec generator has written `agent.reasoning_effort: xhigh` into every direct-* yaml since commit a6ab344. `rk freeze` therefore refuses every direct-* spec at the freeze gate. The k3 entity is widened to fix that schema gap inline (small, on-threat-surface: post-T1 contract integrity) so the full 3-variant breadth check lands in one stage. AC-5 below pins the fix RED→GREEN.
+
 ## Acceptance criteria
 
 **AC-1 — Leak-guard prose present in all three razorback workspace variants.**
@@ -45,6 +47,10 @@ Verified by: `uv run pytest packages/razorback-plugin-dab/tests/unit/test_worksp
 **AC-4 — Existing pytest stays green; existing tests at `test_workspace_readme_variants.py` cover the new prose.**
 Branch's existing tests for workspace_variants pass; the new test runs alongside.
 Verified by: `uv run pytest packages/razorback-plugin-dab/tests/ -v` green; pre-existing failures (LFS-hydration etc.) reproduce on baseline `main`, no branch-introduced regressions.
+
+**AC-5 — `ClaudeCliAgentBlock` accepts `reasoning_effort` and round-trips through `rk freeze`.**
+Added during the T4 dispatch when direct-* freeze surfaced the pre-existing schema gap. New tests in `tests/unit/test_freeze.py` (`test_claude_cli_agent_block_accepts_reasoning_effort` + `test_claude_cli_reasoning_effort_round_trips_through_freeze`) assert that a `kind: claude-cli` spec carrying `agent.reasoning_effort: xhigh` parses cleanly via `parse_spec_text` and survives `freeze_spec` with the field preserved. Schema fix: add `reasoning_effort: str | None = None` to `ClaudeCliAgentBlock`, matching the same field on `SpacedockSolverAgentBlock`; `extra="forbid"` is preserved.
+Verified by: `uv run pytest tests/unit/test_freeze.py -v` shows both new tests GREEN; `uv run rk freeze examples/specs/goal1/direct-structured/agnews.yaml --allow-missing` and the direct-minimal counterpart both exit 0.
 
 ## Test plan
 
