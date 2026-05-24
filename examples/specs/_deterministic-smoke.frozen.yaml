@@ -11,29 +11,30 @@ agent:
     top_p: null
     seed: 1
   solver_workflow: ./examples/solver_workflows/_smoke
-  solver_workflow_content_hash: "sha256:09e54bf02acf88836bcc40f4c896d746dac591b7706957a5f7ce97aebc63fd39"
-  spacedock_skill_version: "1.0.0"
+  solver_workflow_content_hash: sha256:09e54bf02acf88836bcc40f4c896d746dac591b7706957a5f7ce97aebc63fd39
+  spacedock_skill_version: 1.0.0
   prompt_content_hashes:
-    README.md: "sha256:64a3a83643439fcc511c5fb8a2cf81924456d8c52023324649d45dc2eb0d88a9"
-  sealed_hash: "afc50cb618884495c9063958f532b9a1"
+    README.md: sha256:64a3a83643439fcc511c5fb8a2cf81924456d8c52023324649d45dc2eb0d88a9
+  sealed_hash: afc50cb618884495c9063958f532b9a1
   max_turns: 200
-  tools_allowed: [Bash, Read, Write, Edit, Glob, Grep]
+  tools_allowed:
+  - Bash
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
   tools_denied: []
 benchmark:
-  kind: harbor_dab
-  data_root: "${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}"
-  datasets:
-    - bookreview
+  kind: harbor
+  dataset: dab@1.0
+  plugin: dab
+  plugin_args:
+    data_root: ${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}
+  tasks:
+  - bookreview
 trials: 1
 observers:
-  - kind: jsonl
-    path: events.jsonl
-  - kind: stdout
-
-# Expected outcome (recorded at Phase 3 implementation, gated on real Anthropic API):
-#   Live-API command: `uv run rk run examples/specs/_deterministic-smoke.frozen.yaml`
-#   On a clean run with valid ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN, exits 0;
-#   produces <run-dir>/_razorback/freeze/afc50cb618884495c9063958f532b9a1/sealed_hash.txt
-#   containing the literal sealed_hash above. Per-trial reward matches the v1
-#   deterministic-smoke baseline (3/3, reward=1.0). Live-API marker gates CI
-#   execution; unit + mechanism tests cover the determinism contract sans API call.
+- kind: jsonl
+  path: events.jsonl
+- kind: stdout

@@ -7,19 +7,28 @@ agent:
   model: claude-opus-4-5
   sampling:
     temperature: 0.0
-  tools_allowed: [Bash, Read, Write, Edit, Glob, Grep]
+  tools_allowed:
+  - Bash
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
 benchmark:
-  kind: harbor_dab
-  data_root: "${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}"
-  datasets:
-    - bookreview
-  workspace_variant: direct-minimal
-  hints: false
+  kind: harbor
+  dataset: dab@1.0
+  plugin: dab
+  plugin_args:
+    workspace_variant: direct-minimal
+    hints: false
+    data_root: ${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}
+  tasks:
+  - bookreview
 trials: 1
 experiment_meta:
   max_budget_usd: 5.0
   estimated_cost_usd: 1.5
 observers:
-  - kind: jsonl
-    path: events.jsonl
-  - kind: stdout
+- kind: jsonl
+  path: events.jsonl
+- kind: stdout

@@ -144,10 +144,11 @@ def test_checked_in_dab_smoke_spec_uses_direct_codex_minimal_without_hints() -> 
 
     assert payload["agent"]["kind"] == "codex"
     assert "solver_workflow" not in payload["agent"]
-    assert payload["benchmark"]["kind"] == "harbor_dab"
-    assert payload["benchmark"]["datasets"] == ["bookreview"]
-    assert payload["benchmark"]["workspace_variant"] == "direct-minimal"
-    assert payload["benchmark"]["hints"] is False
+    assert payload["benchmark"]["kind"] == "harbor"
+    assert payload["benchmark"]["plugin"] == "dab"
+    assert payload["benchmark"]["tasks"] == ["bookreview"]
+    assert payload["benchmark"]["plugin_args"]["workspace_variant"] == "direct-minimal"
+    assert payload["benchmark"]["plugin_args"]["hints"] is False
 
 
 def test_checked_in_ade_codex_spec_uses_direct_codex_shape() -> None:

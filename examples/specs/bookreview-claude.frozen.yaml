@@ -28,13 +28,16 @@ agent:
   spacedock_skill_version: 1.0.0
   prompt_content_hashes: {}
 benchmark:
-  kind: harbor_dab
-  data_root: /home/exedev/dataagentbench/data
-  datasets:
+  kind: harbor
+  dataset: dab@1.0
+  plugin: dab
+  plugin_args:
+    workspace_variant: direct-minimal
+    query_mode: per-query
+    hints: false
+    data_root: /home/exedev/dataagentbench/data
+  tasks:
   - bookreview
-  workspace_variant: direct-minimal
-  hints: false
-  query_mode: per-query
 trials: 1
 concurrency:
   trials: 1

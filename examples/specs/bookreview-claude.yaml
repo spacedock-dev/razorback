@@ -9,15 +9,24 @@ agent:
     seed: 42
   solver_workflow: ./examples/solver_workflows/claude-benchmark-solver
   max_turns: 200
-  tools_allowed: [Bash, Read, Write, Edit, Glob, Grep]
+  tools_allowed:
+  - Bash
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
   tools_denied: []
 benchmark:
-  kind: harbor_dab
-  data_root: "${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}"
-  datasets:
-    - bookreview
+  kind: harbor
+  dataset: dab@1.0
+  plugin: dab
+  plugin_args:
+    data_root: ${DATAAGENTBENCH_DATA_ROOT:-~/dataagentbench/data}
+  tasks:
+  - bookreview
 trials: 1
 observers:
-  - kind: jsonl
-    path: events.jsonl
-  - kind: stdout
+- kind: jsonl
+  path: events.jsonl
+- kind: stdout
