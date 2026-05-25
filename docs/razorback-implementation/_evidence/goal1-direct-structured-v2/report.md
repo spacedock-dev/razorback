@@ -6,6 +6,29 @@ status: implementation
 matrix_root: _runs/goal1-direct-structured-redo-2026-05-24
 ---
 
+## Amendment 2026-05-25 post-aggregator-fix
+
+The matrix aggregator at the time this report was archived emitted
+`per_query_verdict` (pooled-per-query Wilson CI) as the
+paper-comparison verdict. Per
+`docs/razorback-implementation/goal1-matrix-aggregator-stratified-verdict-fix.md`
+(this entity, branch `spacedock-ensign/goal1-matrix-aggregator-stratified-verdict-fix`),
+the canonical paper-comparison lens is **stratified-per-query** — the
+DAB paper's `direct_baseline=0.4376` is the stratified value (each
+dataset weighted equally regardless of query count). The aggregator
+now emits `against_constant.stratified_verdict` from
+`per_query_pass_at_1_mean_over_strata`; `per_query_verdict` (pooled)
+and `verdict` (binary) remain as supplementary views.
+
+**Corrected paper-comparison headline (stratified lens):**
+`direct-structured stratified-per-query pass@1 = 0.6719` across 12 DAB
+datasets at N=1. Verdict vs `paper direct_baseline=0.4376`: **above**
+(point comparison; CI null per stratified-mean-of-proportions not being
+binomial — see `aggregate-goal1-scores.py` docstring for methodology).
+
+Archived run-dirs are immutable; this is a forward-pointing
+correction, not a re-run.
+
 ## Headline
 
 > **Headline corrected 2026-05-25 by FO at captain directive.** The DAB
