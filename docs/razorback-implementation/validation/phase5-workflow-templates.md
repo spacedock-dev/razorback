@@ -398,3 +398,92 @@ captain findings closed.
 
 `auto-approve: false` is in effect; the FO presents this gate to
 the captain for explicit approval ack.
+
+## Cycle 2 re-validation
+
+Re-validation performed 2026-05-25 after the implementation worker
+addressed the single captain material finding from the cycle-2 gate
+rejection. Scope: narrow — verify the README trim landed exactly as
+asked, re-confirm no AC regression, append this block (do not
+overwrite prior cycle-0 / cycle-1 PASS evidence).
+
+### Captain finding addressed
+
+**Finding — README section over-narrates internal decisions.** PASS.
+The cycle-2 trim landed in commit `4756bdc`. `git diff main..HEAD --
+README.md` shows the `## Workflow templates` section now contains
+ONLY:
+
+- A one-sentence intro stating razorback ships two workflow READMEs
+  as in-package data under `src/razorback/templates/`.
+- A bulleted list of the two templates with their stage chains:
+  `src/razorback/templates/experiment-workflow/README.md` — six-stage
+  (pending → propose → smoke → full → analyze → conclude);
+  `src/razorback/templates/run-workflow/README.md` — four-stage
+  (pending → reconciling → completed → failed).
+- A single copy-and-modify usage paragraph.
+
+Both targeted paragraphs are gone:
+
+    $ grep -n "rk init\|importlib.resources" README.md
+    (no matches)
+
+- The `rk init` disclaimer paragraph is removed.
+- The `importlib.resources.files('razorback').joinpath('templates')`
+  paragraph is removed.
+
+No other README prose was touched; the section trim is exactly the
+shape captain asked for in the cycle-2 rejection note.
+
+### AC regression sweep
+
+**Targeted phase5 tests (re-run on cycle-2 head):**
+
+    $ uv run pytest tests/unit/test_workflow_templates_packaged.py \
+        tests/unit/test_workflow_templates_content.py -q
+    24 passed in 0.13s
+
+All 24 phase5 tests stay green. The README section is outside both
+the package-data test surface and the prompt-content lint surface,
+so the trim could not affect them by construction; this re-run is a
+confirmation regression check.
+
+**AC-1 walking-skeleton (zero `.py` runtime changes) re-check.** The
+cycle-2 commit touches only `README.md`. `git diff main..HEAD
+--name-only -- "src/razorback/*.py"` returns nothing — no `.py`
+runtime changes introduced by the cycle-2 trim. AC-1 still trivially
+satisfied across all three cycles.
+
+**Diff vs main (cycle-2 head, full stat):**
+
+    README.md                                         |  16 +
+    docs/.../phase5-followup-dab-matrix-analyze.md    | 106 ++++++
+    docs/.../phase5-workflow-templates.md             |  94 ++++-
+    docs/.../validation/phase5-workflow-templates.md  | 400 +++++++++++
+    src/razorback/templates/experiment-workflow/...   | 368 ++++++++
+    src/razorback/templates/run-workflow/README.md    | 107 ++++++
+    tests/unit/test_workflow_templates_content.py     | 218 +++++++
+    tests/unit/test_workflow_templates_packaged.py    |  45 +++
+
+No source-code (`.py`) changes; no test changes; only the README
+prose trimmed.
+
+### Cycle 2 gate recommendation
+
+**Recommend APPROVE to `done`.**
+
+The single captain material finding from cycle 2 is closed exactly
+as asked: the project-root README's `## Workflow templates` section
+contains only the two-template bulleted list with their stage chains
+plus a single copy-and-modify usage paragraph. The decision-record
+artifacts (`rk init` disclaimer + `importlib.resources` library-
+consumer cite) are gone. All 24 phase5 tests stay green; AC-1
+walking-skeleton trivially intact (zero `.py` runtime changes across
+all three cycles). The cycle-0 PASS verdict and APPROVE recommendation
+continue to stand, now with both cycle-1 and cycle-2 captain findings
+closed.
+
+`auto-approve: false` is in effect; the FO presents this gate to
+the captain for explicit approval ack. Per dispatch contract, cycle 3
+escalates to manual review if rejected again — validator found no new
+material concern in this re-validation.
