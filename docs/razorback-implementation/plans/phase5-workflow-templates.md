@@ -7,6 +7,30 @@ Spec source: `docs/superpowers/specs/2026-05-19-razorback-on-harbor.md` §5
 surface rewording (k3 / wp / hm / k4 / codex `rk run --explain` /
 stratified-only headline).
 
+> **Post-staff-review amendments 2026-05-25.** A staff reviewer
+> surfaced 4 Material findings; captain resolved each. The plan
+> below is updated in place; original wording preserved in git
+> history. Summary:
+>
+> - **M1 (T-2 schema test):** DEFERRED. T-2 becomes a no-op
+>   placeholder; AC-2 / AC-3 schema-parse verifier clauses REMOVED
+>   from the entity body. Schema drift catching = future entity.
+> - **M2 (AC-5 `--against-constant` text):** entity body AC-5 fixed
+>   in place; T-10 already correctly avoided the legacy CLI shape.
+> - **M3 (T-8 `uv_build` layout):** RESOLVED. Templates ship
+>   IN-PACKAGE at `src/razorback/templates/{experiment-workflow,
+>   run-workflow}/README.md`. No `uv_build` force-include glue
+>   needed. T-8 simplifies; no spike required.
+> - **M4 (T-10 captain-gate integration test):** DOWNGRADED. T-10
+>   integration test = prompt-content lints + dry-run reachability
+>   only. Captain-gate enforcement is human-in-the-loop, not
+>   pytest-runnable. T-10's verifier list updated below.
+>
+> Q1 / Q2 / Q3 captain answers (pre-staff-review) also refined:
+> Q1 = src/razorback/templates/ (REVISED post-M3, was
+> docs/templates/); Q2 = assume 08 lands with fallback note (held);
+> Q3 = N/A (M1 deferred the schema test entirely).
+
 ## AC ↔ task map
 
 | AC | Description | Tasks |
@@ -82,7 +106,23 @@ final integration test.
 - **Spec cite:** §1.3 (walking-skeleton invariant), §5 (templates
   must not break direct-CLI use).
 
-### T-2: Schema-test scaffolding (AC-2, AC-3)
+### T-2: Schema-test scaffolding (AC-2, AC-3) — DEFERRED post-staff-review M1
+
+> **DEFERRED 2026-05-25 per M1 captain decision.** The schema-parse
+> test is removed from phase5 scope. `status --validate <path>` has
+> no stable contract for arbitrary file paths (it operates on workflow
+> directories, not individual files), and re-implementing the YAML
+> frontmatter parse inline duplicates schema knowledge. Captain
+> chose to defer; phase5 ships without automated schema validation.
+> AC-2 and AC-3 verifier text in the entity body updated accordingly
+> (the "parses against spacedock's workflow-README schema" clause
+> REMOVED).
+>
+> **What replaces it:** T-7 (content-verification tests) carries the
+> grep-asserted prompt-content checks for each stage's required
+> guidance phrases. No structural schema check.
+>
+> **Original T-2 content preserved below for git-history audit.**
 
 - Write a failing test under `tests/` (likely
   `tests/test_workflow_templates_schema.py`) that:
@@ -285,35 +325,23 @@ constrained by the entity-08 precondition (matrix aggregator).
     variant runs.
 - **TDD checkpoint:** drives the content authoring in T-4 / T-5.
 
-### T-8: Package data shipping (AC-4) — RISKY CONTRACT, ships EARLY
+### T-8: Package data shipping (AC-4) — RISKY CONTRACT, ships EARLY (M3 resolved 2026-05-25)
 
 - Per the "Risky-contract ordering" note above, T-8 ships as
   soon as T-3 has a minimal skeleton (and BEFORE T-4 / T-5
   prose work is finalized).
-- Configure `pyproject.toml` so the installed wheel exposes
-  `docs/templates/experiment-workflow/` and
-  `docs/templates/run-workflow/`. With `uv_build` backend, this
-  means:
-  - place the templates under
-    `src/razorback/templates/experiment-workflow/README.md` and
-    `src/razorback/templates/run-workflow/README.md` (package-
-    internal), OR
-  - keep them at `docs/templates/...` and add the appropriate
-    `[tool.uv_build.package-data]` (or equivalent — verify the
-    `uv_build>=0.10.7` schema; fall back to symlink-into-package
-    if `uv_build` does not support out-of-package data files).
-- **Mechanism validation FIRST:** the AC-4 verification command
-  is `python -c "import importlib.resources; print(list(
+- **M3 captain decision (2026-05-25):** templates ship IN-PACKAGE
+  at `src/razorback/templates/{experiment-workflow,
+  run-workflow}/README.md`. No `uv_build` force-include glue
+  required; standard `package-data` declaration in pyproject.toml
+  is sufficient. The earlier `docs/templates/...` working-tree
+  home is dropped — no symlink, no `[tool.uv_build.package-data]`
+  out-of-package mapping, no spike needed.
+- The AC-4 verification command remains:
+  `python -c "import importlib.resources; print(list(
   importlib.resources.files('razorback').joinpath('templates')
-  .iterdir()))"`. This implies the templates are addressable as
-  `razorback/templates/experiment-workflow/` and
-  `razorback/templates/run-workflow/` — i.e. shipped INSIDE the
-  `razorback` package namespace. Plan recommends placing them at
-  `src/razorback/templates/{experiment,run}-workflow/README.md`
-  with the `docs/templates/...` paths as the working-tree home
-  (a symlink, or the package path is canonical and `docs/` is
-  a duplicate authored copy — pick one at impl time after a
-  10-minute investigation of `uv_build`'s package-data shape).
+  .iterdir()))"` which resolves cleanly because the templates ARE
+  in the package namespace at `razorback/templates/...`.
 - Write a failing test under `tests/` that runs the AC-4
   verification command (or its `importlib.resources.files`
   equivalent in-process) and asserts both directories appear.
@@ -335,36 +363,52 @@ constrained by the entity-08 precondition (matrix aggregator).
   broken things immediately when you find them" — but only after
   surfacing the unexpected regression).
 
-### T-10: End-to-end hypothesis smoke (AC-5)
+### T-10: Reachability + prompt-content smoke (AC-5) — DOWNGRADED post-staff-review M4
 
-- Integration test under `tests/integration/` (or pre-existing
-  integration test dir) that:
-  1. copies `docs/templates/experiment-workflow/` into a fresh
-     `tmp_path` directory,
-  2. instantiates one hypothesis entity against DAB via the
-     hm-shipped harbor adapter (`kind: harbor`, `plugin: dab`),
-  3. exercises propose → freeze → smoke → analyze → conclude
-     end-to-end:
-     - propose-stage prompt + captain-gate check catches a
-       deliberate leak-guard violation (e.g., the smoke's
-       propose-stage README references an answer-key column or
-       an `hf://` path; the captain gate rejects),
-     - smoke-stage prompt enforces budget via `rk runs cost`,
-     - analyze stage produces `rk score` output (with
-       `experiment_meta.paper_baseline` auto-pulled from
-       `spec.frozen.yaml` per hm commit 5; do NOT use
-       `--against-constant` — that wording in the original AC-5
-       text predates the hm amendment),
-     - conclude stage is reachable.
-- Mark `@pytest.mark.integration` per existing convention; this
-  test requires docker/colima + provider auth.
-- **TDD checkpoint:** the strongest single demonstration of
-  phase 5. Failing-test-first applies — write the integration
-  test before the prompt content stabilizes; iterate on T-4 /
-  T-5 prompt prose until the integration test exercises each
-  expected behavior.
-- **Spec cite:** §5.1 (end-to-end stages), §5 (templates ship
-  with the per-stage prompt content that drives this).
+> **DOWNGRADED 2026-05-25 per M4 captain decision.** The original
+> T-10 asserted "the captain gate rejects a deliberate leak-guard
+> violation" — but a captain gate is human-in-the-loop; pytest
+> cannot exercise it. T-10 is now a reachability + prompt-content
+> lint test, NOT an end-to-end harbor-burn integration test. Docker /
+> Colima / provider auth are NOT required for this test.
+
+- Pytest under `tests/test_workflow_templates_reachability.py` (or
+  similar) that:
+  1. Reads the in-package templates via
+     `importlib.resources.files('razorback').joinpath('templates')`
+     (per AC-4 / T-8 contract); confirms both `experiment-workflow/`
+     and `run-workflow/` subdirs are accessible from the installed
+     package surface.
+  2. Asserts via grep on the experiment-workflow stage prompts'
+     text content that the named guidance phrases are present
+     verbatim per AC-5's verifier list:
+     - **propose-stage** prompt contains: `datasets.load_dataset`,
+       `hf://`, `UNABLE TO DETERMINE`, plus internal-leak-surface
+       phrases (`answer keys`, `ground-truth columns`,
+       `per-task hints` — or paraphrases matching k3's prose).
+     - **smoke-stage** prompt contains: `rk run --explain`,
+       `rk audit --policy strict`, `rk runs cost`,
+       `experiment.max_budget_usd`, `--max-budget-usd-running`.
+     - **analyze-stage** prompt contains:
+       `experiment_meta.paper_baseline`, `stratified_pass_at_1`,
+       `against_constant.stratified.verdict`, and does NOT contain
+       `--against-constant` as a CLI invocation (lint that the
+       post-hm shape is canonical).
+  3. Asserts the six stage subdirs / sections are addressable from
+     a fresh template instantiation (`tmp_path` copy of the
+     templates; reachability stub — no harbor invocation, no API
+     spend). For each stage, the stub workflow driver can resolve
+     the next-stage path.
+- **Captain-gate enforcement is OUT OF SCOPE for this test.** The
+  human captain enforces the gate at runtime; the test asserts
+  only that the prompt contains the named leak-guard guidance the
+  captain will read.
+- **TDD checkpoint:** failing-test-first against the grep
+  assertions. Drives the prompt-content authoring in T-4 / T-5.
+  No `@pytest.mark.integration`, no docker, no API spend.
+- **Spec cite:** §5.1 (per-stage prompt-content shape), §5
+  (templates ship with the per-stage prompt content that drives
+  this).
 
 ## Sequencing summary
 

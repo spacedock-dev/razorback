@@ -52,6 +52,23 @@ shape working as a unit.
 > `rk audit --policy strict` per-cell gates; stratified-only headline
 > per captain standing directive; propose-stage leak-guard scope
 > broadens to external-oracle lookups (k3-shipped language).
+>
+> **Second-pass amendments 2026-05-25 (post-staff-review).** Staff
+> review of the plan-stage doc surfaced 4 Material findings; captain
+> resolved each: M1 = defer schema parse test (T-2 becomes no-op /
+> shipped-without-test; AC-2's `parses against spacedock's
+> workflow-README schema` verifier clause is REMOVED); M2 = AC-5
+> verifier text updated in place to remove `--against-constant`
+> (matches the AC-2 amendment language already in this block); M3 =
+> templates ship in-package at `src/razorback/templates/...` (reverses
+> the earlier docs/templates/ assumption — AC-2 / AC-3 / AC-4 / test
+> plan / Out-of-scope ALL updated accordingly); M4 = AC-5 integration
+> test downgrades the captain-gate enforcement claim to prompt-content
+> lints + dry-run reachability (a pytest cannot exercise a human
+> gate; the smoke verifier asserts the propose-stage prompt's text
+> contains the named leak-guard phrases verbatim + that all four
+> stages are reachable from a fresh template instantiation, NOT that
+> a captain gate fires).
 
 **AC-1 — Walking skeleton holds.**
 Razorback continues to run DAB end-to-end via the direct CLI; Phase
@@ -59,8 +76,8 @@ Razorback continues to run DAB end-to-end via the direct CLI; Phase
 Verified by: deterministic micro-spec passes both before and after
 the template add. Per plan AC-5.1.
 
-**AC-2 — `docs/templates/experiment-workflow/README.md` exists with
-six stages and the required per-stage prompt content.**
+**AC-2 — `src/razorback/templates/experiment-workflow/README.md` exists with
+six stages and the required per-stage prompt content.** (Path updated 2026-05-25 post-staff-review: templates ship IN-PACKAGE at `src/razorback/templates/` per captain decision; reverses the earlier `docs/templates/` assumption. `importlib.resources` resolves cleanly without uv_build force-include glue.)
 - six stages: pending, propose, smoke, full, analyze, conclude
 - sd-b32 ID style
 - `experiment.max_budget_usd` declared in the template spec
@@ -132,60 +149,89 @@ six stages and the required per-stage prompt content.**
     to the captain when the spec's agent kind is
     `spacedock_solver`; document the limitation as a known caveat
     until `gv` ships.
-Verified by: the template parses against spacedock's workflow-README
-schema; the propose / smoke / full / analyze stage prompts contain
-the named guidance verbatim. Per plan AC-5.2.
+Verified by: the propose / smoke / full / analyze stage prompts contain
+the named guidance verbatim (grep-asserted in tests). Per plan AC-5.2.
+(Schema-parse verifier clause REMOVED 2026-05-25 post-staff-review per
+captain M1 decision: `status --validate` contract unstable for arbitrary
+file paths; schema validation deferred to a future entity if/when
+captain wants automated schema-drift catching.)
 
-**AC-3 — `docs/templates/run-workflow/README.md` exists with four
+**AC-3 — `src/razorback/templates/run-workflow/README.md` exists with four
 stages.**
 Four stages (pending, reconciling, completed, failed). No
 stage-completion-signal mods required because halt-resume's real-mod
-machinery defers per AC-3.6's hand-fake note (spec §5.2).
-Verified by: the template parses against spacedock's workflow-README
-schema. Per plan AC-5.2.
+machinery defers per AC-3.6's hand-fake note (spec §5.2). (Path updated
+2026-05-25 per M3.)
+Verified by: file exists at the cited path with four named stage
+sections. (Schema-parse verifier clause REMOVED 2026-05-25 per M1.)
 
-**AC-4 — Package data shipping.**
-`pyproject.toml` ships `docs/templates/` so a captain can copy
-templates into a new project.
+**AC-4 — Package data shipping (in-package).**
+Templates ship inside the razorback package at
+`src/razorback/templates/{experiment-workflow,run-workflow}/`. No
+uv_build force-include / source-include glue required — the templates
+live in the package namespace directly. (Path commitment from M3
+post-staff-review captain decision.)
 Verified by: `python -c "import importlib.resources; print(list(
 importlib.resources.files('razorback').joinpath('templates').iterdir()))"`
 lists both template directories from an installed razorback wheel.
 Per plan AC-5.3.
 
-**AC-5 — End-to-end hypothesis smoke (AC-5.4).**
-A captain copies the experiment-workflow template into a fresh dir,
-instantiates it against DAB via the new harbor adapter, and runs ONE
-hypothesis end-to-end (propose → freeze → smoke → analyze →
-conclude). The full path works.
-Verified by: integration test executes the smoke end-to-end:
-- propose-stage prompt + captain gate catch a deliberate leak-guard
-  violation (the smoke's propose stage tries to reference an
-  answer-key column; the captain gate rejects)
-- smoke-stage prompt enforces budget via `rk runs cost`
-- analyze stage produces `rk score --against-constant` output in
-  the entity body
-- conclude stage is reachable
+**AC-5 — End-to-end reachability smoke + prompt-content lint (AC-5.4).**
+The experiment-workflow template's stages are reachable end-to-end
+from a fresh template instantiation; per-stage prompt content
+contains the named guidance phrases. (M4 amendment 2026-05-25 post-
+staff-review: the original verifier "captain gate rejects a leak-
+guard violation" is unrunnable in pytest because captain gates are
+human-in-the-loop; downgraded to executable assertions only.)
+Verified by: a pytest integration test that:
+- Instantiates the template at a `tmp_path/.razorback-workflow` dir;
+  confirms the six stage subdirs / stage README sections exist.
+- Asserts via grep that the propose-stage prompt's text contains:
+  `datasets.load_dataset`, `hf://`, `UNABLE TO DETERMINE`, plus the
+  internal-leak-surface phrases (answer keys, ground-truth columns,
+  per-task hints).
+- Asserts via grep that the smoke-stage prompt's text contains:
+  `rk run --explain`, `rk audit --policy strict`, `rk runs cost`,
+  `experiment.max_budget_usd`, `--max-budget-usd-running`.
+- Asserts via grep that the analyze-stage prompt's text contains:
+  `experiment_meta.paper_baseline`, `stratified_pass_at_1`,
+  `against_constant.stratified.verdict`, and does NOT contain
+  `--against-constant` as a CLI invocation (lint that the post-hm
+  shape is used).
+- Dry-run reachability: from each stage's README, a stub workflow
+  driver can resolve the next-stage path without invoking harbor
+  or burning API.
 
-Per plan AC-5.4. This is Phase 5's strongest single demonstration.
+Captain-gate enforcement is enforced by the human captain at the
+gate, NOT by this test. The test asserts the template's prompt-
+content shape only.
+
+Per plan AC-5.4. This is Phase 5's strongest single demonstration of
+template-shape integrity.
 
 **AC-6 — `uv run pytest` exits 0.**
 Per plan AC-5.5.
 
 ## Test plan
 
-- **Schema tests:** both templates parse against spacedock's
-  workflow-README schema (likely via spacedock's own parser).
+(Test-plan revised 2026-05-25 post-staff-review per M1 + M4 captain
+decisions: schema-parse test removed; integration test downgraded to
+prompt-content + reachability lints.)
+
+- **Schema tests:** REMOVED (M1). Schema drift catching is a
+  future-entity concern.
 - **Package data test:** the installed wheel exposes
   `templates/experiment-workflow/` + `templates/run-workflow/` via
-  `importlib.resources`.
+  `importlib.resources.files('razorback').joinpath('templates')`.
 - **Stage-prompt content test:** propose / smoke / full / analyze
-  prompts contain the named guidance phrases verbatim.
-- **End-to-end smoke (AC-5):** the AC-5.4 hypothesis cycle runs
-  against the harbor-DAB adapter; outputs land per the named
-  expectations.
-- **Acceptance command:** captain copies the template into a fresh
-  dir, dispatches one hypothesis end-to-end; the analyze stage's
-  entity body carries `rk score --against-constant` output.
+  prompts contain the named guidance phrases verbatim (grep-asserted).
+- **Reachability + prompt-content smoke (AC-5):** pytest exercises
+  the per-AC-5 verifier list inline (no harbor invocation, no API
+  spend; no captain-gate enforcement assertion).
+- **Acceptance command:** captain copies the in-package templates
+  to a fresh project workdir; observes that the analyze-stage prompt
+  references `rk score` auto-pull from `experiment_meta.paper_baseline`
+  (NOT `rk score --against-constant`).
 
 ## Out of scope
 
