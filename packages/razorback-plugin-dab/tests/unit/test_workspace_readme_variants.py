@@ -20,6 +20,22 @@ def test_direct_minimal_is_terse():
     assert "first officer" not in text
 
 
+def test_direct_minimal_carries_database_access_block():
+    """Paper-canonical alignment: direct-minimal must tell the agent how to
+    reach the workspace databases. Mirrors direct-structured's lines 47-52
+    (host/port creds for postgres+mongo, sqlite/duckdb under query_dataset/).
+    Without this section, the agent in direct-minimal cannot connect to the
+    workspace DBs without trial-and-error discovery — explains the archived
+    `an` run's 100% UTD smoke + 0.4279 stratified-per-query headline."""
+    text = render_workspace_readme(variant="direct-minimal", container_workdir="/workspace")
+    assert "## Database access" in text
+    assert "dab-postgres" in text
+    assert "5432" in text
+    assert "dab-mongo" in text
+    assert "27017" in text
+    assert "query_dataset/" in text
+
+
 def test_direct_structured_has_layout_block():
     text = render_workspace_readme(variant="direct-structured", container_workdir="/workspace")
     assert "Workspace layout" in text
