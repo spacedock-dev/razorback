@@ -185,8 +185,28 @@ def aggregate_variant(matrix_root: Path, variant: str) -> dict[str, Any]:
             return "below"
         return "above"
 
+    def _verdict_point(mean: float | None, target: float) -> str:
+        if mean is None:
+            return "no_data"
+        if mean == target:
+            return "matches"
+        return "above" if mean > target else "below"
+
     verdict = _verdict(stratified_ci)
     per_query_verdict = _verdict(pooled_per_query_ci)
+    # Canonical paper-comparison lens. The DAB paper's `paper_baseline` is
+    # stratified-per-query (each dataset weighted equally regardless of
+    # query count); `per_query_verdict` (pooled) and `verdict` (binary) are
+    # supplementary views retained for backward-compat audit against the
+    # archived headlines.
+    #
+    # CI methodology: null. Mean-of-proportions across non-identical-N
+    # strata is not binomial; pick a stratified-CI methodology in a later
+    # entity if statistical-significance machinery is needed. Bootstrap
+    # over 12 cells at N=1 query trial per query is uninformative.
+    # Downstream consumers MUST NOT claim statistical significance from
+    # `stratified_verdict.ci == null` — verdict is a point comparison.
+    stratified_verdict_value = _verdict_point(per_query_mean_over_strata, target_value)
 
     return {
         "variant": variant,
@@ -205,6 +225,12 @@ def aggregate_variant(matrix_root: Path, variant: str) -> dict[str, Any]:
             list(pooled_per_query_ci) if pooled_per_query_ci else None
         ),
         "against_constant": {
+            "stratified_verdict": {
+                "value": target_value,
+                "stratified_mean": per_query_mean_over_strata,
+                "ci": None,
+                "verdict": stratified_verdict_value,
+            },
             "name": target_name,
             "value": target_value,
             "verdict": verdict,
