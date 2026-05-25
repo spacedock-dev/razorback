@@ -8,11 +8,30 @@ matrix_root: _runs/goal1-direct-structured-redo-2026-05-24
 
 ## Headline
 
-**Direct-structured pooled per-query pass@1 = 0.7407 (40/54), 95% Wilson CI [0.611, 0.839] across 12 DAB datasets at N=1.**
+> **Headline corrected 2026-05-25 by FO at captain directive.** The DAB
+> paper's `direct_baseline=0.4376` is the **stratified-per-query** value
+> (each dataset weighted equally regardless of query count). The
+> original headline led with pooled-per-query (0.7407) and compared it
+> against the stratified paper number — apples-to-oranges. The
+> corrected paper-comparable headline is the stratified value below.
+> Pooled-per-query and binary numbers are preserved as supplementary
+> views in the per-cell table. The matrix aggregator's
+> `per_query_verdict` field still computes against `pooled_per_query_ci`
+> (a tooling bug to fix in a follow-on entity).
 
-Verdict vs `paper direct_baseline=0.4376` (auto-pulled from `experiment_meta.paper_baseline` per cell's spec.frontmatter, hm commit 5 surface): **above** (CI lower bound 0.611 > 0.4376).
+**Direct-structured stratified-per-query pass@1 = 0.6719 across 12 DAB datasets at N=1** (`per_query_pass_at_1_mean_over_strata` from `direct-structured/aggregate-score.json`; mean of the 12 per-cell pass@1 values, each dataset weighted equally — paper-canonical).
 
-Side-by-side with the spacedock headline from the archived `d8 goal1-rerun-headline-per-query-recompute` (pooled per-query pass@1 = 0.722, CI [0.591, 0.824]) at the same model + effort point: direct-structured ≈ spacedock (0.741 vs 0.722; CIs overlap meaningfully). At this trial budget (N=1) the spacedock crew loop's measurable contribution over the direct baseline is small enough that the per-query CIs overlap. The binary headline differs more (direct-structured 4/12 cells pass-binary) — the per-query measure is the load-bearing one.
+Verdict vs `paper direct_baseline=0.4376`: **above** (0.6719 > 0.4376, Δ ≈ +0.234). The stratified mean-of-proportions is not binomial so a Wilson CI does not attach at this lens — significance vs the paper baseline at this matrix scale would require bootstrap or per-stratum CI aggregation (a methodology piece to file in the matrix-aggregator-fix follow-on).
+
+Side-by-side with the spacedock headline from the archived `d8 goal1-rerun-headline-per-query-recompute` at the same model + effort point:
+
+| Aggregation lens | direct-structured (this entity) | spacedock (d8 archive) | Δ |
+|---|---|---|---|
+| **stratified-per-query (paper lens)** | **0.6719** | **~0.706** (computed from d8 per-cell table) | direct **-0.034** (spacedock leads on the paper-canonical lens; no CI on this lens at N=1) |
+| pooled-per-query (supplementary) | 0.7407 [0.611, 0.839] | 0.722 [0.591, 0.824] | direct +0.019 (CIs overlap meaningfully) |
+| pooled cell-binary (strictest) | 0.333 [0.138, 0.609] | 0.333 [0.138, 0.609] | identical |
+
+At the paper-canonical stratified-per-query lens, **spacedock leads direct-structured by ~3pp at N=1**; the per-stratum CI machinery to claim statistical significance on that gap isn't computed at this matrix scale. The pooled-per-query lens reverses the ordering by ~2pp because high-query datasets (crmarenapro at 13 queries) dominate the pool, masking the stratified ranking.
 
 ## Per-cell table
 
