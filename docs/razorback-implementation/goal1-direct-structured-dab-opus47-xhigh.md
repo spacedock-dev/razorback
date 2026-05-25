@@ -10,7 +10,7 @@ score: 0.92
 worktree: .worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh
 issue:
 pr: #4
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 ## Problem
