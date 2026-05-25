@@ -1,11 +1,11 @@
 ---
 id: 08ghk1yvkq9vzs71gzecx5bf
 title: goal1 matrix aggregator computes paper-comparison verdict from stratified-mean (not pooled CI)
-status: plan
+status: implementation
 source: 2026-05-25 captain audit during 7q + d8 + an three-way crew-loop study. `examples/drivers/aggregate-goal1-scores.py:189` reads `per_query_verdict = _verdict(pooled_per_query_ci)` — the aggregator computes the against-paper-baseline verdict from the POOLED-per-query Wilson CI lower bound, NOT from the stratified-per-query mean. The DAB paper's `direct_baseline=0.4376` and `spacedock_baseline=0.577` are stratified-per-query values (each dataset weighted equally regardless of query count); comparing them against pooled-per-query CI is apples-to-oranges. Today the verdict happens to come out "above" for both 7q (0.7407 pooled vs 0.4376) and d8 (0.7222 pooled vs 0.577) but the magnitude and statistical reasoning are wrong, and the lens-mismatch could produce a different verdict on a borderline matrix. Discovered when captain asked "what's the stratified score" and FO surfaced that the captain-facing report's headline and verdict were both pooled-per-query, not stratified.
 score: 0.85
 auto-approve: false
-worktree:
+worktree: .worktrees/spacedock-ensign-goal1-matrix-aggregator-stratified-verdict-fix
 issue:
 pr:
 mod-block:
