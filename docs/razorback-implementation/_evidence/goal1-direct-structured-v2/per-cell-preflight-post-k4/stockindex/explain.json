@@ -1,0 +1,96 @@
+{
+  "agent": {
+    "env_keys": [
+      "CLAUDE_CODE_OAUTH_TOKEN"
+    ],
+    "harbor_builtin_name": null,
+    "harbor_import_path": "razorback.agents._runtime.claude:RazorbackClaudeCode",
+    "kwargs": {
+      "allowed_tools": "Bash,Read,Write,Edit,Glob,Grep",
+      "reasoning_effort": "xhigh"
+    },
+    "max_timeout_sec": null,
+    "model": "claude-opus-4-7",
+    "override_setup_timeout_sec": null,
+    "override_timeout_sec": null,
+    "runtime": null,
+    "spec_kind": "claude-cli"
+  },
+  "benchmark": {
+    "dataset": "dab@1.0",
+    "exclude_tasks": null,
+    "kind": "harbor",
+    "n_tasks": null,
+    "plugin": "dab",
+    "plugin_args": {
+      "hints": true,
+      "query_mode": "batch",
+      "workspace_variant": "direct-structured"
+    },
+    "tasks": [
+      "stockindex"
+    ]
+  },
+  "concurrency": {
+    "attempts": 1,
+    "trials": 1
+  },
+  "environment": {
+    "delete": false,
+    "env": {},
+    "force_build": false,
+    "import_path": null,
+    "kwargs": {},
+    "mounts_json": null,
+    "override_cpus": null,
+    "override_gpus": null,
+    "override_memory_mb": null,
+    "override_storage_mb": null,
+    "suppress_override_warnings": false,
+    "type": "docker"
+  },
+  "experiment": "goal1-direct-structured-stockindex",
+  "explain_only": true,
+  "explain_side_effects": [
+    "runs normal preflight checks before the explain branch",
+    "translates the spec and may materialize task views to report exact task paths",
+    "does not write _job_config.yaml",
+    "does not invoke Harbor",
+    "does not run the model"
+  ],
+  "job_config_yaml": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/preflight/goal1-direct-structured-stockindex/e96b6e0266bd17a2/_job_config.yaml",
+  "job_name": "e96b6e0266bd17a2",
+  "ordering_hint": null,
+  "preparation": [
+    "Parse frozen spec and validate schema.",
+    "Resolve runs-dir, job name, and run directory.",
+    "Run runs-dir Docker mount visibility canary.",
+    "Check frozen Harbor/model/plugin provenance drift when present.",
+    "Translate Razorback spec to Harbor JobConfig.",
+    "Invoke razorback-plugin-dab generate to materialize Harbor task directories from the typed plugin_args.",
+    "Build RazorbackClaudeCode directly.",
+    "Apply Claude auth/tool policy.",
+    "Invoke Claude with each task instruction directly.",
+    "Write Harbor job config to /Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/preflight/goal1-direct-structured-stockindex/e96b6e0266bd17a2/_job_config.yaml.",
+    "Invoke `uv run harbor run -c /Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/preflight/goal1-direct-structured-stockindex/e96b6e0266bd17a2/_job_config.yaml`.",
+    "After Harbor returns, write spec/provenance/aggregate artifacts under /Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/preflight/goal1-direct-structured-stockindex/e96b6e0266bd17a2."
+  ],
+  "prompt": {
+    "mode": "direct-task-instruction",
+    "prompt_prefix": "",
+    "sample_composed_prompt": "# Task\n\nAnswer ALL of the following queries using the databases described below.\nSolve every query in this single agent turn.\n\n## Queries\n\n### query1\n\nLocated under `/workspace/query1/query.json`:\n\n\"Which stock index in the Asia region has exhibited the highest average intraday volatility since 2020?\"\n\n### query2\n\nLocated under `/workspace/query2/query.json`:\n\n\"Among North American stock indices, which indices had more up days than down days in 2018?\"\n\n### query3\n\nLocated under `/workspace/query3/query.json`:\n\n\"If an investor had made regular monthly investments in all indices since 2000, which 5 indices would have produced the highest overall returns, and what countries do they belong to?\"\n\n## Databases\n\nHINTS:\n- The Exchange field in indexinfo_database contains full exchange names (e.g., \"Tokyo Stock Exchange\", \"New York Stock Exchange\"). The Index field in indextrade_database contains abbreviated index symbols (e.g., \"N225\", \"HSI\", \"000001.SS\"). To join these datasets, you need to match exchange names with their corresponding major index symbols. For example, \"Tokyo Stock Exchange\" corresponds to \"N225\" (Nikkei 225), \"Hong Kong Stock Exchange\" corresponds to \"HSI\" (Hang Seng Index).\n- The region (e.g., Asia, Europe, North America) of each stock exchange is not explicitly provided. You must infer the region using geographic knowledge. For instance, \"N225\" belongs to the Asia region because it tracks the Tokyo Stock Exchange in Japan.\n- \"Up days\" refer to trading days where the closing price is higher than the opening price. \"Down days\" refer to trading days where the closing price is lower than the opening price.\n- The term \"average intraday volatility\" refers to the average relative fluctuation of a stock index within each trading day. It is typically computed as (High - Low) / Open for each day, then averaged across a given time period.\n\n## Output contract\n\nWrite your final answers to `/workspace/answers.json` as a JSON object where each key is the query directory name (e.g. \"q1\", \"q2\", \"q3\") and each value is the answer string. For example:\n\n```json\n{\n  \"q1\": \"<your answer for query1>\",\n  \"q2\": \"<your answer for query2>\",\n  \"q3\": \"<your answer for query3>\"\n}\n```\n\nThe verifier reads this file and scores each query independently.\n",
+    "sample_instruction": "# Task\n\nAnswer ALL of the following queries using the databases described below.\nSolve every query in this single agent turn.\n\n## Queries\n\n### query1\n\nLocated under `/workspace/query1/query.json`:\n\n\"Which stock index in the Asia region has exhibited the highest average intraday volatility since 2020?\"\n\n### query2\n\nLocated under `/workspace/query2/query.json`:\n\n\"Among North American stock indices, which indices had more up days than down days in 2018?\"\n\n### query3\n\nLocated under `/workspace/query3/query.json`:\n\n\"If an investor had made regular monthly investments in all indices since 2000, which 5 indices would have produced the highest overall returns, and what countries do they belong to?\"\n\n## Databases\n\nHINTS:\n- The Exchange field in indexinfo_database contains full exchange names (e.g., \"Tokyo Stock Exchange\", \"New York Stock Exchange\"). The Index field in indextrade_database contains abbreviated index symbols (e.g., \"N225\", \"HSI\", \"000001.SS\"). To join these datasets, you need to match exchange names with their corresponding major index symbols. For example, \"Tokyo Stock Exchange\" corresponds to \"N225\" (Nikkei 225), \"Hong Kong Stock Exchange\" corresponds to \"HSI\" (Hang Seng Index).\n- The region (e.g., Asia, Europe, North America) of each stock exchange is not explicitly provided. You must infer the region using geographic knowledge. For instance, \"N225\" belongs to the Asia region because it tracks the Tokyo Stock Exchange in Japan.\n- \"Up days\" refer to trading days where the closing price is higher than the opening price. \"Down days\" refer to trading days where the closing price is lower than the opening price.\n- The term \"average intraday volatility\" refers to the average relative fluctuation of a stock index within each trading day. It is typically computed as (High - Low) / Open for each day, then averaged across a given time period.\n\n## Output contract\n\nWrite your final answers to `/workspace/answers.json` as a JSON object where each key is the query directory name (e.g. \"q1\", \"q2\", \"q3\") and each value is the answer string. For example:\n\n```json\n{\n  \"q1\": \"<your answer for query1>\",\n  \"q2\": \"<your answer for query2>\",\n  \"q3\": \"<your answer for query3>\"\n}\n```\n\nThe verifier reads this file and scores each query independently.\n",
+    "sample_instruction_path": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/preflight/goal1-direct-structured-stockindex/e96b6e0266bd17a2/tasks/stockindex/instruction.md",
+    "sample_task_path": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/preflight/goal1-direct-structured-stockindex/e96b6e0266bd17a2/tasks/stockindex",
+    "task_count": 1,
+    "task_instruction_application": "The benchmark task instruction is passed directly to the runtime adapter for each trial.",
+    "task_paths": [
+      "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/preflight/goal1-direct-structured-stockindex/e96b6e0266bd17a2/tasks/stockindex"
+    ],
+    "workflow_readme": null
+  },
+  "run_dir": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/preflight/goal1-direct-structured-stockindex/e96b6e0266bd17a2",
+  "schema_version": "rk-run-explain-v1",
+  "spec_path": "examples/specs/goal1/direct-structured/stockindex.frozen.yaml",
+  "spec_sha256": "e96b6e0266bd17a22d102a7119cb2342228f826071d1c08ef25f6ed4499814f5"
+}
