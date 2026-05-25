@@ -31,6 +31,22 @@ docs/razorback-implementation/ active Spacedock implementation workflow
 tests/                         unit and integration tests
 ```
 
+## Workflow templates
+
+Razorback ships two workflow READMEs as in-package data under
+`src/razorback/templates/`:
+
+- `src/razorback/templates/experiment-workflow/README.md` — six-stage
+  experiment workflow (pending → propose → smoke → full → analyze →
+  conclude) for benchmark-result research.
+- `src/razorback/templates/run-workflow/README.md` — four-stage run
+  workflow (pending → reconciling → completed → failed) for single-run
+  reconciliation.
+
+Usage is copy-and-modify: copy a template directory into a new
+research repo (or alongside a frozen spec) and edit the per-stage
+prompts in place.
+
 ## Setup
 
 ```bash

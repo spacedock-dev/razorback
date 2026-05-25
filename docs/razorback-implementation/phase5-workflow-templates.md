@@ -1,7 +1,7 @@
 ---
 id: zgaactcgj955qn04t0jaj7dg
 title: Phase 5 — solver workflow README templates
-status: implementation
+status: validation
 source: plan Phase 5 + spec §5 (v2 spec at docs/superpowers/specs/2026-05-19-razorback-on-harbor.md)
 started: 2026-05-25T05:47:55Z
 completed:
@@ -340,6 +340,33 @@ post-hm); phase6 finishes the v2 cleanup independently." The
 captain may choose to keep the strict ordering for narrative
 discipline, but it's no longer mechanically required.
 
+## Feedback Cycles
+
+### Cycle 1 — validation REJECTED (2026-05-25)
+
+**Captain findings (material):**
+
+1. **Discoverability gap.** Nothing in the project root `README.md`, the spec, or `rk --help` mentions that razorback ships workflow templates. A user clones razorback and has no breadcrumb to `src/razorback/templates/`. Fix: add a short "## Workflow templates" section to `/Users/kent/Dev/InfuseAI/GitHub/razorback/README.md` (project root) that points at `src/razorback/templates/{experiment-workflow,run-workflow}/` with the copy-and-modify note (no `rk init` work — that stays out of scope per phase 5 plan).
+
+2. **Invalid sd-b32 id on follow-up entity.** The implementation worker minted `zhzokycis7ppv1dsl8mzs3t3` for the T-5c follow-up entity, but `i` is not in the spacedock-base32 alphabet (`0123456789abcdefghjkmnpqrstvwxyz`). `status --where` rejects the workflow dir with `invalid sd-b32 stored id`. Fix: re-mint via `status --next-id --id-seed phase5-followup-dab-matrix-analyze --workflow-dir <wd>` and update:
+   - `docs/razorback-implementation/phase5-followup-dab-matrix-analyze.md` (the `id:` frontmatter field)
+   - `docs/razorback-implementation/validation/phase5-workflow-templates.md` (the citation around line 246)
+   - any other forward-looking references to the bad id (grep first; the prior stage reports in this entity body are audit history — leave those, they are worker-written records).
+
+**Routing:** back to `implementation` stage in worktree branch `spacedock-ensign/phase5-workflow-templates`. Re-validation will follow once the fix lands.
+
+### Cycle 2 — validation REJECTED (2026-05-25)
+
+**Captain findings (material):**
+
+1. **README section over-narrates internal decisions.** The cycle-1 `## Workflow templates` section in `/Users/kent/Dev/InfuseAI/GitHub/razorback/README.md` includes two paragraphs that don't earn their space for a user:
+   - The `rk init` disclaimer ("There is no `rk init` scaffolder — that is deliberately out of scope until a consumer materializes.") — this is a decision-record artifact; a user who doesn't know about `rk init` won't miss it. Belongs in the spec/design doc, not the README.
+   - The `importlib.resources.files('razorback').joinpath('templates')` line — narrow Python-library-consumer surface; typical user doing copy-and-modify will `cp -r` from the source tree. Cutting it loses one signal for library consumers but doesn't change AC-4 (the test still exercises the importlib.resources reach).
+
+   Fix: trim both paragraphs from the README section. Keep only (a) the two templates named with their stage chains and (b) the copy-and-modify usage statement.
+
+**Routing:** back to `implementation` stage in worktree branch `spacedock-ensign/phase5-workflow-templates`. Re-validation will follow once the trim lands. Cycle 2 of 3 before the contract escalates to manual review.
+
 ## Stage Report: plan
 
 - DONE: Plan-output flex: 6 ACs, multi-file template-shipping work (experiment-workflow + run-workflow READMEs + pyproject package data + end-to-end smoke). Recommend SEPARATE plan doc at docs/razorback-implementation/plans/phase5-workflow-templates.md per README threshold (4+ ACs, multi-subsystem).
@@ -352,3 +379,81 @@ discipline, but it's no longer mechanically required.
 ### Summary
 
 Wrote a separate plan doc covering all 6 ACs with 10 sequenced tasks. Key decisions: (1) T-8 package-data shipping is the riskiest mechanism and ships EARLY (validates the wheel-shipping contract before prose work finalizes); (2) T-5c (DAB-matrix analyze path) is the only entity-08-gated task — branching logic at impl-stage dispatch keeps phase5 unblocked when 08 is still in flight; (3) plan implements the entity-body 2026-05-25 amendments language (broadened propose-stage scope, `rk run --explain` pre-flight, `rk audit --policy strict` sandwich, `paper_baseline` auto-pull from spec frontmatter, stratified-only headline directive, spacedock-variant audit-coverage caveat), not the older spec §5.1 table. Three open questions surfaced for captain at gate review (template canonical home under `uv_build`, T-5c branching preference, schema-test framework choice).
+
+## Stage Report: implementation
+
+- DONE: T-8 package-data shipping (AC-4, riskiest contract) lands EARLY with a failing test first — before T-4/T-5 prose work is finalized. Templates ship in-package at src/razorback/templates/{experiment-workflow,run-workflow}/ per captain M3 decision.
+  Commit `538e019` shipped placeholder READMEs + 4 failing-test-first assertions in `tests/unit/test_workflow_templates_packaged.py`; `uv build --wheel` confirmed both template dirs ship inside `razorback-0.1.0-py3-none-any.whl` (no `[tool.uv_build.package-data]` glue needed — uv_build auto-includes non-Python files in package dirs).
+- DONE: T-5c branching call: at implementation start, run `status --resolve goal1-matrix-aggregator-stratified-verdict-fix --workflow-dir <wd>` to check entity 08's stage; if not archived, split T-5c into a follow-up entity `phase5-followup-dab-matrix-analyze` and ship phase5 with the single-benchmark analyze path only. Document the branch decision in the stage report.
+  Entity 08 read directly from `docs/razorback-implementation/goal1-matrix-aggregator-stratified-verdict-fix.md` — frontmatter `status: implementation` (NOT archived). Per plan recommendation (a), split T-5c to follow-up entity `phase5-followup-dab-matrix-analyze.md` (id `zhzokycis7ppv1dsl8mzs3t3`, status `backlog`, depends-on entity 08); commit `1a55417`. Phase 5 ships single-benchmark analyze path only; experiment-workflow template's analyze stage contains a "DAB-paper matrix (deferred to follow-up)" section citing the follow-up entity.
+- DONE: TDD discipline per plan: failing tests precede implementation (T-2 deferred per M1; T-7 content lints, T-8 package-data, T-10 reachability/content lints drive the code). Small atomic commits on `spacedock-ensign/phase5-workflow-templates`; no unrelated refactors.
+  Four atomic commits: `538e019` (T-8 red+green, package-data), `053541e` (T-7+T-10 red, 19 failing content/reachability assertions), `a756ddc` (T-3/T-4/T-5a/T-5b/T-6 green, template prose lands), `1a55417` (T-5c branching follow-up entity). All 24 phase5 tests pass. `uv run pytest -q` (excluding pre-existing-broken `tests/unit/test_task_identity_scoring.py` + `tests/integration`) reports 693 passed (669 pre-existing + 24 new) + 2 pre-existing failures (`test_matrix_specs_carry_query_mode_batch`, `test_rk_research_new_creates_scaffold_tree`) — both unrelated to phase 5 and reproduce on main without any phase5 work.
+
+### Summary
+
+Phase 5 ships per the post-staff-review M1/M2/M3/M4 amendments in the entity body: templates live in-package at `src/razorback/templates/{experiment-workflow,run-workflow}/`, uv_build auto-includes them in the wheel, no schema-parse test (M1 deferred), no captain-gate enforcement assertion (M4 downgraded to prompt-content + reachability lints). T-5c (DAB-matrix analyze path) split to follow-up entity because entity 08 was at implementation, not archived. AC-1/AC-6 walking-skeleton + pytest sweep hold (pre-existing failures unrelated). All 6 ACs satisfied via 24 new tests across `tests/unit/test_workflow_templates_packaged.py` (4 tests, AC-4) and `tests/unit/test_workflow_templates_content.py` (20 tests, AC-2 + AC-3 + AC-5). The experiment-workflow template implements the 2026-05-25 amendments language (k3 broadened leak-guard scope, codex `rk run --explain` pre-flight, wp `rk audit --policy strict` sandwich, hm `paper_baseline` auto-pull with no `rk score --against-constant` CLI invocation, stratified-only headline directive, spacedock_solver audit-coverage caveat).
+
+## Stage Report: validation
+
+- DONE: Reproduce each AC's `Verified by:` command verbatim from a clean checkout of the worktree branch.
+  AC-1: file-tree diff vs main shows zero `.py` runtime changes (templates/docs/tests only). AC-2: grep evidence captured for every required phrase + NEGATIVE lint for `rk score --against-constant`. AC-3: `grep '^## Stage:'` on run-workflow README returns the four named stages in order. AC-4: `uv run python -c "import importlib.resources; print(list(importlib.resources.files('razorback').joinpath('templates').iterdir()))"` enumerates both template dirs; `uv build --wheel` + `unzip -l` confirms in-wheel shipping. AC-5: 24 phase5 tests green (4 in `test_workflow_templates_packaged.py`, 20 in `test_workflow_templates_content.py`). AC-6: `uv run pytest -q --ignore=tests/integration --ignore=tests/unit/test_task_identity_scoring.py` → 693 passed, 2 pre-existing failures reproduce on main.
+- DONE: Run code review against branch `spacedock-ensign/phase5-workflow-templates`; classify findings as blocking / non-blocking.
+  Reviewed full diff vs main (858 insertions across 7 files). Blocking findings: none. Non-blocking observations: (1) `uv.lock` `[options]` exclude-newer block dropped as side-effect of `uv run`/`uv build`; (2) AC-1 deterministic-micro-spec verifier is structurally satisfied (zero `.py` changes); (3) DAB-matrix defer is well-scoped with a clean follow-up entity carrying hard precondition on entity 08; (4) test scope discipline is clean (templates only).
+- DONE: Write the validation report at `docs/razorback-implementation/validation/phase5-workflow-templates.md`; verify the analyze-stage prompt's DAB-paper matrix section correctly defers to the follow-up entity rather than referencing the unfixed aggregator.
+  Report written at `docs/razorback-implementation/validation/phase5-workflow-templates.md`. DAB-matrix defer verified: the analyze stage's "DAB-paper multi-dataset matrices (deferred to follow-up)" section names the follow-up entity `phase5-followup-dab-matrix-analyze` (id `zhzokycis7ppv1dsl8mzs3t3`), explicitly documents the unfixed aggregator bug at `examples/drivers/aggregate-goal1-scores.py:189`, and cites the gating entity `goal1-matrix-aggregator-stratified-verdict-fix`. The template does NOT cite the buggy aggregator's verdict field as authoritative — captain's defer directive honored.
+
+### Summary
+
+Validation PASS on all 6 ACs. Each `Verified by:` clause exercised verbatim from a clean worktree checkout with reproducible evidence. Phase 5's 24 new tests green; the 2 pre-existing pytest failures (`test_matrix_specs_carry_query_mode_batch`, `test_rk_research_new_creates_scaffold_tree`) reproduce on main and are not phase 5 regressions. Code review surfaces zero blocking findings; one non-blocking `uv.lock` side-effect for the FO/captain to acknowledge at the gate. **Recommend APPROVE to `done`.** auto-approve=false honored; the FO must present this gate to the captain with the `uv.lock` non-blocker noted.
+
+## Stage Report: implementation (cycle 1 follow-up)
+
+- DONE: Add a short `## Workflow templates` section to `/Users/kent/Dev/InfuseAI/GitHub/razorback/README.md` (project root) that names both shipped templates (`src/razorback/templates/experiment-workflow/` and `src/razorback/templates/run-workflow/`) and states the copy-and-modify usage shape (no `rk init` — phase 5 Out of scope). Place it in a natural spot relative to the existing 'What Is Here' / 'Layout' sections. Commit on the worktree branch.
+  Inserted a 20-line section between `## Layout` and `## Setup` (commit `472a9bb`). Names both templates with their stage lists (experiment: 6 stages; run: 4 stages), documents copy-and-modify usage, explicitly notes `rk init` is deliberately out of scope, and cites the `importlib.resources.files('razorback').joinpath('templates')` reach from an installed wheel. README-section change is outside both the package-data test scope and the prompt-content lint scope.
+- DONE: Re-mint the T-5c follow-up entity id with `status --next-id --id-seed phase5-followup-dab-matrix-analyze --workflow-dir <wd>` (sd-b32 alphabet excludes `i`/`l`/`o`/`u`). Update the `id:` field in `docs/razorback-implementation/phase5-followup-dab-matrix-analyze.md` and the forward-looking citation in `docs/razorback-implementation/validation/phase5-workflow-templates.md` (around line 246). Leave the stage reports inside `docs/razorback-implementation/phase5-workflow-templates.md` body alone — they are worker-written audit history that git preserves. Run `status --where slug=phase5-followup-dab-matrix-analyze --workflow-dir <worktree-wd>` to confirm the workflow dir no longer errors with `invalid sd-b32 stored id`.
+  New id minted: `95f3xqq3f14573w5jc8n0wfg` (alphabet-clean — verified no `i/l/o/u`). Because `--workflow-dir` errored on the bad-id-bearing file at mint time, the workflow temporarily moved the file aside, ran `status --next-id --id-seed phase5-followup-dab-matrix-analyze --workflow-dir <wd>`, captured the printed id, and restored the file. Updated the follow-up entity frontmatter `id:` field and the forward-looking citation at `validation/phase5-workflow-templates.md:246` (commit `dc50b59`). Verification: `status --where slug=phase5-followup-dab-matrix-analyze --workflow-dir <wd>` now resolves the row cleanly (id prefix `95`, status `backlog`) with no parse error. Per captain directive, the audit-history references to the prior bad id in this entity body's earlier stage reports were left intact.
+- DONE: Confirm all 24 phase5 tests still green (`uv run pytest tests/unit/test_workflow_templates_packaged.py tests/unit/test_workflow_templates_content.py -q`) — the README section is outside the package data scope and outside the content lints, but verify no accidental coupling broke.
+  `uv run pytest tests/unit/test_workflow_templates_packaged.py tests/unit/test_workflow_templates_content.py -q` → 24 passed in 0.16s. No coupling regression from the project-root README change or the id re-mint.
+
+### Summary
+
+Cycle-1 captain findings addressed in two atomic commits on `spacedock-ensign/phase5-workflow-templates`: (1) `472a9bb` adds the project-root README discoverability breadcrumb pointing to `src/razorback/templates/{experiment-workflow,run-workflow}/` with copy-and-modify guidance; (2) `dc50b59` re-mints the follow-up entity id from the alphabet-invalid `zhzokycis7ppv1dsl8mzs3t3` to a clean `95f3xqq3f14573w5jc8n0wfg`, updating the entity frontmatter and the forward-looking validation-report citation while preserving the prior id in the entity-body audit history per captain directive. `status --where` resolves the follow-up entity cleanly; all 24 phase5 tests stay green; no other live citations of the bad id remain in the repo. Ready for re-validation.
+
+## Stage Report: validation (cycle 1)
+
+- DONE: Verify cycle-1 fix (a): project root `/Users/kent/Dev/InfuseAI/GitHub/razorback/README.md` contains a section that names both shipped templates with a copy-and-modify usage note.
+  `git diff main..HEAD -- README.md` (commit `472a9bb`) shows a 20-line `## Workflow templates` section between `## Layout` and `## Setup` that names `src/razorback/templates/experiment-workflow/README.md` (six stages enumerated) and `src/razorback/templates/run-workflow/README.md` (four stages enumerated), documents copy-and-modify usage, calls out `rk init` as deliberately out of scope, and cites the `importlib.resources.files('razorback').joinpath('templates')` wheel-reach.
+- DONE: Verify cycle-1 fix (b): T-5c follow-up entity id is alphabet-valid sd-b32 and `status --where slug=phase5-followup-dab-matrix-analyze --workflow-dir <wd>` resolves without `invalid sd-b32 stored id`.
+  Follow-up entity frontmatter is `id: 95f3xqq3f14573w5jc8n0wfg` — no `i`/`l`/`o`/`u` characters. `status --where slug=phase5-followup-dab-matrix-analyze --workflow-dir docs/razorback-implementation` resolves cleanly with prefix `95`, status `backlog`, no parse error. `grep -rn` across `docs/`, `README.md`, and `src/` confirms no live forward-looking citation of the bad id remains; only the entity-body audit-history references survive (captain directive honored).
+- DONE: Re-confirm the 6 entity ACs still hold after cycle-1 changes; AC-1 walking-skeleton (zero `.py` runtime changes) still holds because cycle-1 touched only project-root docs + entity frontmatter + validation report.
+  `uv run pytest tests/unit/test_workflow_templates_packaged.py tests/unit/test_workflow_templates_content.py -q` → 24 passed in 0.09s. `uv run pytest -q --ignore=tests/integration --ignore=tests/unit/test_task_identity_scoring.py` → 693 passed + 2 pre-existing failures (`test_matrix_specs_carry_query_mode_batch`, `test_rk_research_new_creates_scaffold_tree`) identical to cycle-0 evidence; both reproduce on main. `git diff main..HEAD --name-only -- "src/razorback/*.py"` returns nothing — AC-1 trivially intact.
+- DONE: Append `## Cycle 1 re-validation` section to `docs/razorback-implementation/validation/phase5-workflow-templates.md` with the captain findings addressed, re-run command output, and gate recommendation. Append (do NOT overwrite).
+  Appended; prior cycle-0 PASS content intact above. Section records both captain-finding fixes verified, the targeted + broader pytest re-run output, the AC-1 re-check, and the final gate recommendation (APPROVE).
+
+### Summary
+
+Cycle-1 re-validation PASS. Both captain material findings from cycle 1 closed correctly and minimally: project-root README breadcrumb names both shipped templates with copy-and-modify guidance (commit `472a9bb`); follow-up entity id re-minted to alphabet-clean `95f3xqq3f14573w5jc8n0wfg` and `status --where` resolves cleanly (commit `dc50b59`). All 24 phase5 tests stay green; the broader sweep remains 693 passed + 2 pre-existing failures (unchanged from cycle-0). AC-1 walking-skeleton trivially intact (no `.py` runtime changes in cycle-1). The cycle-0 APPROVE recommendation stands. `auto-approve: false` — FO presents this gate to the captain for explicit ack.
+
+## Stage Report: implementation (cycle 2 follow-up)
+
+- DONE: Trim the `## Workflow templates` section in `/Users/kent/Dev/InfuseAI/GitHub/razorback/README.md`: remove the `rk init` disclaimer paragraph and the `importlib.resources.files('razorback').joinpath('templates')` paragraph entirely. Keep ONLY the two templates named with their stage chains and the copy-and-modify usage statement (a single short paragraph is fine). One atomic commit on the worktree branch.
+  Trimmed both paragraphs in a single Edit; the remaining section keeps the bulleted list of the two templates (with their stage chains: experiment 6-stage, run 4-stage) and a single short copy-and-modify usage paragraph. `git diff README.md` shows the two paragraphs removed (`rk init` disclaimer + `importlib.resources` line) with no other prose touched. One atomic commit on `spacedock-ensign/phase5-workflow-templates`.
+- DONE: Confirm phase5 tests still green (`uv run pytest tests/unit/test_workflow_templates_packaged.py tests/unit/test_workflow_templates_content.py -q`). The README trim is outside both test surfaces; this is a regression check.
+  24 passed in 0.09s. No coupling from the project-root README trim to the package-data or content-lint tests, as expected.
+
+### Summary
+
+Cycle-2 captain finding addressed via a narrow trim on the project-root README's `## Workflow templates` section: the `rk init` disclaimer paragraph and the `importlib.resources` paragraph are gone; the bulleted list of both shipped templates with their stage chains and a single copy-and-modify usage sentence remain. No template prose, no tests, no other files touched. All 24 phase5 tests stay green (regression check). Ready for re-validation.
+
+## Stage Report: validation (cycle 2)
+
+- DONE: Verify the cycle-2 README trim: `/Users/kent/Dev/InfuseAI/GitHub/razorback/README.md`'s `## Workflow templates` section no longer contains the `rk init` disclaimer paragraph or the `importlib.resources.files('razorback').joinpath('templates')` line. The section now contains ONLY the two templates named with their stage chains + a copy-and-modify usage statement. Use `git diff main..HEAD -- README.md` as evidence.
+  `git diff main..HEAD -- README.md` shows a 16-line `## Workflow templates` section between `## Layout` and `## Setup`: one-sentence intro + bulleted list naming both templates with their full stage chains (experiment: pending → propose → smoke → full → analyze → conclude; run: pending → reconciling → completed → failed) + a single copy-and-modify usage paragraph. `grep -n "rk init\|importlib.resources" README.md` returns NO matches — both decision-record paragraphs are gone exactly as captain asked. Cycle-2 trim landed in commit `4756bdc`.
+- DONE: Confirm phase5 test sweep stays clean: `uv run pytest tests/unit/test_workflow_templates_packaged.py tests/unit/test_workflow_templates_content.py -q` exits 0. AC-1 walking-skeleton still intact (zero `.py` runtime changes in cycle-2).
+  `uv run pytest tests/unit/test_workflow_templates_packaged.py tests/unit/test_workflow_templates_content.py -q` → 24 passed in 0.13s. `git diff main..HEAD --name-only -- "src/razorback/*.py"` returns nothing across all three cycles — AC-1 walking-skeleton trivially intact. The README trim is outside both phase5 test surfaces (package data + content lints) by construction.
+- DONE: Append `## Cycle 2 re-validation` section to `docs/razorback-implementation/validation/phase5-workflow-templates.md` recording the trim verified + test re-run output + gate recommendation. Do NOT overwrite prior cycle-0 / cycle-1 content.
+  Appended at the end of the validation report; prior cycle-0 PASS evidence and cycle-1 re-validation block are intact above. The new section records captain finding closure, the targeted pytest re-run output (24 passed in 0.13s), the AC-1 walking-skeleton re-check, the full-diff stat, and the cycle-2 gate recommendation (APPROVE).
+
+### Summary
+
+Cycle-2 re-validation PASS. The single captain material finding from cycle 2 is closed exactly and minimally as asked: the project-root README's `## Workflow templates` section was trimmed (commit `4756bdc`) to contain only the two-template bulleted list with stage chains + a single copy-and-modify usage paragraph; the `rk init` disclaimer and `importlib.resources` library-consumer cite are gone. All 24 phase5 tests stay green; AC-1 walking-skeleton trivially intact (zero `.py` runtime changes across all three cycles). The cycle-0 PASS verdict and APPROVE recommendation continue to stand. No new material concerns surfaced — cycle-3 escalation per contract is not warranted by this re-validation. `auto-approve: false`; FO presents this gate to the captain for explicit approval ack.
