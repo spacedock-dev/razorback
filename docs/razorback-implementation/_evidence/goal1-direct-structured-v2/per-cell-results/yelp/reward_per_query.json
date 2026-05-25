@@ -1,0 +1,30 @@
+{
+  "q1": {
+    "reward": 1.0,
+    "reason": "Found matching number: 3.55 \u2248 3.55"
+  },
+  "q2": {
+    "reward": 1.0,
+    "reason": "Found: value\u22483.7 near PA/Pennsylvania"
+  },
+  "q3": {
+    "reward": 1.0,
+    "reason": "Found number: 35"
+  },
+  "q4": {
+    "reward": 1.0,
+    "reason": "Found: Restaurant, 3.63"
+  },
+  "q5": {
+    "reward": 1.0,
+    "reason": "Found: value\u22483.48 near PA/Pennsylvania"
+  },
+  "q6": {
+    "reward": 1.0,
+    "reason": "Name and all categories are present."
+  },
+  "q7": {
+    "reward": 1.0,
+    "reason": "All categories are present."
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "policy": "strict",
+  "run_dir": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/goal1-direct-structured-redo-2026-05-24/direct-structured/GITHUB_REPOS/goal1-direct-structured-github_repos/e0ec2c30cff3bc06",
+  "schema_version": "rk-audit-v1",
+  "summary": {
+    "clean": 1,
+    "coverage_missing": 0,
+    "tainted": 0
+  },
+  "trials": [
+    {
+      "findings": [],
+      "taint_status": "clean",
+      "trial_id": "GITHUB_REPOS__noNb5hh",
+      "trial_path": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/goal1-direct-structured-redo-2026-05-24/direct-structured/GITHUB_REPOS/goal1-direct-structured-github_repos/e0ec2c30cff3bc06/GITHUB_REPOS__noNb5hh"
+    }
+  ]
+}

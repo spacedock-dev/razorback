@@ -1,0 +1,48 @@
+{
+  "summary_version": 1,
+  "n_trials_total": 1,
+  "n_trials_completed": 1,
+  "n_trials_errored": 0,
+  "stratified_pass_at_1": 0.0,
+  "datasets": {
+    "DEPS_DEV_V1": {
+      "dataset_pass_at_1": 0.0,
+      "n_queries": 2,
+      "queries": [
+        {
+          "query_id": 1,
+          "n_trials": 1,
+          "n_correct": 0,
+          "pass_at_1": 0.0
+        },
+        {
+          "query_id": 2,
+          "n_trials": 1,
+          "n_correct": 0,
+          "pass_at_1": 0.0
+        }
+      ]
+    }
+  },
+  "trials": [
+    {
+      "trial_id": "DEPS_DEV_V1__cQp4dSB",
+      "reward": 0.0,
+      "cost_usd": 1.4148015,
+      "wall_seconds": null,
+      "error_reason": null,
+      "stratum": {
+        "dataset": "DEPS_DEV_V1",
+        "query_ids": [
+          1,
+          2
+        ],
+        "backends": [
+          "duckdb",
+          "sqlite"
+        ]
+      }
+    }
+  ],
+  "cost_usd": 1.4148015
+}

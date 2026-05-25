@@ -1,0 +1,73 @@
+{
+  "score_version": 1,
+  "alpha": 0.05,
+  "strata": {
+    "PANCANCER_ATLAS": {
+      "dataset": "PANCANCER_ATLAS",
+      "n_total": 3,
+      "n_completed": 3,
+      "n_errored": 0,
+      "n_pass": 2,
+      "pass_at_1": 0.6666666666666666,
+      "wilson_ci": null,
+      "error_reason": null,
+      "queries": [
+        {
+          "query_id": 1,
+          "n_trials": 1,
+          "n_correct": 0,
+          "pass_at_1": 0.0,
+          "wilson_ci": [
+            0.0,
+            0.7934506856227626
+          ]
+        },
+        {
+          "query_id": 2,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0,
+          "wilson_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        {
+          "query_id": 3,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0,
+          "wilson_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        }
+      ]
+    }
+  },
+  "stratified_pass_at_1": 0.6666666666666666,
+  "stratified_n_completed": 1,
+  "stratified_n_errored": 0,
+  "error_reason": null,
+  "against_constant": {
+    "name": "direct",
+    "value": 0.4376,
+    "per_stratum": {
+      "PANCANCER_ATLAS": {
+        "verdict": "above",
+        "ci": null,
+        "side": null
+      }
+    },
+    "stratified": {
+      "mean": 0.6666666666666666,
+      "verdict": "above"
+    },
+    "source": "spec.frontmatter"
+  },
+  "taint_status": {
+    "clean": 1,
+    "tainted": 0,
+    "coverage_missing": 0
+  }
+}

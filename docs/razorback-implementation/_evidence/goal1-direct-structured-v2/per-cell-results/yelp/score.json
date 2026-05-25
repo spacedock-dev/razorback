@@ -1,0 +1,113 @@
+{
+  "score_version": 1,
+  "alpha": 0.05,
+  "strata": {
+    "yelp": {
+      "dataset": "yelp",
+      "n_total": 7,
+      "n_completed": 7,
+      "n_errored": 0,
+      "n_pass": 7,
+      "pass_at_1": 1.0,
+      "wilson_ci": null,
+      "error_reason": null,
+      "queries": [
+        {
+          "query_id": 1,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0,
+          "wilson_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        {
+          "query_id": 2,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0,
+          "wilson_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        {
+          "query_id": 3,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0,
+          "wilson_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        {
+          "query_id": 4,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0,
+          "wilson_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        {
+          "query_id": 5,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0,
+          "wilson_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        {
+          "query_id": 6,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0,
+          "wilson_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        {
+          "query_id": 7,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0,
+          "wilson_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        }
+      ]
+    }
+  },
+  "stratified_pass_at_1": 1.0,
+  "stratified_n_completed": 1,
+  "stratified_n_errored": 0,
+  "error_reason": null,
+  "against_constant": {
+    "name": "direct",
+    "value": 0.4376,
+    "per_stratum": {
+      "yelp": {
+        "verdict": "above",
+        "ci": null,
+        "side": null
+      }
+    },
+    "stratified": {
+      "mean": 1.0,
+      "verdict": "above"
+    },
+    "source": "spec.frontmatter"
+  },
+  "taint_status": {
+    "clean": 1,
+    "tainted": 0,
+    "coverage_missing": 0
+  }
+}

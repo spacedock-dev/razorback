@@ -1,0 +1,14 @@
+{
+  "q1": {
+    "reward": 1.0,
+    "reason": "ok"
+  },
+  "q2": {
+    "reward": 1.0,
+    "reason": "All book titles found in LLM output."
+  },
+  "q3": {
+    "reward": 1.0,
+    "reason": "All book titles found in LLM output."
+  }
+}

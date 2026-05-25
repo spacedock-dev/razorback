@@ -1,0 +1,10 @@
+{
+  "q1": {
+    "reward": 0.0,
+    "reason": "Missing name: @dmrvos/infrajs>0.0.6>typescript"
+  },
+  "q2": {
+    "reward": 0.0,
+    "reason": "Missing project name: moment/moment"
+  }
+}

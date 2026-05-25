@@ -1,0 +1,54 @@
+{
+  "q1": {
+    "reward": 1.0,
+    "reason": "Found expected BANT factor: Authority"
+  },
+  "q2": {
+    "reward": 0.0,
+    "reason": "Found knowledge article IDs ['ka0Wt000000Ens5IAC'], but expected 'ka0Wt000000Eq0MIAS'"
+  },
+  "q3": {
+    "reward": 1.0,
+    "reason": "Found expected agent ID: Negotiation"
+  },
+  "q4": {
+    "reward": 1.0,
+    "reason": "Found expected agent ID: November"
+  },
+  "q5": {
+    "reward": 1.0,
+    "reason": "Found expected agent ID: a03Wt00000JqnHwIAJ"
+  },
+  "q6": {
+    "reward": 1.0,
+    "reason": "Found expected agent ID: ka0Wt000000EnwvIAC"
+  },
+  "q7": {
+    "reward": 1.0,
+    "reason": "Found expected agent ID: ka0Wt000000EoD3IAK"
+  },
+  "q8": {
+    "reward": 0.0,
+    "reason": "Found agent IDs ['005Wt000003NJ8HIAW'], but expected '005Wt000003NIliIAG'"
+  },
+  "q9": {
+    "reward": 1.0,
+    "reason": "Found expected state: MI"
+  },
+  "q10": {
+    "reward": 1.0,
+    "reason": "Found expected agent ID: 005Wt000003NDqDIAW"
+  },
+  "q11": {
+    "reward": 1.0,
+    "reason": "Found expected product ID: 01tWt000006hV8LIAU"
+  },
+  "q12": {
+    "reward": 1.0,
+    "reason": "Found expected agent ID: 005Wt000003NDEBIA4"
+  },
+  "q13": {
+    "reward": 1.0,
+    "reason": "Found expected agent ID: 005Wt000003NIXCIA4"
+  }
+}

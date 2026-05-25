@@ -1,0 +1,14 @@
+{
+  "q1": {
+    "reward": 1.0,
+    "reason": "Ground truth found in LLM output."
+  },
+  "q2": {
+    "reward": 1.0,
+    "reason": "Ground truth found in LLM output."
+  },
+  "q3": {
+    "reward": 1.0,
+    "reason": "Fuzzy match found: 'Zo gaat het leven aan je voor' with score 1.00"
+  }
+}

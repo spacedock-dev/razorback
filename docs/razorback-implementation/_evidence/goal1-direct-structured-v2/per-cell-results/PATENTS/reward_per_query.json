@@ -1,0 +1,14 @@
+{
+  "q1": {
+    "reward": 0.0,
+    "reason": "Missing CPC code: A22B"
+  },
+  "q2": {
+    "reward": 0.0,
+    "reason": "Code/year not found near 'WORKING OF PLASTICS; WORKING OF SUBSTANCES IN A PLASTIC STATE IN GENERAL' (CPC: B29, Year: 2012, Window: 'bestyear2015b29workingofplasticsworkingofsubstancesinaplasticstateingeneralbestyear2007g02')"
+  },
+  "q3": {
+    "reward": 0.0,
+    "reason": "No match for: ABBOTT RYAN + DIAGNOSIS; SURGERY; IDENTIFICATION"
+  }
+}
