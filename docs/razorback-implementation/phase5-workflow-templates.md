@@ -292,3 +292,16 @@ The strict ordering "phase5 after phase6" can be relaxed to
 post-hm); phase6 finishes the v2 cleanup independently." The
 captain may choose to keep the strict ordering for narrative
 discipline, but it's no longer mechanically required.
+
+## Stage Report: plan
+
+- DONE: Plan-output flex: 6 ACs, multi-file template-shipping work (experiment-workflow + run-workflow READMEs + pyproject package data + end-to-end smoke). Recommend SEPARATE plan doc at docs/razorback-implementation/plans/phase5-workflow-templates.md per README threshold (4+ ACs, multi-subsystem).
+  Separate plan doc written at `docs/razorback-implementation/plans/phase5-workflow-templates.md` per the README threshold; AC↔task map at top.
+- DONE: Mechanism validation: confirm spacedock workflow-README schema lives where the entity expects (cite the schema's source location); confirm packages/razorback-plugin-dab/src/.../workspace_readme.py's `## Rules` block is the canonical leak-guard prose the propose-stage prompt should reference; cite the matrix-aggregator fix entity (08) status + that DAB-shape impl is gated on 08.
+  Schema parser: `/Users/clkao/git/spacedock/skills/commission/bin/status`. Leak-guard prose: `workspace_readme.py:23-29` (direct-minimal), `:56-62` (direct-structured), `:99-105` (spacedock). Entity 08 confirmed at `plan` stage (not archived); bug at `examples/drivers/aggregate-goal1-scores.py:189`.
+- DONE: Task sequence honoring the 2026-05-25 amendments + 08 precondition: T-N's enumeration MUST sequence the analyze-stage template-write AFTER 08 has shipped (for the DAB-matrix path) OR scope the analyze-stage to single-benchmark task-binary if 08 hasn't shipped at impl-stage dispatch time.
+  T-5 split into T-5a (smoke/full, ungated), T-5b (analyze single-benchmark, ungated), T-5c (analyze DAB-matrix, GATED on entity 08 archiving). Branching rule documented: at impl-stage dispatch, if 08 not archived, split T-5c to follow-up entity `phase5-followup-dab-matrix-analyze`.
+
+### Summary
+
+Wrote a separate plan doc covering all 6 ACs with 10 sequenced tasks. Key decisions: (1) T-8 package-data shipping is the riskiest mechanism and ships EARLY (validates the wheel-shipping contract before prose work finalizes); (2) T-5c (DAB-matrix analyze path) is the only entity-08-gated task — branching logic at impl-stage dispatch keeps phase5 unblocked when 08 is still in flight; (3) plan implements the entity-body 2026-05-25 amendments language (broadened propose-stage scope, `rk run --explain` pre-flight, `rk audit --policy strict` sandwich, `paper_baseline` auto-pull from spec frontmatter, stratified-only headline directive, spacedock-variant audit-coverage caveat), not the older spec §5.1 table. Three open questions surfaced for captain at gate review (template canonical home under `uv_build`, T-5c branching preference, schema-test framework choice).
