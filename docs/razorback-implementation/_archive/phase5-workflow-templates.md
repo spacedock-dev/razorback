@@ -1,17 +1,18 @@
 ---
 id: zgaactcgj955qn04t0jaj7dg
 title: Phase 5 — solver workflow README templates
-status: validation
+status: done
 source: plan Phase 5 + spec §5 (v2 spec at docs/superpowers/specs/2026-05-19-razorback-on-harbor.md)
 started: 2026-05-25T05:47:55Z
-completed:
-verdict:
+completed: 2026-05-25T09:32:08Z
+verdict: PASSED
 score: 0.7
-worktree: .worktrees/spacedock-ensign-phase5-workflow-templates
+worktree: 
 issue:
 pr: #5
 mod-block: 
 auto-approve: false
+archived: 2026-05-25T09:32:15Z
 ---
 
 ## Problem
