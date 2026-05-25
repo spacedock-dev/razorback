@@ -244,17 +244,21 @@ else:
           continue
         fi
 
-        # Score: --against-constant per variant.
+        # Score per cell. Direct-* variants auto-pull
+        # experiment_meta.paper_baseline from spec.frontmatter (hm commit 5);
+        # spacedock variant still passes --against-constant explicitly because
+        # its paper_baseline lives elsewhere in the matrix-design space.
         case "$v" in
-          spacedock) target="spacedock=0.577" ;;
-          direct-minimal|direct-structured) target="direct_baseline=0.4376" ;;
-          *) target="" ;;
+          spacedock)
+            uv run --project "$REPO_ROOT" rk score "$cell_run_dir" \
+              --against-constant "spacedock=0.577" --format json \
+              > "${cell_run_dir}/score.json" 2> "${cell_run_dir}/score.stderr" || true
+            ;;
+          direct-minimal|direct-structured)
+            uv run --project "$REPO_ROOT" rk score "$cell_run_dir" --format json \
+              > "${cell_run_dir}/score.json" 2> "${cell_run_dir}/score.stderr" || true
+            ;;
         esac
-        if [[ -n "$target" ]]; then
-          uv run --project "$REPO_ROOT" rk score "$cell_run_dir" \
-            --against-constant "$target" --format json \
-            > "${cell_run_dir}/score.json" 2> "${cell_run_dir}/score.stderr" || true
-        fi
       fi
     fi
 
