@@ -1,8 +1,8 @@
 ---
 id: an4czz3smccy5adazak2hr4y
-title: Goal 1 — DAB direct-minimal matrix, opus-4.7, reasoning_effort=xhigh, batch, parallel=1
+title: Goal 1 — DAB direct-minimal matrix, opus-4.7, reasoning_effort=xhigh, batch, parallel=1 (SUPERSEDED)
 status: implementation
-source: Captain directive 2026-05-25 — close the three-way comparison alongside the archived `d8 goal1-rerun-headline-per-query-recompute` (spacedock stratified=0.7055) and `7q goal1-direct-structured-dab-opus47-xhigh` (direct-structured stratified=0.6719). 7q's filed scope explicitly named direct-minimal as out-of-scope; this entity files it as the sibling. Same matrix shape, same model + effort point, same post-everything-stack discipline (k3 leak-guard prose + wp audit-taint extension + hm generic kind:harbor + plugin:dab + k4 reasoning_effort threading + rk audit --policy strict gating + rk run --explain preflight + rk score paper_baseline auto-pull). Result is the third comparison point for the crew-loop study: spacedock vs direct-structured vs direct-minimal at the same model + effort.
+source: SUPERSEDED 2026-05-25 — rolled into nested research project `_research/dab-goal1/` per captain decision; the direct-minimal-template-fix work continues as `_research/dab-goal1/hypotheses/direct-minimal-template-includes-db-access.md` (id `jvnr6hyx66wk99n72x7nszxn`). Original `an` matrix produced stratified=0.4279 vs paper direct_baseline=0.4376 (verdict `matches`), but captain identified the result as a workspace-setup failure (not paper-canonical): razorback's `_DIRECT_MINIMAL` template omits the `## Database access` section, so the agent could not connect to the DBs without trial-and-error discovery. The new hypothesis fixes the template + re-runs. Historical evidence preserved under `docs/razorback-implementation/_evidence/` and the still-mounted `.worktrees/spacedock-ensign-goal1-direct-minimal-dab-opus47-xhigh/_runs/` (until worktree teardown). This razorback-implementation entity becomes a stub pointer; no further work happens here.
 score: 0.85
 auto-approve: false
 worktree: .worktrees/spacedock-ensign-goal1-direct-minimal-dab-opus47-xhigh
@@ -13,6 +13,14 @@ started:
 completed:
 verdict:
 ---
+
+> **STUB — work continues at `_research/dab-goal1/hypotheses/direct-minimal-template-includes-db-access.md`.**
+>
+> This entity is being terminalized with `verdict: SUPERSEDED` once captain
+> acks the move. The razorback-implementation workflow no longer drives
+> direct-minimal-template-fix work; the nested research project at
+> `_research/dab-goal1/` (instantiating phase5's experiment-workflow + research-project
+> templates per captain decision 2026-05-25) is the canonical home.
 
 ## Problem
 
