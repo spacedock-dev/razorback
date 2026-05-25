@@ -327,7 +327,7 @@ frontmatter now reads `id: 95f3xqq3f14573w5jc8n0wfg` (commit
 characters (sd-b32 alphabet is `0123456789abcdefghjkmnpqrstvwxyz`).
 `status --where` resolves the workflow dir cleanly:
 
-    $ /Users/kent/.claude/plugins/cache/spacedock/spacedock/0.12.1/skills/commission/bin/status \
+    $ status \
         --where slug=phase5-followup-dab-matrix-analyze \
         --workflow-dir docs/razorback-implementation
     ID     SLUG                           STATUS    TITLE
