@@ -296,3 +296,105 @@ The entity is `auto-approve: false`; the FO must present this gate
 to the captain. The captain should APPROVE on the strength of the
 evidence above, with the `uv.lock` note acknowledged as a tooling-
 side-effect non-blocker.
+
+## Cycle 1 re-validation
+
+Re-validation performed 2026-05-25 after the implementation worker
+addressed the two captain material findings from the cycle-1 gate
+rejection. Scope: narrow — verify the two fixes landed correctly,
+re-confirm no AC regression, append this block (do not overwrite
+the prior PASS evidence).
+
+### Captain findings addressed
+
+**Finding 1 — Discoverability breadcrumb (project root README).**
+PASS. `git diff main..HEAD -- README.md` (commit `472a9bb`) inserts
+a 20-line `## Workflow templates` section between `## Layout` and
+`## Setup`. The section names both shipped templates explicitly
+(`src/razorback/templates/experiment-workflow/README.md` — six-stage
+pending→propose→smoke→full→analyze→conclude;
+`src/razorback/templates/run-workflow/README.md` — four-stage
+pending→reconciling→completed→failed), states the copy-and-modify
+usage shape, calls out `rk init` as deliberately out of scope, and
+cites the `importlib.resources.files('razorback').joinpath('templates')`
+wheel-reach. Both template paths appear verbatim in the README diff;
+no `rk init` work introduced (phase 5 Out-of-scope honored).
+
+**Finding 2 — Invalid sd-b32 follow-up entity id.** PASS. The
+follow-up entity at `docs/razorback-implementation/phase5-followup-dab-matrix-analyze.md`
+frontmatter now reads `id: 95f3xqq3f14573w5jc8n0wfg` (commit
+`dc50b59`). Alphabet check: the new id contains no `i`/`l`/`o`/`u`
+characters (sd-b32 alphabet is `0123456789abcdefghjkmnpqrstvwxyz`).
+`status --where` resolves the workflow dir cleanly:
+
+    $ /Users/kent/.claude/plugins/cache/spacedock/spacedock/0.12.1/skills/commission/bin/status \
+        --where slug=phase5-followup-dab-matrix-analyze \
+        --workflow-dir docs/razorback-implementation
+    ID     SLUG                           STATUS    TITLE
+    95     phase5-followup-dab-matrix-analyze backlog   Phase 5 follow-up — DAB-paper matrix analyze-stage prompt
+
+No `invalid sd-b32 stored id` error; row resolves with prefix `95`
+and the expected `backlog` status. The forward-looking citation in
+this validation report (around line 246) was updated to the new id
+in the same commit. The audit-history references to the prior bad
+id remain in the entity body's earlier stage reports per the
+captain directive (worker-written audit history, git preserves them).
+
+`grep -rn` across `docs/`, `README.md`, and `src/` confirms no live
+forward-looking citation of the alphabet-invalid id remains — only
+the entity-body audit history.
+
+### AC regression sweep
+
+**Targeted phase5 tests (re-run on cycle-1 head):**
+
+    $ uv run pytest tests/unit/test_workflow_templates_packaged.py \
+        tests/unit/test_workflow_templates_content.py -q
+    24 passed in 0.09s
+
+All 24 phase5 tests stay green.
+
+**Broader pytest sweep (re-run on cycle-1 head):**
+
+    $ uv run pytest -q --ignore=tests/integration \
+        --ignore=tests/unit/test_task_identity_scoring.py
+    ...
+    FAILED tests/unit/test_generate_matrix_specs.py::test_matrix_specs_carry_query_mode_batch
+        - KeyError: 'data_root'
+    FAILED tests/unit/test_rk_research_new.py::test_rk_research_new_creates_scaffold_tree
+        - AssertionError: assert False
+    2 failed, 693 passed, 22 warnings in 25.64s
+
+Identical to the cycle-0 sweep: 693 passed + 2 pre-existing failures
+(both reproduce on main per cycle-0 evidence; neither is touched by
+the cycle-1 fixes). AC-6 holds.
+
+**AC-1 walking-skeleton (zero `.py` runtime changes) re-check.** The
+cycle-1 fixes touched `README.md` (project-root docs) and
+`docs/razorback-implementation/phase5-followup-dab-matrix-analyze.md`
+(frontmatter id field) plus `docs/razorback-implementation/validation/phase5-workflow-templates.md`
+(forward-looking citation). `git diff main..HEAD --name-only -- "src/razorback/*.py"`
+returns nothing — no `.py` runtime changes introduced by either
+cycle-1 commit. AC-1 still trivially satisfied.
+
+### Cycle 1 gate recommendation
+
+**Recommend APPROVE to `done`.**
+
+Both captain material findings from cycle 1 are addressed correctly
+and minimally:
+
+- The project-root README now names both shipped templates with a
+  copy-and-modify breadcrumb; future users cloning razorback have a
+  discoverable pointer to `src/razorback/templates/`.
+- The follow-up entity id is alphabet-clean sd-b32 and resolves via
+  `status --where` without parser error; the workflow tooling can
+  now traverse the workflow dir cleanly.
+
+No new code paths introduced; all 24 phase5 tests stay green; the
+pre-existing failures remain unrelated to phase 5. The cycle-0 PASS
+verdict and APPROVE recommendation stand, now with the cycle-1
+captain findings closed.
+
+`auto-approve: false` is in effect; the FO presents this gate to
+the captain for explicit approval ack.
