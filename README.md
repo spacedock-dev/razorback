@@ -45,11 +45,7 @@ Razorback ships two workflow READMEs as in-package data under
 
 Usage is copy-and-modify: copy a template directory into a new
 research repo (or alongside a frozen spec) and edit the per-stage
-prompts in place. There is no `rk init` scaffolder — that is
-deliberately out of scope until a consumer materializes.
-
-The templates are also reachable from an installed wheel via
-`importlib.resources.files('razorback').joinpath('templates')`.
+prompts in place.
 
 ## Setup
 

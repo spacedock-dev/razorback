@@ -433,3 +433,14 @@ Cycle-1 captain findings addressed in two atomic commits on `spacedock-ensign/ph
 ### Summary
 
 Cycle-1 re-validation PASS. Both captain material findings from cycle 1 closed correctly and minimally: project-root README breadcrumb names both shipped templates with copy-and-modify guidance (commit `472a9bb`); follow-up entity id re-minted to alphabet-clean `95f3xqq3f14573w5jc8n0wfg` and `status --where` resolves cleanly (commit `dc50b59`). All 24 phase5 tests stay green; the broader sweep remains 693 passed + 2 pre-existing failures (unchanged from cycle-0). AC-1 walking-skeleton trivially intact (no `.py` runtime changes in cycle-1). The cycle-0 APPROVE recommendation stands. `auto-approve: false` — FO presents this gate to the captain for explicit ack.
+
+## Stage Report: implementation (cycle 2 follow-up)
+
+- DONE: Trim the `## Workflow templates` section in `/Users/kent/Dev/InfuseAI/GitHub/razorback/README.md`: remove the `rk init` disclaimer paragraph and the `importlib.resources.files('razorback').joinpath('templates')` paragraph entirely. Keep ONLY the two templates named with their stage chains and the copy-and-modify usage statement (a single short paragraph is fine). One atomic commit on the worktree branch.
+  Trimmed both paragraphs in a single Edit; the remaining section keeps the bulleted list of the two templates (with their stage chains: experiment 6-stage, run 4-stage) and a single short copy-and-modify usage paragraph. `git diff README.md` shows the two paragraphs removed (`rk init` disclaimer + `importlib.resources` line) with no other prose touched. One atomic commit on `spacedock-ensign/phase5-workflow-templates`.
+- DONE: Confirm phase5 tests still green (`uv run pytest tests/unit/test_workflow_templates_packaged.py tests/unit/test_workflow_templates_content.py -q`). The README trim is outside both test surfaces; this is a regression check.
+  24 passed in 0.09s. No coupling from the project-root README trim to the package-data or content-lint tests, as expected.
+
+### Summary
+
+Cycle-2 captain finding addressed via a narrow trim on the project-root README's `## Workflow templates` section: the `rk init` disclaimer paragraph and the `importlib.resources` paragraph are gone; the bulleted list of both shipped templates with their stage chains and a single copy-and-modify usage sentence remain. No template prose, no tests, no other files touched. All 24 phase5 tests stay green (regression check). Ready for re-validation.
