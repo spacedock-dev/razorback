@@ -18,6 +18,13 @@ Write the final answer to `{workdir}/answers.json` as a JSON object:
 
 The verifier reads this file. Nothing else is graded.
 
+## Database access
+
+Connect to each database declared in `db_config.yaml`:
+- `postgres` clients: host `dab-postgres`, port 5432, user `postgres`, password `postgres`.
+- `mongo` clients: host `dab-mongo`, port 27017.
+- `sqlite` / `duckdb` clients: open the file under `query_dataset/`.
+
 ## Rules
 
 **Use only the workspace data.** The benchmark provides everything needed to answer the query in the workspace's databases (`db_config.yaml`, attached SQLite/PostgreSQL/MongoDB/DuckDB sources). Do **not** consult external data sources to look up answer values, labels, or ground truth — even if the workspace data appears to come from a public dataset. Specifically forbidden:
