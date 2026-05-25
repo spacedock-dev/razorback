@@ -1,0 +1,18 @@
+{
+  "policy": "strict",
+  "run_dir": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/goal1-direct-structured-redo-2026-05-24/direct-structured/DEPS_DEV_V1/goal1-direct-structured-deps_dev_v1/11822fd0bc8ea3ea",
+  "schema_version": "rk-audit-v1",
+  "summary": {
+    "clean": 1,
+    "coverage_missing": 0,
+    "tainted": 0
+  },
+  "trials": [
+    {
+      "findings": [],
+      "taint_status": "clean",
+      "trial_id": "DEPS_DEV_V1__cQp4dSB",
+      "trial_path": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/goal1-direct-structured-redo-2026-05-24/direct-structured/DEPS_DEV_V1/goal1-direct-structured-deps_dev_v1/11822fd0bc8ea3ea/DEPS_DEV_V1__cQp4dSB"
+    }
+  ]
+}

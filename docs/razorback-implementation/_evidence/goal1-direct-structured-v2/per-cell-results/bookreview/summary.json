@@ -1,0 +1,55 @@
+{
+  "summary_version": 1,
+  "n_trials_total": 1,
+  "n_trials_completed": 1,
+  "n_trials_errored": 0,
+  "stratified_pass_at_1": 1.0,
+  "datasets": {
+    "bookreview": {
+      "dataset_pass_at_1": 1.0,
+      "n_queries": 3,
+      "queries": [
+        {
+          "query_id": 1,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        },
+        {
+          "query_id": 2,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        },
+        {
+          "query_id": 3,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        }
+      ]
+    }
+  },
+  "trials": [
+    {
+      "trial_id": "bookreview__a8Rn8h2",
+      "reward": 1.0,
+      "cost_usd": 1.06155075,
+      "wall_seconds": null,
+      "error_reason": null,
+      "stratum": {
+        "dataset": "bookreview",
+        "query_ids": [
+          1,
+          2,
+          3
+        ],
+        "backends": [
+          "postgres",
+          "sqlite"
+        ]
+      }
+    }
+  ],
+  "cost_usd": 1.06155075
+}

@@ -1,0 +1,18 @@
+{
+  "policy": "strict",
+  "run_dir": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/goal1-direct-structured-redo-2026-05-24/direct-structured/stockindex/goal1-direct-structured-stockindex/e96b6e0266bd17a2",
+  "schema_version": "rk-audit-v1",
+  "summary": {
+    "clean": 1,
+    "coverage_missing": 0,
+    "tainted": 0
+  },
+  "trials": [
+    {
+      "findings": [],
+      "taint_status": "clean",
+      "trial_id": "stockindex__B8GNFYW",
+      "trial_path": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/goal1-direct-structured-redo-2026-05-24/direct-structured/stockindex/goal1-direct-structured-stockindex/e96b6e0266bd17a2/stockindex__B8GNFYW"
+    }
+  ]
+}

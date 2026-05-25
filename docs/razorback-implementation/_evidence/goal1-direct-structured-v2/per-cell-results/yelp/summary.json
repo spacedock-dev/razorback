@@ -1,0 +1,83 @@
+{
+  "summary_version": 1,
+  "n_trials_total": 1,
+  "n_trials_completed": 1,
+  "n_trials_errored": 0,
+  "stratified_pass_at_1": 1.0,
+  "datasets": {
+    "yelp": {
+      "dataset_pass_at_1": 1.0,
+      "n_queries": 7,
+      "queries": [
+        {
+          "query_id": 1,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        },
+        {
+          "query_id": 2,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        },
+        {
+          "query_id": 3,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        },
+        {
+          "query_id": 4,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        },
+        {
+          "query_id": 5,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        },
+        {
+          "query_id": 6,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        },
+        {
+          "query_id": 7,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        }
+      ]
+    }
+  },
+  "trials": [
+    {
+      "trial_id": "yelp__7iSiQwP",
+      "reward": 1.0,
+      "cost_usd": 1.86771425,
+      "wall_seconds": null,
+      "error_reason": null,
+      "stratum": {
+        "dataset": "yelp",
+        "query_ids": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "backends": [
+          "duckdb",
+          "mongo"
+        ]
+      }
+    }
+  ],
+  "cost_usd": 1.86771425
+}

@@ -1,0 +1,39 @@
+{
+    "id": "85cf585c-1525-4460-bee7-001575ad44b3",
+    "started_at": "2026-05-24T19:20:53.643612",
+    "updated_at": "2026-05-24T19:24:03.074848",
+    "finished_at": "2026-05-24T19:24:03.074848",
+    "n_total_trials": 1,
+    "stats": {
+        "n_completed_trials": 1,
+        "n_errored_trials": 0,
+        "n_running_trials": 0,
+        "n_pending_trials": 0,
+        "n_cancelled_trials": 0,
+        "n_retries": 0,
+        "evals": {
+            "claude-cli__claude-opus-4-7__adhoc": {
+                "n_trials": 1,
+                "n_errors": 0,
+                "metrics": [
+                    {
+                        "mean": 0.6666666666666666
+                    }
+                ],
+                "pass_at_k": {},
+                "reward_stats": {
+                    "reward": {
+                        "0.6666666666666666": [
+                            "PANCANCER_ATLAS__i8MVQCV"
+                        ]
+                    }
+                },
+                "exception_stats": {}
+            }
+        },
+        "n_input_tokens": 893973,
+        "n_cache_tokens": 846464,
+        "n_output_tokens": 11935,
+        "cost_usd": 1.0184944999999999
+    }
+}

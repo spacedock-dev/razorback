@@ -1,0 +1,929 @@
+{
+  "against_constant": {
+    "name": "direct_baseline",
+    "per_query_verdict": "above",
+    "value": 0.4376,
+    "verdict": "matches"
+  },
+  "n_strata_scored": 12,
+  "n_strata_total": 12,
+  "per_query_pass_at_1_mean_over_strata": 0.6719017094017095,
+  "pooled_n_pass": 4,
+  "pooled_n_query_correct": 40,
+  "pooled_n_query_trials": 54,
+  "pooled_n_total": 12,
+  "pooled_pass_at_1": 0.3333333333333333,
+  "pooled_per_query_pass_at_1": 0.7407407407407407,
+  "pooled_per_query_wilson_95ci": [
+    0.6106910949571832,
+    0.8388134737397926
+  ],
+  "pooled_wilson_95ci": [
+    0.13812009109121315,
+    0.6093779111272004
+  ],
+  "strata": {
+    "DEPS_DEV_V1": {
+      "error_reason": null,
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_query_correct": 0,
+      "n_query_trials": 2,
+      "n_total": 1,
+      "pass_at_1": 0.0,
+      "per_query_pass_at_1": 0.0,
+      "per_query_strata": {
+        "DEPS_DEV_V1": {
+          "dataset": "DEPS_DEV_V1",
+          "dataset_pass_at_1": 0.0,
+          "n_queries": 2,
+          "queries": [
+            {
+              "n_correct": 0,
+              "n_trials": 1,
+              "pass_at_1": 0.0,
+              "query_id": 1,
+              "wilson_ci": [
+                0.0,
+                0.7934506856227626
+              ]
+            },
+            {
+              "n_correct": 0,
+              "n_trials": 1,
+              "pass_at_1": 0.0,
+              "query_id": 2,
+              "wilson_ci": [
+                0.0,
+                0.7934506856227626
+              ]
+            }
+          ],
+          "wilson_ci": null
+        }
+      },
+      "result_json": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/goal1-direct-structured-redo-2026-05-24/direct-structured/DEPS_DEV_V1/goal1-direct-structured-deps_dev_v1/11822fd0bc8ea3ea/result.json",
+      "rewards": {
+        "0.0": [
+          "DEPS_DEV_V1__cQp4dSB"
+        ]
+      },
+      "wilson_ci": [
+        0.0,
+        0.7934506856227626
+      ]
+    },
+    "GITHUB_REPOS": {
+      "error_reason": null,
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_query_correct": 2,
+      "n_query_trials": 4,
+      "n_total": 1,
+      "pass_at_1": 0.0,
+      "per_query_pass_at_1": 0.5,
+      "per_query_strata": {
+        "GITHUB_REPOS": {
+          "dataset": "GITHUB_REPOS",
+          "dataset_pass_at_1": 0.5,
+          "n_queries": 4,
+          "queries": [
+            {
+              "n_correct": 0,
+              "n_trials": 1,
+              "pass_at_1": 0.0,
+              "query_id": 1,
+              "wilson_ci": [
+                0.0,
+                0.7934506856227626
+              ]
+            },
+            {
+              "n_correct": 0,
+              "n_trials": 1,
+              "pass_at_1": 0.0,
+              "query_id": 2,
+              "wilson_ci": [
+                0.0,
+                0.7934506856227626
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 3,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 4,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            }
+          ],
+          "wilson_ci": null
+        }
+      },
+      "result_json": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/goal1-direct-structured-redo-2026-05-24/direct-structured/GITHUB_REPOS/goal1-direct-structured-github_repos/e0ec2c30cff3bc06/result.json",
+      "rewards": {
+        "0.5": [
+          "GITHUB_REPOS__noNb5hh"
+        ]
+      },
+      "wilson_ci": [
+        0.0,
+        0.7934506856227626
+      ]
+    },
+    "PANCANCER_ATLAS": {
+      "error_reason": null,
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_query_correct": 2,
+      "n_query_trials": 3,
+      "n_total": 1,
+      "pass_at_1": 0.0,
+      "per_query_pass_at_1": 0.6666666666666666,
+      "per_query_strata": {
+        "PANCANCER_ATLAS": {
+          "dataset": "PANCANCER_ATLAS",
+          "dataset_pass_at_1": 0.6666666666666666,
+          "n_queries": 3,
+          "queries": [
+            {
+              "n_correct": 0,
+              "n_trials": 1,
+              "pass_at_1": 0.0,
+              "query_id": 1,
+              "wilson_ci": [
+                0.0,
+                0.7934506856227626
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 2,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 3,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            }
+          ],
+          "wilson_ci": null
+        }
+      },
+      "result_json": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/goal1-direct-structured-redo-2026-05-24/direct-structured/PANCANCER_ATLAS/goal1-direct-structured-pancancer_atlas/d0c16e322ee33e49/result.json",
+      "rewards": {
+        "0.6666666666666666": [
+          "PANCANCER_ATLAS__i8MVQCV"
+        ]
+      },
+      "wilson_ci": [
+        0.0,
+        0.7934506856227626
+      ]
+    },
+    "PATENTS": {
+      "error_reason": null,
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_query_correct": 0,
+      "n_query_trials": 3,
+      "n_total": 1,
+      "pass_at_1": 0.0,
+      "per_query_pass_at_1": 0.0,
+      "per_query_strata": {
+        "PATENTS": {
+          "dataset": "PATENTS",
+          "dataset_pass_at_1": 0.0,
+          "n_queries": 3,
+          "queries": [
+            {
+              "n_correct": 0,
+              "n_trials": 1,
+              "pass_at_1": 0.0,
+              "query_id": 1,
+              "wilson_ci": [
+                0.0,
+                0.7934506856227626
+              ]
+            },
+            {
+              "n_correct": 0,
+              "n_trials": 1,
+              "pass_at_1": 0.0,
+              "query_id": 2,
+              "wilson_ci": [
+                0.0,
+                0.7934506856227626
+              ]
+            },
+            {
+              "n_correct": 0,
+              "n_trials": 1,
+              "pass_at_1": 0.0,
+              "query_id": 3,
+              "wilson_ci": [
+                0.0,
+                0.7934506856227626
+              ]
+            }
+          ],
+          "wilson_ci": null
+        }
+      },
+      "result_json": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/goal1-direct-structured-redo-2026-05-24/direct-structured/PATENTS/goal1-direct-structured-patents/e377497ce0ceec6a/result.json",
+      "rewards": {
+        "0.0": [
+          "PATENTS__K2uGQrN"
+        ]
+      },
+      "wilson_ci": [
+        0.0,
+        0.7934506856227626
+      ]
+    },
+    "agnews": {
+      "error_reason": null,
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_query_correct": 2,
+      "n_query_trials": 4,
+      "n_total": 1,
+      "pass_at_1": 0.0,
+      "per_query_pass_at_1": 0.5,
+      "per_query_strata": {
+        "agnews": {
+          "dataset": "agnews",
+          "dataset_pass_at_1": 0.5,
+          "n_queries": 4,
+          "queries": [
+            {
+              "n_correct": 0,
+              "n_trials": 1,
+              "pass_at_1": 0.0,
+              "query_id": 1,
+              "wilson_ci": [
+                0.0,
+                0.7934506856227626
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 2,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 0,
+              "n_trials": 1,
+              "pass_at_1": 0.0,
+              "query_id": 3,
+              "wilson_ci": [
+                0.0,
+                0.7934506856227626
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 4,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            }
+          ],
+          "wilson_ci": null
+        }
+      },
+      "result_json": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/goal1-direct-structured-redo-2026-05-24/direct-structured/agnews/goal1-direct-structured-agnews/b9f48fa377716424/result.json",
+      "rewards": {
+        "0.5": [
+          "agnews__rFqCKQn"
+        ]
+      },
+      "wilson_ci": [
+        0.0,
+        0.7934506856227626
+      ]
+    },
+    "bookreview": {
+      "error_reason": null,
+      "n_errored": 0,
+      "n_pass": 1,
+      "n_query_correct": 3,
+      "n_query_trials": 3,
+      "n_total": 1,
+      "pass_at_1": 1.0,
+      "per_query_pass_at_1": 1.0,
+      "per_query_strata": {
+        "bookreview": {
+          "dataset": "bookreview",
+          "dataset_pass_at_1": 1.0,
+          "n_queries": 3,
+          "queries": [
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 1,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 2,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 3,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            }
+          ],
+          "wilson_ci": null
+        }
+      },
+      "result_json": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/goal1-direct-structured-redo-2026-05-24/direct-structured/bookreview/goal1-direct-structured-bookreview/c654cdea801aa44a/result.json",
+      "rewards": {
+        "1.0": [
+          "bookreview__a8Rn8h2"
+        ]
+      },
+      "wilson_ci": [
+        0.20654931437723745,
+        1.0
+      ]
+    },
+    "crmarenapro": {
+      "error_reason": null,
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_query_correct": 11,
+      "n_query_trials": 13,
+      "n_total": 1,
+      "pass_at_1": 0.0,
+      "per_query_pass_at_1": 0.8461538461538461,
+      "per_query_strata": {
+        "crmarenapro": {
+          "dataset": "crmarenapro",
+          "dataset_pass_at_1": 0.8461538461538461,
+          "n_queries": 13,
+          "queries": [
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 1,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 0,
+              "n_trials": 1,
+              "pass_at_1": 0.0,
+              "query_id": 2,
+              "wilson_ci": [
+                0.0,
+                0.7934506856227626
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 3,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 4,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 5,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 6,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 7,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 0,
+              "n_trials": 1,
+              "pass_at_1": 0.0,
+              "query_id": 8,
+              "wilson_ci": [
+                0.0,
+                0.7934506856227626
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 9,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 10,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 11,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 12,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 13,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            }
+          ],
+          "wilson_ci": null
+        }
+      },
+      "result_json": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/goal1-direct-structured-redo-2026-05-24/direct-structured/crmarenapro/goal1-direct-structured-crmarenapro/004833b525dca614/result.json",
+      "rewards": {
+        "0.8461538461538461": [
+          "crmarenapro__W2SRMrK"
+        ]
+      },
+      "wilson_ci": [
+        0.0,
+        0.7934506856227626
+      ]
+    },
+    "googlelocal": {
+      "error_reason": null,
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_query_correct": 3,
+      "n_query_trials": 4,
+      "n_total": 1,
+      "pass_at_1": 0.0,
+      "per_query_pass_at_1": 0.75,
+      "per_query_strata": {
+        "googlelocal": {
+          "dataset": "googlelocal",
+          "dataset_pass_at_1": 0.75,
+          "n_queries": 4,
+          "queries": [
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 1,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 0,
+              "n_trials": 1,
+              "pass_at_1": 0.0,
+              "query_id": 2,
+              "wilson_ci": [
+                0.0,
+                0.7934506856227626
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 3,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 4,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            }
+          ],
+          "wilson_ci": null
+        }
+      },
+      "result_json": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/goal1-direct-structured-redo-2026-05-24/direct-structured/googlelocal/goal1-direct-structured-googlelocal/d36f68a3e7b1e4fe/result.json",
+      "rewards": {
+        "0.75": [
+          "googlelocal__EJx9Cry"
+        ]
+      },
+      "wilson_ci": [
+        0.0,
+        0.7934506856227626
+      ]
+    },
+    "music_brainz_20k": {
+      "error_reason": null,
+      "n_errored": 0,
+      "n_pass": 1,
+      "n_query_correct": 3,
+      "n_query_trials": 3,
+      "n_total": 1,
+      "pass_at_1": 1.0,
+      "per_query_pass_at_1": 1.0,
+      "per_query_strata": {
+        "music_brainz_20k": {
+          "dataset": "music_brainz_20k",
+          "dataset_pass_at_1": 1.0,
+          "n_queries": 3,
+          "queries": [
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 1,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 2,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 3,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            }
+          ],
+          "wilson_ci": null
+        }
+      },
+      "result_json": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/goal1-direct-structured-redo-2026-05-24/direct-structured/music_brainz_20k/goal1-direct-structured-music_brainz_20k/356f669d6fc9a43f/result.json",
+      "rewards": {
+        "1.0": [
+          "music_brainz_20k__ZDgzSfy"
+        ]
+      },
+      "wilson_ci": [
+        0.20654931437723745,
+        1.0
+      ]
+    },
+    "stockindex": {
+      "error_reason": null,
+      "n_errored": 0,
+      "n_pass": 1,
+      "n_query_correct": 3,
+      "n_query_trials": 3,
+      "n_total": 1,
+      "pass_at_1": 1.0,
+      "per_query_pass_at_1": 1.0,
+      "per_query_strata": {
+        "stockindex": {
+          "dataset": "stockindex",
+          "dataset_pass_at_1": 1.0,
+          "n_queries": 3,
+          "queries": [
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 1,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 2,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 3,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            }
+          ],
+          "wilson_ci": null
+        }
+      },
+      "result_json": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/goal1-direct-structured-redo-2026-05-24/direct-structured/stockindex/goal1-direct-structured-stockindex/e96b6e0266bd17a2/result.json",
+      "rewards": {
+        "1.0": [
+          "stockindex__B8GNFYW"
+        ]
+      },
+      "wilson_ci": [
+        0.20654931437723745,
+        1.0
+      ]
+    },
+    "stockmarket": {
+      "error_reason": null,
+      "n_errored": 0,
+      "n_pass": 0,
+      "n_query_correct": 4,
+      "n_query_trials": 5,
+      "n_total": 1,
+      "pass_at_1": 0.0,
+      "per_query_pass_at_1": 0.8,
+      "per_query_strata": {
+        "stockmarket": {
+          "dataset": "stockmarket",
+          "dataset_pass_at_1": 0.8,
+          "n_queries": 5,
+          "queries": [
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 1,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 2,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 0,
+              "n_trials": 1,
+              "pass_at_1": 0.0,
+              "query_id": 3,
+              "wilson_ci": [
+                0.0,
+                0.7934506856227626
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 4,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 5,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            }
+          ],
+          "wilson_ci": null
+        }
+      },
+      "result_json": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/goal1-direct-structured-redo-2026-05-24/direct-structured/stockmarket/goal1-direct-structured-stockmarket/4ec90485d97145e2/result.json",
+      "rewards": {
+        "0.8": [
+          "stockmarket__qknRRY3"
+        ]
+      },
+      "wilson_ci": [
+        0.0,
+        0.7934506856227626
+      ]
+    },
+    "yelp": {
+      "error_reason": null,
+      "n_errored": 0,
+      "n_pass": 1,
+      "n_query_correct": 7,
+      "n_query_trials": 7,
+      "n_total": 1,
+      "pass_at_1": 1.0,
+      "per_query_pass_at_1": 1.0,
+      "per_query_strata": {
+        "yelp": {
+          "dataset": "yelp",
+          "dataset_pass_at_1": 1.0,
+          "n_queries": 7,
+          "queries": [
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 1,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 2,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 3,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 4,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 5,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 6,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            },
+            {
+              "n_correct": 1,
+              "n_trials": 1,
+              "pass_at_1": 1.0,
+              "query_id": 7,
+              "wilson_ci": [
+                0.20654931437723745,
+                1.0
+              ]
+            }
+          ],
+          "wilson_ci": null
+        }
+      },
+      "result_json": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/goal1-direct-structured-redo-2026-05-24/direct-structured/yelp/goal1-direct-structured-yelp/89346bea2acf0d1d/result.json",
+      "rewards": {
+        "1.0": [
+          "yelp__7iSiQwP"
+        ]
+      },
+      "wilson_ci": [
+        0.20654931437723745,
+        1.0
+      ]
+    }
+  },
+  "stratified_pass_at_1_mean_over_strata": 0.3333333333333333,
+  "variant": "direct-structured"
+}

@@ -1,0 +1,14 @@
+{
+  "q1": {
+    "reward": 1.0,
+    "reason": "Target '399001.SZ' present as primary answer."
+  },
+  "q2": {
+    "reward": 1.0,
+    "reason": "Target 'IXIC' present as primary answer."
+  },
+  "q3": {
+    "reward": 1.0,
+    "reason": "All name-country pairs matched."
+  }
+}

@@ -29,6 +29,9 @@ trials: 1
 experiment_meta:
   max_budget_usd: 20.0
   estimated_cost_usd: 2.0
+  paper_baseline:
+    name: direct
+    value: 0.4376
 observers:
 - kind: jsonl
   path: events.jsonl

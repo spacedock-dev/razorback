@@ -1,0 +1,55 @@
+{
+  "summary_version": 1,
+  "n_trials_total": 1,
+  "n_trials_completed": 1,
+  "n_trials_errored": 0,
+  "stratified_pass_at_1": 0.6666666666666666,
+  "datasets": {
+    "PANCANCER_ATLAS": {
+      "dataset_pass_at_1": 0.6666666666666666,
+      "n_queries": 3,
+      "queries": [
+        {
+          "query_id": 1,
+          "n_trials": 1,
+          "n_correct": 0,
+          "pass_at_1": 0.0
+        },
+        {
+          "query_id": 2,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        },
+        {
+          "query_id": 3,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        }
+      ]
+    }
+  },
+  "trials": [
+    {
+      "trial_id": "PANCANCER_ATLAS__i8MVQCV",
+      "reward": 0.6666666666666666,
+      "cost_usd": 1.0184944999999999,
+      "wall_seconds": null,
+      "error_reason": null,
+      "stratum": {
+        "dataset": "PANCANCER_ATLAS",
+        "query_ids": [
+          1,
+          2,
+          3
+        ],
+        "backends": [
+          "duckdb",
+          "postgres"
+        ]
+      }
+    }
+  ],
+  "cost_usd": 1.0184944999999999
+}

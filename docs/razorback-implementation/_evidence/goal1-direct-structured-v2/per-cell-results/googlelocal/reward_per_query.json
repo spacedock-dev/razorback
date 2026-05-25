@@ -1,0 +1,18 @@
+{
+  "q1": {
+    "reward": 1.0,
+    "reason": "All names are present and in correct order."
+  },
+  "q2": {
+    "reward": 0.0,
+    "reason": "No score found after name: Elite Massage"
+  },
+  "q3": {
+    "reward": 1.0,
+    "reason": "All businesses validated successfully."
+  },
+  "q4": {
+    "reward": 1.0,
+    "reason": "All names and numbers matched."
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "summary_version": 1,
+  "n_trials_total": 1,
+  "n_trials_completed": 1,
+  "n_trials_errored": 0,
+  "stratified_pass_at_1": 1.0,
+  "datasets": {
+    "music_brainz_20k": {
+      "dataset_pass_at_1": 1.0,
+      "n_queries": 3,
+      "queries": [
+        {
+          "query_id": 1,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        },
+        {
+          "query_id": 2,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        },
+        {
+          "query_id": 3,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        }
+      ]
+    }
+  },
+  "trials": [
+    {
+      "trial_id": "music_brainz_20k__ZDgzSfy",
+      "reward": 1.0,
+      "cost_usd": 1.7525299999999997,
+      "wall_seconds": null,
+      "error_reason": null,
+      "stratum": {
+        "dataset": "music_brainz_20k",
+        "query_ids": [
+          1,
+          2,
+          3
+        ],
+        "backends": [
+          "duckdb",
+          "sqlite"
+        ]
+      }
+    }
+  ],
+  "cost_usd": 1.7525299999999997
+}

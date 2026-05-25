@@ -1,0 +1,96 @@
+{
+  "agent": {
+    "env_keys": [
+      "CLAUDE_CODE_OAUTH_TOKEN"
+    ],
+    "harbor_builtin_name": null,
+    "harbor_import_path": "razorback.agents._runtime.claude:RazorbackClaudeCode",
+    "kwargs": {
+      "allowed_tools": "Bash,Read,Write,Edit,Glob,Grep",
+      "reasoning_effort": "xhigh"
+    },
+    "max_timeout_sec": null,
+    "model": "claude-opus-4-7",
+    "override_setup_timeout_sec": null,
+    "override_timeout_sec": null,
+    "runtime": null,
+    "spec_kind": "claude-cli"
+  },
+  "benchmark": {
+    "dataset": "dab@1.0",
+    "exclude_tasks": null,
+    "kind": "harbor",
+    "n_tasks": null,
+    "plugin": "dab",
+    "plugin_args": {
+      "hints": true,
+      "query_mode": "batch",
+      "workspace_variant": "direct-structured"
+    },
+    "tasks": [
+      "agnews"
+    ]
+  },
+  "concurrency": {
+    "attempts": 1,
+    "trials": 1
+  },
+  "environment": {
+    "delete": false,
+    "env": {},
+    "force_build": false,
+    "import_path": null,
+    "kwargs": {},
+    "mounts_json": null,
+    "override_cpus": null,
+    "override_gpus": null,
+    "override_memory_mb": null,
+    "override_storage_mb": null,
+    "suppress_override_warnings": false,
+    "type": "docker"
+  },
+  "experiment": "goal1-direct-structured-agnews",
+  "explain_only": true,
+  "explain_side_effects": [
+    "runs normal preflight checks before the explain branch",
+    "translates the spec and may materialize task views to report exact task paths",
+    "does not write _job_config.yaml",
+    "does not invoke Harbor",
+    "does not run the model"
+  ],
+  "job_config_yaml": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/preflight/goal1-direct-structured-agnews/b9f48fa377716424/_job_config.yaml",
+  "job_name": "b9f48fa377716424",
+  "ordering_hint": null,
+  "preparation": [
+    "Parse frozen spec and validate schema.",
+    "Resolve runs-dir, job name, and run directory.",
+    "Run runs-dir Docker mount visibility canary.",
+    "Check frozen Harbor/model/plugin provenance drift when present.",
+    "Translate Razorback spec to Harbor JobConfig.",
+    "Invoke razorback-plugin-dab generate to materialize Harbor task directories from the typed plugin_args.",
+    "Build RazorbackClaudeCode directly.",
+    "Apply Claude auth/tool policy.",
+    "Invoke Claude with each task instruction directly.",
+    "Write Harbor job config to /Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/preflight/goal1-direct-structured-agnews/b9f48fa377716424/_job_config.yaml.",
+    "Invoke `uv run harbor run -c /Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/preflight/goal1-direct-structured-agnews/b9f48fa377716424/_job_config.yaml`.",
+    "After Harbor returns, write spec/provenance/aggregate artifacts under /Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/preflight/goal1-direct-structured-agnews/b9f48fa377716424."
+  ],
+  "prompt": {
+    "mode": "direct-task-instruction",
+    "prompt_prefix": "",
+    "sample_composed_prompt": "# Task\n\nAnswer ALL of the following queries using the databases described below.\nSolve every query in this single agent turn.\n\n## Queries\n\n### query1\n\nLocated under `/workspace/query1/query.json`:\n\n\"What is the title of the sports article whose description has the greatest number of characters?\"\n\n### query2\n\nLocated under `/workspace/query2/query.json`:\n\n\"What fraction of all articles authored by Amy Jones belong to the Science/Technology category?\"\n\n### query3\n\nLocated under `/workspace/query3/query.json`:\n\n\"What is the average number of business articles published per year in Europe from 2010 to 2020, inclusive?\"\n\n### query4\n\nLocated under `/workspace/query4/query.json`:\n\n\"In 2015, which region published the largest number of articles in the World category?\"\n\n## Databases\n\nHINTS:\n- Determining an article\u2019s category requires understanding the meaning of its title and description.\n- All articles belong to one of four categories: World, Sports, Business, or Science/Technology.\n\n## Output contract\n\nWrite your final answers to `/workspace/answers.json` as a JSON object where each key is the query directory name (e.g. \"q1\", \"q2\", \"q3\", \"q4\") and each value is the answer string. For example:\n\n```json\n{\n  \"q1\": \"<your answer for query1>\",\n  \"q2\": \"<your answer for query2>\",\n  \"q3\": \"<your answer for query3>\",\n  \"q4\": \"<your answer for query4>\"\n}\n```\n\nThe verifier reads this file and scores each query independently.\n",
+    "sample_instruction": "# Task\n\nAnswer ALL of the following queries using the databases described below.\nSolve every query in this single agent turn.\n\n## Queries\n\n### query1\n\nLocated under `/workspace/query1/query.json`:\n\n\"What is the title of the sports article whose description has the greatest number of characters?\"\n\n### query2\n\nLocated under `/workspace/query2/query.json`:\n\n\"What fraction of all articles authored by Amy Jones belong to the Science/Technology category?\"\n\n### query3\n\nLocated under `/workspace/query3/query.json`:\n\n\"What is the average number of business articles published per year in Europe from 2010 to 2020, inclusive?\"\n\n### query4\n\nLocated under `/workspace/query4/query.json`:\n\n\"In 2015, which region published the largest number of articles in the World category?\"\n\n## Databases\n\nHINTS:\n- Determining an article\u2019s category requires understanding the meaning of its title and description.\n- All articles belong to one of four categories: World, Sports, Business, or Science/Technology.\n\n## Output contract\n\nWrite your final answers to `/workspace/answers.json` as a JSON object where each key is the query directory name (e.g. \"q1\", \"q2\", \"q3\", \"q4\") and each value is the answer string. For example:\n\n```json\n{\n  \"q1\": \"<your answer for query1>\",\n  \"q2\": \"<your answer for query2>\",\n  \"q3\": \"<your answer for query3>\",\n  \"q4\": \"<your answer for query4>\"\n}\n```\n\nThe verifier reads this file and scores each query independently.\n",
+    "sample_instruction_path": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/preflight/goal1-direct-structured-agnews/b9f48fa377716424/tasks/agnews/instruction.md",
+    "sample_task_path": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/preflight/goal1-direct-structured-agnews/b9f48fa377716424/tasks/agnews",
+    "task_count": 1,
+    "task_instruction_application": "The benchmark task instruction is passed directly to the runtime adapter for each trial.",
+    "task_paths": [
+      "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/preflight/goal1-direct-structured-agnews/b9f48fa377716424/tasks/agnews"
+    ],
+    "workflow_readme": null
+  },
+  "run_dir": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/preflight/goal1-direct-structured-agnews/b9f48fa377716424",
+  "schema_version": "rk-run-explain-v1",
+  "spec_path": "examples/specs/goal1/direct-structured/agnews.frozen.yaml",
+  "spec_sha256": "b9f48fa377716424e42a11ca11740a914bca62c96643a3009e59c4c75942cbfa"
+}

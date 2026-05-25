@@ -1,0 +1,18 @@
+{
+  "policy": "strict",
+  "run_dir": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/goal1-direct-structured-redo-2026-05-24/direct-structured/bookreview/goal1-direct-structured-bookreview/c654cdea801aa44a",
+  "schema_version": "rk-audit-v1",
+  "summary": {
+    "clean": 1,
+    "coverage_missing": 0,
+    "tainted": 0
+  },
+  "trials": [
+    {
+      "findings": [],
+      "taint_status": "clean",
+      "trial_id": "bookreview__a8Rn8h2",
+      "trial_path": "/Users/clkao/git/razorback/.worktrees/spacedock-ensign-goal1-direct-structured-dab-opus47-xhigh/_runs/goal1-direct-structured-redo-2026-05-24/direct-structured/bookreview/goal1-direct-structured-bookreview/c654cdea801aa44a/bookreview__a8Rn8h2"
+    }
+  ]
+}

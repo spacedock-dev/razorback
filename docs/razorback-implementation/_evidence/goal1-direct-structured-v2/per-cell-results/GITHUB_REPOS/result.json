@@ -1,0 +1,39 @@
+{
+    "id": "0ea85790-2bd9-49e3-94d7-2ced6f4a1233",
+    "started_at": "2026-05-24T19:03:54.590007",
+    "updated_at": "2026-05-24T19:11:42.639806",
+    "finished_at": "2026-05-24T19:11:42.639806",
+    "n_total_trials": 1,
+    "stats": {
+        "n_completed_trials": 1,
+        "n_errored_trials": 0,
+        "n_running_trials": 0,
+        "n_pending_trials": 0,
+        "n_cancelled_trials": 0,
+        "n_retries": 0,
+        "evals": {
+            "claude-cli__claude-opus-4-7__adhoc": {
+                "n_trials": 1,
+                "n_errors": 0,
+                "metrics": [
+                    {
+                        "mean": 0.5
+                    }
+                ],
+                "pass_at_k": {},
+                "reward_stats": {
+                    "reward": {
+                        "0.5": [
+                            "GITHUB_REPOS__noNb5hh"
+                        ]
+                    }
+                },
+                "exception_stats": {}
+            }
+        },
+        "n_input_tokens": 1692259,
+        "n_cache_tokens": 1601170,
+        "n_output_tokens": 24982,
+        "cost_usd": 1.9943837500000001
+    }
+}

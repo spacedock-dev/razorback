@@ -1,0 +1,62 @@
+{
+  "summary_version": 1,
+  "n_trials_total": 1,
+  "n_trials_completed": 1,
+  "n_trials_errored": 0,
+  "stratified_pass_at_1": 0.5,
+  "datasets": {
+    "agnews": {
+      "dataset_pass_at_1": 0.5,
+      "n_queries": 4,
+      "queries": [
+        {
+          "query_id": 1,
+          "n_trials": 1,
+          "n_correct": 0,
+          "pass_at_1": 0.0
+        },
+        {
+          "query_id": 2,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        },
+        {
+          "query_id": 3,
+          "n_trials": 1,
+          "n_correct": 0,
+          "pass_at_1": 0.0
+        },
+        {
+          "query_id": 4,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        }
+      ]
+    }
+  },
+  "trials": [
+    {
+      "trial_id": "agnews__rFqCKQn",
+      "reward": 0.5,
+      "cost_usd": 4.8557075,
+      "wall_seconds": null,
+      "error_reason": null,
+      "stratum": {
+        "dataset": "agnews",
+        "query_ids": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "backends": [
+          "mongo",
+          "sqlite"
+        ]
+      }
+    }
+  ],
+  "cost_usd": 4.8557075
+}

@@ -1,0 +1,62 @@
+{
+  "summary_version": 1,
+  "n_trials_total": 1,
+  "n_trials_completed": 1,
+  "n_trials_errored": 0,
+  "stratified_pass_at_1": 0.5,
+  "datasets": {
+    "GITHUB_REPOS": {
+      "dataset_pass_at_1": 0.5,
+      "n_queries": 4,
+      "queries": [
+        {
+          "query_id": 1,
+          "n_trials": 1,
+          "n_correct": 0,
+          "pass_at_1": 0.0
+        },
+        {
+          "query_id": 2,
+          "n_trials": 1,
+          "n_correct": 0,
+          "pass_at_1": 0.0
+        },
+        {
+          "query_id": 3,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        },
+        {
+          "query_id": 4,
+          "n_trials": 1,
+          "n_correct": 1,
+          "pass_at_1": 1.0
+        }
+      ]
+    }
+  },
+  "trials": [
+    {
+      "trial_id": "GITHUB_REPOS__noNb5hh",
+      "reward": 0.5,
+      "cost_usd": 1.9943837500000001,
+      "wall_seconds": null,
+      "error_reason": null,
+      "stratum": {
+        "dataset": "GITHUB_REPOS",
+        "query_ids": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "backends": [
+          "duckdb",
+          "sqlite"
+        ]
+      }
+    }
+  ],
+  "cost_usd": 1.9943837500000001
+}
