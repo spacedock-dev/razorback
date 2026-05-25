@@ -1,7 +1,7 @@
 ---
 id: zgaactcgj955qn04t0jaj7dg
 title: Phase 5 — solver workflow README templates
-status: validation
+status: implementation
 source: plan Phase 5 + spec §5 (v2 spec at docs/superpowers/specs/2026-05-19-razorback-on-harbor.md)
 started: 2026-05-25T05:47:55Z
 completed:
@@ -339,6 +339,21 @@ The strict ordering "phase5 after phase6" can be relaxed to
 post-hm); phase6 finishes the v2 cleanup independently." The
 captain may choose to keep the strict ordering for narrative
 discipline, but it's no longer mechanically required.
+
+## Feedback Cycles
+
+### Cycle 1 — validation REJECTED (2026-05-25)
+
+**Captain findings (material):**
+
+1. **Discoverability gap.** Nothing in the project root `README.md`, the spec, or `rk --help` mentions that razorback ships workflow templates. A user clones razorback and has no breadcrumb to `src/razorback/templates/`. Fix: add a short "## Workflow templates" section to `/Users/kent/Dev/InfuseAI/GitHub/razorback/README.md` (project root) that points at `src/razorback/templates/{experiment-workflow,run-workflow}/` with the copy-and-modify note (no `rk init` work — that stays out of scope per phase 5 plan).
+
+2. **Invalid sd-b32 id on follow-up entity.** The implementation worker minted `zhzokycis7ppv1dsl8mzs3t3` for the T-5c follow-up entity, but `i` is not in the spacedock-base32 alphabet (`0123456789abcdefghjkmnpqrstvwxyz`). `status --where` rejects the workflow dir with `invalid sd-b32 stored id`. Fix: re-mint via `status --next-id --id-seed phase5-followup-dab-matrix-analyze --workflow-dir <wd>` and update:
+   - `docs/razorback-implementation/phase5-followup-dab-matrix-analyze.md` (the `id:` frontmatter field)
+   - `docs/razorback-implementation/validation/phase5-workflow-templates.md` (the citation around line 246)
+   - any other forward-looking references to the bad id (grep first; the prior stage reports in this entity body are audit history — leave those, they are worker-written records).
+
+**Routing:** back to `implementation` stage in worktree branch `spacedock-ensign/phase5-workflow-templates`. Re-validation will follow once the fix lands.
 
 ## Stage Report: plan
 
