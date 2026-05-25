@@ -47,8 +47,8 @@ def test_experiment_workflow_declares_id_style_sd_b32():
 
 
 def test_experiment_workflow_declares_max_budget_usd():
-    """AC-2: experiment.max_budget_usd declared in template spec."""
-    assert "experiment.max_budget_usd" in _read_template_text()
+    """AC-2: experiment_meta.max_budget_usd declared in template spec."""
+    assert "experiment_meta.max_budget_usd" in _read_template_text()
 
 
 # --- AC-2: propose-stage leak-guard prose (k3 scope) ---------------------

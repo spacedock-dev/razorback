@@ -45,19 +45,21 @@ canonical v2 dispatch shape:
 
 ```yaml
 agent:
-  kind: spacedock_solver   # canonical post-hm (Phase 6)
-  kwargs:
-    reasoning_effort: high
+  kind: spacedock_solver         # canonical post-hm (Phase 6)
+  reasoning_effort: high
 benchmark:
   kind: harbor
-  plugin: <name>           # e.g. ade-bench, spider2-dbt, dabstep
-razorback:
-  plugin_args: {...}       # plugin-defined; auto-resolved via entry-point
-experiment:
-  max_budget_usd: 5.00     # hard cap; smoke/full prompts refuse if exceeded
+  plugin: <name>                 # e.g. ade-bench, spider2-dbt, dabstep
+  plugin_args: {...}             # plugin-defined; validated at parse time
+                                 # against the plugin's Pydantic model
+                                 # discovered via the `razorback.plugin_args`
+                                 # entry-point group
 experiment_meta:
-  paper_baseline: 0.4376   # canonical paper-baseline; rk score auto-pulls this
-  paper_baseline_lens: stratified_pass_at_1
+  max_budget_usd: 5.00           # hard cap; smoke/full prompts refuse if exceeded
+  paper_baseline:
+    name: stratified_pass_at_1   # benchmark-canonical lens
+    value: 0.4376                # canonical paper-baseline value
+                                 # rk score auto-pulls this for --against-constant
 ```
 
 Captain edits the spec at `propose`; once it freezes (via the
@@ -133,7 +135,7 @@ The captain reviews the propose-stage output (frozen spec +
 recommended solver-workflow README) at the `propose → smoke` gate.
 The captain rejects if the README references any of the forbidden
 external-oracle surfaces above, if the frozen spec is missing
-`experiment.max_budget_usd` or `experiment_meta.paper_baseline`, or
+`experiment_meta.max_budget_usd` or `experiment_meta.paper_baseline`, or
 if `agent.kind` is not `spacedock_solver` (Phase 6 canonical).
 
 **Captain-gate enforcement is human-in-the-loop, not a razorback-
@@ -158,13 +160,16 @@ plugin-arg resolution mistakes at zero cost.
 Verify the resolved plan against the frozen spec:
 
 - `agent.kind: spacedock_solver` resolves cleanly (Phase 6)
-- `agent.kwargs.reasoning_effort` matches the spec's declared
+- `agent.reasoning_effort` matches the spec's declared
   value (catches k4-class translator drops where the field silently
   drops on the claude-cli path)
 - `benchmark.plugin` resolves via the `razorback.plugin_args`
-  entry-point to the expected `PluginArgs` class
-- `razorback.plugin_args` validates against the plugin's pydantic
-  schema (catches typos before they burn API)
+  entry-point group to the expected `PluginArgs` class
+- the spec's `benchmark.plugin_args` dict validates against that
+  plugin's Pydantic model (catches typos before they burn API).
+  Distinct concepts: `benchmark.plugin_args` is the YAML key on the
+  benchmark block; `razorback.plugin_args` is the Python entry-point
+  group name used to discover the validating model.
 
 If the explain plan disagrees with the frozen spec, STOP and surface
 to the captain. Do not proceed to live burn.
@@ -178,14 +183,14 @@ before any spend.
 ### Budget check: `rk runs cost`
 
 Before dispatching the smoke run, check the running budget against
-`experiment.max_budget_usd`:
+`experiment_meta.max_budget_usd`:
 
 ```bash
 rk runs cost <run-root>
 ```
 
 Refuse to dispatch if the running total + the estimated smoke cost
-exceeds `experiment.max_budget_usd`. The
+exceeds `experiment_meta.max_budget_usd`. The
 `rk run --max-budget-usd-running <file>` flag is the invocation-time
 backstop; the prompt's pre-dispatch check is the cheap front-stop.
 
@@ -215,7 +220,7 @@ At the `smoke → full` gate, the captain reviews:
 - the smoke slice's `score.json` outputs (per-cell pass rate)
 - the audit verdicts (any `--policy strict` failures block
   promotion to full)
-- the running cost against `experiment.max_budget_usd`
+- the running cost against `experiment_meta.max_budget_usd`
 - whether the smoke result is consistent with the hypothesis
   (the captain may abandon the hypothesis here rather than
   burning the full budget)
@@ -234,7 +239,7 @@ at full-dataset scale.
   resolved plan (no spec drift)
 - `rk runs cost <run-root>` before dispatch and at every cell
   checkpoint; refuse if the running total exceeds
-  `experiment.max_budget_usd`
+  `experiment_meta.max_budget_usd`
 - Per-cell: `rk run` → `rk audit --policy strict` → `rk score`,
   same as smoke
 
@@ -253,7 +258,7 @@ At the `full → analyze` gate, the captain reviews:
 - the full matrix's per-cell `audit.json` + `score.json`
 - any `--policy strict` audit failures (these block promotion;
   the analyze stage cannot run on incomplete data)
-- the final running cost against `experiment.max_budget_usd`
+- the final running cost against `experiment_meta.max_budget_usd`
 
 ## Stage: analyze
 
