@@ -1,7 +1,7 @@
 ---
 id: an4czz3smccy5adazak2hr4y
 title: Goal 1 — DAB direct-minimal matrix, opus-4.7, reasoning_effort=xhigh, batch, parallel=1
-status: backlog
+status: plan
 source: Captain directive 2026-05-25 — close the three-way comparison alongside the archived `d8 goal1-rerun-headline-per-query-recompute` (spacedock stratified=0.7055) and `7q goal1-direct-structured-dab-opus47-xhigh` (direct-structured stratified=0.6719). 7q's filed scope explicitly named direct-minimal as out-of-scope; this entity files it as the sibling. Same matrix shape, same model + effort point, same post-everything-stack discipline (k3 leak-guard prose + wp audit-taint extension + hm generic kind:harbor + plugin:dab + k4 reasoning_effort threading + rk audit --policy strict gating + rk run --explain preflight + rk score paper_baseline auto-pull). Result is the third comparison point for the crew-loop study: spacedock vs direct-structured vs direct-minimal at the same model + effort.
 score: 0.85
 auto-approve: false
