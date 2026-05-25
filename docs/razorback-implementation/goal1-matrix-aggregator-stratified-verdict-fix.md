@@ -8,7 +8,7 @@ auto-approve: false
 worktree: .worktrees/spacedock-ensign-goal1-matrix-aggregator-stratified-verdict-fix
 issue:
 pr: #6
-mod-block: merge:pr-merge
+mod-block: 
 started:
 completed:
 verdict:
