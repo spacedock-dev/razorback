@@ -11,6 +11,7 @@ worktree:
 issue:
 pr:
 mod-block:
+auto-approve: false
 ---
 
 ## Problem
