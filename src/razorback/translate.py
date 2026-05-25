@@ -190,6 +190,8 @@ def _build_agent_config(
         kwargs: dict[str, Any] = {}
         if spec.agent.tools_allowed:
             kwargs["allowed_tools"] = ",".join(spec.agent.tools_allowed)
+        if spec.agent.reasoning_effort is not None:
+            kwargs["reasoning_effort"] = spec.agent.reasoning_effort
         agent_cfg = AgentConfig(
             import_path=RAZORBACK_CLAUDE_CODE_IMPORT_PATH,
             model_name=spec.agent.model,
