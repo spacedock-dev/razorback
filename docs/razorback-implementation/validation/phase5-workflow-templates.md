@@ -243,7 +243,7 @@ Reviewed the diff vs main per
    section correctly defers rather than referencing the unfixed
    aggregator. The follow-up entity
    `phase5-followup-dab-matrix-analyze.md` (id
-   `zhzokycis7ppv1dsl8mzs3t3`) carries a hard precondition on
+   `95f3xqq3f14573w5jc8n0wfg`) carries a hard precondition on
    entity 08 (`goal1-matrix-aggregator-stratified-verdict-fix`)
    and a clean 4-AC plan. This honors the implementation worker's
    T-5c branching decision per the plan's recommendation (a).
