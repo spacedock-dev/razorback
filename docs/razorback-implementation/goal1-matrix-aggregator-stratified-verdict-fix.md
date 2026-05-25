@@ -117,3 +117,113 @@ or any N≥3 follow-on study) get the right verdict by construction.
 `auto-approve: false` because this is research-integrity surface —
 a wrong-lens verdict on a published headline is misconduct in the
 limit.
+
+## Stage Report: plan
+
+- DONE: Plan-output flex: 4 ACs, single-file change to examples/drivers/aggregate-goal1-scores.py + a fixture-based regression test + amendment blocks to 2 archived reports. Recommend INLINE plan per README threshold (single primary file + amendments).
+  INLINE confirmed: README §plan flex rule says ≤3 ACs / single-file → inline; 4+ ACs / multi-subsystem → separate doc. This entity has 4 ACs but the change surface is a single Python file (~30 lines added) plus a single new test file plus two markdown amendments — all single-file edits, no subsystem touched, no harbor surfaces, no CLI shape change. The 4th AC is a backward-compat assertion, not a new subsystem. Single-file-change criterion dominates; inline plan is correct.
+- DONE: Mechanism validation: read aggregate-goal1-scores.py:140-220 to confirm where `against_constant.per_query_verdict` is built; identify the right insertion point for `stratified_verdict`. Read 7q's `aggregate-score.json` to confirm `per_query_pass_at_1_mean_over_strata` is the right field name. Read AC-2's bootstrap-vs-null-CI methodology choice; recommend which option (a or b) per plan-stage analysis.
+  Confirmed: `examples/drivers/aggregate-goal1-scores.py:189` builds `per_query_verdict = _verdict(pooled_per_query_ci)` from the pooled Wilson CI — the bug. `per_query_pass_at_1_mean_over_strata` is computed at L152-156 and is the canonical paper-comparable lens. Right insertion point: a new `stratified_verdict = _verdict_point(per_query_mean_over_strata, target_value)` between L188 and L189, with the new field emitted into the `against_constant` dict at L207-212. Verified against the 7q archived fixture at `_evidence/goal1-direct-structured-v2/matrix-aggregate/aggregate-score.json`: `per_query_pass_at_1_mean_over_strata = 0.6719017094017095`, target `direct_baseline = 0.4376`, expected new `stratified_verdict = "above"`.
+- DONE: Task sequence: T0 RED unit test (fixture matrix root with paper_baseline=0.4376, known stratified mean 0.6719) → T1 GREEN add stratified_verdict computation → T2 CI methodology (bootstrap implementation OR null-CI documentation) → T3 amend 7q + d8 evidence reports → T4 full pytest stays green. Captain-decision-required at the CI methodology choice (T2) per AC-2.
+  Task sequence below; AC-2 choice surfaced as captain-decision gate before T2.
+
+### Summary
+
+Inline plan for the goal1 matrix aggregator stratified-verdict fix. Single-file change at `examples/drivers/aggregate-goal1-scores.py` adds an `against_constant.stratified_verdict` field computed from `per_query_pass_at_1_mean_over_strata` against `paper_baseline.value`. AC-2's CI-methodology choice is surfaced as a captain-decision gate; plan-stage recommendation is **choice (b) null-CI + point comparison** on three grounds (bootstrap over 12 cells gives unhelpfully wide bounds at N=1 per query trial; mean-of-proportions across non-identical-N strata has multiple legitimate methods, picking one is a separate methodology entity per "Out of scope"; entity's research-integrity framing argues for conservative point comparison rather than premature statistical claims). Two archived captain-facing reports get amendment blocks at their top citing this entity and replacing pooled-headline verdict with stratified verdict. Pre-existing aggregator tests at `tests/unit/test_aggregate_goal1_from_definition.py` are shape-only and stay green per AC-4.
+
+### Plan
+
+#### AC ↔ task map
+
+| Task | Covers | Surface |
+|---|---|---|
+| T0 | AC-1, AC-2 | tests/unit/test_aggregate_goal1_stratified_verdict.py (new) |
+| T1 | AC-1 | examples/drivers/aggregate-goal1-scores.py |
+| T2 | AC-2 | examples/drivers/aggregate-goal1-scores.py (CI methodology + docstring comment block) |
+| T3 | AC-3 | docs/razorback-implementation/_evidence/goal1-direct-structured-v2/report.md AND docs/razorback-implementation/_evidence/goal1-rerun-dab-spacedock-opus47-xhigh-report.md |
+| T4 | AC-4 | full `uv run pytest tests/` |
+
+#### Captain-decision gate (BLOCKING — required before T2)
+
+**AC-2 CI methodology — captain choose (a) or (b).** Plan-stage recommendation: **(b) null-CI + point comparison** for the reasons in the Summary above. If captain prefers (a) bootstrap, T2 implements `numpy.random.choice` resampling of per-cell `per_query_pass_at_1` values with N=1000 resamples + 2.5/97.5 percentile bounds, and the verdict logic compares the bounds (matching the existing `_verdict(ci)` shape). The first officer surfaces this gate to the captain before dispatching the implementation stage; the FO does not auto-resolve regardless of sprint-wide auto-approval state per `auto-approve: false` in the entity frontmatter.
+
+#### T0 — RED unit test (mechanism check first)
+
+Add `tests/unit/test_aggregate_goal1_stratified_verdict.py` (new file, sibling of the existing `test_aggregate_goal1_from_definition.py`). The test plants the 7q archived `aggregate-score.json` strata into a stub matrix root: for each of the 12 datasets, write a minimal `result.json` shape that drives `extract_cell_stats` to return the per-cell `per_query_pass_at_1` value recorded in the 7q archived fixture (12 cells, stratified mean = 0.6719). Then run `module.aggregate_variant(matrix_root, "direct-structured")` and assert:
+
+- `agg["per_query_pass_at_1_mean_over_strata"] == pytest.approx(0.6719, abs=1e-3)`
+- `agg["against_constant"]["name"] == "direct_baseline"` and `agg["against_constant"]["value"] == 0.4376`
+- **`agg["against_constant"]["stratified_verdict"]["verdict"] == "above"`** ← this is the RED assertion; field does not exist on baseline `main`.
+- `agg["against_constant"]["stratified_verdict"]["stratified_mean"] == pytest.approx(0.6719, abs=1e-3)`
+- `agg["against_constant"]["stratified_verdict"]["value"] == 0.4376`
+- backward-compat assertions: `agg["against_constant"]["per_query_verdict"]` and `agg["against_constant"]["verdict"]` still emit (AC-4 backstop).
+
+Run the test on baseline `main` to confirm RED (the `stratified_verdict` key access raises KeyError). Commit the failing test before T1.
+
+Spec cite: AC-1 ("Running the aggregator against the 7q matrix root produces an `aggregate-score.json` with `against_constant.stratified_verdict` block containing `{value: 0.4376, stratified_mean: 0.6719, verdict: 'above'}`").
+
+#### T1 — GREEN implementation
+
+In `examples/drivers/aggregate-goal1-scores.py`:
+
+1. Add a `_verdict_point(mean: float | None, target: float) -> str` helper near `_verdict` (L178-186). Returns "above" / "below" / "matches" by direct numeric comparison; "no_data" when mean is None. "matches" is reserved for the null-CI choice when `mean == target` exactly (rare in floating point; in practice this branch produces above/below only).
+2. Between L188 (`verdict = _verdict(stratified_ci)`) and L189, add: `stratified_verdict_value = _verdict_point(per_query_mean_over_strata, target_value)`.
+3. In the `against_constant` dict at L207-212, add a new key (place it first to signal canonical lens):
+   ```
+   "stratified_verdict": {
+       "value": target_value,
+       "stratified_mean": per_query_mean_over_strata,
+       "ci": None,                  # ← AC-2 choice (b); see T2 if choice (a)
+       "verdict": stratified_verdict_value,
+   },
+   ```
+4. Leave `verdict` (binary, L210) and `per_query_verdict` (pooled, L211) unchanged — backward compat per AC-4.
+5. Add a 3-line comment block above the new field building noting: "Canonical paper-comparison lens. The DAB paper's `paper_baseline` is stratified-per-query (each dataset weighted equally regardless of query count); `per_query_verdict` (pooled) and `verdict` (binary) are supplementary views."
+
+Run T0; expect GREEN. Commit.
+
+Spec cite: AC-1 (Verified by: aggregator's source has `stratified_verdict` building logic + 7q-shape produces expected dict).
+
+#### T2 — CI methodology (gated on captain choice)
+
+**If choice (b) — recommended:** Add a comment block above the `stratified_verdict` building (3-6 lines) documenting: "CI methodology: null. Mean-of-proportions across non-identical-N strata is not binomial; bootstrap over 12 cells at N=1 query trial per query is uninformative. Verdict is a point comparison. Downstream consumers MUST NOT claim statistical significance from `stratified_verdict.ci == null`. Stratified-Wilson / Cochran-Mantel-Haenszel aggregation is a separate methodology entity if captain wants significance claims." T2 ships as part of T1's commit.
+
+**If choice (a) — bootstrap:** Add a `_bootstrap_stratified_mean_ci(values: list[float], n_resamples: int = 1000, alpha: float = 0.05) -> tuple[float, float]` helper near `wilson_ci` (L31-39). Uses `random.Random(seed=0)` for determinism (matches `wilson_ci`'s deterministic-z conventions; do not introduce numpy/scipy dep unless captain ack). Resamples 12 per-cell `per_query_pass_at_1` values with replacement, computes the mean each time, returns 2.5/97.5 percentiles. Wire into `stratified_verdict["ci"]`; verdict logic compares CI bounds via `_verdict(ci)` rather than `_verdict_point(mean, target)`. Add a T0 supplementary assertion: `stratified_verdict["ci"]` is a 2-tuple, both bounds in [0, 1], lo ≤ stratified_mean ≤ hi. Commit.
+
+Spec cite: AC-2 (Verified by: documented methodology choice; if (a), CI 2-tuple; if (b), ci is null + downstream note).
+
+#### T3 — amend 7q + d8 archived reports
+
+Add an `## Amendment 2026-MM-DD post-aggregator-fix` section at the **top of the body** (immediately after the closing `---` of the YAML frontmatter, before the existing `## Headline` section) of both:
+
+1. `docs/razorback-implementation/_evidence/goal1-direct-structured-v2/report.md`
+2. `docs/razorback-implementation/_evidence/goal1-rerun-dab-spacedock-opus47-xhigh-report.md`
+
+Each amendment block (≤15 lines) contains:
+- Forward-pointer: "Aggregator emitted pooled-per-query as the paper-comparison verdict at the time this report was archived. Per `docs/razorback-implementation/goal1-matrix-aggregator-stratified-verdict-fix.md` (commit SHA recorded in this entity's archived stage report), the canonical lens is stratified-per-query."
+- Corrected headline: stratified-mean value (7q: 0.6719; d8: TBD — implementation-stage worker reads `_evidence/goal1-rerun-.../matrix-aggregate/aggregate-score.json` for the d8 number, or re-runs the aggregator on the d8 matrix root if the archived file predates the field).
+- Corrected verdict: stratified-verdict against paper_baseline (7q: above 0.4376; d8: above 0.577).
+- Note that archived run-dirs are immutable; the amendment is a forward-pointing correction, not a re-run.
+
+Implementation-stage worker records both commit SHAs in the archive stage report per AC-3 "Verified by".
+
+Spec cite: AC-3 (Verified by: both reports carry `## Amendment 2026-MM-DD post-aggregator-fix` at top; entity's archived stage report cites the commit SHAs).
+
+#### T4 — pytest green + backward compat
+
+Run `uv run pytest tests/` from repo root. Required to pass (modulo pre-existing failures documented elsewhere):
+- `tests/unit/test_aggregate_goal1_from_definition.py` (existing, shape-only) — stays green.
+- `tests/unit/test_aggregate_goal1_stratified_verdict.py` (new from T0) — green post-T1.
+- Integration test `tests/integration/test_dab_paper_matrix_external_oracle_gate.py` — does not exercise per_query_verdict semantics; stays green.
+
+If pre-existing failures surface, document them in the implementation-stage stage report; do not fix them in this entity per YAGNI.
+
+Spec cite: AC-4 (Verified by: `uv run pytest tests/` exits 0 modulo pre-existing failures; aggregator's regression tests pass).
+
+#### Validation entry criteria
+
+- T0's RED→GREEN transition demonstrated in implementation-stage stage report (commit SHAs for RED commit and GREEN commit).
+- T1 + T2 implementation lands on the worktree branch with the AC-2 choice the captain selected at the gate.
+- T3 amendment commits cited by SHA in the implementation-stage stage report.
+- T4 pytest output captured (pass count, not full log).
+- Validation-stage agent re-runs T0's test and `uv run pytest tests/` independently.
