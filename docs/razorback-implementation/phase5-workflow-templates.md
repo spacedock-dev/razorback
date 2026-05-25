@@ -9,7 +9,7 @@ verdict:
 score: 0.7
 worktree: .worktrees/spacedock-ensign-phase5-workflow-templates
 issue:
-pr:
+pr: #5
 mod-block: merge:pr-merge
 auto-approve: false
 ---
