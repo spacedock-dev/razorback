@@ -1,7 +1,7 @@
 ---
 id: zgaactcgj955qn04t0jaj7dg
 title: Phase 5 — solver workflow README templates
-status: validation
+status: implementation
 source: plan Phase 5 + spec §5 (v2 spec at docs/superpowers/specs/2026-05-19-razorback-on-harbor.md)
 started: 2026-05-25T05:47:55Z
 completed:
@@ -354,6 +354,18 @@ discipline, but it's no longer mechanically required.
    - any other forward-looking references to the bad id (grep first; the prior stage reports in this entity body are audit history — leave those, they are worker-written records).
 
 **Routing:** back to `implementation` stage in worktree branch `spacedock-ensign/phase5-workflow-templates`. Re-validation will follow once the fix lands.
+
+### Cycle 2 — validation REJECTED (2026-05-25)
+
+**Captain findings (material):**
+
+1. **README section over-narrates internal decisions.** The cycle-1 `## Workflow templates` section in `/Users/kent/Dev/InfuseAI/GitHub/razorback/README.md` includes two paragraphs that don't earn their space for a user:
+   - The `rk init` disclaimer ("There is no `rk init` scaffolder — that is deliberately out of scope until a consumer materializes.") — this is a decision-record artifact; a user who doesn't know about `rk init` won't miss it. Belongs in the spec/design doc, not the README.
+   - The `importlib.resources.files('razorback').joinpath('templates')` line — narrow Python-library-consumer surface; typical user doing copy-and-modify will `cp -r` from the source tree. Cutting it loses one signal for library consumers but doesn't change AC-4 (the test still exercises the importlib.resources reach).
+
+   Fix: trim both paragraphs from the README section. Keep only (a) the two templates named with their stage chains and (b) the copy-and-modify usage statement.
+
+**Routing:** back to `implementation` stage in worktree branch `spacedock-ensign/phase5-workflow-templates`. Re-validation will follow once the trim lands. Cycle 2 of 3 before the contract escalates to manual review.
 
 ## Stage Report: plan
 
