@@ -8,7 +8,7 @@ auto-approve: false
 worktree: .worktrees/spacedock-ensign-translate-reasoning-effort-thread-through-claude-cli
 issue:
 pr: #3
-mod-block: merge:pr-merge
+mod-block: 
 started:
 completed:
 verdict:
