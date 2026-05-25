@@ -5,6 +5,34 @@ date: 2026-05-23
 status: matrix complete (cycle 2), 12/12 strata scored; headline recomputed post-1s
 ---
 
+## Amendment 2026-05-25 post-aggregator-fix
+
+The matrix aggregator at the time this report was archived emitted
+`per_query_verdict` (pooled-per-query Wilson CI) as the
+paper-comparison verdict; the post-`1s` recompute headline below
+likewise leads with the pooled-per-query number (0.722 [0.591, 0.824])
+and reads `above` off the pooled CI. Per
+`docs/razorback-implementation/goal1-matrix-aggregator-stratified-verdict-fix.md`
+(this entity, branch `spacedock-ensign/goal1-matrix-aggregator-stratified-verdict-fix`),
+the canonical paper-comparison lens is **stratified-per-query** — the
+DAB paper's `spacedock=0.577` is the stratified value (each dataset
+weighted equally regardless of query count). The aggregator now emits
+`against_constant.stratified_verdict` from
+`per_query_pass_at_1_mean_over_strata`; `per_query_verdict` (pooled)
+and `verdict` (binary) remain as supplementary views.
+
+**Corrected paper-comparison headline (stratified lens):**
+`spacedock stratified-per-query pass@1 = 0.7055` across 12 DAB datasets
+(mean of the 12 per-cell `per_query_pass@1` values in the cycle-2
+per-dataset table below: 0.5, 1.0, 9/13, 0.5, 0.5, 0.75, 1.0, 2/3,
+0.0, 1.0, 1.0, 6/7). Verdict vs `paper spacedock=0.577`: **above**
+(0.7055 > 0.577; point comparison, CI null per stratified-mean-of-
+proportions not being binomial — see `aggregate-goal1-scores.py`
+docstring for methodology).
+
+Archived run-dirs are immutable; this is a forward-pointing
+correction, not a re-run.
+
 > **Headline scoring:** canonical per-query reducer (`runs/aggregate.py:reduce_per_query_stratified`, post-`1s` merge at commit `f76443b` on main).
 
 ## Headline (post-1s recompute — per-query)
