@@ -12,8 +12,10 @@ from razorback.agents.proxy import PROXY_BLOCK_ENV, PROXY_EXEMPT_HOSTS
 from razorback.environments.docker import ProxySeparatedDockerEnvironment
 
 
-def test_proxy_exempt_hosts_include_dbt_hub() -> None:
-    assert "hub.getdbt.com" in PROXY_EXEMPT_HOSTS.split(",")
+def test_proxy_exempt_hosts_include_external_package_registries() -> None:
+    exempt_hosts = PROXY_EXEMPT_HOSTS.split(",")
+    assert "hub.getdbt.com" in exempt_hosts
+    assert "codeload.github.com" in exempt_hosts
 
 
 class _Process:

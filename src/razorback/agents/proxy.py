@@ -6,7 +6,7 @@ PROXY_EXEMPT_HOSTS = (
     "featuregates.org,.statsig.com,"
     ".openai.com,api.openai.com,auth.openai.com,chatgpt.com,"
     "pypi.org,files.pythonhosted.org,pypi.python.org,"
-    "hub.getdbt.com"
+    "hub.getdbt.com,codeload.github.com"
 )
 
 PROXY_BLOCK_ENV: dict[str, str] = {
