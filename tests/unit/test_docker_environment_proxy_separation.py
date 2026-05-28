@@ -12,6 +12,10 @@ from razorback.agents.proxy import PROXY_BLOCK_ENV, PROXY_EXEMPT_HOSTS
 from razorback.environments.docker import ProxySeparatedDockerEnvironment
 
 
+def test_proxy_exempt_hosts_include_dbt_hub() -> None:
+    assert "hub.getdbt.com" in PROXY_EXEMPT_HOSTS.split(",")
+
+
 class _Process:
     returncode = 0
 
