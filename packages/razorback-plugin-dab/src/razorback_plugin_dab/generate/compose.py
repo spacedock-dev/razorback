@@ -133,6 +133,15 @@ def generate_compose(
     if mongo_dbs:
         services["dab-mongo"] = {
             "image": MONGO_IMAGE,
+            # mongo:8 intermittently SIGSEGVs (exit 139) on startup, and its
+            # WiredTiger cache auto-sizes to ~half of host RAM (≈7GB on a 15GB
+            # box), starving the agent. Cap the cache and let docker restart a
+            # crashed mongod: the data dir is already populated so the restart
+            # comes straight back up with data and the healthcheck recovers.
+            # Without this, a single crash bricks the trial — main's healthcheck
+            # fails for its whole retry window and the trial is cancelled.
+            "command": ["--wiredTigerCacheSizeGB", "1"],
+            "restart": "on-failure",
             "healthcheck": {
                 "test": ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ping:1})"],
                 "interval": "5s",
