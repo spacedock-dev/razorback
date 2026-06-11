@@ -262,6 +262,14 @@ def _materialize_task_dir(
             dataset=dataset_meta.name,
             query_id=query_id,
         )
+    # Some upstream validators do `from common_scaffold.validate.levenshtein
+    # import levenshtein`. verify.py exec_module's validate.py inside the
+    # dab-agent container, which has no common_scaffold installed, so the
+    # import raises, verify.py exits non-zero under `set -eu`, no reward.json
+    # is written, and harbor reports RewardFileNotFoundError (verifier appears
+    # to never run). Vendor common_scaffold next to verify.py — /tests is
+    # sys.path[0] — so the import resolves. The batch path already does this.
+    _install_common_scaffold(tests_dir=tests_dir, data_root=dataset_dir.parent)
 
     write_stratum_file(
         tests_dir=tests_dir,

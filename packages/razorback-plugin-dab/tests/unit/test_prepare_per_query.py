@@ -1,6 +1,7 @@
 # ABOUTME: AC-3 — task-dir shape for one (dataset, query) emission.
 # ABOUTME: Asserts forbidden files (ground_truth.csv, validate.py) never reach workdir.
 
+import importlib.util
 from pathlib import Path
 
 import pytest
@@ -72,6 +73,65 @@ def test_task_dir_layout(tmp_path: Path):
     assert (task_dir / "tests" / "test.sh").exists()
     assert (task_dir / "tests" / "stratum.json").exists()
     assert (task_dir / "steps" / "main" / "workdir" / "README.md").exists()
+
+
+def _build_common_scaffold_data_root(root: Path) -> Path:
+    """Single-query data root whose validator imports common_scaffold."""
+    data_root = root / "data"
+    scaffold_validate = data_root / "common_scaffold" / "validate"
+    scaffold_validate.mkdir(parents=True)
+    (scaffold_validate / "levenshtein.py").write_text(
+        "def levenshtein(left, right):\n"
+        "    return 0 if left == right else 1\n"
+    )
+    (scaffold_validate / "__pycache__").mkdir()
+    (scaffold_validate / "__pycache__" / "ignored.pyc").write_bytes(b"cached")
+
+    qdir = data_root / "query_PATENTS"
+    qdir.mkdir(parents=True)
+    (qdir / "db_description.txt").write_text("Synthetic affected DAB dataset.")
+    q1 = qdir / "query1"
+    q1.mkdir()
+    (q1 / "query.json").write_text('{"question": "Return abc."}')
+    (q1 / "validate.py").write_text(
+        "from common_scaffold.validate.levenshtein import levenshtein\n\n"
+        "def validate(answer):\n"
+        "    distance = levenshtein(answer, 'abc')\n"
+        "    return (distance == 0, f'distance={distance}')\n"
+    )
+    return data_root
+
+
+def test_per_query_materializes_common_scaffold_for_upstream_validators(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # Regression: 9 of 54 DAB validators do `from common_scaffold.validate
+    # .levenshtein import levenshtein`. verify.py exec_module's validate.py in
+    # the dab-agent container (no common_scaffold installed), so without the
+    # vendored package the import raises, no reward.json is written, and harbor
+    # reports RewardFileNotFoundError (the verifier appears never to run). The
+    # batch path already vendored it; the per-query path must too.
+    data_root = _build_common_scaffold_data_root(tmp_path)
+    manifest = prepare_dataset_tasks(
+        data_root=data_root,
+        dataset="PATENTS",
+        tasks_root=tmp_path / "tasks",
+    )
+    tests_dir = manifest[0]["task_dir"] / "tests"
+
+    assert (tests_dir / "common_scaffold" / "validate" / "levenshtein.py").exists()
+    assert not (tests_dir / "common_scaffold" / "validate" / "__pycache__").exists()
+
+    # The copied validator must import and run with /tests on sys.path
+    # (verify.py runs as `python /tests/verify.py`, so /tests is sys.path[0]).
+    monkeypatch.syspath_prepend(str(tests_dir))
+    spec = importlib.util.spec_from_file_location(
+        "_generated_validate_per_query", tests_dir / "validate.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.validate("abc") == (True, "distance=0")
 
 
 def test_compose_bind_mount_sources_resolve_to_real_files(tmp_path: Path):

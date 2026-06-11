@@ -32,6 +32,17 @@ def test_mongo_service_emitted(tmp_path: Path):
     assert "mongosh" in services["dab-mongo"]["healthcheck"]["test"]
 
 
+def test_mongo_has_restart_and_cache_cap(tmp_path: Path):
+    # mongo:8 intermittently SIGSEGVs on startup; on a constrained host its
+    # default WiredTiger cache (~half of RAM) also starves the agent. The
+    # service must cap the cache and restart on failure so a single crash
+    # does not brick the trial via main's healthcheck retry window.
+    text = generate_compose(db_config=_AGNEWS_LIKE, dataset_name="agnews", data_root=tmp_path)
+    mongo = yaml.safe_load(text)["services"]["dab-mongo"]
+    assert mongo["restart"] == "on-failure"
+    assert mongo["command"] == ["--wiredTigerCacheSizeGB", "1"]
+
+
 def test_main_depends_on_mongo(tmp_path: Path):
     text = generate_compose(db_config=_AGNEWS_LIKE, dataset_name="agnews", data_root=tmp_path)
     compose = yaml.safe_load(text)
