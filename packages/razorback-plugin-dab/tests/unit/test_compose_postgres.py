@@ -63,6 +63,22 @@ def test_sqlite_does_not_spawn_service(tmp_path: Path):
     assert "dab-sqlite" not in compose["services"]
 
 
+def test_main_service_runs_as_root(tmp_path: Path):
+    # The codex runtime's setup (run as root) pre-creates root-owned
+    # /logs/agent and $CODEX_HOME, then harbor runs the agent as the image's
+    # default USER. dab-agent:latest is USER exedev (non-root), so the agent
+    # cannot write those dirs -> codex aborts with "Permission denied
+    # (os error 13)". Pin the main service to root so it can write them,
+    # matching the root images ade-bench runs successfully.
+    compose_text = generate_compose(
+        db_config=_BOOKREVIEW_LIKE,
+        dataset_name="bookreview",
+        data_root=tmp_path,
+    )
+    compose = yaml.safe_load(compose_text)
+    assert compose["services"]["main"]["user"] == "0:0"
+
+
 def test_dab_net_declared(tmp_path: Path):
     compose_text = generate_compose(
         db_config=_BOOKREVIEW_LIKE,
