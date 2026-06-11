@@ -153,6 +153,13 @@ def generate_compose(
     main_service: dict[str, Any] = {
         "image": docker_image,
         "working_dir": container_workdir,
+        # Run as root. Harbor's codex runtime pre-creates root-owned
+        # /logs/agent and $CODEX_HOME during setup, then runs the agent as the
+        # image's default USER. dab-agent:latest ships USER exedev (non-root),
+        # so the agent cannot write those dirs and codex aborts with
+        # "Permission denied (os error 13)". ade-bench's images run as root and
+        # never hit this; pin main to root to match.
+        "user": "0:0",
         "networks": ["dab-net"] if networks_used else [],
     }
     if main_file_volumes:
