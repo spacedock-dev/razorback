@@ -45,17 +45,23 @@ def _git_commit_subjects(path):
     return out.splitlines()
 
 
-def test_freeze_dir_resolves_to_sealed_hash_keyed_external_path(
+def test_freeze_dir_resolves_to_sealed_hash_and_cell_keyed_external_path(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ):
-    """AC-1: <cas-root>/<sealed_hash>/ (env-override CAS, outside any worktree)."""
+    """<cas-root>/<sealed_hash>/<cell_token>/ (env-override CAS, outside any worktree).
+
+    The per-cell token isolates concurrent trials; see
+    test_freeze_concurrent_trials_isolated.py.
+    """
     monkeypatch.setenv("RAZORBACK_FREEZE_DIR", str(tmp_path / "freeze-cas"))
     agent = SpacedockSolverAgent(**_kw(tmp_path))
-    expected = (tmp_path / "freeze-cas").resolve() / agent.sealed_hash
-    assert agent.resolve_freeze_dir() == expected
+    sealed_root = (tmp_path / "freeze-cas").resolve() / agent.sealed_hash
+    resolved = agent.resolve_freeze_dir()
+    assert resolved.parent == sealed_root
+    assert resolved.name == agent._cell_token()
     # The path lives OUTSIDE harbor's run-dir / trials/ subtree entirely.
-    assert "trials" not in str(expected)
-    assert (tmp_path / "run") not in expected.parents
+    assert "trials" not in str(resolved)
+    assert (tmp_path / "run") not in resolved.parents
 
 
 @pytest.mark.asyncio

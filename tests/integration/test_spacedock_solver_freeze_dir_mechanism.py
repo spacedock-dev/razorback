@@ -87,19 +87,27 @@ async def test_sealed_hash_txt_lands_at_keyed_external_path(
 
     await agent.setup(fake_env)
 
-    expected = tmp_path / "freeze-cas" / agent.sealed_hash
+    expected = tmp_path / "freeze-cas" / agent.sealed_hash / agent._cell_token()
+    assert expected == agent.resolve_freeze_dir()
     assert (expected / "sealed_hash.txt").exists()
     assert (expected / "sealed_hash.txt").read_text().strip() == agent.sealed_hash
-    # AC-1 + AC-2 precursor: CAS root is outside the run-dir entirely.
+    # CAS root is outside the run-dir entirely.
     assert "trials" not in str(expected)
     assert (tmp_path / "run") not in expected.parents
 
 
 @pytest.mark.asyncio
-async def test_harbor_jobs_resume_round_trip_with_new_trial_name(
+async def test_new_trial_name_gets_isolated_freeze_tree(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ):
-    """AC-6 mechanism: re-executed trial with a NEW trial_name reads the SAME freeze tree."""
+    """A cell with a NEW trial_name gets its OWN freeze tree (per-cell isolation).
+
+    This is what makes concurrent attempts safe: trials of one task share a
+    sealed_hash but never share a git repo. The trade-off — intentional — is
+    that a job restarted with a regenerated trial-name suffix starts a fresh
+    freeze instead of reusing the prior one. Within-cell resume (same logs_dir)
+    is covered by test_freeze_cas_resume_no_agent_invocation.
+    """
     monkeypatch.setenv("RAZORBACK_FREEZE_DIR", str(tmp_path / "freeze-cas"))
     monkeypatch.setenv("RAZORBACK_SPACEDOCK_PLUGIN_DIR", str(tmp_path))
     logs_a = _make_harbor_run_dir(tmp_path, "bookreview-0001__abc1234")
@@ -117,18 +125,18 @@ async def test_harbor_jobs_resume_round_trip_with_new_trial_name(
     freeze_dir = agent_a.resolve_freeze_dir()
     assert (freeze_dir / "sealed_hash.txt").exists()
 
-    # Simulate harbor jobs resume: rmtree trials/<old_name>/, new trial_name.
-    import shutil
-    shutil.rmtree(tmp_path / "run" / "trials" / "bookreview-0001__abc1234")
     logs_b = _make_harbor_run_dir(tmp_path, "bookreview-0001__wMGYfz7")
-
     agent_b = SpacedockSolverAgent(logs_dir=logs_b, **kw)
-    assert agent_b.sealed_hash == agent_a.sealed_hash
-    assert agent_b.resolve_freeze_dir() == freeze_dir  # SAME tree, different trial.
+    assert agent_b.sealed_hash == agent_a.sealed_hash  # same sealed inputs
+    # ...but an isolated freeze tree under the shared sealed_hash dir.
+    assert agent_b.resolve_freeze_dir() != freeze_dir
+    assert agent_b.resolve_freeze_dir().parent == freeze_dir.parent
 
+    agent_b._inner = MagicMock()
+    agent_b._inner.setup = AsyncMock()
     await agent_b.setup(fake_env)
-    assert freeze_dir.exists()
-    assert not (tmp_path / "run" / "trials" / "bookreview-0001__abc1234").exists()
+    assert agent_b.resolve_freeze_dir().exists()
+    assert freeze_dir.exists()  # agent_a's tree is untouched.
 
 
 def test_translator_emits_spacedock_solver_import_path(tmp_path):

@@ -2,6 +2,7 @@
 # ABOUTME: __init__ computes sealed_hash from six inputs; refuses on resume mismatch BEFORE harbor I/O.
 
 import asyncio
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -268,18 +269,48 @@ class SpacedockSolverAgent(BaseAgent):
         return {"temperature"}
 
     def resolve_freeze_dir(self) -> Path:
-        """Per spec §4.3.4 + AC-1: sealed_hash-keyed external freeze in a CAS.
+        """Per-cell external freeze tree, keyed by sealed_hash AND cell identity.
 
-        The freeze tree lives at `<cas-root>/<sealed_hash>/` where `<cas-root>`
-        resolves via `$RAZORBACK_FREEZE_DIR` → `$XDG_DATA_HOME/razorback/freeze`
-        → `~/.local/share/razorback/freeze`. This is independent of any
-        worktree, so:
+        The freeze tree lives at `<cas-root>/<sealed_hash>/<cell_token>/` where
+        `<cas-root>` resolves via `$RAZORBACK_FREEZE_DIR` →
+        `$XDG_DATA_HOME/razorback/freeze` → `~/.local/share/razorback/freeze`,
+        and `<cell_token>` is unique per (task, attempt) — see `_cell_token`.
+
+        The external `<cas-root>` is independent of any worktree, so:
         - `git worktree remove --force` cannot destroy freeze trees.
-        - Any worktree can discover any prior freeze by sealed_hash (AC-2).
-        - Re-running the same spec resumes from the existing freeze without
-          re-invoking the agent (AC-5).
+        - Re-running the same cell (same `logs_dir`) resumes from its own
+          freeze without re-invoking the agent (AC-5).
+
+        The per-cell `<cell_token>` is what makes `concurrency.trials > 1` safe:
+        every concurrent cell commits to its OWN git repo, so they never
+        contend for one shared `HEAD` ref lock. This supersedes the older
+        sealed_hash-only CAS, which shared one repo across trial names and
+        worktrees — a model that only held under a single active writer.
         """
-        return resolve_default_freeze_dir() / self.sealed_hash
+        return resolve_default_freeze_dir() / self.sealed_hash / self._cell_token()
+
+    def _cell_token(self) -> str:
+        """Stable per-cell discriminator so concurrent trials never share a repo.
+
+        Keyed on the harbor trial name (unique per task+attempt within a run).
+        Falls back to the resolved `logs_dir` so isolation is NEVER silently
+        lost — two cells must never collapse to one freeze repo.
+        """
+        basis = self._trial_name() or str(Path(self.logs_dir).resolve())
+        return hashlib.sha256(basis.encode("utf-8")).hexdigest()[:16]
+
+    def _trial_name(self) -> str | None:
+        """The harbor trial dir name for this cell, backed out from `logs_dir`."""
+        try:
+            run_dir = self._resolve_run_dir_from_logs_dir(Path(self.logs_dir))
+            rel = Path(self.logs_dir).resolve().relative_to(run_dir.resolve())
+        except Exception:
+            return None
+        if not rel.parts:
+            return None
+        if rel.parts[0] == "trials" and len(rel.parts) >= 2:
+            return rel.parts[1]
+        return rel.parts[0]
 
     @staticmethod
     def _resolve_run_dir_from_logs_dir(logs_dir: Path) -> Path:
@@ -297,17 +328,10 @@ class SpacedockSolverAgent(BaseAgent):
         return logs_dir.resolve().parent.parent.parent
 
     def _discover_task_identity_from_manifest(self) -> dict[str, str]:
-        try:
-            run_dir = self._resolve_run_dir_from_logs_dir(Path(self.logs_dir))
-            rel = Path(self.logs_dir).resolve().relative_to(run_dir.resolve())
-        except Exception:
+        trial_name = self._trial_name()
+        if not trial_name:
             return {}
-        if not rel.parts:
-            return {}
-        if rel.parts[0] == "trials" and len(rel.parts) >= 2:
-            trial_name = rel.parts[1]
-        else:
-            trial_name = rel.parts[0]
+        run_dir = self._resolve_run_dir_from_logs_dir(Path(self.logs_dir))
         trial_prefix = trial_name.split("__", 1)[0]
         views_root = run_dir / "_razorback" / "task_views"
         if not views_root.is_dir():
