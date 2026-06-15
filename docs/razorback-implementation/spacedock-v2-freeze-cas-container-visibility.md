@@ -39,6 +39,13 @@ overrides `RAZORBACK_FREEZE_DIR`.
 Verified by: existing freeze cross-worktree and no-agent resume tests stay
 green.
 
+> **Superseded 2026-06-15 by per-cell freeze isolation** (see
+> `_artifacts/FREEZE_REPO_RACE_HANDOFF.md`). To make `concurrency.trials > 1` safe, the
+> freeze dir is now `<cas-root>/<sealed_hash>/<cell_token>`. Two worktrees now
+> resolve to the same tree only when they are the *same cell* (same trial
+> name), not merely the same sealed hash. The external-survival property (a
+> freeze tree outlives worktree teardown) is retained.
+
 **AC-3 — Translator and docs agree.**
 The translator, solver workflow docs, and tests name the same container-visible
 path and host source path semantics.

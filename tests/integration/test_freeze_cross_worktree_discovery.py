@@ -1,5 +1,5 @@
-# ABOUTME: AC-2 mechanism gate — freeze tree written from worktree A is
-# ABOUTME: discoverable from worktree B sharing the same $RAZORBACK_FREEZE_DIR.
+# ABOUTME: External-freeze survival gate — a freeze tree written from worktree A
+# ABOUTME: survives worktree A teardown and is rediscovered by the SAME cell from worktree B.
 
 import subprocess
 from pathlib import Path
@@ -85,10 +85,12 @@ async def test_freeze_survives_worktree_a_teardown_and_is_visible_from_worktree_
     finally:
         _force_remove(REPO_ROOT, wt_a)
 
-    # Worktree A is gone. Build agent B from inside worktree B with the
-    # SAME inputs (same sealed_hash) and confirm discovery.
+    # Worktree A is gone. Build agent B from inside worktree B for the SAME
+    # cell (same trial name) and confirm it rediscovers the surviving tree.
+    # The freeze key is sealed_hash + cell_token; cell_token derives from the
+    # trial name, not the worktree path, so the same cell resolves identically.
     try:
-        logs_b = _make_logs_dir(wt_b, "task-0001__deadbeef")
+        logs_b = _make_logs_dir(wt_b, "task-0001__abc1234")
         agent_b = SpacedockSolverAgent(
             logs_dir=logs_b, **_common_kwargs(workflow)
         )
@@ -97,7 +99,8 @@ async def test_freeze_survives_worktree_a_teardown_and_is_visible_from_worktree_
         )
         freeze_b = agent_b.resolve_freeze_dir()
         assert freeze_b == freeze_a, (
-            f"AC-2 violated: agent B resolved {freeze_b}, not the shared {freeze_a}"
+            f"same cell must resolve identically across worktrees: "
+            f"agent B resolved {freeze_b}, not {freeze_a}"
         )
         # The pre-existing freeze tree is intact (worktree A teardown did not destroy it).
         assert (freeze_b / "sealed_hash.txt").exists()
