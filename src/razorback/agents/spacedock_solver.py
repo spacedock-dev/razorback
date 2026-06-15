@@ -274,7 +274,8 @@ class SpacedockSolverAgent(BaseAgent):
         The freeze tree lives at `<cas-root>/<sealed_hash>/<cell_token>/` where
         `<cas-root>` resolves via `$RAZORBACK_FREEZE_DIR` →
         `$XDG_DATA_HOME/razorback/freeze` → `~/.local/share/razorback/freeze`,
-        and `<cell_token>` is unique per (task, attempt) — see `_cell_token`.
+        and `<cell_token>` is derived from this cell's identity (distinct per
+        task+attempt) — see `_cell_token`.
 
         The external `<cas-root>` is independent of any worktree, so:
         - `git worktree remove --force` cannot destroy freeze trees.
@@ -290,11 +291,14 @@ class SpacedockSolverAgent(BaseAgent):
         return resolve_default_freeze_dir() / self.sealed_hash / self._cell_token()
 
     def _cell_token(self) -> str:
-        """Stable per-cell discriminator so concurrent trials never share a repo.
+        """Stable per-cell discriminator so concurrent trials don't share a repo.
 
-        Keyed on the harbor trial name (unique per task+attempt within a run).
-        Falls back to the resolved `logs_dir` so isolation is NEVER silently
-        lost — two cells must never collapse to one freeze repo.
+        The basis is the harbor trial name (distinct per task+attempt within a
+        run), falling back to the resolved `logs_dir` — itself per-cell unique —
+        so the token is never keyed on a constant that would collapse two cells
+        into one freeze repo. The 16-hex-char (64-bit) truncation just makes a
+        filesystem-safe dir name; distinct cells get distinct tokens barring an
+        astronomically unlikely hash collision.
         """
         basis = self._trial_name() or str(Path(self.logs_dir).resolve())
         return hashlib.sha256(basis.encode("utf-8")).hexdigest()[:16]

@@ -71,7 +71,7 @@ def test_codex_runtime_dispatch_constructs_inner_agent(tmp_path):
 async def test_sealed_hash_txt_lands_at_keyed_external_path(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ):
-    """AC-1: sealed_hash.txt at <cas-root>/<sealed_hash>/ (env-override CAS)."""
+    """sealed_hash.txt at <cas-root>/<sealed_hash>/<cell_token>/ (env-override CAS)."""
     monkeypatch.setenv("RAZORBACK_FREEZE_DIR", str(tmp_path / "freeze-cas"))
     logs_dir = _make_harbor_run_dir(tmp_path, "bookreview-0001__abc1234")
     workflow = tmp_path / "solver"
