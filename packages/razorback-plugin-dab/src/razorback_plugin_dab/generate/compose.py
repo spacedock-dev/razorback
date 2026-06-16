@@ -116,6 +116,12 @@ def generate_compose(
                 "POSTGRES_PASSWORD": POSTGRES_PASSWORD,
                 "POSTGRES_DB": pg_dbs[0],
             },
+            # postgres:17 can die mid-run (crash/OOM). Without a restart policy the
+            # container leaves dab-net and `dab-postgres` stops resolving for the rest
+            # of the trial — clinical data (e.g. PANCANCER_ATLAS) becomes unreachable
+            # and the agent can only abstain. Restart on failure so the populated data
+            # dir comes straight back up and the healthcheck recovers (mirrors dab-mongo).
+            "restart": "on-failure",
             "healthcheck": {
                 "test": ["CMD-SHELL", f"pg_isready -U {POSTGRES_USER} -d {pg_dbs[0]}"],
                 "interval": "5s",

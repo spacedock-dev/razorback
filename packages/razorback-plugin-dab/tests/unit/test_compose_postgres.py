@@ -40,6 +40,20 @@ def test_postgres_service_emitted(tmp_path: Path):
     assert "dab-net" in pg["networks"]
 
 
+def test_postgres_has_restart_policy(tmp_path: Path):
+    # postgres:17 can die mid-run (crash/OOM). Without restart-on-failure the
+    # container leaves dab-net and `dab-postgres` stops resolving for the rest of
+    # the trial, so clinical data becomes unreachable and the agent can only
+    # abstain (observed on PANCANCER_ATLAS q2/q3). Mirror the dab-mongo fix.
+    compose_text = generate_compose(
+        db_config=_BOOKREVIEW_LIKE,
+        dataset_name="bookreview",
+        data_root=tmp_path,
+    )
+    pg = yaml.safe_load(compose_text)["services"]["dab-postgres"]
+    assert pg["restart"] == "on-failure"
+
+
 def test_main_service_depends_on_postgres(tmp_path: Path):
     compose_text = generate_compose(
         db_config=_BOOKREVIEW_LIKE,
