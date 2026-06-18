@@ -205,3 +205,100 @@ get an explicit captain-approved deviation, AND adopt the real
 ACs as written pass and the rider is satisfied, but those ACs encode the
 wrong oracle semantics — re-derive AC-2 against column-containment when
 re-entering implementation.
+
+---
+
+# Re-review (cycle 2): validation gate
+
+**Branch:** `spacedock-ensign/spider2-dbt-duckdb-match-verifier` @ `f878967`
+**Merge-base with main:** `9c39af2`
+**Gate verdict:** **PASSED → done**
+
+Independent re-verification of the two cycle-1 blocking findings after the
+fix commits `61a1b9c` (B2) and `22b9b6c` (B1). The authoritative
+xlang-ai/Spider2 `spider2-dbt/evaluation_suite/eval_utils.py` was fetched
+live via `gh api` (387 lines, decoded to `/tmp`); the impl was checked
+line-by-line against it and differential-tested against an inline
+transcription of that source. Both findings are resolved; no new
+regressions; rider + AC-3 intact.
+
+## B2 — comparator faithfulness to Spider2 `eval_utils.duckdb_match`: CONFIRMED
+
+`src/razorback/benchmarks/spider2_dbt/duckdb_match.py` is a faithful port of
+Spider2 `duckdb_match` + `compare_pandas_table` + `vectors_match`:
+
+- **Column-containment** (not row-tuple equality): gold restricted to
+  `condition_cols` via `iloc[:, ...]`, pred uses all columns, both
+  transposed to column-vectors, each gold column must match SOME pred
+  column — matches Spider2 `eval_utils.py:132-149`. (impl drops Spider2's
+  dead `else` loop at 145-148; no behavioral effect.)
+- **Per-column sort under `ignore_order`** with Spider2's exact sort key
+  `(x is None, str(x), isinstance(x,(int,float)))` — matches 115-117.
+- **Numeric `math.isclose(abs_tol=1e-2)`** — matches 124.
+- **NaN: `pd.isna(a) and pd.isna(b)` → equal** — matches 121.
+- **AND across `condition_tabs`**, **predicted-fetch failure = mismatch**
+  (try/except → False) — matches 221-243.
+
+Differential test (impl vs an inline transcription of the upstream oracle)
+on 10 verdict-flipping cases — float within/beyond 1e-2, row reorder
+with/without ignore_order, extra pred columns, diff in non-condition col,
+NaN, missing pred table, multi-table 1-mismatch, multi-table all-match —
+**all 10 agree and match the expected verdict**.
+
+`load_eval_spec` drilled into the REAL `playbook001`/`provider001` gold
+lines fetched from upstream `gold/spider2_eval.jsonl`: parses
+`evaluation.parameters` with per-table `condition_tabs: List[str]`,
+`condition_cols: List[List[int]]` (`[[0,1],[0,1,2,5,6,7,9,10,11,12,13]]`),
+`ignore_orders: List[bool]` (`[True,True]`) — matches `evaluate.py:96-99`
+(`duckdb_match(result, **parameters)`). All 68 real duckdb_match gold lines
+carry explicit tabs/cols/orders, so the impl's explicit-`condition_tabs`
+requirement (no None→all-tables default) is never exercised on real data.
+
+Minor non-blocking note: impl uses `SELECT * FROM "{table}"` (quoted) vs
+Spider2's unquoted `{table_name}` — a robustness improvement, not a
+faithfulness divergence.
+
+## B1 — leakage scoping sound, protection not weakened: CONFIRMED
+
+`_leakage_hits` (in `tests/unit/test_translate_spider2_dbt.py`) now excludes
+the verify-time-only `tests/` subtree via `_is_verifier_only`. Verified the
+Harbor lifecycle claim against the installed package source:
+
+- `harbor/verifier/verifier.py:123 def verify()` → lines 133-138 upload
+  the task's `tests/` to `env_paths.tests_dir` ONLY inside `verify()`.
+- `harbor/trial/trial.py:570 _verify_step` → line 587-591
+  `reset_dirs(remove_dirs=[verifier_dir, tests_dir], create_dirs=[...])`
+  wipes+recreates them EMPTY immediately before verification.
+- The agent step receives only `_upload_step_workdir` (`workdir/`), never
+  the host view's `tests/`. So the host `tests/` assets genuinely never
+  reach the agent — excluding them from the host scan is principled.
+
+Scoping ≠ weakening, proven two ways: (1) the shipped guard test
+`test_leakage_scan_still_fires_on_agent_visible_answer_content` plants
+`gold`-content in BOTH an agent-visible path (caught) and `tests/`
+(ignored); (2) a mutation probe — forcing `_is_verifier_only` to blanket-
+`True` — makes that guard FAIL on the agent-visible leak, confirming the
+guard is meaningful. Production deny-globs (`gold/**`, `**/gold/**`,
+`expected/**`, `golden/**`) — the real agent-view protection — are
+UNCHANGED; only the test's scan scope moved.
+
+The 2 previously-failing `test_translate_spider2_dbt.py` tests are green:
+full file = 13 passed.
+
+## Regression / rider / AC-3
+
+- Acceptance/gating: `uv run pytest -k spider2_dbt --ignore=tests/unit/test_task_identity_scoring.py` → **66 passed**.
+- Rider (independent end-to-end): materialized a view with `task_slug=not-spider2-slug`; emitted `tests/test.sh` resolves `--predicted-db /app/not-spider2-slug.duckdb` (ny's `resolve_spider2_db_name`), no hardcoded `/app/spider2.duckdb`.
+- AC-3 (independent end-to-end): ran the emitted `verify.py` against the gold fixture → `/logs/verifier/reward.json` = `{"reward": 1.0}` (match) and `{"reward": 0.0}` (missing pred); reward is a float.
+- Branch touches only `spider2_dbt`-scoped modules/tests + the gold fixture. None of the 3 known pre-existing failures (`test_task_identity_scoring`, `test_generate_matrix_specs`, `test_rk_research_new`) are touched by this branch — not regressions. Ignored harness `uv.lock` churn.
+
+## Gate decision
+
+**PASSED → done.** Both cycle-1 blocking findings are independently
+resolved against the live Spider2 source: B2 — the comparator and eval-spec
+schema faithfully reproduce `eval_utils.duckdb_match` (verified by a 10-case
+differential test against the upstream oracle and a real multi-table gold
+line); B1 — the leakage fix is scoping, not weakening (mutation-probed),
+justified by the verified Harbor verify-only-tests/ lifecycle. Rider and
+AC-3 reward.json shape intact; no regressions outside the known pre-existing
+set. No blocking findings remain.
