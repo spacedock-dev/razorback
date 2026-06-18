@@ -173,3 +173,15 @@ captain chose **bounce-and-fix-now**. Routing back to `implementation`:
    `--materialize bind` produces symlinked view files for spider2-dbt. Keep the
    generic non-spider2 harbor path behavior unchanged. Do not regress the 3 ACs
    or the cycle-1 fixes.
+
+## Stage Report: implementation (cycle 2)
+
+- DONE: Thread `materialize_mode` from `spec_to_job_config` (translate.py:93) into `_build_harbor`, map `bind`->`view_mode="link"` and `copy`->`view_mode="copy"`, and pass it to `materialize_spider2_harbor_task_view` at the spider2 call site. Mirror how ade-bench threads the mode (cli/run.py:313).
+  Commit 0d09629. `spec_to_job_config` now passes `materialize_mode=` to `_build_harbor` (translate.py:119); `_build_harbor` gained the param (translate.py:307) and maps `link if materialize_mode=="bind" else copy` (translate.py:370-371) into the spider2 view call (translate.py:378). Removing `view_mode=view_mode` fails the bind test; restoring passes (verified).
+- DONE: Add a regression test proving `--materialize bind` produces symlinked (not copied) view files for spider2-dbt, and that `copy` still copies.
+  `test_materialize_bind_produces_symlinked_view_files` (bind -> `example.sql` is_symlink) + `test_materialize_copy_still_copies_view_files` (copy -> not symlink), both in test_translate_spider2_dbt.py. Bind test failed pre-fix, passes post-fix.
+- DONE: No regression: the generic non-spider2 harbor path stays byte-for-byte unchanged, and the 3 ACs + cycle-1 fixes still pass. `uv run pytest` green for spider2/harbor/explain.
+  Generic harbor path (translate.py:385+) untouched; test_translate_harbor_block 6/6 (dabstep excluded — network-only, fails identically on base). spider2(13) + materializer(3) + leakage + explain(1) all green; broad `tests/unit` = 674 passed. The 2 remaining failures (test_generate_matrix_specs, test_rk_research_new) and the dabstep/score-load collection error all pre-exist on base (stash-verified).
+
+### Summary
+Threaded the spec-level `materialize_mode` through `_build_harbor` into the spider2-dbt view materializer (bind->link, copy->copy), closing the parity gap where `--materialize bind` was silently ignored and large task trees were eagerly copied into `run_dir/tasks`. Enabling link mode surfaced a latent correctness bug: `_patch_task_toml` wrote through the reflected `task.toml`, which under link mode is a symlink back into the shared source — so env-injection corrupted the source fixture. Fixed by unlinking the symlink before writing so the patched `task.toml` is view-owned while the bulk tree stays symlinked; added a materializer test asserting link mode symlinks bulk files, keeps `task.toml` a real file, and never mutates the source. Generic non-spider2 harbor path is unchanged and the 3 ACs + cycle-1 fixes do not regress.
