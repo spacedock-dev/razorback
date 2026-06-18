@@ -184,3 +184,16 @@ Modules added: one user-facing example spec `examples/specs/spider2-dbt-harbor-c
 ### Summary
 
 Added the `kind: harbor` spider2-dbt example spec with the qualified `spider2-dbt/spider2-dbt@1.0` ref. AC-2 grep returns the `# ABOUTME:` header note naming the PKG-40 hydration prerequisite. AC-1 `rk freeze --allow-missing` exits 0 and the frozen `benchmark.dataset` is the verbatim qualified ref; the frozen sibling is force-committed per the existing tracked-frozen convention. No live run attempted (PKG-40 blocker stands). Entity AC-1 clause updated to the captain-settled `--allow-missing` offline-reproducible form.
+
+## Stage Report: validation
+
+- DONE: Rerun both ACs from a clean checkout of the worktree branch with ACTUAL output: AC-1 (`uv run rk freeze examples/specs/spider2-dbt-harbor-codex.yaml --allow-missing` exits 0 and the frozen spider2-dbt-harbor-codex.frozen.yaml has benchmark.dataset == "spider2-dbt/spider2-dbt@1.0"), AC-2 (`grep -F 'spider2-dbt@1.0' examples/specs/spider2-dbt-harbor-codex.yaml` returns the header note naming the harbor-package hydration prerequisite). Confirm the spec is kind: harbor with the qualified dataset ref, NOT harbor-local.
+  AC-1: freeze exited 0, regenerated frozen `benchmark.dataset == "spider2-dbt/spider2-dbt@1.0"`, `kind: harbor` (both PASS). AC-2: grep GREP_EXIT=0 returns the 2nd `# ABOUTME:` note naming the PKG-40 hydration prereq (PASS). Spec confirmed `kind: harbor` qualified ref; `grep -c harbor-local → 0`. Frozen file verified as real freeze output (only `harness_git_sha` differs on regen).
+- DONE: Run `superpowers:requesting-code-review` against the worktree branch (base main); classify findings blocking/non-blocking. Scrutinize the implementer's flagged convention call: the .frozen.yaml is gitignored (.gitignore:22) yet tracked siblings exist, so it was force-added — confirm that matches the established repo convention and the frozen file is the real freeze output.
+  Reviewer verdict "Yes, ready to merge": zero Critical/Important (blocking), three Minor (non-blocking, cosmetic). Convention call confirmed: 3 pre-existing tracked frozen siblings (`_codex-smoke`, `_deterministic-smoke`, `bookreview-claude` @ 40ed8a2) → force-add is established convention; frozen file is genuine freeze output.
+- DONE: Write the validation report at docs/razorback-implementation/validation/spider2-dbt-example-spec.md (or sibling): PASS/FAIL per AC with exact command+output, code-review findings, and a gate decision (approve to done, or reject to implementation with concrete fixes).
+  Report at `docs/razorback-implementation/validation/spider2-dbt-example-spec.md`: AC-1 PASS, AC-2 PASS, code-review findings classified, gate decision APPROVE → done.
+
+### Summary
+
+Both ACs reproduced independently from a clean checkout with actual output (freeze exit 0 + verbatim qualified `benchmark.dataset`; grep returns the PKG-40 hydration-prereq header note). Spec confirmed `kind: harbor` qualified-ref, not `harbor-local`. Code review returned ready-to-merge with no blocking findings; the flagged gitignored-but-tracked `.frozen.yaml` force-add matches an established convention (three tracked frozen siblings already exist) and the frozen file is the real freeze output. Gate decision: APPROVE → done.
