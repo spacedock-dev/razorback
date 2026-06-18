@@ -43,6 +43,15 @@ class EvalSpec:
 
     def __post_init__(self) -> None:
         n = len(self.condition_tabs)
+        # Fail closed: a zero-table spec would make compare_duckdb's AND-loop
+        # never run and return True — silently scoring every prediction 1.0.
+        # A corrupted/truncated/schema-drifted gold line must NOT score as a
+        # match, so refuse to construct an empty-condition_tabs spec.
+        if n == 0:
+            raise ValueError(
+                "EvalSpec requires a non-empty condition_tabs; a zero-table "
+                "spec would score every prediction as a match (fail-open)"
+            )
         # Normalize to Spider2 duckdb_match defaults so the comparator can
         # index condition_cols[i] / ignore_orders[i] for every table.
         cols = self.condition_cols
@@ -70,11 +79,35 @@ def load_eval_spec(path: Path) -> EvalSpec:
     ``evaluation.parameters`` (the shape Spider2 ``evaluate.py`` passes to
     ``duckdb_match``), and returns an :class:`EvalSpec`. Tolerates a bare
     ``parameters``-shaped object (no ``evaluation`` wrapper) for fixtures.
+
+    Fails closed on a corrupted/truncated/schema-drifted gold line: an empty
+    file, a wrong ``evaluation.func``, or a missing/empty ``condition_tabs``
+    each raise ``ValueError`` rather than yielding a zero-table spec that
+    ``compare_duckdb`` would silently score as a match (reward 1.0).
     """
     text = Path(path).read_text().strip()
-    first_line = text.splitlines()[0] if text else "{}"
+    if not text:
+        raise ValueError(
+            f"empty gold eval spec at {path}: cannot score a missing/truncated "
+            "spider2_eval.jsonl (fail-open guard)"
+        )
+    first_line = text.splitlines()[0]
     raw = json.loads(first_line)
-    params = raw.get("evaluation", {}).get("parameters", raw)
+
+    # When the real Spider2 evaluation wrapper is present, the func MUST be
+    # duckdb_match — any other func means this verifier cannot faithfully score
+    # the line, so refuse rather than fall through to a match.
+    evaluation = raw.get("evaluation")
+    if evaluation is not None:
+        func = evaluation.get("func")
+        if func != "duckdb_match":
+            raise ValueError(
+                f"unsupported evaluation.func {func!r} in {path}: this verifier "
+                "only scores 'duckdb_match' (fail-open guard)"
+            )
+        params = evaluation.get("parameters", {})
+    else:
+        params = raw
 
     condition_tabs = list(params.get("condition_tabs", []))
     raw_cols = params.get("condition_cols")

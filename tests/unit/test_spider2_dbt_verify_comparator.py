@@ -71,6 +71,72 @@ def test_spider2_dbt_verify_eval_spec_rejects_mismatched_lengths():
 
 
 # --------------------------------------------------------------------------
+# Fail-closed: a zero-table / malformed gold spec MUST NOT score as a match
+# (cycle-2 B1). compare_duckdb returns True on an empty condition_tabs loop,
+# so an empty spec would silently award 1.0 -> reject it at load/construct time.
+# --------------------------------------------------------------------------
+
+
+def test_spider2_dbt_verify_eval_spec_rejects_empty_condition_tabs():
+    # A zero-table spec is the fail-open hazard: compare_duckdb's AND-loop never
+    # runs and returns True. EvalSpec must refuse to construct one.
+    with pytest.raises(ValueError):
+        EvalSpec(condition_tabs=[])
+
+
+def test_spider2_dbt_verify_load_eval_spec_empty_file_raises(tmp_path: Path):
+    # An empty / truncated spider2_eval.jsonl must NOT yield a zero-table spec.
+    spec_path = tmp_path / "spider2_eval.jsonl"
+    spec_path.write_text("")
+    with pytest.raises(ValueError):
+        load_eval_spec(spec_path)
+
+
+def test_spider2_dbt_verify_load_eval_spec_missing_condition_tabs_raises(tmp_path: Path):
+    # evaluation.parameters present but no condition_tabs -> fail closed.
+    spec_path = tmp_path / "spider2_eval.jsonl"
+    spec_path.write_text(
+        json.dumps(
+            {
+                "instance_id": "t",
+                "evaluation": {"func": "duckdb_match", "parameters": {"gold": "g.duckdb"}},
+            }
+        )
+        + "\n"
+    )
+    with pytest.raises(ValueError):
+        load_eval_spec(spec_path)
+
+
+def test_spider2_dbt_verify_load_eval_spec_wrong_func_raises(tmp_path: Path):
+    # A non-duckdb_match evaluation func is a schema drift we must not score.
+    spec_path = tmp_path / "spider2_eval.jsonl"
+    spec_path.write_text(
+        json.dumps(
+            {
+                "instance_id": "t",
+                "evaluation": {
+                    "func": "string_match",
+                    "parameters": {"gold": "g.duckdb", "condition_tabs": ["orders"]},
+                },
+            }
+        )
+        + "\n"
+    )
+    with pytest.raises(ValueError):
+        load_eval_spec(spec_path)
+
+
+def test_spider2_dbt_verify_load_eval_spec_missing_evaluation_raises(tmp_path: Path):
+    # A line with no evaluation wrapper and no condition_tabs must fail closed
+    # rather than fall through to a zero-table (match-everything) spec.
+    spec_path = tmp_path / "spider2_eval.jsonl"
+    spec_path.write_text(json.dumps({"instance_id": "t"}) + "\n")
+    with pytest.raises(ValueError):
+        load_eval_spec(spec_path)
+
+
+# --------------------------------------------------------------------------
 # comparator fixtures
 # --------------------------------------------------------------------------
 

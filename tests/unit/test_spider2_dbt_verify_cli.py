@@ -92,6 +92,53 @@ def test_spider2_dbt_verify_cli_missing_predicted_scores_zero(tmp_path):
     assert json.loads(reward_out.read_text()) == {"reward": 0.0}
 
 
+def test_spider2_dbt_verify_cli_empty_spec_scores_zero_not_one(tmp_path):
+    # FAIL-CLOSED (cycle-2 B1): a real predicted DB matching a gold DB, but with
+    # an empty / malformed gold spec, must score 0.0 — never silently 1.0. An
+    # empty condition_tabs is the hazard (compare_duckdb's AND-loop returns True
+    # on zero tables), so emit_reward must surface it as a NON-match.
+    _build_db(tmp_path / "pred.duckdb", [1, 2])
+    _build_db(tmp_path / "gold.duckdb", [1, 2])  # identical -> would be 1.0 if scored
+    empty_spec = tmp_path / "spider2_eval.jsonl"
+    empty_spec.write_text("")
+    reward_out = tmp_path / "logs" / "verifier" / "reward.json"
+    emit_reward(
+        predicted_db=tmp_path / "pred.duckdb",
+        gold_db=tmp_path / "gold.duckdb",
+        eval_spec=empty_spec,
+        reward_out=reward_out,
+    )
+    assert json.loads(reward_out.read_text()) == {"reward": 0.0}
+
+
+def test_spider2_dbt_verify_cli_wrong_func_scores_zero_not_one(tmp_path):
+    # A schema-drifted spec (non-duckdb_match func) over a matching DB pair must
+    # also fail closed to 0.0, not crash and not pass.
+    _build_db(tmp_path / "pred.duckdb", [1, 2])
+    _build_db(tmp_path / "gold.duckdb", [1, 2])
+    bad_spec = tmp_path / "spider2_eval.jsonl"
+    bad_spec.write_text(
+        json.dumps(
+            {
+                "instance_id": "x",
+                "evaluation": {
+                    "func": "string_match",
+                    "parameters": {"gold": "gold.duckdb", "condition_tabs": ["orders"]},
+                },
+            }
+        )
+        + "\n"
+    )
+    reward_out = tmp_path / "logs" / "verifier" / "reward.json"
+    emit_reward(
+        predicted_db=tmp_path / "pred.duckdb",
+        gold_db=tmp_path / "gold.duckdb",
+        eval_spec=bad_spec,
+        reward_out=reward_out,
+    )
+    assert json.loads(reward_out.read_text()) == {"reward": 0.0}
+
+
 def test_spider2_dbt_verify_view_carries_verifier_assets(tmp_path):
     view = materialize_spider2_harbor_task_view(
         source_task_dir=_SOURCE,

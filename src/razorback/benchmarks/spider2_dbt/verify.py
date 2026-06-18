@@ -23,21 +23,30 @@ def emit_reward(
     reward_out: Path,
 ) -> None:
     """Compute the binary duckdb_match reward and write harbor's reward.json."""
+    err: str | None = None
     if not Path(predicted_db).exists():
         is_match = False
+        err = f"predicted DB not found ({predicted_db})"
     else:
-        spec = load_eval_spec(Path(eval_spec))
-        is_match = compare_duckdb(
-            predicted_db=Path(predicted_db),
-            gold_db=Path(gold_db),
-            spec=spec,
-        )
+        # Fail closed: an empty / malformed / schema-drifted gold spec must
+        # surface as reward 0, never crash-into-pass and never silently 1.0.
+        try:
+            spec = load_eval_spec(Path(eval_spec))
+            is_match = compare_duckdb(
+                predicted_db=Path(predicted_db),
+                gold_db=Path(gold_db),
+                spec=spec,
+            )
+        except Exception as exc:  # noqa: BLE001 — any spec/compare failure = non-match
+            is_match = False
+            err = f"eval-spec/compare error: {exc}"
     payload = {"reward": 1.0 if is_match else 0.0}
     Path(reward_out).parent.mkdir(parents=True, exist_ok=True)
     Path(reward_out).write_text(json.dumps(payload) + "\n")
     if not is_match:
+        detail = f": {err}" if err else ""
         sys.stderr.write(
-            f"spider2-dbt verify: mismatch (predicted={predicted_db})\n"
+            f"spider2-dbt verify: mismatch (predicted={predicted_db}){detail}\n"
         )
 
 
