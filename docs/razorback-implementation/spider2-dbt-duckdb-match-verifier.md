@@ -285,3 +285,22 @@ Closed the symmetric predicted-DB injection that the cycle-5 gold allowlist didn
 ### Summary
 
 Removed the verifier's `pandas` dependency by re-porting the comparator onto duckdb-native fetch + stdlib. `verify.py` now imports only `duckdb` — the single library the verify-time task image is already guaranteed to ship (proven by the build-time preflight that imports it) — so the emitted verifier can no longer crash-on-import in a dbt-duckdb image that lacks pandas (which is neither a project dep nor installed by any injected layer). The Spider2 `duckdb_match` semantics are preserved verbatim (column-containment, `isclose` 1e-2, Spider2 sort key, condition_cols, multi-table AND, missing-table→0, NA==NA); the full behavioral comparator suite stays green UNCHANGED as the faithfulness proof. Cycles 1-6 intact; spider2_dbt suite 67 passed. The verifier now has zero undeclared runtime deps.
+
+### Cycle 8 — validation gate REJECTED (2026-06-18, captain via Codex review)
+
+8th adversarial Codex pass found a SQL-injection via spec-supplied table names; captain chose fix-now. Confirmed live. Routing back to `implementation`:
+
+1. **[high] `condition_tabs` table name interpolated raw into DuckDB SQL → reward rigging.**
+   `_fetch_columns` built `SELECT * FROM "{table}"` by string interpolation, but `condition_tabs` comes from the external `spider2_eval.jsonl`. A value like `realt"; select 999 AS a; --` (existing-table prefix) breaks out of the identifier; DuckDB runs the multi-statement and `.fetchall()` returns the LAST statement's rows. So a hostile spec makes BOTH gold and pred fetches return identical injected rows → forced `reward: 1.0` over genuinely mismatched DBs. Verified live (`.venv/bin/python`: raw → `[(999,)]`; quote-doubled → CatalogException).
+   **Fix:** add an identifier-quoting helper that doubles embedded `"` and use it in `_fetch_columns`; a bogus name then fails to resolve → the gold fetch raises → `emit_reward` scores 0 (fail-closed). Add a regression where `condition_tabs` carries `"; select ...; --` over mismatched DBs and assert it cannot score a match.
+
+## Stage Report: implementation (cycle 8)
+
+- DONE: Quote spec-supplied table identifiers in `_fetch_columns` (double embedded `"`).
+  `duckdb_match.py`: new `_quote_ident(name)` returns `'"' + name.replace('"','""') + '"'`; `_fetch_columns` now does `SELECT * FROM {_quote_ident(table)}`. A breakout value becomes a single bogus identifier that doesn't resolve → CatalogException; `compare_duckdb`'s gold fetch is not try/excepted, so it raises → `emit_reward`'s wrapper scores 0 (fail-closed). Legit table names (incl. ones with special chars) are preserved.
+- DONE: Regression proving `condition_tabs` cannot SQL-inject a match.
+  `test_..._condition_tabs_cannot_sql_inject`: `condition_tabs=['realt"; select 999 AS a; --']` over real `realt` tables holding DIFFERENT data (genuine mismatch). Asserts `_compare` raises (cannot return a forced match). Load-bearing: reverting the quoting makes both fetches return `[(999,)]` → match → the `pytest.raises` fails. spider2_dbt suite (comparator/verify_cli/harbor_view/translate) = 68 passed. Cycles 1-7 untouched.
+
+### Summary
+
+Closed a benchmark-integrity SQL-injection: `condition_tabs` (external eval-spec input) was interpolated raw into the comparator's `SELECT * FROM "<table>"`, letting a hostile spec break out, run an injected statement, and force `reward: 1.0` over mismatched DBs. `_fetch_columns` now quotes the identifier with doubled `"`, so a breakout value becomes an unresolvable identifier and the fetch raises → reward 0 (fail-closed). One helper + one call-site change + one load-bearing regression (verified live that raw injects `[(999,)]` and the fix raises). This is the third trust-boundary arg sealed (gold name → cycle 5, predicted name → cycle 6, table names → now) — SQL this time, not shell. Cycles 1-7 intact; spider2_dbt suite 68 passed.

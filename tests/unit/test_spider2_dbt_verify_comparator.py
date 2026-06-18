@@ -469,3 +469,20 @@ def test_spider2_dbt_verify_multi_table_gold_line_mismatch(tmp_path):
         "customers": _ints(["id"], [(99,)]),
     }
     assert _compare(tmp_path, pred=pred, gold=gold, spec=spec) is False
+
+
+def test_spider2_dbt_verify_condition_tabs_cannot_sql_inject(tmp_path):
+    # SECURITY: condition_tabs comes from the external eval spec. A name like
+    # `realt"; select 999 ...; --` breaks out of the quoted identifier; DuckDB
+    # runs the injected statement and returns ITS rows, so pre-fix both gold and
+    # pred fetch identical attacker rows -> a forced reward 1.0 over genuinely
+    # mismatched DBs. The identifier-quoting (doubled ") must keep it a single
+    # bogus identifier that fails to resolve -> fetch raises -> NEVER a match.
+    inject = 'realt"; select 999 AS a; --'
+    spec = EvalSpec(condition_tabs=[inject])
+    # Real `realt` tables present (the breakout prefix) but with DIFFERENT data:
+    # a faithful compare is a mismatch, and the injection must not flip it to 1.0.
+    pred = {"realt": _ints(["a"], [(1,)])}
+    gold = {"realt": _ints(["a"], [(2,)])}
+    with pytest.raises(Exception):
+        _compare(tmp_path, pred=pred, gold=gold, spec=spec)

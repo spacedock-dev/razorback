@@ -83,6 +83,19 @@ def _compare_table(
     return True
 
 
+def _quote_ident(name: str) -> str:
+    """Quote a SQL identifier, doubling embedded double-quotes.
+
+    ``condition_tabs`` table names come from the external eval spec, so a value
+    like ``realt"; select 999; --`` would otherwise break out of the quoted
+    identifier and DuckDB would execute the injected statement, letting a hostile
+    spec rig gold/pred fetches to return identical rows and award reward 1.0.
+    Doubling keeps the value a single (bogus) identifier; it then fails to
+    resolve and the fetch raises -> emit_reward scores 0 (fail-closed).
+    """
+    return '"' + name.replace('"', '""') + '"'
+
+
 def _fetch_columns(con: duckdb.DuckDBPyConnection, table: str) -> list[list]:
     """``SELECT * FROM `table``` as a list of column-vectors (transposed rows).
 
@@ -91,7 +104,7 @@ def _fetch_columns(con: duckdb.DuckDBPyConnection, table: str) -> list[list]:
     and ``.description`` fixes the column count so a zero-row table still
     yields one empty vector per column.
     """
-    cur = con.execute(f'SELECT * FROM "{table}"')
+    cur = con.execute(f"SELECT * FROM {_quote_ident(table)}")
     rows = cur.fetchall()
     ncols = len(cur.description)
     return [[row[j] for row in rows] for j in range(ncols)]
