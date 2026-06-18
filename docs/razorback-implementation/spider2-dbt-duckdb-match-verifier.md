@@ -139,3 +139,12 @@ Resolved both cycle-1 blocking defects against the authoritative xlang-ai/Spider
 ### Summary
 
 Re-review after cycle-1 fixes (61a1b9c, 22b9b6c) — independent verification only, no production code. Both blocking findings resolved against the authoritative live xlang-ai/Spider2 source: B2 — the comparator is a faithful port of `eval_utils.duckdb_match` (column-containment + 1e-2 tolerance + per-column sort + AND-across-tables), proven by a 10-case differential test against the upstream oracle and a real multi-table gold line; `load_eval_spec` reads the real `evaluation.parameters` schema. B1 — the leakage scoping is sound, not weakening: the Harbor verify-only-tests/ lifecycle is verified against the installed package, and a mutation probe confirms the guard test still fires on agent-visible leaks. Rider (`/app/<db_name>.duckdb`) and AC-3 reward.json shape intact; no regressions outside the known pre-existing set. Gate verdict: PASSED → done. Full report: docs/razorback-implementation/validation/spider2-dbt-duckdb-match-verifier.md
+
+### Cycle 2 — validation gate REJECTED (2026-06-18, captain via Codex review)
+
+Codex found a fail-open verifier hazard; captain chose fix-now. Confirmed live.
+Routing back to `implementation`:
+
+1. **[high] Fail-open: empty/malformed eval spec awards `{"reward": 1.0}`.**
+   `load_eval_spec` (`eval_spec.py:79`) defaults `condition_tabs` to `[]` with no non-empty check and no `evaluation.func` validation; `compare_duckdb` (`duckdb_match.py:76`) returns `True` when the `condition_tabs` loop never runs. So a corrupted/truncated/schema-drifted `spider2_eval.jsonl` scores every prediction 1.0 — silently reporting broken scoring as success.
+   **Fix:** fail closed in `load_eval_spec`/`EvalSpec` — require a non-empty `condition_tabs`, validate `evaluation.func == "duckdb_match"`, and raise (or otherwise force reward 0) on empty/missing. Add a negative regression test proving an empty/missing-`condition_tabs` spec raises or emits reward 0, NOT 1. Keep the faithful comparator (cycle-1 B2), the leakage scoping (cycle-1 B1), the rider, and AC-3 reward shape intact.
