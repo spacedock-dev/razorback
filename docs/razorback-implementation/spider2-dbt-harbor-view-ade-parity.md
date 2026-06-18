@@ -72,3 +72,26 @@ authored tag and leave the digest null when unresolved (per PKG-40).
 ### Summary
 
 Produced a separate plan doc (standard flow, per the FO dispatch) mapping AC-1/AC-2/AC-3 to four code tasks plus a Task-0 written contract. The riskiest surface — the `/app` + `/app/<db_name>.duckdb` image/workdir contract the r5 verifier depends on — is pinned first as prose; the riskiest mechanism (AC-2 preflight's real DuckDB open / fail-closed) is built first with a real `duckdb.connect` round-trip test. All ade_bench reference cites were verified against the source files. AC-3 is noted as mostly already satisfied (deny-globs present at `spider2_dbt/harbor_view.py:10-21`), so its task is a locking test. Key spider2 divergence flagged: `dbt_project/` layout vs ade-bench `project/`.
+
+## Implementation summary
+
+Modules added/touched (all under `src/razorback/benchmarks/spider2_dbt/`; generic `harbor_tasks/materialize.py` + `harbor_tasks/leakage.py` byte-for-byte unchanged):
+- new `preflight.py` — `Spider2WorkspacePreflightError`, `preflight_spider2_workspace`, `preflight_script_text`, `main` CLI (`RAZORBACK_SPIDER2_PREFLIGHT`).
+- `harbor_view.py` — added `_ensure_spider2_build_context_layer` (RIDER), `_ensure_dbt_deps_image_layer`, `_ensure_workspace_preflight_image_layer`, `_has_dbt_project`, `_has_dbt_packages_manifest`, `_insert_before_final_cmd`; wired into `materialize_spider2_harbor_task_view`.
+
+Harbor surfaces touched: the spider2 view's `environment/Dockerfile` now gains (in order before the final `CMD`) a build-context COPY landing `dbt_project/` at `/app`, the dbt-deps RUN, and the preflight COPY+RUN.
+
+## Stage Report: implementation
+
+- DONE: Implement the approved plan TDD-first so all 3 ACs pass: new `spider2_dbt/preflight.py`; `_ensure_dbt_deps_image_layer` adding a dbt-deps layer when `dbt_project/packages.yml` is present; deny-glob regression lock. `uv run pytest` green.
+  Red→green per task; `uv run pytest -k spider2_dbt --ignore=tests/unit/test_task_identity_scoring.py` → 28 passed. Commits: preflight + tests, then harbor_view + tests.
+- DONE: RIDER (Codex finding 2): build-time preflight `RUN ... --workspace /app` must NOT fail on a missing dbt project; this entity owns the COPY/context landing `dbt_project/` + source `.duckdb` at `/app` BEFORE the preflight RUN; verify at build-context level.
+  `_ensure_spider2_build_context_layer` `shutil.copytree`s `dbt_project/` (incl. its `.duckdb`) into the `environment/` build context and emits `COPY dbt_project/ /app/` before the preflight RUN. `test_preflight_build_context_holds_duckdb_before_preflight_run` parses the COPY src from the Dockerfile and asserts a real `*.duckdb` exists under it in the build context — build-context proof, not text inspection.
+- DONE: Pin the image/workdir contract (`/app` dbt root, agent DB at `/app/<db_name>.duckdb`, preflight at `/tmp/...`) as the stable r5-facing invariant; keep generic materializer + non-spider2 harbor behavior byte-for-byte unchanged.
+  `_APP_ROOT="/app"` and preflight at `/tmp/razorback_spider2_preflight.py` constant-pinned in `harbor_view.py`. `materialize.py`/`leakage.py` untouched (git diff empty); ade_bench + translate regression suites 25 passed.
+- SKIPPED: verifier-time `test-setup.sh` dbt-deps reuse helper (`_ensure_dbt_deps_test_setup_uses_preinstalled_packages`).
+  Plan Task-2 note: r5 verifier out of scope; spider2 fixture has `tests/test.sh` not `tests/test-setup.sh`. Deferred to r5.
+
+### Summary
+
+Ported the three ade_bench harness patterns into a new `spider2_dbt/preflight.py` (real DuckDB round-trip, fails closed with a named error) and three Dockerfile-layer helpers in `harbor_view.py`, all TDD-first. The mandatory RIDER is satisfied structurally: the entity now stages `dbt_project/` (carrying the source `.duckdb`) into the `environment/` build context and COPYs it to `/app` before the preflight RUN, proven by a build-context-level test that resolves the COPY source and asserts a real `.duckdb` is present. The one structural divergence — `dbt_project/` (not ade-bench `project/`) for the packages-manifest and build-context lookups — is implemented and tested. Note: `uv run pytest -k spider2_dbt` collection trips a PRE-EXISTING unrelated broken module (`tests/unit/test_task_identity_scoring.py` imports the nonexistent `razorback.score.load`, present verbatim in base commit `996d42b`); excluding that module the spider2 acceptance is 28 passed and ade_bench/translate regression is 25 passed.
