@@ -1,12 +1,14 @@
 # ABOUTME: spider2-dbt comparator faithfully reproducing Spider2 eval_utils.duckdb_match.
-# ABOUTME: Column-containment over transposed column-vectors, math.isclose(1e-2), AND across tables.
+# ABOUTME: Column-containment over column-vectors, math.isclose(1e-2), AND across tables.
+# Depends ONLY on duckdb (the one library the verify-time image is guaranteed to
+# have — the build-time preflight already imports it); no pandas, so the emitted
+# verifier cannot crash-on-import in a task image that ships dbt-duckdb but not pandas.
 from __future__ import annotations
 
 import math
 from pathlib import Path
 
 import duckdb
-import pandas as pd
 
 try:
     from razorback.benchmarks.spider2_dbt.eval_spec import EvalSpec
@@ -17,10 +19,19 @@ except ModuleNotFoundError:  # running flat from /tests in the verifier containe
 _TOLERANCE = 1e-2
 
 
+def _isna(x) -> bool:
+    """stdlib stand-in for pandas.isna over scalar cells fetched from DuckDB.
+
+    DuckDB returns SQL NULL as Python ``None``; a float ``NaN`` is the only other
+    NA-like scalar. Mirrors Spider2's ``pd.isna(...)`` NaN==NaN handling.
+    """
+    return x is None or (isinstance(x, float) and math.isnan(x))
+
+
 def _vectors_match(v1, v2, *, tol: float = _TOLERANCE, ignore_order: bool = False) -> bool:
     """Port of Spider2 eval_utils.compare_pandas_table.vectors_match.
 
-    Compares two column-vectors element-wise: NaN==NaN, numerics via
+    Compares two column-vectors element-wise: NA==NA, numerics via
     math.isclose(abs_tol=tol), everything else by ``!=``. When ignore_order
     is set, both vectors are sorted first with Spider2's exact key.
     """
@@ -32,7 +43,7 @@ def _vectors_match(v1, v2, *, tol: float = _TOLERANCE, ignore_order: bool = Fals
         if len(v1) != len(v2):
             return False
         for a, b in zip(v1, v2):
-            if pd.isna(a) and pd.isna(b):
+            if _isna(a) and _isna(b):
                 continue
             elif isinstance(a, (int, float)) and isinstance(b, (int, float)):
                 if not math.isclose(float(a), float(b), abs_tol=tol):
@@ -44,9 +55,9 @@ def _vectors_match(v1, v2, *, tol: float = _TOLERANCE, ignore_order: bool = Fals
         return False
 
 
-def _compare_pandas_table(
-    pred: pd.DataFrame,
-    gold: pd.DataFrame,
+def _compare_table(
+    pred_cols: list[list],
+    gold_cols: list[list],
     *,
     condition_cols: list[int],
     ignore_order: bool,
@@ -54,31 +65,36 @@ def _compare_pandas_table(
     """Port of Spider2 eval_utils.compare_pandas_table.
 
     Column-CONTAINMENT (not positional row equality): restrict gold to
-    ``condition_cols`` (all columns when empty), transpose both tables to
-    column-vectors, and require that EVERY gold column-vector matches SOME
-    pred column-vector. Extra pred columns are therefore tolerated.
+    ``condition_cols`` (all columns when empty), then require that EVERY gold
+    column-vector matches SOME pred column-vector. Extra pred columns are
+    therefore tolerated. Inputs are already transposed to column-vectors.
     """
     if condition_cols:
-        gold_cols = gold.iloc[:, condition_cols]
+        gold_vecs = [gold_cols[c] for c in condition_cols]
     else:
-        gold_cols = gold
-    pred_cols = pred
+        gold_vecs = gold_cols
 
-    t_gold_list = gold_cols.transpose().values.tolist()
-    t_pred_list = pred_cols.transpose().values.tolist()
-
-    for gold_vec in t_gold_list:
+    for gold_vec in gold_vecs:
         if not any(
             _vectors_match(gold_vec, pred_vec, ignore_order=ignore_order)
-            for pred_vec in t_pred_list
+            for pred_vec in pred_cols
         ):
             return False
     return True
 
 
-def _fetch_df(con: duckdb.DuckDBPyConnection, table: str) -> pd.DataFrame:
-    """SELECT * FROM `table` as a DataFrame (mirrors Spider2 fetchdf())."""
-    return con.execute(f'SELECT * FROM "{table}"').fetchdf()
+def _fetch_columns(con: duckdb.DuckDBPyConnection, table: str) -> list[list]:
+    """``SELECT * FROM `table``` as a list of column-vectors (transposed rows).
+
+    Replaces Spider2's ``fetchdf().transpose().values.tolist()``: DuckDB's
+    ``.fetchall()`` yields native Python scalars in row order (NULL -> None),
+    and ``.description`` fixes the column count so a zero-row table still
+    yields one empty vector per column.
+    """
+    cur = con.execute(f'SELECT * FROM "{table}"')
+    rows = cur.fetchall()
+    ncols = len(cur.description)
+    return [[row[j] for row in rows] for j in range(ncols)]
 
 
 def compare_duckdb(*, predicted_db: Path, gold_db: Path, spec: EvalSpec) -> bool:
@@ -92,23 +108,23 @@ def compare_duckdb(*, predicted_db: Path, gold_db: Path, spec: EvalSpec) -> bool
     """
     gold_con = duckdb.connect(str(gold_db), read_only=True)
     try:
-        gold_tables = [_fetch_df(gold_con, t) for t in spec.condition_tabs]
+        gold_tables = [_fetch_columns(gold_con, t) for t in spec.condition_tabs]
     finally:
         gold_con.close()
 
     pred_con = duckdb.connect(str(predicted_db), read_only=True)
     try:
         try:
-            pred_tables = [_fetch_df(pred_con, t) for t in spec.condition_tabs]
+            pred_tables = [_fetch_columns(pred_con, t) for t in spec.condition_tabs]
         except Exception:
             return False
     finally:
         pred_con.close()
 
-    for i, (gold_df, pred_df) in enumerate(zip(gold_tables, pred_tables)):
-        if not _compare_pandas_table(
-            pred_df,
-            gold_df,
+    for i, (gold_cols, pred_cols) in enumerate(zip(gold_tables, pred_tables)):
+        if not _compare_table(
+            pred_cols,
+            gold_cols,
             condition_cols=spec.condition_cols[i],
             ignore_order=spec.ignore_orders[i],
         ):

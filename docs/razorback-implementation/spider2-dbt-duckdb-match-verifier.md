@@ -266,3 +266,22 @@ Closed the cycle-5 shell-injection class definitively. The cycle-4 basename guar
 ### Summary
 
 Closed the symmetric predicted-DB injection that the cycle-5 gold allowlist didn't cover. Both verifier arguments derived from external task input — `db_name` (from `profiles.yml` `path:`) and `gold_basename` (from the eval spec) — are now `shlex.quote`'d at the single test.sh emission point, so neither can be interpreted as shell syntax during verification regardless of source. The gold allowlist stays (it additionally blocks path-traversal, which quoting alone wouldn't). One-line template change + quoted format args + one load-bearing regression (profiles `$()` path). Cycles 1-5 intact; spider2_dbt suite 67 passed. The entire verifier shell boundary (both args, traversal + injection) is now sealed.
+
+### Cycle 7 — validation gate REJECTED (2026-06-18, captain via Codex review)
+
+7th adversarial Codex pass found a runtime-dependency gap (different class from the shell-boundary cycles); captain chose fix-now via the duckdb-only re-port. Confirmed live. Routing back to `implementation`:
+
+1. **[high] Verifier imported undeclared/uninstalled `pandas` → crash-on-import before reward.json.**
+   `duckdb_match.py` imported `pandas` at module level; `verify.py` (which imports it) runs INSIDE the task image via `python /tests/verify.py`. The image is guaranteed to have `duckdb` (the build-time preflight imports it), but NOT `pandas` — it is not in `pyproject.toml` and dbt-duckdb does not pull it in as a core dep. In an image without pandas the verifier dies during import before `emit_reward()` writes `/logs/verifier/reward.json`, turning valid runs into infra failures.
+   **Fix (chosen direction: remove pandas):** re-port the column-containment compare onto duckdb's own `.fetchall()`/`.description` + stdlib (`sorted`, `math.isclose`), so the verifier depends ONLY on duckdb — the one library the image is already required to have. Keep all behavioral comparator tests green unchanged (the faithfulness net). Rejected alternative: keep pandas + add a `RUN pip install pandas` layer (network/pip/version assumptions, image bloat).
+
+## Stage Report: implementation (cycle 7)
+
+- DONE: Remove the `pandas` import from the verifier comparator; re-port on duckdb-native + stdlib.
+  `duckdb_match.py` no longer imports pandas. `_fetch_columns` replaces `fetchdf().transpose().values.tolist()` with `cur.fetchall()` + `cur.description` (column count) → list of column-vectors of native Python scalars (NULL→None); a zero-row table still yields one empty vector per column. `_isna` (`x is None or NaN-float`) replaces `pd.isna`; `_vectors_match`, the Spider2 sort key, the `math.isclose(abs_tol=1e-2)` numeric path, condition_cols restriction, the column-containment loop, the per-table AND, and the missing-pred-table→False try/except are all preserved verbatim. Only duckdb (already required by the build-time preflight) is imported.
+- DONE: Keep the behavioral comparator tests green unchanged (faithfulness net).
+  All comparator tests pass unmodified: matching/mismatched DBs, all-tables-AND, missing predicted table→False, float within/beyond 1e-2 tolerance, column-containment reorder, extra-pred-column tolerated, condition_cols restrict + diff-detected, row-reorder match/mismatch under ignore_orders, multi-table gold-line mismatch. spider2_dbt suite (comparator/verify_cli/harbor_view/translate) = 67 passed. `grep import pandas` over `benchmarks/spider2_dbt/` → none (only a docstring `pd.isna` mention).
+
+### Summary
+
+Removed the verifier's `pandas` dependency by re-porting the comparator onto duckdb-native fetch + stdlib. `verify.py` now imports only `duckdb` — the single library the verify-time task image is already guaranteed to ship (proven by the build-time preflight that imports it) — so the emitted verifier can no longer crash-on-import in a dbt-duckdb image that lacks pandas (which is neither a project dep nor installed by any injected layer). The Spider2 `duckdb_match` semantics are preserved verbatim (column-containment, `isclose` 1e-2, Spider2 sort key, condition_cols, multi-table AND, missing-table→0, NA==NA); the full behavioral comparator suite stays green UNCHANGED as the faithfulness proof. Cycles 1-6 intact; spider2_dbt suite 67 passed. The verifier now has zero undeclared runtime deps.
