@@ -1,8 +1,9 @@
 ---
+
 id: wjfra5rje67399g6msza9zg6
 title: dab-net — block huggingface.co + dataset CDN egress at the network layer
 status: backlog
-source: 2026-05-23 7q validation cheating-audit finding — even after the workspace README adds leak-guard prose (sibling `k3`) and the verify stage gains an external-oracle audit (sibling `wp`), the network layer remains the irrefutable guard. agnews's `load_dataset` call succeeded because `dab-net` bridge has unrestricted public egress to `huggingface.co`. A hard network block would have closed the attack path at the lowest layer regardless of prompt or library. Auto-approve: false because network policy is infrastructure-facing and irreversible mid-run.
+source: '2026-05-23 7q validation cheating-audit finding — even after the workspace README adds leak-guard prose (sibling `k3`) and the verify stage gains an external-oracle audit (sibling `wp`), the network layer remains the irrefutable guard. agnews''s `load_dataset` call succeeded because `dab-net` bridge has unrestricted public egress to `huggingface.co`. A hard network block would have closed the attack path at the lowest layer regardless of prompt or library. Auto-approve: false because network policy is infrastructure-facing and irreversible mid-run.'
 score: 0.78
 auto-approve: false
 worktree:

@@ -1,8 +1,9 @@
 ---
+
 id: jpfj5pv1d00zpgtem00q949b
 title: commit small experiment artifacts by default (split bulky vs scoring-essential)
 status: backlog
-source: goal1-resume-spacedock-first 2026-05-22 — `.gitignore: runs/` blanket-ignored per-cell scoring artifacts (KB-scale validation.json, reward_per_query.json, summary.json, provenance.yaml) alongside bulky stuff (dataset tasks/ copies). Worktree teardown destroyed both, leaving nothing committable.
+source: 'goal1-resume-spacedock-first 2026-05-22 — `.gitignore: runs/` blanket-ignored per-cell scoring artifacts (KB-scale validation.json, reward_per_query.json, summary.json, provenance.yaml) alongside bulky stuff (dataset tasks/ copies). Worktree teardown destroyed both, leaving nothing committable.'
 started:
 completed:
 verdict:
@@ -10,8 +11,7 @@ score: 0.85
 worktree:
 issue:
 pr:
-mod-block:
-archived: 2026-05-22T23:14:13Z
+mod-block: 'archived: 2026-05-22T23:14:13Z'
 ---
 
 ## Problem

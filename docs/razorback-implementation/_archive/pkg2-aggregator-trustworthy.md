@@ -1,8 +1,9 @@
 ---
+
 id: f4vk47r17zgms9dgezgckmp9
 title: PKG-2 — Aggregator trustworthiness (errored-vs-completed, trial_name pairing, sampling validation, partial-DAB labeling, n<5 guard, silent-drop guard)
 status: backlog
-source: ML review Rev 2 (2026-05-19): P0-1, P0-2, P1-1, P1-2, P1-3, P1-4
+source: 'ML review Rev 2 (2026-05-19): P0-1, P0-2, P1-1, P1-2, P1-3, P1-4'
 started:
 completed:
 verdict:

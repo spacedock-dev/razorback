@@ -1,8 +1,9 @@
 ---
+
 id: etm8kjzn1vcvptabc341wnww
 title: translate.py threads prompt_file through to harbor on the claude-cli path
 status: backlog
-source: 2026-05-24 k4 plan-stage AC-3 schema audit (entity `translate-reasoning-effort-thread-through-claude-cli`, validation report `## Stage Report: validation` and the entity body `## Implementation plan (inline)` T4 audit table). The audit enumerated `ClaudeCliAgentBlock`'s 6 fields against the post-fix claude-cli kwargs builder in `src/razorback/translate.py:178-202`. Five fields threaded correctly post-k4-merge; `prompt_file` is the one remaining declared-but-not-threaded field — schema admits it but the translator never reads it. Captain authorized deferral to a follow-on entity at k4 plan stage 2026-05-24; k4 ensign filed the follow-on recommendation in its impl stage report.
+source: '2026-05-24 k4 plan-stage AC-3 schema audit (entity `translate-reasoning-effort-thread-through-claude-cli`, validation report `## Stage Report: validation` and the entity body `## Implementation plan (inline)` T4 audit table). The audit enumerated `ClaudeCliAgentBlock`''s 6 fields against the post-fix claude-cli kwargs builder in `src/razorback/translate.py:178-202`. Five fields threaded correctly post-k4-merge; `prompt_file` is the one remaining declared-but-not-threaded field — schema admits it but the translator never reads it. Captain authorized deferral to a follow-on entity at k4 plan stage 2026-05-24; k4 ensign filed the follow-on recommendation in its impl stage report.'
 score: 0.78
 auto-approve: false
 worktree:

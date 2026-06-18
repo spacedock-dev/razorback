@@ -1,8 +1,9 @@
 ---
+
 id: 8yb8fzx5549j8q1w23c7xbr9
 title: Port DAB upstream's taint scanner + read-only rootfs + read-only DuckDB extension cache
 status: backlog
-source: 2026-05-23 7q validation cheating-audit finding + DAB upstream's design at `~/git/dataagentbench/docs/harness/scored-run-egress-taint-and-duckdb-preinstall.md` (status `review` upstream, not yet shipped). The upstream design pairs the egress taint scanner with read-only rootfs + read-only DuckDB extension cache so attempt-time `pip install` / `INSTALL postgres` provably fail and any blocked attempt is recorded in `taint.json`. This is the structural-mechanism leak guard (vs prompt+trace which are soft layers). Auto-approve: false because it's infrastructure-shaping; needs captain veto power.
+source: '2026-05-23 7q validation cheating-audit finding + DAB upstream''s design at `~/git/dataagentbench/docs/harness/scored-run-egress-taint-and-duckdb-preinstall.md` (status `review` upstream, not yet shipped). The upstream design pairs the egress taint scanner with read-only rootfs + read-only DuckDB extension cache so attempt-time `pip install` / `INSTALL postgres` provably fail and any blocked attempt is recorded in `taint.json`. This is the structural-mechanism leak guard (vs prompt+trace which are soft layers). Auto-approve: false because it''s infrastructure-shaping; needs captain veto power.'
 score: 0.85
 auto-approve: false
 worktree:

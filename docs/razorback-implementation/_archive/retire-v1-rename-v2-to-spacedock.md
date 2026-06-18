@@ -1,17 +1,17 @@
 ---
+
 id: 5f192b62951w0v5wx45fw8qm
 title: retire v1 SpacedockSolverAgent + rename v2 to spacedock (clean cut, no rollback alias)
 status: done
-source: 2026-05-23 session — captain decision after auditing v1 callers (zero production specs use kind `spacedock-solver`; all callers are test-only). The `_v2` suffix on the canonical agent leaks rewrite history into every spec. Captain directive: "i don't care about old runs, as long as new fresh run works." Supersedes `t1 phase6-promote-v2-canonical` and `sd phase7-delete-legacy` from the original reconciliation plan.
+source: '2026-05-23 session — captain decision after auditing v1 callers (zero production specs use kind `spacedock-solver`; all callers are test-only). The `_v2` suffix on the canonical agent leaks rewrite history into every spec. Captain directive: "i don''t care about old runs, as long as new fresh run works." Supersedes `t1 phase6-promote-v2-canonical` and `sd phase7-delete-legacy` from the original reconciliation plan.'
 started: 2026-05-23T04:11:11Z
 completed: 2026-05-23T04:57:55Z
 verdict: REJECTED
 score: 0.85
-worktree: 
+worktree:
 issue:
 pr:
-mod-block:
-archived: 2026-05-23T04:57:55Z
+mod-block: 'archived: 2026-05-23T04:57:55Z'
 ---
 
 ## Problem
