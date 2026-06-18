@@ -350,3 +350,37 @@ def test_link_mode_injects_layers_but_never_mutates_source_dockerfile(tmp_path):
     # symlink, and no idempotency marker leaked back into the source.
     assert source_dockerfile.read_text() == source_dockerfile_before
     assert "Razorback:" not in source_dockerfile.read_text()
+
+
+def test_link_mode_preflight_script_never_mutates_source_named_file(tmp_path):
+    """A source task that happens to ship environment/razorback_spider2_preflight.py
+    must not be corrupted in link mode.
+
+    `_ensure_workspace_preflight_image_layer` writes the preflight script to
+    environment/razorback_spider2_preflight.py. Under `view_mode="link"` the
+    reflected file is a symlink back into the source tree, so an unguarded
+    `write_text` would follow the link and overwrite the user's source file —
+    the same symlink-write-through class fixed for the Dockerfile/task.toml.
+    """
+    source = _write_source(
+        tmp_path / "source", with_packages=True, with_duckdb=True
+    )
+    source_script = source / "environment" / "razorback_spider2_preflight.py"
+    source_script_before = "# user's own file, not the generated preflight\n"
+    source_script.write_text(source_script_before)
+
+    view = materialize_spider2_harbor_task_view(
+        source_task_dir=source,
+        view_root=tmp_path / "views",
+        task_slug="spider2-fixture-001",
+        view_mode="link",
+    )
+
+    # The view owns a real preflight script carrying the generated content.
+    view_script = view / "environment" / "razorback_spider2_preflight.py"
+    assert view_script.is_file()
+    assert not view_script.is_symlink()
+    assert "def preflight_spider2_workspace" in view_script.read_text()
+
+    # The SOURCE file is byte-for-byte unchanged — no write followed the symlink.
+    assert source_script.read_text() == source_script_before

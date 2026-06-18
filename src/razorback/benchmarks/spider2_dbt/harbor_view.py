@@ -202,6 +202,13 @@ def _ensure_workspace_preflight_image_layer(
         return
 
     script_path = environment_dir / "razorback_spider2_preflight.py"
+    # In `view_mode="link"` a source task that ships a file with this exact name
+    # is reflected as a symlink back into the shared source tree; writing through
+    # it would follow the link and corrupt the version-controlled source. Replace
+    # the symlink with a real, view-owned file so the write stays inside the view
+    # (mirrors the Dockerfile/task.toml unlink-then-write guards).
+    if script_path.is_symlink():
+        script_path.unlink()
     script_path.write_text(preflight_script_text())
 
     text = dockerfile.read_text()
