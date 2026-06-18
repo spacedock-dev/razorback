@@ -12,6 +12,18 @@ TASK_VIEW_MANIFEST = "view_manifest.json"
 TASK_VIEW_MANIFEST_SCHEMA_VERSION = 2
 
 
+def task_views_root(run_dir: Path) -> Path:
+    """The single root where Harbor task-view manifests live.
+
+    The run orchestrator materializes views under tasks_root = run_dir/"tasks"
+    (cli/run.py threads it into spec_to_job_config; translate.py materializes
+    there). Solver freeze-identity discovery and the scoring aggregator MUST
+    resolve this same root so a spider2-dbt run's benchmark identity propagates
+    end-to-end. See plan: harbor-view-task-identity-scored-runs (direction b).
+    """
+    return run_dir / "tasks"
+
+
 def utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
