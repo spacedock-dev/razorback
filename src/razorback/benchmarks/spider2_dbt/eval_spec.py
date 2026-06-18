@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
+
+# Conservative allowlist for the spec-supplied gold DB basename. A real Spider2
+# gold filename is a plain `<word>.duckdb`; restricting to this set blocks path
+# traversal AND shell injection at the trust boundary (see load_eval_spec).
+_SAFE_GOLD_RE = re.compile(r"[A-Za-z0-9._-]+\.duckdb")
 
 
 @dataclass(frozen=True)
@@ -132,17 +138,22 @@ def load_eval_spec(path: Path) -> EvalSpec:
             "guard)"
         )
     # `gold` is external Spider2 input that the materializer joins onto a path
-    # (tests/gold/<gold>) and emits into test.sh (--gold-db /tests/<gold>). It is
-    # documented as a bare basename; reject absolute paths, separators, and `..`
-    # so a malformed/hostile spec cannot read or write outside the verifier-only
-    # gold area. Fail closed at the trust boundary, not downstream.
+    # (tests/gold/<gold>) and emits UNQUOTED into the verifier test.sh
+    # (--gold-db /tests/<gold>). A conservative allowlist closes the whole class
+    # at the trust boundary: it subsumes the path checks (no separators, `..`, or
+    # absolute paths get through) AND rejects shell metacharacters/whitespace, so
+    # a malformed/hostile spec can neither escape tests/gold/ nor inject shell
+    # syntax into the verifier script. Real Spider2 gold names are plain
+    # `<word>.duckdb`, so this is tighter than the data requires by design.
     if isinstance(gold, str) and gold.strip():
         g = gold.strip()
-        if Path(g).name != g or g in (".", ".."):
+        if not _SAFE_GOLD_RE.fullmatch(g):
             raise ValueError(
-                f"unsafe evaluation.parameters.gold {gold!r} in {path}: must be "
-                "a bare .duckdb basename (no path separators, '..', or absolute "
-                "path) — refusing to score outside tests/gold/ (fail-closed)"
+                f"unsafe evaluation.parameters.gold {gold!r} in {path}: must "
+                "match [A-Za-z0-9._-]+.duckdb (a bare .duckdb basename, no path "
+                "separators, '..', whitespace, or shell metacharacters) — "
+                "refusing to score outside tests/gold/ or inject into test.sh "
+                "(fail-closed)"
             )
         gold = g
 

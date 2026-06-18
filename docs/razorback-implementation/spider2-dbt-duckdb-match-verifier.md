@@ -228,3 +228,22 @@ Cycle-3-fix re-validation (commit a677c36) — independent verification only, no
 ### Summary
 
 Resolved the cycle-4 path-traversal defect. `load_eval_spec` now fails closed on any `gold` that is not a bare basename (`..`, `.`, absolute, or containing separators), sanitizing the value at the trust boundary so both the materializer's `copy2` targets and the emitted `--gold-db /tests/<gold>` path stay inside the verifier-only gold area. One file + one parametrized test (5 cases); cycles 1-3 left intact. spider2_dbt suite green (62 across comparator/harbor_view/verify_cli/translate).
+
+### Cycle 5 — validation gate REJECTED (2026-06-18, captain via Codex review)
+
+5th adversarial Codex pass found the cycle-4 basename guard still admits shell metacharacters; captain chose fix-now. Confirmed live. Routing back to `implementation`:
+
+1. **[high] Spec-controlled gold basename emitted UNQUOTED into test.sh → shell injection.**
+   The cycle-4 guard rejects separators/`..`/absolute, but a POSIX-valid basename like `x.duckdb; echo '{"reward":1.0}' > /logs/verifier/reward.json #` has no separator, so `Path(g).name == g` passes; it is then interpolated unquoted into `--gold-db /tests/<gold>` in test.sh and executes as shell during verification. External task input → trust boundary.
+   **Fix:** replace the basename guard in `load_eval_spec` with a conservative allowlist `^[A-Za-z0-9._-]+\.duckdb$` (subsumes the path checks AND blocks metacharacters/whitespace). Add `;`/space/`$()` regression cases. Keep cycles 1-4 intact.
+
+## Stage Report: implementation (cycle 5)
+
+- DONE: Replace the cycle-4 basename guard with a conservative allowlist at the trust boundary.
+  `eval_spec.py`: `_SAFE_GOLD_RE = re.compile(r"[A-Za-z0-9._-]+\.duckdb")`; `load_eval_spec` rejects any non-`None` `gold` that fails `fullmatch`. Strictly tighter than the cycle-4 check — separators, `..`, absolute, whitespace, and shell metacharacters all fail closed at parse, so neither the materializer's `copy2` nor the unquoted test.sh `--gold-db` can be subverted. Bare-fixture `gold=None` → `gold.duckdb` fallback (safe) unchanged.
+- DONE: Regression cases for shell-injection + wrong-suffix gold values.
+  Parametrized `test_..._rejects_non_basename_gold` extended to 9 cases: the 4 path cases plus `x.duckdb; … #`, `g.duckdb $(id)`, `g .duckdb` (space), `g.sqlite` (wrong suffix). spider2_dbt suite (comparator/harbor_view/verify_cli/translate) = 66 passed. Cycles 1-4 untouched.
+
+### Summary
+
+Closed the cycle-5 shell-injection class definitively. The cycle-4 basename guard is replaced by a conservative `[A-Za-z0-9._-]+\.duckdb` allowlist in `load_eval_spec`, which subsumes the path-traversal checks and additionally rejects whitespace and shell metacharacters — so a spec-supplied gold name can neither escape `tests/gold/` nor inject into the unquoted `--gold-db` argument of the emitted test.sh. This is a terminal trust-boundary fix (allowlist, not edge-by-edge): one regex + the cycle-4 guard swap, 4 new regression cases (9 total). Cycles 1-4 intact; spider2_dbt suite 66 passed.

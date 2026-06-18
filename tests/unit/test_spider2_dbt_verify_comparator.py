@@ -186,14 +186,27 @@ def test_spider2_dbt_verify_load_eval_spec_missing_evaluation_raises(tmp_path: P
 
 @pytest.mark.parametrize(
     "bad_gold",
-    ["../dbt_project/foo.duckdb", "/etc/passwd", "sub/dir/g.duckdb", "..", "."],
+    [
+        # path traversal / separators / absolute
+        "../dbt_project/foo.duckdb",
+        "/etc/passwd",
+        "sub/dir/g.duckdb",
+        "..",
+        ".",
+        # shell injection into the unquoted test.sh --gold-db arg
+        "x.duckdb; echo '{\"reward\":1.0}' > /logs/verifier/reward.json #",
+        "g.duckdb $(id)",
+        "g .duckdb",
+        "g.sqlite",  # wrong suffix
+    ],
 )
 def test_spider2_dbt_verify_load_eval_spec_rejects_non_basename_gold(
     tmp_path: Path, bad_gold: str
 ):
     # `gold` is external Spider2 input the materializer joins onto a path and
-    # emits into test.sh. A `..`/absolute/separator value would let the verifier
-    # read or write outside tests/gold/, so it must fail closed at parse time.
+    # emits UNQUOTED into test.sh. A `..`/absolute/separator value escapes
+    # tests/gold/; a shell-metacharacter/whitespace value injects into the
+    # verifier script. The conservative allowlist must fail both closed at parse.
     spec_path = tmp_path / "spider2_eval.jsonl"
     spec_path.write_text(
         json.dumps(
