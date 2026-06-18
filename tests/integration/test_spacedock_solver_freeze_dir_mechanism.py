@@ -303,7 +303,9 @@ def test_freeze_dir_includes_explicit_benchmark_task_identity(tmp_path):
 
 def test_freeze_dir_discovers_benchmark_task_identity_from_view_manifest(tmp_path):
     run_dir = tmp_path / "run"
-    view = run_dir / "_razorback" / "task_views" / "ade-bench-task-a"
+    # Discovery must resolve the manifest at the producer's tasks_root
+    # (run_dir/tasks), not the dead _razorback/task_views root. AC-2.
+    view = run_dir / "tasks" / "ade-bench-task-a"
     view.mkdir(parents=True)
     (view / "view_manifest.json").write_text(
         '{"benchmark_kind":"ade-bench","benchmark_task_id":"task-a"}'
@@ -319,6 +321,28 @@ def test_freeze_dir_discovers_benchmark_task_identity_from_view_manifest(tmp_pat
 
     assert with_identity.sealed_hash != without_identity.sealed_hash
     assert with_identity.resolve_freeze_dir() != without_identity.resolve_freeze_dir()
+
+
+def test_discovery_resolves_manifest_under_tasks_root(tmp_path):
+    """AC-2: the freeze-identity discovery scan reads the manifest the producer
+    materializes under run_dir/tasks (tasks_root), not the dead
+    _razorback/task_views root. Asserts the resolved identity directly."""
+    run_dir = tmp_path / "run"
+    view = run_dir / "tasks" / "spider2-dbt-bq001"
+    view.mkdir(parents=True)
+    (view / "view_manifest.json").write_text(
+        '{"benchmark_kind":"spider2-dbt","benchmark_task_id":"bq001"}'
+    )
+    logs_dir = _make_harbor_run_dir(tmp_path, "spider2-dbt-bq001__abc1234")
+    workflow = tmp_path / "solver"
+    workflow.mkdir()
+    (workflow / "README.md").write_text("## Stages\n- model\n")
+
+    agent = SpacedockSolverAgent(logs_dir=logs_dir, **_common_kwargs(workflow))
+    identity = agent._discover_task_identity_from_manifest()
+
+    assert identity["benchmark_kind"] == "spider2-dbt"
+    assert identity["benchmark_task_id"] == "bq001"
 
 
 def test_translator_includes_codex_reasoning_kwargs_for_canonical_agent(tmp_path):

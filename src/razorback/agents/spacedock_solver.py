@@ -14,6 +14,7 @@ from harbor.environments.base import BaseEnvironment
 from razorback.agents.seal import compute_sealed_hash, prompt_sha256  # noqa: F401
 from razorback.errors import RazorbackError, SeedMismatchError
 from razorback.freeze_dir_default import resolve_default_freeze_dir
+from razorback.harbor_tasks.manifest import task_views_root
 
 
 _REQUIRED_PHASE_STATS_KEYS = (
@@ -337,7 +338,7 @@ class SpacedockSolverAgent(BaseAgent):
             return {}
         run_dir = self._resolve_run_dir_from_logs_dir(Path(self.logs_dir))
         trial_prefix = trial_name.split("__", 1)[0]
-        views_root = run_dir / "_razorback" / "task_views"
+        views_root = task_views_root(run_dir)
         if not views_root.is_dir():
             return {}
         for manifest_path in sorted(views_root.glob("*/view_manifest.json")):
