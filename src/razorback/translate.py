@@ -42,6 +42,26 @@ RAZORBACK_CODEX_IMPORT_PATH = (
 )
 SPACEDOCK_SOLVER_CONTAINER_FREEZE_ROOT = "/razorback-freeze"
 
+SPIDER2_DBT_SHORT_NAME = "spider2-dbt"
+
+
+def _is_spider2_dbt_dataset(dataset_ref: str) -> bool:
+    """True when a `kind: harbor` dataset ref names the spider2-dbt family.
+
+    Mirrors the ade-bench dataset-ref flow: the dataset ref is the family
+    signal. The fully-qualified `<org>/spider2-dbt@<ref>` form resolves to
+    short_name == "spider2-dbt"; the bare `spider2-dbt@1.0` form is the
+    `harbor download` CLI concept (not a valid spec dataset) and raises on
+    parse, so the helper swallows the error and returns False.
+    """
+    from harbor.models.package.reference import PackageReference
+
+    try:
+        parsed = PackageReference.parse(dataset_ref)
+    except Exception:
+        return False
+    return parsed.short_name == SPIDER2_DBT_SHORT_NAME
+
 
 def spec_to_job_config(
     spec: Spec,
