@@ -164,3 +164,30 @@ def test_translator_resolves_dabstep_via_package_dataset_client(tmp_path):
     assert resolved_path.exists()
     assert (resolved_path / "task.toml").exists()
     assert (resolved_path / "instruction.md").exists()
+
+
+def test_generic_harbor_path_writes_no_view_manifest(tmp_path):
+    """AC-3: the generic harbor-local path emits TaskConfig(path=source) and
+    materializes NO view_manifest under tasks_root. Identity on this path must
+    keep coming from stratum.json / trial-name parsing, not manifest discovery,
+    so the tasks_root reconciliation (direction b) leaves it untouched.
+    """
+    spec = _make_spec(
+        benchmark=HarborLocalBenchmarkBlock(
+            kind="harbor-local",
+            tasks_root=FIXTURE_ADE_TASKS,
+            tasks=["adebench-fixture-001"],
+        ),
+    )
+    job_config, trial_name_map = spec_to_job_config(
+        spec, job_name="testjob", jobs_dir=tmp_path
+    )
+    run_dir = tmp_path / "testjob"
+    # Task path points at the source dir, not a materialized view under run_dir/tasks.
+    assert job_config.tasks[0].path == FIXTURE_ADE_TASKS / "adebench-fixture-001"
+    # No manifests materialized under the shared task-views root (run_dir/tasks).
+    tasks_root = run_dir / "tasks"
+    manifests = list(tasks_root.glob("*/view_manifest.json")) if tasks_root.is_dir() else []
+    assert manifests == []
+    # Generic path leaves the per-query rewiring map empty (no spider2 wiring).
+    assert trial_name_map == {}
