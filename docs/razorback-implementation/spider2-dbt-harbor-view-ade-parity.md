@@ -10,7 +10,7 @@ score:
 worktree: .worktrees/spacedock-ensign-spider2-dbt-harbor-view-ade-parity
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 ---
 
 ## Problem
