@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import shlex
 import shutil
+import stat
 from pathlib import Path
 from typing import Literal
 
+from razorback.benchmarks.spider2_dbt import duckdb_match as _duckdb_match_mod
+from razorback.benchmarks.spider2_dbt import eval_spec as _eval_spec_mod
+from razorback.benchmarks.spider2_dbt import verify as _verify_mod
 from razorback.benchmarks.spider2_dbt.preflight import (
     preflight_script_text,
     resolve_spider2_db_name,
@@ -46,6 +50,21 @@ _SPIDER2_WORKSPACE_PREFLIGHT_MARKER = (
     "# Razorback: validate spider2-dbt source DuckDB before agent runtime."
 )
 
+# Emitted into the view's tests/ — Harbor uploads tests/ to the container only
+# at verify time, so the gold .duckdb + eval spec reach the verifier but never
+# the agent. `{predicted_db}` is filled from `resolve_spider2_db_name` (the
+# SHARED `/app/<db_name>.duckdb` contract) so the verifier scores the SAME
+# DuckDB the build-time preflight validated — NOT a hardcoded /app/spider2.duckdb.
+_TEST_SH_TEMPLATE = """#!/bin/sh
+set -eu
+mkdir -p /logs/verifier
+python /tests/verify.py \\
+  --predicted-db {predicted_db} \\
+  --gold-db /tests/gold.duckdb \\
+  --eval-spec /tests/spider2_eval.jsonl \\
+  --reward-out /logs/verifier/reward.json
+"""
+
 
 def materialize_spider2_harbor_task_view(
     *,
@@ -75,7 +94,67 @@ def materialize_spider2_harbor_task_view(
     _ensure_spider2_build_context_layer(view)
     _ensure_dbt_deps_image_layer(view)
     _ensure_workspace_preflight_image_layer(view, task_slug=task_slug)
+    _ensure_verifier_assets(
+        view, source_task_dir=Path(source_task_dir), task_slug=task_slug
+    )
     return view
+
+
+def _ensure_verifier_assets(
+    view_dir: Path, *, source_task_dir: Path, task_slug: str
+) -> None:
+    """Copy the comparator + gold data + test.sh into the view's tests/ dir.
+
+    Gold assets are read from the SOURCE task's tests/gold/ (the reflected view
+    stripped them via the **/gold/** deny-glob) and written WITHOUT a `gold/`
+    path segment so `assert_no_denied_paths` stays green while the
+    verifier-uploaded tests/ dir still carries them. The emitted test.sh's
+    `--predicted-db` is `/app/<db_name>.duckdb` where `<db_name>` comes from the
+    SHARED `resolve_spider2_db_name` resolver (RIDER, Codex r5-plan finding) —
+    never a hardcoded `/app/spider2.duckdb`.
+    """
+    source_gold = Path(source_task_dir) / "tests" / "gold"
+    if not source_gold.is_dir():
+        return
+
+    tests = view_dir / "tests"
+    tests.mkdir(parents=True, exist_ok=True)
+    for mod in (_duckdb_match_mod, _eval_spec_mod, _verify_mod):
+        src = Path(mod.__file__)
+        shutil.copy2(src, tests / src.name)
+    shutil.copy2(source_gold / "gold.duckdb", tests / "gold.duckdb")
+    shutil.copy2(source_gold / "spider2_eval.jsonl", tests / "spider2_eval.jsonl")
+
+    # Resolve the agent-facing DuckDB stem from the dbt project (or the slug
+    # fallback) so the verifier compares the SAME `/app/<db_name>.duckdb` the
+    # preflight validated and the agent operates against.
+    project_dir = _dbt_project_dir(view_dir)
+    db_name = resolve_spider2_db_name(
+        project_dir if project_dir is not None else view_dir,
+        task_slug=task_slug,
+    )
+    test_sh = tests / "test.sh"
+    if test_sh.is_symlink():
+        test_sh.unlink()
+    test_sh.write_text(
+        _TEST_SH_TEMPLATE.format(
+            predicted_db=f"{_APP_ROOT}/{db_name}.duckdb"
+        )
+    )
+    test_sh.chmod(
+        test_sh.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+    )
+
+    # The deny-glob reflection strips gold FILES but leaves the now-empty
+    # `gold/` directory behind. Prune empty `gold/`-named dirs so no `gold/`
+    # path segment survives anywhere in the agent-facing view.
+    for gold_dir in sorted(
+        (p for p in view_dir.rglob("gold") if p.is_dir()),
+        key=lambda p: len(p.parts),
+        reverse=True,
+    ):
+        if not any(gold_dir.iterdir()):
+            gold_dir.rmdir()
 
 
 def _has_dbt_project(view_dir: Path) -> bool:
