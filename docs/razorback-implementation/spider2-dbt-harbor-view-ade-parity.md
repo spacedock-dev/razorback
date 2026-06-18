@@ -110,3 +110,27 @@ Ported the three ade_bench harness patterns into a new `spider2_dbt/preflight.py
 ### Summary
 
 Verified all 3 ACs and the mandatory RIDER from a clean clone of the worktree branch: `uv run pytest -k spider2_dbt --ignore=tests/unit/test_task_identity_scoring.py` → 28 passed; the RIDER's COPY-before-preflight ordering and real-`.duckdb`-in-build-context were confirmed by independently exercising the materializer; the `/app` contract is pinned; generic `materialize.py`/`leakage.py` are unchanged and non-spider2 regression is 72 passed; the `razorback.score.load` collection error is pre-existing on base `996d42b`, not a regression. However the code review surfaced — and I independently reproduced — a Critical defect: in the default link materialize mode the new Dockerfile helpers write through the symlinked Dockerfile and corrupt the committed source fixtures (and in production rewrite the user's source task Dockerfile, risking marker-leak that skips layer injection). The generic materializer already guards this exact hazard for `task.toml`. **Gate: REJECTED → implementation** (fix B1 + restore corrupted fixtures + re-run for a clean tree). The corrupted fixtures are intentionally left dirty in the worktree as the reproduction artifact.
+
+## Feedback Cycles
+
+### Cycle 1 — validation gate REJECTED (2026-06-18)
+
+Validation (our own reviewer, no Codex needed) found a Critical defect.
+Routing back to `implementation`:
+
+1. **[Critical] B1 — Dockerfile-writing helpers corrupt the source fixture under link mode.**
+   The three new helpers in `harbor_view.py` (`_ensure_spider2_build_context_layer`,
+   `_ensure_dbt_deps_image_layer`, `_ensure_workspace_preflight_image_layer`)
+   call `dockerfile.write_text(...)` on `environment/Dockerfile`. In the default
+   production path `translate.py:376` maps `bind`->`view_mode="link"`, so that
+   Dockerfile is a SYMLINK back into the source tree — the write follows the link
+   and mutates the version-controlled `spider2-fixture-00{1,2}/environment/Dockerfile`
+   (and can leak the idempotency marker, suppressing layer injection on later runs).
+   This is the same symlink-write-through class fixed for `task.toml` at
+   `materialize.py:140-146`.
+   **Fix:** apply the unlink-then-write pattern (unlink the symlink before
+   `write_text`, so the view owns a real file) in ALL three helpers; restore the
+   two corrupted fixture Dockerfiles to their committed content; add a test
+   proving link mode never mutates the source Dockerfile (mirror
+   `test_link_mode_symlinks_files_but_never_mutates_source_task_toml`). Keep AC-1/2/3
+   + the build-context rider green.
