@@ -221,3 +221,24 @@ def test_n_tasks_caps_spider2_before_materialize(tmp_path, monkeypatch):
         spec, job_name="job", jobs_dir=tmp_path, tasks_root=tmp_path / "tasks"
     )
     assert len(job_config.tasks) == 1
+
+
+from harbor.models.task.config import TaskConfig as HarborTaskConfig
+
+
+def test_materialized_view_carries_benchmark_env(tmp_path, monkeypatch):
+    source = FIXTURE_ROOT / "spider2-fixture-001"
+    monkeypatch.setattr(
+        "razorback.translate._resolve_harbor_dataset_tasks",
+        lambda **k: [source],
+    )
+    spec = _spec(
+        HarborBenchmarkBlock(kind="harbor", dataset="spider2-dbt/spider2-dbt@1.0")
+    )
+    job_config, _ = spec_to_job_config(
+        spec, job_name="job", jobs_dir=tmp_path, tasks_root=tmp_path / "tasks"
+    )
+    view_toml = job_config.tasks[0].path / "task.toml"
+    cfg = HarborTaskConfig.model_validate_toml(view_toml.read_text())
+    assert cfg.environment.env["RAZORBACK_BENCHMARK_KIND"] == "spider2-dbt"
+    assert cfg.environment.env["RAZORBACK_BENCHMARK_TASK_ID"] == "spider2-fixture-001"
