@@ -1,1 +1,1 @@
-{"condition_tabs": ["orders"], "condition_cols": {"orders": [0, 1]}, "ignore_orders": true}
+{"instance_id": "spider2-fixture-001", "evaluation": {"func": "duckdb_match", "parameters": {"gold": "gold.duckdb", "condition_tabs": ["orders"], "condition_cols": [[0, 1]], "ignore_orders": [true]}}}

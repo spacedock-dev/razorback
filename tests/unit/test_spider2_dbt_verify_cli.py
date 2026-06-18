@@ -29,9 +29,21 @@ def _build_db(path, rows):
 
 
 def _spec(path):
+    # Real Spider2 gold-line shape: evaluation.parameters with per-table lists.
     path.write_text(
         json.dumps(
-            {"condition_tabs": ["orders"], "condition_cols": {}, "ignore_orders": True}
+            {
+                "instance_id": "cli-001",
+                "evaluation": {
+                    "func": "duckdb_match",
+                    "parameters": {
+                        "gold": "gold.duckdb",
+                        "condition_tabs": ["orders"],
+                        "condition_cols": [[]],
+                        "ignore_orders": [True],
+                    },
+                },
+            }
         )
         + "\n"
     )

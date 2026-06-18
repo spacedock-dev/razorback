@@ -18,12 +18,22 @@ def build() -> None:
         con.executemany("INSERT INTO orders VALUES (?, ?)", [(1, 100), (2, 200)])
     finally:
         con.close()
+    # Real Spider2 gold-line shape (spider2-dbt/evaluation_suite/evaluate.py):
+    # instance_id + evaluation.parameters with per-table List[List[int]]
+    # condition_cols and List[bool] ignore_orders.
     (HERE / "spider2_eval.jsonl").write_text(
         json.dumps(
             {
-                "condition_tabs": ["orders"],
-                "condition_cols": {"orders": [0, 1]},
-                "ignore_orders": True,
+                "instance_id": "spider2-fixture-001",
+                "evaluation": {
+                    "func": "duckdb_match",
+                    "parameters": {
+                        "gold": "gold.duckdb",
+                        "condition_tabs": ["orders"],
+                        "condition_cols": [[0, 1]],
+                        "ignore_orders": [True],
+                    },
+                },
             }
         )
         + "\n"
