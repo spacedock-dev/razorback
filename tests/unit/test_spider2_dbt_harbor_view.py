@@ -51,6 +51,23 @@ def _write_source(
             conn.execute("CREATE TABLE orders (id INTEGER)")
         finally:
             conn.close()
+    # Every spider2-dbt task is duckdb_match-scored, so the materializer now
+    # fails closed without tests/gold/. Give the source a minimal gold so these
+    # layer-focused tests still materialize (they don't assert on the verifier).
+    import duckdb as _dk
+
+    gold = source / "tests" / "gold"
+    gold.mkdir(parents=True)
+    _conn = _dk.connect(str(gold / "gold.duckdb"))
+    try:
+        _conn.execute("CREATE TABLE orders (id INTEGER); INSERT INTO orders VALUES (1)")
+    finally:
+        _conn.close()
+    (gold / "spider2_eval.jsonl").write_text(
+        '{"instance_id": "spider2-fixture-001", "evaluation": {"func": '
+        '"duckdb_match", "parameters": {"gold": "gold.duckdb", "condition_tabs": '
+        '["orders"], "condition_cols": [[0]], "ignore_orders": [true]}}}\n'
+    )
     lines = dockerfile_lines or [
         "FROM python:3.12",
         "WORKDIR /app",
@@ -263,6 +280,22 @@ def test_preflight_layer_absent_when_not_a_dbt_project(tmp_path):
     (source / "task.toml").write_text(_TASK_TOML)
     (source / "environment" / "Dockerfile").write_text(
         "FROM python:3.12\nCMD [\"bash\"]\n"
+    )
+    # Gold is required (the materializer fails closed without it); this test is
+    # about the preflight layer being absent for a non-dbt source, not scoring.
+    import duckdb as _dk
+
+    gold = source / "tests" / "gold"
+    gold.mkdir(parents=True)
+    _conn = _dk.connect(str(gold / "gold.duckdb"))
+    try:
+        _conn.execute("CREATE TABLE orders (id INTEGER); INSERT INTO orders VALUES (1)")
+    finally:
+        _conn.close()
+    (gold / "spider2_eval.jsonl").write_text(
+        '{"instance_id": "plain-001", "evaluation": {"func": "duckdb_match", '
+        '"parameters": {"gold": "gold.duckdb", "condition_tabs": ["orders"], '
+        '"condition_cols": [[0]], "ignore_orders": [true]}}}\n'
     )
 
     view = materialize_spider2_harbor_task_view(

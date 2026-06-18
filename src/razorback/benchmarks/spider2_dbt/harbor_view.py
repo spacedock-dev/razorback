@@ -120,9 +120,20 @@ def _ensure_verifier_assets(
     spec names a gold file that does not exist under ``tests/gold/``, so the
     verifier never scores against a missing/wrong gold.
     """
+    # Every spider2-dbt task is duckdb_match-scored, so its source MUST ship
+    # tests/gold/spider2_eval.jsonl (+ the named gold DB). A missing gold dir is
+    # NOT a "skip scoring" signal — silently returning would leave the source
+    # test.sh in place (e.g. a stub `exit 0`), materializing an unscored /
+    # trivially-passing task under dataset skew or a resolver bug. Fail closed.
     source_gold = Path(source_task_dir) / "tests" / "gold"
-    if not source_gold.is_dir():
-        return
+    source_spec = source_gold / "spider2_eval.jsonl"
+    if not source_spec.is_file():
+        raise FileNotFoundError(
+            f"spider2-dbt task {task_slug!r} is missing its gold eval spec "
+            f"{source_spec} — every spider2-dbt task is duckdb_match-scored and "
+            "must ship tests/gold/spider2_eval.jsonl + its named gold DB; "
+            "refusing to materialize an unscored task (fail-closed)"
+        )
 
     tests = view_dir / "tests"
     tests.mkdir(parents=True, exist_ok=True)
@@ -134,7 +145,6 @@ def _ensure_verifier_assets(
     # Real Spider2 tasks name the gold per task; scoring the wrong/missing file
     # is a benchmark-correctness defect. A wrapped spec without parameters.gold
     # fails closed inside load_eval_spec.
-    source_spec = source_gold / "spider2_eval.jsonl"
     spec = _eval_spec_mod.load_eval_spec(source_spec)
     gold_basename = spec.gold or "gold.duckdb"
     source_gold_db = source_gold / gold_basename

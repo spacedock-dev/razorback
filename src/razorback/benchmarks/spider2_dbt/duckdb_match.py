@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import math
+from decimal import Decimal
 from pathlib import Path
 
 import duckdb
@@ -107,7 +108,19 @@ def _fetch_columns(con: duckdb.DuckDBPyConnection, table: str) -> list[list]:
     cur = con.execute(f"SELECT * FROM {_quote_ident(table)}")
     rows = cur.fetchall()
     ncols = len(cur.description)
-    return [[row[j] for row in rows] for j in range(ncols)]
+    return [[_normalize(row[j]) for row in rows] for j in range(ncols)]
+
+
+def _normalize(v):
+    """Mirror Spider2's pandas fetchdf() DECIMAL->float64 coercion.
+
+    DuckDB native fetchall() returns ``decimal.Decimal`` for DECIMAL/NUMERIC,
+    but Decimal is ``numbers.Number`` yet NOT ``numbers.Real``, so it would skip
+    ``_vectors_match``'s tolerance branch and a within-1e-2 DECIMAL match would
+    wrongly score 0. Normalize to float in one place so downstream compares see
+    the same scalar types Spider2's pandas path produced.
+    """
+    return float(v) if isinstance(v, Decimal) else v
 
 
 def compare_duckdb(*, predicted_db: Path, gold_db: Path, spec: EvalSpec) -> bool:

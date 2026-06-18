@@ -288,6 +288,27 @@ def test_spider2_dbt_verify_view_missing_named_gold_fails_closed(tmp_path):
         )
 
 
+def test_spider2_dbt_verify_view_missing_gold_dir_fails_closed(tmp_path):
+    # Every spider2-dbt task is duckdb_match-scored, so a source with NO
+    # tests/gold/spider2_eval.jsonl must be a hard materialization error — NOT a
+    # silent pass-through that leaves the source test.sh (e.g. a stub `exit 0`)
+    # in place and yields an unscored / trivially-passing task.
+    import shutil as _shutil
+
+    import pytest
+
+    source = _write_gold_source(
+        tmp_path / "source", gold_basename="g.duckdb", with_default_gold=False
+    )
+    _shutil.rmtree(source / "tests" / "gold")
+    with pytest.raises(FileNotFoundError):
+        materialize_spider2_harbor_task_view(
+            source_task_dir=source,
+            view_root=tmp_path / "views",
+            task_slug="playbook001",
+        )
+
+
 def test_spider2_dbt_verify_test_sh_uses_resolved_db_name(tmp_path):
     # RIDER: the emitted test.sh predicted-DB path must come from
     # resolve_spider2_db_name, NOT a hardcoded /app/spider2.duckdb. This

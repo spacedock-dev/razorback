@@ -304,3 +304,27 @@ Removed the verifier's `pandas` dependency by re-porting the comparator onto duc
 ### Summary
 
 Closed a benchmark-integrity SQL-injection: `condition_tabs` (external eval-spec input) was interpolated raw into the comparator's `SELECT * FROM "<table>"`, letting a hostile spec break out, run an injected statement, and force `reward: 1.0` over mismatched DBs. `_fetch_columns` now quotes the identifier with doubled `"`, so a breakout value becomes an unresolvable identifier and the fetch raises → reward 0 (fail-closed). One helper + one call-site change + one load-bearing regression (verified live that raw injects `[(999,)]` and the fix raises). This is the third trust-boundary arg sealed (gold name → cycle 5, predicted name → cycle 6, table names → now) — SQL this time, not shell. Cycles 1-7 intact; spider2_dbt suite 68 passed.
+
+### Cycle 9 — validation gate REJECTED (2026-06-18, captain via Codex review)
+
+9th adversarial Codex pass found a DECIMAL numeric-tolerance regression (introduced by the cycle-7 pandas removal) and a missing-gold fail-open; captain chose fix-both. Confirmed live. Routing back to `implementation`:
+
+1. **[high] DECIMAL columns skip the `isclose(1e-2)` tolerance (regression from cycle 7).**
+   DuckDB native `fetchall()` returns `decimal.Decimal` for DECIMAL/NUMERIC; `Decimal` is `numbers.Number` but NOT `numbers.Real`, so `_vectors_match`'s `isinstance(_, (int,float))` numeric branch skipped it → `!=` exact compare. Spider2's pandas `fetchdf()` had converted DECIMAL→float64, so a within-1e-2 DECIMAL match scored 0. Verified live: `_vectors_match([D('1.005')],[D('1.000')])` → False.
+   **Fix:** normalize `Decimal`→`float` in `_fetch_columns` (one place; mirrors fetchdf's float64), keeping `_vectors_match`/sort-key identical to Spider2. DECIMAL within/beyond-tolerance regression tests.
+2. **[medium] Missing `tests/gold/` silently kept the source test.sh → unscored task.**
+   `_ensure_verifier_assets` early-returned when `tests/gold/` was absent, leaving the source `test.sh` (e.g. `fixture-002`'s `exit 0`) → a trivially-passing spider2-dbt task under dataset skew / resolver bug.
+   **Fix:** fail closed (raise) when a spider2-dbt source lacks `tests/gold/spider2_eval.jsonl`; give `fixture-002` a real gold so the multi-instance/explain tests exercise two scored tasks; fail-closed materialization regression.
+
+## Stage Report: implementation (cycle 9)
+
+- DONE: DECIMAL tolerance — normalize Decimal→float at fetch.
+  `duckdb_match.py`: new `_normalize(v)` (`float(v) if isinstance(v, Decimal) else v`) applied per cell in `_fetch_columns`; `_vectors_match` and the Spider2 sort key are unchanged (they now see floats exactly as Spider2's pandas path did). 2 regression tests: DECIMAL(10,3) within 1e-2 → match, beyond → mismatch. Load-bearing (without normalize, Decimal `!=` → the within-tol match would score False).
+- DONE: Fail closed on missing gold + make fixture-002 scored.
+  `harbor_view.py`: `_ensure_verifier_assets` now raises `FileNotFoundError` when `tests/gold/spider2_eval.jsonl` is absent (was a silent early-return). `tests/fixtures/.../spider2-fixture-002/tests/gold/` gains a minimal `gold.duckdb` (orders table) + `spider2_eval.jsonl`, so the multi-instance leakage test and the `rk run --explain` integration test now materialize TWO scored tasks. Test helpers `_write_source` (harbor_view) and the non-dbt `plain-001` case updated to ship gold (they assert on layers, not scoring). New `test_..._missing_gold_dir_fails_closed` asserts a no-gold source raises.
+- DONE: full spider2_dbt suite green.
+  `uv run pytest -k spider2_dbt --ignore=tests/unit/test_task_identity_scoring.py` = 92 passed. Comparator faithfulness net (cycles 1/7), shell-boundary quoting (cycles 5/6), SQL-identifier quoting (cycle 8), and AC-3 reward shape all intact.
+
+### Summary
+
+Fixed a benchmark-correctness regression and a fail-open. (1) The cycle-7 pandas removal had left DECIMAL/NUMERIC values as `decimal.Decimal`, which bypassed `_vectors_match`'s `isclose(1e-2)` numeric branch (Decimal is Number, not Real) — so real dbt DECIMAL outputs within tolerance scored 0. Normalizing Decimal→float at fetch (one place) restores Spider2's float64 semantics with the comparator otherwise unchanged. (2) A spider2-dbt source missing `tests/gold/` silently kept its source `test.sh`, materializing an unscored / trivially-passing task; the materializer now fails closed, and `fixture-002` was given a real gold so the multi-instance + explain tests exercise two genuinely-scored tasks. Both proven by load-bearing regressions. Cycles 1-8 intact; spider2_dbt suite 92 passed.

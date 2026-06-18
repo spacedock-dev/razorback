@@ -471,6 +471,25 @@ def test_spider2_dbt_verify_multi_table_gold_line_mismatch(tmp_path):
     assert _compare(tmp_path, pred=pred, gold=gold, spec=spec) is False
 
 
+def test_spider2_dbt_verify_decimal_within_tolerance_matches(tmp_path):
+    # DuckDB returns decimal.Decimal for DECIMAL/NUMERIC columns; Spider2's pandas
+    # path converted those to float64 before math.isclose(abs_tol=1e-2). The
+    # comparator must apply the SAME tolerance to Decimals -> within-tol == match.
+    spec = EvalSpec(condition_tabs=["m"])
+    pred = {"m": (["v"], ["DECIMAL(10,3)"], [(1.005,), (2.000,)])}
+    gold = {"m": (["v"], ["DECIMAL(10,3)"], [(1.000,), (2.004,)])}
+    assert _compare(tmp_path, pred=pred, gold=gold, spec=spec) is True
+
+
+def test_spider2_dbt_verify_decimal_beyond_tolerance_mismatches(tmp_path):
+    # Same DECIMAL path, difference > 1e-2 -> mismatch (proves it's the tolerance
+    # compare, not a string/exact-equality fallback).
+    spec = EvalSpec(condition_tabs=["m"])
+    pred = {"m": (["v"], ["DECIMAL(10,3)"], [(1.050,)])}
+    gold = {"m": (["v"], ["DECIMAL(10,3)"], [(1.000,)])}
+    assert _compare(tmp_path, pred=pred, gold=gold, spec=spec) is False
+
+
 def test_spider2_dbt_verify_condition_tabs_cannot_sql_inject(tmp_path):
     # SECURITY: condition_tabs comes from the external eval spec. A name like
     # `realt"; select 999 ...; --` breaks out of the quoted identifier; DuckDB
