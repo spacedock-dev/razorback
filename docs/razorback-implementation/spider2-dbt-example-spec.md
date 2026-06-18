@@ -1,13 +1,13 @@
 ---
 id: h1cxe6x9zcyfq0zrs0rejsp7
 title: spider2-dbt — user-facing example spec
-status: plan
+status: implementation
 source: follow-up from spider2-dbt-source-resolution-and-run-wiring (no example exercises the new kind:harbor + qualified-ref path)
 started: 2026-06-18T15:54:47Z
 completed:
 verdict:
 score:
-worktree:
+worktree: .worktrees/spacedock-ensign-spider2-dbt-example-spec
 issue:
 pr:
 mod-block:
