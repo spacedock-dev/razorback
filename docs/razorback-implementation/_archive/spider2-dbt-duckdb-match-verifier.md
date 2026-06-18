@@ -1,16 +1,17 @@
 ---
 id: r5hpxtc97nws6qfjc2j8ewz3
 title: spider2-dbt — duckdb_match verifier emitting binary reward.json
-status: implementation
+status: done
 source: Spider2 evaluation_suite/eval_utils.duckdb_match + gold/spider2_eval.jsonl schema; harbor verifier reward.json contract
 started: 2026-06-18T08:49:13Z
-completed:
-verdict:
+completed: 2026-06-18T14:54:02Z
+verdict: PASSED
 score:
-worktree: .worktrees/spacedock-ensign-spider2-dbt-duckdb-match-verifier
+worktree:
 issue:
-pr:
+pr: "#15"
 mod-block:
+archived: 2026-06-18T14:54:02Z
 ---
 
 ## Problem
