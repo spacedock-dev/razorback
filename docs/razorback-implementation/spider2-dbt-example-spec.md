@@ -1,9 +1,9 @@
 ---
 id: h1cxe6x9zcyfq0zrs0rejsp7
 title: spider2-dbt — user-facing example spec
-status: backlog
+status: plan
 source: follow-up from spider2-dbt-source-resolution-and-run-wiring (no example exercises the new kind:harbor + qualified-ref path)
-started:
+started: 2026-06-18T15:54:47Z
 completed:
 verdict:
 score:
