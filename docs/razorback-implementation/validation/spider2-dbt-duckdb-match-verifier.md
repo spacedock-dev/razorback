@@ -383,3 +383,82 @@ negative tests) are load-bearing. Cycle-1 comparator faithfulness and leakage
 scoping are intact (untouched by the fix + re-confirmed live); rider and AC-3
 reward shape intact; no new regressions. Per the convergence plan this was the
 last re-validation before PR.
+
+---
+
+## Re-validation (cycle-3 fix: gold DB basename) — 2026-06-18
+
+Independent re-review after the cycle-3 fix (commit `a677c36`) that threads
+the eval spec's `gold` basename through `EvalSpec` → materializer copy →
+`test.sh --gold-db`, replacing the hardcoded `gold.duckdb`. No production code
+written by this validator.
+
+### Fix is real (production code, branch HEAD `bac0705`)
+
+- `eval_spec.py`: `EvalSpec` gains `gold: str | None`; `load_eval_spec` parses
+  `evaluation.parameters.gold` and RAISES `ValueError` when a wrapped
+  `duckdb_match` spec omits/empties it (`eval_spec.py:128`).
+- `harbor_view.py`: `_ensure_verifier_assets` loads the spec, resolves
+  `gold_basename = spec.gold or "gold.duckdb"`, copies the EXACT named file
+  from `tests/gold/<basename>`, raises `FileNotFoundError` if absent
+  (`harbor_view.py:141`), and formats `_TEST_SH_TEMPLATE` with
+  `--gold-db /tests/{gold_db}` (`:63`, `:164`) — no hardcoded `gold.duckdb`.
+
+### Independent exercise (standalone probe, no test infra) — 11/11 PASS
+
+- Loader: wrapped spec missing `gold` RAISES; empty-string `gold` RAISES;
+  `gold` parsed verbatim (`playbook.duckdb`).
+- Materializer with `parameters.gold = playbook.duckdb` and NO `gold.duckdb`
+  present: `playbook.duckdb` copied; `gold.duckdb` NOT invented; test.sh emits
+  `--gold-db /tests/playbook.duckdb`, no `/tests/gold.duckdb`; leakage-clean
+  (no `gold/` path segment survives).
+- End-to-end over the materialized named gold via `emit_reward`: matching pred
+  → `{"reward": 1.0}`, mismatch → `{"reward": 0.0}`.
+- Missing named gold → `FileNotFoundError` (fail-closed).
+
+### Load-bearing (mutation tests)
+
+- Hardcoding `gold_basename = "gold.duckdb"` in `harbor_view.py` →
+  `test_spider2_dbt_verify_view_uses_non_default_gold_basename` and
+  `..._named_gold_actually_scores` FAIL (2 failed, 6 passed). Restored.
+- Disabling the wrapped-spec missing-`gold` raise in `eval_spec.py` →
+  `test_...load_eval_spec_missing_gold_in_wrapped_spec_raises` FAILS
+  (1 failed, 7 passed). Restored. Tree clean (only `uv.lock`).
+
+### No regression to prior cycles / rider / AC-3
+
+- Cycle-3 diff (`a677c36`) touches ONLY `eval_spec.py` + `harbor_view.py`
+  + their 2 test files. `duckdb_match.py` (cycle-1 comparator, last `61a1b9c`)
+  and `verify.py` (cycle-2 / AC-3, last `869918d`) UNTOUCHED — cycle-1/cycle-2
+  intact by construction.
+- Re-confirmed live: cycle-1 column-containment + `math.isclose(1e-2)` +
+  per-column sort under `ignore_order` + missing-table mismatch (3/3);
+  cycle-2 fail-closed empty-file / wrong-func / empty-`condition_tabs` raises
+  (3/3).
+- Rider: `task_slug=not-spider2-slug` → emitted test.sh
+  `--predicted-db /app/not-spider2-slug.duckdb`, no `/app/spider2.duckdb`
+  (`...test_sh_uses_resolved_db_name` 1 passed).
+- AC-3 reward shape `{"reward": <float>}` intact (end-to-end probe above).
+
+### Suites (clean checkout)
+
+- `uv run pytest -k spider2_dbt --ignore=tests/unit/test_task_identity_scoring.py`
+  = **78 passed**, 751 deselected.
+- `tests/unit/test_translate_spider2_dbt.py` = **13 passed**.
+- Full suite (`--ignore` the broken scoring file) = 813 passed, 4 failed.
+  The 4 failures (`test_spacedock_solver_freeze_dir_mechanism`,
+  `test_worktree_teardown_preserves_runs`, `test_generate_matrix_specs`,
+  `test_rk_research_new`) ALSO fail on merge-base `9c39af2` (verified in a
+  throwaway base worktree) — pre-existing, unrelated, NOT regressions. Branch
+  touches only spider2_dbt-scoped files.
+
+## Gate decision (cycle-3 re-validation)
+
+**PASSED → done.** The cycle-3 gold-basename fix is real and load-bearing: a
+non-default `playbook.duckdb` is honored (copied + scored, leakage-clean), a
+missing named gold fails closed, and a wrapped spec lacking `gold` raises —
+each proven by an independent probe and a mutation test that flips the
+regression tests red. Cycles 1-2, the predicted-DB rider, and the AC-3 reward
+shape are intact (untouched by the fix + re-confirmed live). The only
+remaining full-suite failures are pre-existing on base. Per the convergence
+plan, this is the last re-validation before PR.
