@@ -28,7 +28,7 @@ from pathlib import Path
 import pytest
 
 from razorback.spec.schema import HarborBenchmarkBlock, NopAgentBlock, Spec
-from razorback.translate import spec_to_job_config
+from razorback.translate import SpecError, spec_to_job_config
 
 FIXTURE_ROOT = (
     Path(__file__).parent.parent
@@ -80,28 +80,42 @@ def test_spider2_dataset_requires_tasks_root(tmp_path, monkeypatch):
     spec = _spec(
         HarborBenchmarkBlock(kind="harbor", dataset="spider2-dbt/spider2-dbt@1.0")
     )
-    with pytest.raises(Exception) as exc:
+    with pytest.raises(SpecError) as exc:
         spec_to_job_config(spec, job_name="job", jobs_dir=tmp_path, tasks_root=None)
     assert "tasks_root" in str(exc.value).lower()
 
 
-import subprocess
+_LEAKAGE_TERMS = ("gold", "expected", "golden")
 
 
-def _rg_leakage_hit(view: Path) -> subprocess.CompletedProcess:
-    """Run the rider's unescaped `gold|expected|golden` alternation over a view.
+def _leakage_hits(view: Path) -> list[Path]:
+    """Pure-Python reimplementation of the rider's `rg -l 'gold|expected|golden'`.
 
-    `view_manifest.json` is the materializer's provenance record: it lists the
-    deny globs (`tests/expected/**`, `**/gold/**`, `**/golden/**`) and the
-    checksums of every excluded source file by design — an audit trail, NOT
-    leaked answer content. So the leakage scan excludes the manifest; a hit on
-    any other file means real answer data survived the deny globs.
+    Walks the view dir and reports any file whose NAME or CONTENT matches the
+    case-sensitive alternation `gold|expected|golden` — matching the rider's
+    unescaped `rg -l` semantics. `view_manifest.json` is the materializer's
+    provenance record: it lists the deny globs (`tests/expected/**`,
+    `**/gold/**`, `**/golden/**`) and the checksums of every excluded source
+    file by design — an audit trail, NOT leaked answer content. So the scan
+    excludes the manifest; a hit on any other file means real answer data
+    survived the deny globs.
     """
-    return subprocess.run(
-        ["rg", "-l", "--glob", "!view_manifest.json", "gold|expected|golden", str(view)],
-        capture_output=True,
-        text=True,
-    )
+    hits: list[Path] = []
+    for path in sorted(view.rglob("*")):
+        if not path.is_file():
+            continue
+        if path.name == "view_manifest.json":
+            continue
+        if any(term in path.name for term in _LEAKAGE_TERMS):
+            hits.append(path)
+            continue
+        try:
+            content = path.read_text()
+        except (UnicodeDecodeError, OSError):
+            continue
+        if any(term in content for term in _LEAKAGE_TERMS):
+            hits.append(path)
+    return hits
 
 
 def test_spider2_resolves_n_views_all_leakage_clean(tmp_path, monkeypatch):
@@ -123,10 +137,8 @@ def test_spider2_resolves_n_views_all_leakage_clean(tmp_path, monkeypatch):
         view = task.path
         assert (view / "task.toml").is_file()
         # leakage-clean: no gold/expected/golden answer content survives
-        hit = _rg_leakage_hit(view)
-        assert hit.returncode == 1 and hit.stdout == "", (
-            f"leakage in {view}: {hit.stdout}"
-        )
+        hits = _leakage_hits(view)
+        assert hits == [], f"leakage in {view}: {hits}"
 
 
 def test_planted_forbidden_files_are_excluded_from_view(tmp_path, monkeypatch):
@@ -169,10 +181,8 @@ def test_planted_forbidden_files_are_excluded_from_view(tmp_path, monkeypatch):
     assert not (view / "gold" / "answer.sql").exists()
     assert not (view / "golden" / "result.txt").exists()
     # And the rider's content scan finds no surviving answer data.
-    hit = _rg_leakage_hit(view)
-    assert hit.returncode == 1 and hit.stdout == "", (
-        f"planted leakage survived into {view}: {hit.stdout}"
-    )
+    hits = _leakage_hits(view)
+    assert hits == [], f"planted leakage survived into {view}: {hits}"
 
 
 def test_exclude_tasks_drops_spider2_source_slug(tmp_path, monkeypatch):

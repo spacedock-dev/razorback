@@ -340,6 +340,17 @@ def _build_harbor(
             tasks_root=Path(tasks_root),
         )
     else:
+        # Fail fast on the spider2-dbt tasks_root contract BEFORE the network
+        # resolve: `_is_spider2_dbt_dataset` is a cheap ref-parse, while
+        # `_resolve_harbor_dataset_tasks` can trigger a dataset download. A
+        # spider2-dbt dataset with `tasks_root is None` is mis-wired regardless
+        # of resolution, so reject it without touching the network.
+        is_spider2_dbt = _is_spider2_dbt_dataset(block.dataset)
+        if is_spider2_dbt and tasks_root is None:
+            raise SpecError(
+                "`kind: harbor` spider2-dbt dataset requires tasks_root "
+                "(the run orchestrator passes it)."
+            )
         home_dir = Path(home) if home is not None else Path.home()
         cache_root = home_dir / ".cache" / "razorback" / "harbor" / "datasets"
         source_paths = _resolve_harbor_dataset_tasks(
@@ -347,12 +358,7 @@ def _build_harbor(
             tasks=block.tasks,
             cache_root=cache_root,
         )
-        if _is_spider2_dbt_dataset(block.dataset):
-            if tasks_root is None:
-                raise SpecError(
-                    "`kind: harbor` spider2-dbt dataset requires tasks_root "
-                    "(the run orchestrator passes it)."
-                )
+        if is_spider2_dbt:
             # Filter on SOURCE slugs BEFORE materialization so selectors bind
             # to Harbor task names, not the `spider2-dbt-<slug>` view names.
             selected_sources = _apply_task_selectors(
