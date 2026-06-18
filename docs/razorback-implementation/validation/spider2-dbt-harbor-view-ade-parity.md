@@ -257,3 +257,78 @@ All three ACs, the build-context rider, the pinned `/app` contract, and the
 cycle-1 Critical defect B1 are verified from a clean checkout. The fix is real,
 mirrors the established pattern, and its regression test is proven load-bearing.
 **PASSED → `done`.**
+
+---
+
+## Cycle 3 — re-review of the cycle-2 Codex findings fix (2026-06-18)
+
+Re-validated the cycle-3 fix commit `e60795e` from the worktree branch HEAD
+`73fd832`. No production code written; verification by exercising behavior.
+
+### Finding 1 (high) — db_name pinned into the injected preflight RUN; resolver importable + fails closed — VERIFIED FIXED
+
+- **Importable for r5:** `from razorback.benchmarks.spider2_dbt.preflight import resolve_spider2_db_name`
+  imports cleanly. r5 (`spider2-dbt-duckdb-match-verifier`) can reuse the same
+  `/app/<db_name>.duckdb` resolution.
+- **Resolver behavior (exercised directly):**
+  - ambiguous multi-DB (`a.duckdb`, `b.duckdb`, no profiles) → raises
+    `Spider2WorkspacePreflightError(reason="ambiguous duckdb file", candidates=['a.duckdb','b.duckdb'])`
+  - single `demo.duckdb` → `"demo"`
+  - `profiles.yml` `path: /some/dir/pinned.duckdb` overrides even a 2-DB dir → `"pinned"`
+  - empty workspace → slug fallback `"myslug"`
+- **Wired into the injected RUN (exercised via the materializer):** a real
+  end-to-end materialize of a single-DB task emits
+  `RUN python /tmp/razorback_spider2_preflight.py --task-id spider2-fixture-001 --workspace /app --db-name spider2-fixture-001`
+  — `--db-name` is present and resolved against the view's dbt project dir
+  (`harbor_view.py:216-220`), not glob-firsted.
+- **Fail-closed is load-bearing at materialize time:** materializing a task whose
+  `dbt_project/` carries two `*.duckdb` and no `profiles.yml` raises
+  `Spider2WorkspacePreflightError(reason="ambiguous duckdb file")` — the build
+  aborts rather than validating the wrong DB.
+
+### Finding 2 (medium) — schema-aware source-table check — VERIFIED FIXED
+
+Exercised `preflight_spider2_workspace` against a real DuckDB:
+
+- dbt source expects `main.raw_orders`; DuckDB has `other.raw_orders` (wrong schema)
+  → raises `reason="required dbt source tables missing"`, `missing_tables=['main.raw_orders']`.
+  The wrong-schema table does NOT satisfy the source.
+- After creating `main.raw_orders` → `status="passed"`, `missing_tables=[]`.
+
+Confirmed in code: `_read_dbt_source_tables` returns `(schema, table)` with dbt
+precedence (table.schema > source.schema > source.name; identifier > name), and
+`_read_duckdb_tables` selects `table_schema, table_name`; the comparison at
+`preflight.py:75` is a `(schema, table)` tuple set difference. Both sides
+lowercased consistently.
+
+### No regression
+
+- `uv run pytest -k spider2_dbt --ignore=tests/unit/test_task_identity_scoring.py`
+  → **38 passed, 751 deselected** (matches expected ~38).
+- Generic `materialize.py` / `leakage.py`: `git diff 996d42b..HEAD` empty —
+  byte-for-byte unchanged.
+- ade_bench harbor_view + workspace_preflight regression → 13 passed.
+- Cycle-1 unlink-then-write fix intact: 3 `if dockerfile.is_symlink():` guards in
+  `harbor_view.py`; `test_link_mode_injects_layers_but_never_mutates_source_dockerfile`
+  present and green.
+- `/app` + `/app/<db_name>.duckdb` contract still pinned (`_APP_ROOT="/app"`,
+  preflight `--workspace /app`, COPY `dbt_project/ /app/`).
+- Pre-existing unrelated failures confirmed on base: `razorback.score.load` is
+  MISSING in `996d42b` (the `test_task_identity_scoring` import error); the three
+  named files (`test_task_identity_scoring`, `test_generate_matrix_specs`,
+  `test_rk_research_new`) are untouched by this branch (empty diff vs base) — not
+  regressions. Harness `uv.lock` ignored per dispatch. `git status` clean.
+
+### Code review
+
+Focused adversarial review of the fix diff (`e60795e`). No blocking findings.
+Non-blocking observation: the resolver is invoked against the view's on-disk dbt
+project dir as the stand-in for the container `/app` root — coherent with the
+runtime contract. Schema precedence and consistent lowercasing make the set
+difference correct.
+
+### Gate
+
+Both cycle-2 findings are genuinely fixed and load-bearing; the resolver is
+importable for r5; no regression to AC-1/2/3, the build-context rider, or the
+cycle-1 unlink fix. **PASSED → `done`.**
