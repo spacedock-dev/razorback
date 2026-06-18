@@ -8,8 +8,15 @@ from razorback.harbor_tasks.materialize import materialize_harbor_task_view
 
 
 SPIDER2_DBT_DENY_GLOBS = DEFAULT_SOLUTION_DENY_GLOBS + (
+    # Both the top-level and nested forms: fnmatch's `**/` prefix requires a
+    # leading path segment, so `**/gold/**` alone misses a top-level `gold/`
+    # dir. The bare `gold/**` variants close that leakage hole (surfaced by
+    # the plan-gate cycle-1 negative-leakage rider).
+    "expected/**",
     "**/expected/**",
+    "gold/**",
     "**/gold/**",
+    "golden/**",
     "**/golden/**",
 )
 

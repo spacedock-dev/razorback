@@ -14,6 +14,9 @@ from harbor.models.trial.config import (
 )
 
 from razorback.agents.auth import resolve_claude_auth, resolve_codex_auth
+from razorback.benchmarks.spider2_dbt.harbor_view import (
+    materialize_spider2_harbor_task_view,
+)
 from razorback.agents.proxy import PROXY_BLOCK_ENV
 from razorback.errors import SpecError
 from razorback.spec.agent_kwargs import build_spacedock_harbor_agent_kwargs
@@ -41,6 +44,41 @@ RAZORBACK_CODEX_IMPORT_PATH = (
     "razorback.agents._runtime.codex:RazorbackCodex"
 )
 SPACEDOCK_SOLVER_CONTAINER_FREEZE_ROOT = "/razorback-freeze"
+
+SPIDER2_DBT_SHORT_NAME = "spider2-dbt"
+
+
+def _is_spider2_dbt_dataset(dataset_ref: str) -> bool:
+    """True when a `kind: harbor` dataset ref names the spider2-dbt family.
+
+    Mirrors the ade-bench dataset-ref flow: the dataset ref is the family
+    signal. The fully-qualified `<org>/spider2-dbt@<ref>` form resolves to
+    short_name == "spider2-dbt"; the bare `spider2-dbt@1.0` form is the
+    `harbor download` CLI concept (not a valid spec dataset) and raises on
+    parse, so the helper swallows the error and returns False.
+    """
+    from harbor.models.package.reference import PackageReference
+
+    try:
+        parsed = PackageReference.parse(dataset_ref)
+    except Exception:
+        return False
+    return parsed.short_name == SPIDER2_DBT_SHORT_NAME
+
+
+def _apply_task_selectors(
+    paths: list[Path], *, exclude_tasks: list[str] | None, n_tasks: int | None
+) -> list[Path]:
+    """Filter task dirs by name, then cap. Operates on whatever `.name` the
+    caller passes — for spider2-dbt this MUST be source-slug paths, applied
+    BEFORE materialization (view names are `spider2-dbt-<slug>`)."""
+    result = paths
+    if exclude_tasks:
+        excluded = set(exclude_tasks)
+        result = [p for p in result if p.name not in excluded]
+    if n_tasks is not None:
+        result = result[:n_tasks]
+    return result
 
 
 def spec_to_job_config(
@@ -78,6 +116,7 @@ def spec_to_job_config(
             tasks_root=Path(tasks_root) if tasks_root else None,
             agent_cfg=agent_cfg,
             home=home,
+            materialize_mode=materialize_mode,
         )
     if isinstance(spec.benchmark, HarborLocalBenchmarkBlock):
         return _build_harbor_local(
@@ -265,6 +304,7 @@ def _build_harbor(
     agent_cfg: AgentConfig,
     home: Path | None = None,
     tasks_root: Path | None = None,
+    materialize_mode: Literal["bind", "copy"] = "bind",
 ) -> tuple[JobConfig, dict[str, tuple[str, int] | tuple[str, list[int]]]]:
     """Translate `kind: harbor` block into a Harbor JobConfig.
 
@@ -300,13 +340,67 @@ def _build_harbor(
             tasks_root=Path(tasks_root),
         )
     else:
+        # Fail fast on the spider2-dbt tasks_root contract BEFORE the network
+        # resolve: `_is_spider2_dbt_dataset` is a cheap ref-parse, while
+        # `_resolve_harbor_dataset_tasks` can trigger a dataset download. A
+        # spider2-dbt dataset with `tasks_root is None` is mis-wired regardless
+        # of resolution, so reject it without touching the network.
+        is_spider2_dbt = _is_spider2_dbt_dataset(block.dataset)
+        if is_spider2_dbt and tasks_root is None:
+            raise SpecError(
+                "`kind: harbor` spider2-dbt dataset requires tasks_root "
+                "(the run orchestrator passes it)."
+            )
         home_dir = Path(home) if home is not None else Path.home()
         cache_root = home_dir / ".cache" / "razorback" / "harbor" / "datasets"
-        task_paths = _resolve_harbor_dataset_tasks(
+        source_paths = _resolve_harbor_dataset_tasks(
             dataset_ref=block.dataset,
             tasks=block.tasks,
             cache_root=cache_root,
         )
+        if is_spider2_dbt:
+            # Filter on SOURCE slugs BEFORE materialization so selectors bind
+            # to Harbor task names, not the `spider2-dbt-<slug>` view names.
+            selected_sources = _apply_task_selectors(
+                source_paths,
+                exclude_tasks=block.exclude_tasks,
+                n_tasks=block.n_tasks,
+            )
+            view_root = Path(tasks_root)
+            # Map the spec-level materialize mode onto the view-materializer's
+            # vocabulary: `bind` -> symlink the (large) task trees in place,
+            # `copy` -> eagerly duplicate. Mirrors how ade-bench threads the
+            # mode (cli/run.py:313). Defaulting to "bind" matches
+            # `spec_to_job_config`, so an un-threaded call no longer silently
+            # forces copy.
+            view_mode: Literal["copy", "link"] = (
+                "link" if materialize_mode == "bind" else "copy"
+            )
+            task_paths = [
+                materialize_spider2_harbor_task_view(
+                    source_task_dir=src,
+                    view_root=view_root,
+                    task_slug=src.name,
+                    view_mode=view_mode,
+                )
+                for src in selected_sources
+            ]
+            trial_name_map = {}
+
+            cfg = JobConfig(
+                job_name=job_name,
+                jobs_dir=jobs_dir,
+                n_concurrent_trials=spec.concurrency.trials,
+                n_attempts=spec.trials,
+                agents=[agent_cfg],
+                tasks=[TaskConfig(path=p) for p in task_paths],
+                verifier=VerifierConfig(disable=False),
+                retry=RetryConfig(max_retries=0),
+                environment=_environment_config(agent_cfg, run_dir),
+            )
+            return cfg, trial_name_map
+
+        task_paths = source_paths
         trial_name_map = {}
 
     if block.exclude_tasks:
