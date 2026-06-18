@@ -88,23 +88,51 @@ def test_spider2_dataset_requires_tasks_root(tmp_path, monkeypatch):
 _LEAKAGE_TERMS = ("gold", "expected", "golden")
 
 
+def _is_verifier_only(rel: Path) -> bool:
+    """True for the verify-time-only `tests/` subtree.
+
+    Harbor uploads the task's `tests/` dir into the container ONLY at verify
+    time and wipes/recreates it around the agent run, so it is never part of
+    the agent-visible view:
+      - harbor/verifier/verifier.py:133-138 uploads `tests/` inside `verify()`.
+      - harbor/trial/trial.py `_verify_step` first `reset_dirs(remove=[tests_dir,
+        verifier_dir])` then re-uploads — the agent step never sees `/tests`.
+    The spider2-dbt materializer deliberately stages the gold .duckdb + eval
+    spec + comparator there (`_ensure_verifier_assets`); those are the verifier's
+    answer key, NOT agent-visible leakage. Scoping the scan to the agent-visible
+    portion (everything OUTSIDE `tests/`) keeps real leakage protection intact:
+    any answer data that survives into an agent-reachable path still trips.
+    """
+    return rel.parts[:1] == ("tests",)
+
+
 def _leakage_hits(view: Path) -> list[Path]:
-    """Pure-Python reimplementation of the rider's `rg -l 'gold|expected|golden'`.
+    """Pure-Python reimplementation of the rider's `rg -l 'gold|expected|golden'`,
+    scoped to the AGENT-VISIBLE portion of the view.
 
     Walks the view dir and reports any file whose NAME or CONTENT matches the
     case-sensitive alternation `gold|expected|golden` — matching the rider's
-    unescaped `rg -l` semantics. `view_manifest.json` is the materializer's
-    provenance record: it lists the deny globs (`tests/expected/**`,
-    `**/gold/**`, `**/golden/**`) and the checksums of every excluded source
-    file by design — an audit trail, NOT leaked answer content. So the scan
-    excludes the manifest; a hit on any other file means real answer data
-    survived the deny globs.
+    unescaped `rg -l` semantics. Two exclusions, both principled:
+
+    - `view_manifest.json` is the materializer's provenance record: it lists the
+      deny globs (`tests/expected/**`, `**/gold/**`, `**/golden/**`) and the
+      checksums of every excluded source file by design — an audit trail, NOT
+      leaked answer content.
+    - The verify-time-only `tests/` subtree (see `_is_verifier_only`): Harbor
+      uploads it to the container only at verify time and removes it during the
+      agent run, so the gold .duckdb / eval spec / comparator the verifier needs
+      there are never agent-visible.
+
+    A hit on any other file means real answer data survived into an
+    agent-reachable path.
     """
     hits: list[Path] = []
     for path in sorted(view.rglob("*")):
         if not path.is_file():
             continue
         if path.name == "view_manifest.json":
+            continue
+        if _is_verifier_only(path.relative_to(view)):
             continue
         if any(term in path.name for term in _LEAKAGE_TERMS):
             hits.append(path)
@@ -183,6 +211,25 @@ def test_planted_forbidden_files_are_excluded_from_view(tmp_path, monkeypatch):
     # And the rider's content scan finds no surviving answer data.
     hits = _leakage_hits(view)
     assert hits == [], f"planted leakage survived into {view}: {hits}"
+
+
+def test_leakage_scan_still_fires_on_agent_visible_answer_content(tmp_path):
+    """Guard: the `tests/`-scoped exclusion must NOT blanket-disable the scan.
+
+    Plant `gold`-named answer content BOTH in an agent-visible path (view root)
+    AND under the verify-time-only `tests/` subtree, then assert `_leakage_hits`
+    reports the agent-visible one and ignores the verifier-only one. This pins
+    the B1 fix to scoping (exclude only `tests/`), not weakening the scanner.
+    """
+    view = tmp_path / "view"
+    (view / "models").mkdir(parents=True)
+    (view / "models" / "answer_gold.sql").write_text("select 'leak';\n")
+    (view / "tests").mkdir()
+    (view / "tests" / "gold.duckdb").write_bytes(b"verifier-only gold answer key")
+
+    hits = _leakage_hits(view)
+    assert view / "models" / "answer_gold.sql" in hits, "agent-visible leak missed"
+    assert view / "tests" / "gold.duckdb" not in hits, "verifier-only asset flagged"
 
 
 def test_exclude_tasks_drops_spider2_source_slug(tmp_path, monkeypatch):
