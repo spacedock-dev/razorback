@@ -302,3 +302,84 @@ line); B1 — the leakage fix is scoping, not weakening (mutation-probed),
 justified by the verified Harbor verify-only-tests/ lifecycle. Rider and
 AC-3 reward.json shape intact; no regressions outside the known pre-existing
 set. No blocking findings remain.
+
+---
+
+# Re-review (cycle 3): validation gate — fail-closed fix
+
+**Branch:** `spacedock-ensign/spider2-dbt-duckdb-match-verifier` @ `11c66f4`
+**Merge-base with main:** `9c39af2`
+**Fix commit under review:** `869918d` (fail-closed eval-spec validation)
+**Gate verdict:** **PASSED → done**
+
+Independent re-verification of the cycle-2 fail-open hazard fix (Codex
+finding: empty/malformed eval spec awarded `{"reward": 1.0}`). No
+production code written.
+
+## Fail-closed fix is real and load-bearing: CONFIRMED
+
+`load_eval_spec` / `EvalSpec.__post_init__` (`eval_spec.py`) now fail closed,
+and `emit_reward` (`verify.py:33-42`) wraps spec-load + compare in
+`try/except → reward 0`. Independent probe at clean branch HEAD:
+
+- **RAISE cases** (all `ValueError`): empty file; `evaluation.parameters`
+  with no `condition_tabs`; explicit empty `condition_tabs`; non-`duckdb_match`
+  `evaluation.func` (`string_match`); direct `EvalSpec(condition_tabs=[])`.
+- **Hazard-beating** — over a MATCHING pred/gold pair (cloned tables):
+  an empty/zero-table spec → `{"reward": 0.0}` and a wrong-func spec →
+  `{"reward": 0.0}` — **not the prior 1.0**. Garbage non-JSON → `0.0` with
+  no exception (no crash-into-pass).
+- **Positive control:** a VALID matching spec still → `{"reward": 1.0}`,
+  so the guards are targeted, not blanket-failing.
+
+**Mutation test (guards are load-bearing):** stripping the `n==0` guard,
+the empty-file raise, and the wrong-func raise from `eval_spec.py` made all
+6 negative tests FAIL — and the CLI negative reproduced the exact
+`{'reward': 1.0}` == `{'reward': 0.0}` assertion failure, i.e. the original
+hazard returned. Tree restored to clean (`git diff` on `eval_spec.py` empty).
+
+Root-cause confirmed in source: `compare_duckdb` (`duckdb_match.py:116`)
+returns `True` after the per-table AND-loop, so a zero-`condition_tabs` spec
+would vacuously match — the guards prevent that spec from ever being built.
+
+## Cycle-1 fixes intact (B2 comparator + B1 leakage): CONFIRMED
+
+`git diff 0b64e92..869918d --name-only` (the cycle-2 fix delta) touches ONLY
+`eval_spec.py`, `verify.py`, `test_spider2_dbt_verify_cli.py`,
+`test_spider2_dbt_verify_comparator.py`. `duckdb_match.py` (B2),
+`harbor_view.py` + `test_translate_spider2_dbt.py` (B1) are **untouched** —
+cycle-1 is intact by construction, and re-confirmed live:
+
+- **B2 faithfulness:** column-containment with reordered + extra pred
+  columns → True; `math.isclose(1e-2)` within → True / beyond → False;
+  per-column sort under `ignore_order` → True; ordered mismatch → False;
+  missing pred table → False (mismatch).
+- **B1 leakage scoping:** `test_translate_spider2_dbt.py` leakage/planted/
+  resolves tests → 3 passed; the `leakage_scan_still_fires_on_agent_visible`
+  guard among 9 rider/AC-3/leakage tests → 9 passed (agent-visible leaks
+  still caught; only verify-only `tests/` excluded).
+
+## Regression / rider / AC-3
+
+- **Gating:** `uv run pytest -k spider2_dbt --ignore=tests/unit/test_task_identity_scoring.py`
+  → **73 passed, 751 deselected** (was 66 in cycle 2; +7 negatives).
+- **Rider:** materialized view with `task_slug=not-spider2-slug` → emitted
+  `test.sh` `--predicted-db /app/not-spider2-slug.duckdb`; `/app/spider2.duckdb`
+  absent (ny's `resolve_spider2_db_name`).
+- **AC-3:** independent end-to-end via `emit_reward` against the materialized
+  gold fixture — matching pred → `{"reward": 1.0}`, mismatch → `{"reward": 0.0}`;
+  `set(payload) == {"reward"}`, reward is `float`.
+- Working tree clean apart from the known harness `uv.lock` churn (ignored
+  per assignment). Pre-existing unrelated failures on base
+  (`test_task_identity_scoring`, `test_generate_matrix_specs`,
+  `test_rk_research_new`, etc.) are not regressions and not touched.
+
+## Gate decision
+
+**PASSED → done.** The cycle-2 fail-open hazard is independently closed:
+empty/malformed/schema-drifted specs raise or score 0, the matching-pair
+hazard now yields 0 not 1.0, and a mutation test proves the guards (and their
+negative tests) are load-bearing. Cycle-1 comparator faithfulness and leakage
+scoping are intact (untouched by the fix + re-confirmed live); rider and AC-3
+reward shape intact; no new regressions. Per the convergence plan this was the
+last re-validation before PR.
