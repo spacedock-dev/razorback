@@ -9,7 +9,7 @@ verdict:
 score:
 worktree: .worktrees/spacedock-ensign-spider2-dbt-source-resolution-and-run-wiring
 issue:
-pr:
+pr: "#13"
 mod-block: merge:pr-merge
 auto-approve: false
 ---
