@@ -1,13 +1,13 @@
 ---
 id: nygs3pzdz4dx5hzwn6dsm0qa
 title: spider2-dbt — harbor_view dbt+DuckDB parity with ade-bench
-status: plan
+status: implementation
 source: ade_bench/harbor_view.py + ade_bench/preflight.py as reference; spider2-dbt is a dbt+DuckDB benchmark like ade-bench
 started: 2026-06-18T08:49:13Z
 completed:
 verdict:
 score:
-worktree:
+worktree: .worktrees/spacedock-ensign-spider2-dbt-harbor-view-ade-parity
 issue:
 pr:
 mod-block:
