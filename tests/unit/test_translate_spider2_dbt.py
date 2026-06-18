@@ -173,3 +173,51 @@ def test_planted_forbidden_files_are_excluded_from_view(tmp_path, monkeypatch):
     assert hit.returncode == 1 and hit.stdout == "", (
         f"planted leakage survived into {view}: {hit.stdout}"
     )
+
+
+def test_exclude_tasks_drops_spider2_source_slug(tmp_path, monkeypatch):
+    sources = sorted(FIXTURE_ROOT.glob("spider2-fixture-*"))
+    assert len(sources) >= 2, "need >1 fixture instance to prove exclusion keeps the other"
+    excluded_slug = sources[0].name  # e.g. "spider2-fixture-001" (SOURCE slug)
+
+    monkeypatch.setattr(
+        "razorback.translate._resolve_harbor_dataset_tasks",
+        lambda **k: list(sources),
+    )
+    spec = _spec(
+        HarborBenchmarkBlock(
+            kind="harbor",
+            dataset="spider2-dbt/spider2-dbt@1.0",
+            exclude_tasks=[excluded_slug],
+        )
+    )
+    job_config, _ = spec_to_job_config(
+        spec, job_name="job", jobs_dir=tmp_path, tasks_root=tmp_path / "tasks"
+    )
+    # the excluded source produced no view; the others did
+    assert len(job_config.tasks) == len(sources) - 1
+    view_names = {t.path.name for t in job_config.tasks}
+    # filter ran on the SOURCE slug, so neither the source slug nor its
+    # `spider2-dbt-<slug>` view appears in the emitted set
+    assert excluded_slug not in view_names
+    assert f"spider2-dbt-{excluded_slug}" not in view_names
+    # sanity: a surviving task's view IS the `spider2-dbt-<slug>` form
+    kept_slug = sources[1].name
+    assert f"spider2-dbt-{kept_slug}" in view_names
+
+
+def test_n_tasks_caps_spider2_before_materialize(tmp_path, monkeypatch):
+    sources = sorted(FIXTURE_ROOT.glob("spider2-fixture-*"))
+    monkeypatch.setattr(
+        "razorback.translate._resolve_harbor_dataset_tasks",
+        lambda **k: list(sources),
+    )
+    spec = _spec(
+        HarborBenchmarkBlock(
+            kind="harbor", dataset="spider2-dbt/spider2-dbt@1.0", n_tasks=1
+        )
+    )
+    job_config, _ = spec_to_job_config(
+        spec, job_name="job", jobs_dir=tmp_path, tasks_root=tmp_path / "tasks"
+    )
+    assert len(job_config.tasks) == 1
