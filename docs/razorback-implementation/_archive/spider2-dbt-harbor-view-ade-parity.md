@@ -11,6 +11,7 @@ worktree:
 issue:
 pr: "#14"
 mod-block:
+archived: 2026-06-18T11:08:42Z
 ---
 
 ## Problem
