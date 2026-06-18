@@ -1,5 +1,7 @@
 # ABOUTME: Translator coverage for the spider2-dbt kind:harbor branch in _build_harbor.
 # ABOUTME: Family detect, filter-then-materialize, leakage-clean views, benchmark env (AC-1/AC-2).
+import shutil
+
 from razorback.translate import _is_spider2_dbt_dataset
 
 
@@ -81,3 +83,93 @@ def test_spider2_dataset_requires_tasks_root(tmp_path, monkeypatch):
     with pytest.raises(Exception) as exc:
         spec_to_job_config(spec, job_name="job", jobs_dir=tmp_path, tasks_root=None)
     assert "tasks_root" in str(exc.value).lower()
+
+
+import subprocess
+
+
+def _rg_leakage_hit(view: Path) -> subprocess.CompletedProcess:
+    """Run the rider's unescaped `gold|expected|golden` alternation over a view.
+
+    `view_manifest.json` is the materializer's provenance record: it lists the
+    deny globs (`tests/expected/**`, `**/gold/**`, `**/golden/**`) and the
+    checksums of every excluded source file by design — an audit trail, NOT
+    leaked answer content. So the leakage scan excludes the manifest; a hit on
+    any other file means real answer data survived the deny globs.
+    """
+    return subprocess.run(
+        ["rg", "-l", "--glob", "!view_manifest.json", "gold|expected|golden", str(view)],
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_spider2_resolves_n_views_all_leakage_clean(tmp_path, monkeypatch):
+    sources = sorted(FIXTURE_ROOT.glob("spider2-fixture-*"))
+    assert len(sources) >= 2, "need >1 fixture instance to prove N task-view dirs"
+
+    monkeypatch.setattr(
+        "razorback.translate._resolve_harbor_dataset_tasks",
+        lambda **k: list(sources),
+    )
+    spec = _spec(
+        HarborBenchmarkBlock(kind="harbor", dataset="spider2-dbt/spider2-dbt@1.0")
+    )
+    job_config, _ = spec_to_job_config(
+        spec, job_name="job", jobs_dir=tmp_path, tasks_root=tmp_path / "tasks"
+    )
+    assert len(job_config.tasks) == len(sources)
+    for task in job_config.tasks:
+        view = task.path
+        assert (view / "task.toml").is_file()
+        # leakage-clean: no gold/expected/golden answer content survives
+        hit = _rg_leakage_hit(view)
+        assert hit.returncode == 1 and hit.stdout == "", (
+            f"leakage in {view}: {hit.stdout}"
+        )
+
+
+def test_planted_forbidden_files_are_excluded_from_view(tmp_path, monkeypatch):
+    """Rider (plan-gate cycle 1): plant forbidden answer files in a fixture
+    source dir and assert the materialized view excludes them — a NEGATIVE
+    leakage proof distinct from the positive AC-1 scan above.
+
+    The planted files carry the gold/expected/golden answer content the deny
+    globs exist to strip; if any survives into the view, the rider's unescaped
+    `rg -l 'gold|expected|golden'` alternation fires on a real (non-manifest)
+    file and the test fails.
+    """
+    # Build an isolated source copy so the committed fixture stays clean.
+    src_root = tmp_path / "src"
+    base = FIXTURE_ROOT / "spider2-fixture-001"
+    source = src_root / "spider2-fixture-001"
+    shutil.copytree(base, source)
+    # Plant forbidden files matching SPIDER2_DBT_DENY_GLOBS by path.
+    (source / "tests" / "expected").mkdir(parents=True, exist_ok=True)
+    (source / "tests" / "expected" / "expected.csv").write_text("id\ngold-value\n")
+    (source / "gold").mkdir(exist_ok=True)
+    (source / "gold" / "answer.sql").write_text("select 'golden';\n")
+    (source / "golden").mkdir(exist_ok=True)
+    (source / "golden" / "result.txt").write_text("expected golden output\n")
+
+    monkeypatch.setattr(
+        "razorback.translate._resolve_harbor_dataset_tasks",
+        lambda **k: [source],
+    )
+    spec = _spec(
+        HarborBenchmarkBlock(kind="harbor", dataset="spider2-dbt/spider2-dbt@1.0")
+    )
+    job_config, _ = spec_to_job_config(
+        spec, job_name="job", jobs_dir=tmp_path, tasks_root=tmp_path / "tasks"
+    )
+    view = job_config.tasks[0].path
+    # None of the planted answer FILES survive into the view (the deny globs
+    # strip files; empty parent dirs may remain — that is not leakage).
+    assert not (view / "tests" / "expected" / "expected.csv").exists()
+    assert not (view / "gold" / "answer.sql").exists()
+    assert not (view / "golden" / "result.txt").exists()
+    # And the rider's content scan finds no surviving answer data.
+    hit = _rg_leakage_hit(view)
+    assert hit.returncode == 1 and hit.stdout == "", (
+        f"planted leakage survived into {view}: {hit.stdout}"
+    )
