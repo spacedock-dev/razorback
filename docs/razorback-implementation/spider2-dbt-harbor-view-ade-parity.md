@@ -207,3 +207,12 @@ Both cycle-2 findings resolved and committed (e60795e). The prior session had le
 ### Summary
 
 Independently re-verified the cycle-3 fix (commit `e60795e`, branch HEAD `73fd832`) from the worktree with no production code written. Both cycle-2 Codex findings are real and load-bearing: (1) `resolve_spider2_db_name` is importable for r5, fails closed on an ambiguous multi-DB workspace, and is now actually wired into the injected preflight RUN (`--db-name` resolved against the view's dbt project dir, proven by exercising the materializer end-to-end — including the fail-closed abort on a 2-DB project); (2) the source-table check is schema-aware — `other.raw_orders` does not satisfy a source expecting `main.raw_orders`, proven against a real DuckDB. Acceptance is 38 passed; generic materializer/leakage unchanged; ade_bench regression 13 passed; the cycle-1 unlink-then-write fix (3 guards + its regression test) is intact; the `/app` contract is pinned. The pre-existing unrelated failures predate this branch (verified on base `996d42b`) and the harness `uv.lock` is ignored per dispatch. **Gate: PASSED → done.**
+
+### Cycle 3 — validation gate REJECTED (2026-06-18, captain via Codex review)
+
+Codex re-review found the symlink-write-through class is not fully closed.
+Captain chose fix-now. Routing back to `implementation`:
+
+1. **[medium] Preflight helper write can still follow a source symlink in link mode (`harbor_view.py:187-188`).**
+   `_ensure_workspace_preflight_image_layer` does `script_path.write_text(preflight_script_text())` on `environment/razorback_spider2_preflight.py` with NO `is_symlink()` guard. Under `view_mode="link"`, if a source task ships a file with that exact name, the view path is a symlink into the source and the write corrupts the user's source file — the same class as the cycle-1 Dockerfile fix.
+   **Fix:** add the same `if script_path.is_symlink(): script_path.unlink()` guard before the helper `write_text` (mirror the Dockerfile/`task.toml` guards). Add a link-mode regression test that SEEDS `environment/razorback_spider2_preflight.py` in the source fixture and proves the source file is unchanged after materialization (fails without the guard). Keep all prior ACs, the rider, and cycle-1/cycle-2 fixes green.
