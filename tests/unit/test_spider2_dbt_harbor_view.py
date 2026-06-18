@@ -194,6 +194,67 @@ def test_preflight_build_context_holds_duckdb_before_preflight_run(tmp_path):
     )
 
 
+# --- Finding 1 (cycle 2): injected RUN must pin --db-name ------------------
+# The build-time preflight must validate the SAME DB the agent runs against
+# (`/app/<db_name>.duckdb`), not glob-first. The materializer resolves the
+# db_name and threads it into the injected RUN.
+
+
+def test_injected_preflight_run_carries_db_name(tmp_path):
+    source = _write_source(
+        tmp_path / "source", with_packages=True, with_duckdb=True
+    )
+
+    view = materialize_spider2_harbor_task_view(
+        source_task_dir=source,
+        view_root=tmp_path / "views",
+        task_slug="spider2-fixture-001",
+    )
+
+    dockerfile = (view / "environment" / "Dockerfile").read_text()
+    # The single staged DB is spider2-fixture-001.duckdb, so the resolver pins
+    # that name and the injected RUN passes it explicitly.
+    assert "--db-name spider2-fixture-001" in dockerfile
+
+
+def test_injected_preflight_run_pins_db_among_many(tmp_path):
+    # A multi-DB workspace with a profiles.yml `path:` pins the right DB into
+    # the injected RUN (not a glob-first of whichever sorts first).
+    source = _write_source(
+        tmp_path / "source", with_packages=True, with_duckdb=True
+    )
+    import duckdb as _duckdb
+
+    stale = source / "dbt_project" / "aaa_stale.duckdb"
+    conn = _duckdb.connect(str(stale))
+    try:
+        conn.execute("CREATE TABLE t (id INTEGER)")
+    finally:
+        conn.close()
+    (source / "dbt_project" / "profiles.yml").write_text(
+        "\n".join(
+            [
+                "example:",
+                "  outputs:",
+                "    dev:",
+                "      type: duckdb",
+                "      path: spider2-fixture-001.duckdb",
+                "  target: dev",
+                "",
+            ]
+        )
+    )
+
+    view = materialize_spider2_harbor_task_view(
+        source_task_dir=source,
+        view_root=tmp_path / "views",
+        task_slug="spider2-fixture-001",
+    )
+
+    dockerfile = (view / "environment" / "Dockerfile").read_text()
+    assert "--db-name spider2-fixture-001" in dockerfile
+
+
 def test_preflight_layer_absent_when_not_a_dbt_project(tmp_path):
     # A non-dbt source (no dbt_project/) gets no preflight layer at all, so the
     # preflight RUN can never run against an empty /app.

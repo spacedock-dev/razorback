@@ -5,7 +5,10 @@ import shutil
 from pathlib import Path
 from typing import Literal
 
-from razorback.benchmarks.spider2_dbt.preflight import preflight_script_text
+from razorback.benchmarks.spider2_dbt.preflight import (
+    preflight_script_text,
+    resolve_spider2_db_name,
+)
 from razorback.harbor_tasks.leakage import DEFAULT_SOLUTION_DENY_GLOBS
 from razorback.harbor_tasks.materialize import materialize_harbor_task_view
 
@@ -78,10 +81,24 @@ def materialize_spider2_harbor_task_view(
 def _has_dbt_project(view_dir: Path) -> bool:
     """spider2-dbt nests the dbt project under `dbt_project/` (or under
     `environment/dbt_project/`)."""
-    return (
-        (view_dir / _DBT_PROJECT_DIRNAME).is_dir()
-        or (view_dir / "environment" / _DBT_PROJECT_DIRNAME).is_dir()
-    )
+    return _dbt_project_dir(view_dir) is not None
+
+
+def _dbt_project_dir(view_dir: Path) -> Path | None:
+    """The dbt project root inside the view (`dbt_project/` or
+    `environment/dbt_project/`), if present.
+
+    This is the on-disk stand-in for the container's `/app` dbt root: the
+    source `.duckdb` and any `profiles.yml` live here, so it is the workspace
+    `resolve_spider2_db_name` reads to pin `/app/<db_name>.duckdb`.
+    """
+    direct = view_dir / _DBT_PROJECT_DIRNAME
+    if direct.is_dir():
+        return direct
+    nested = view_dir / "environment" / _DBT_PROJECT_DIRNAME
+    if nested.is_dir():
+        return nested
+    return None
 
 
 def _has_dbt_packages_manifest(view_dir: Path) -> bool:
@@ -191,6 +208,16 @@ def _ensure_workspace_preflight_image_layer(
     if _SPIDER2_WORKSPACE_PREFLIGHT_MARKER in text:
         return
 
+    # Pin the agent-facing DuckDB via the SHARED resolver so the build-time
+    # preflight validates the SAME `/app/<db_name>.duckdb` the agent (and the
+    # r5 verifier) operate against — never a glob-first under multi/stale-DB
+    # drift. Resolution fails CLOSED (raises) when >1 *.duckdb exists and none
+    # is pinned; that aborts the materialize, the correct fail-closed point.
+    project_dir = _dbt_project_dir(view_dir)
+    db_name = resolve_spider2_db_name(
+        project_dir if project_dir is not None else view_dir,
+        task_slug=task_slug,
+    )
     command = " ".join(
         [
             "python",
@@ -199,6 +226,8 @@ def _ensure_workspace_preflight_image_layer(
             shlex.quote(task_slug),
             "--workspace",
             _APP_ROOT,
+            "--db-name",
+            shlex.quote(db_name),
         ]
     )
     block = "\n".join(
