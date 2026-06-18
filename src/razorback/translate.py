@@ -14,6 +14,9 @@ from harbor.models.trial.config import (
 )
 
 from razorback.agents.auth import resolve_claude_auth, resolve_codex_auth
+from razorback.benchmarks.spider2_dbt.harbor_view import (
+    materialize_spider2_harbor_task_view,
+)
 from razorback.agents.proxy import PROXY_BLOCK_ENV
 from razorback.errors import SpecError
 from razorback.spec.agent_kwargs import build_spacedock_harbor_agent_kwargs
@@ -61,6 +64,21 @@ def _is_spider2_dbt_dataset(dataset_ref: str) -> bool:
     except Exception:
         return False
     return parsed.short_name == SPIDER2_DBT_SHORT_NAME
+
+
+def _apply_task_selectors(
+    paths: list[Path], *, exclude_tasks: list[str] | None, n_tasks: int | None
+) -> list[Path]:
+    """Filter task dirs by name, then cap. Operates on whatever `.name` the
+    caller passes — for spider2-dbt this MUST be source-slug paths, applied
+    BEFORE materialization (view names are `spider2-dbt-<slug>`)."""
+    result = paths
+    if exclude_tasks:
+        excluded = set(exclude_tasks)
+        result = [p for p in result if p.name not in excluded]
+    if n_tasks is not None:
+        result = result[:n_tasks]
+    return result
 
 
 def spec_to_job_config(
@@ -322,11 +340,49 @@ def _build_harbor(
     else:
         home_dir = Path(home) if home is not None else Path.home()
         cache_root = home_dir / ".cache" / "razorback" / "harbor" / "datasets"
-        task_paths = _resolve_harbor_dataset_tasks(
+        source_paths = _resolve_harbor_dataset_tasks(
             dataset_ref=block.dataset,
             tasks=block.tasks,
             cache_root=cache_root,
         )
+        if _is_spider2_dbt_dataset(block.dataset):
+            if tasks_root is None:
+                raise SpecError(
+                    "`kind: harbor` spider2-dbt dataset requires tasks_root "
+                    "(the run orchestrator passes it)."
+                )
+            # Filter on SOURCE slugs BEFORE materialization so selectors bind
+            # to Harbor task names, not the `spider2-dbt-<slug>` view names.
+            selected_sources = _apply_task_selectors(
+                source_paths,
+                exclude_tasks=block.exclude_tasks,
+                n_tasks=block.n_tasks,
+            )
+            view_root = Path(tasks_root)
+            task_paths = [
+                materialize_spider2_harbor_task_view(
+                    source_task_dir=src,
+                    view_root=view_root,
+                    task_slug=src.name,
+                )
+                for src in selected_sources
+            ]
+            trial_name_map = {}
+
+            cfg = JobConfig(
+                job_name=job_name,
+                jobs_dir=jobs_dir,
+                n_concurrent_trials=spec.concurrency.trials,
+                n_attempts=spec.trials,
+                agents=[agent_cfg],
+                tasks=[TaskConfig(path=p) for p in task_paths],
+                verifier=VerifierConfig(disable=False),
+                retry=RetryConfig(max_retries=0),
+                environment=_environment_config(agent_cfg, run_dir),
+            )
+            return cfg, trial_name_map
+
+        task_paths = source_paths
         trial_name_map = {}
 
     if block.exclude_tasks:
