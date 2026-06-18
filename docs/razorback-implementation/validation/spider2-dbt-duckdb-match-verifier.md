@@ -1,464 +1,147 @@
-# Validation: spider2-dbt — duckdb_match verifier emitting binary reward.json
+# Validation report — spider2-dbt duckdb_match verifier (cycles 1–10, final)
 
-**Branch:** `spacedock-ensign/spider2-dbt-duckdb-match-verifier` @ `7ab0bf7`
-**Merge-base with main:** `9c39af2`
-**Gate verdict:** **REJECTED → implementation**
+- Entity: `docs/razorback-implementation/spider2-dbt-duckdb-match-verifier.md`
+- Branch: `spacedock-ensign/spider2-dbt-duckdb-match-verifier`
+- Validated HEAD: `965f2ea` (includes cycles 1–10)
+- Merge-base with `main`: `9c39af2`
+- Method: independent validation of the current worktree HEAD — fresh suite
+  runs from the clean branch checkout, standalone behavioral probes (not a
+  re-read of prior reports), and `superpowers:requesting-code-review`.
 
-Two blocking findings: (B1) a branch-induced regression in the spider2
-production translate leakage suite, and (B2) the `duckdb_match`
-reproduction is **not faithful** to Spider2's `eval_utils.duckdb_match`
-semantics (verdict-flipping divergences, plus an incompatible eval-spec
-schema). The 3 ACs as literally written all reproduce green, but a
-verifier whose comparator disagrees with the benchmark's own oracle and
-whose change breaks the shipping leakage suite must not advance.
+## Acceptance criteria — PASS/FAIL with command + output
 
----
+### AC-1 — comparator scores 1.0 on a matching DB, 0.0 on a mismatch — PASS
 
-## Acceptance command (gating)
+Verified by the comparator unit suite and a standalone live probe driving
+`compare_duckdb` over in-test DuckDB fixtures.
 
-`uv run pytest -k spider2_dbt_verify --ignore=tests/unit/test_task_identity_scoring.py`
-→ **18 passed, 793 deselected** (clean checkout of the branch HEAD).
+```
+$ uv run pytest -k spider2_dbt_verify --ignore=tests/unit/test_task_identity_scoring.py -q
+49 passed, 795 deselected in 2.84s
+```
 
-## AC reproduction (independent, not trusting the in-repo tests)
+Standalone probe drives `compare_duckdb` directly: matching DB → True,
+mismatched DB → False; missing predicted table → False; multi-table AND with one
+table mismatched → overall False. All PASS.
 
-Driven via a standalone script against the `compare_duckdb` comparator
-and the materializer, from a clean worktree.
+### AC-2 — column subsetting + ignore_orders honor duckdb_match semantics — PASS
 
-- **AC-1 — 1.0 on match / 0.0 on mismatch:** PASS.
-  `compare_duckdb` on a matching DB → `True`; on a differing
-  condition-col value → `False`. Missing predicted table → `False`.
-- **AC-2 — column subset + ignore_orders:** PASS *(as literally
-  specified)*.
-  (a) Row-reordered table + `ignore_orders=True` → `True`; same with
-  `ignore_orders=False` → `False`. (b) A diff in a NON-condition column
-  (excluded from `condition_cols`) → `True`; the same diff with the
-  column included → `False`.
-- **AC-3 — emitted test.sh writes harbor-shaped reward.json:** PASS.
-  Materialized the view, then **actually executed the emitted
-  `test.sh`** (container paths `/tests`,`/app/<db>`,`/logs/verifier`
-  substituted to temp dirs): exit 0, wrote
-  `/logs/verifier/reward.json` = `{"reward": 0.0}` on a mismatch and
-  `{"reward": 1.0}` on a match. `set(payload) == {"reward"}`,
-  `isinstance(payload["reward"], float)`.
-  Note: the in-repo integration test invokes `verify.py` directly and
-  only `sh -n` syntax-checks `test.sh`; I additionally ran the script
-  itself to satisfy AC-3's "running the emitted test.sh" clause.
+Same probe, exercised live:
 
-## Mandatory rider (resolver-driven predicted-db path)
+- `ignore_orders=True` over a row-reordered table → match (True); same data with
+  `ignore_orders=False` → mismatch (False).
+- A difference in a column NOT in `condition_cols` → still match (True); the same
+  difference WITH that column in `condition_cols` → mismatch (False).
+- Column-containment: pred columns reordered + an extra pred column → still match.
+- `math.isclose(abs_tol=1e-2)`: within 1e-2 → match, beyond → mismatch.
+- DECIMAL(10,3) within 1e-2 → match (cycle-9 `_normalize` Decimal→float).
+- NULL==NULL → match (NA==NA).
 
-**CONFIRMED.** Materialized with `task_slug="not-spider2-slug"` (fixture
-ships no profiles.yml / *.duckdb → resolver slug fallback). Emitted
-`test.sh` `--predicted-db` = `/app/not-spider2-slug.duckdb`;
-`/app/spider2.duckdb` absent. The path flows from ny's
-`resolve_spider2_db_name` (imported from `preflight.py`, unchanged on
-this branch), satisfying the SHARED `/app/<db_name>.duckdb` contract for
-a NON-`spider2` slug.
+All 11 probe cases PASS. Independently re-confirmed against the upstream
+`xlang-ai/Spider2` `eval_utils.duckdb_match`/`compare_pandas_table` by the code
+reviewer (fetched live during review) — line-accurate port, including the
+`(x is None, str(x), isinstance(x,(int,float)))` sort key.
 
-## Verifier-only gold assets / leakage (path-based)
+### AC-3 — emitted test.sh writes a Harbor-shaped reward.json — PASS
 
-Gold `.duckdb` + `spider2_eval.jsonl` + the 3 comparator modules +
-`test.sh` land in the view's `tests/` (uploaded to the container only at
-verify time). No `gold/` path SEGMENT survives in the materialized view
-(`rglob("gold")` dirs = none; the empty `gold/` dir left by the
-deny-glob file-strip is pruned). The path-based deny-glob isolation is
-sound — but see B1: the assets still trip the production-path *content*
-leakage scanner.
+Verified by the integration suite and a standalone `emit_reward` probe:
 
----
+- Matching pred/gold → reward.json parses to `{"reward": 1.0}`,
+  `set(payload) == {"reward"}`, value is a `float`.
+- Mismatch → `{"reward": 0.0}`.
+- `emit_reward` never crashes-into-pass: garbage (non-JSON) spec over MATCHING
+  DBs → `{"reward": 0.0}`; empty-`condition_tabs` wrapped spec over matching DBs
+  → `{"reward": 0.0}` (the would-be-1.0 fail-open is closed); missing predicted
+  DB → `{"reward": 0.0}`.
 
-## BLOCKING findings
+Integration test (`test_spider2_dbt_verify_test_sh.py`) executes the emitted
+`test.sh` end-to-end and asserts the reward.json shape — green within the
+`spider2_dbt_verify` 49-passed run above.
 
-### B1 — Regression in the spider2 translate leakage suite
+## Stage-checklist verification of the dispatch focus areas
 
-`tests/unit/test_translate_spider2_dbt.py` has TWO tests that **pass on
-`9c39af2` (base) and FAIL on `7ab0bf7` (this branch)** — verified by
-running them in a base worktree (2 passed) and on the branch (2 failed):
+- **Comparator faithfulness** — PASS. Column-containment, isclose 1e-2, per-column
+  sort, condition_cols restriction, multi-table AND, missing-table → 0, NA==NA,
+  DECIMAL within tolerance all confirmed live (probe) + reviewer's line-by-line
+  oracle comparison.
+- **duckdb-only dependency** — PASS.
+  `grep -rn "import pandas\|from pandas\|import numpy\|from numpy"
+  src/razorback/benchmarks/spider2_dbt/` → no matches. Only `duckdb` + stdlib are
+  imported by the comparator/verifier.
+- **Fail-closed guards** — PASS. Live probe: empty file, wrong `evaluation.func`,
+  empty/missing `condition_tabs`, and a wrapped spec missing `parameters.gold`
+  each RAISE; the gold-basename allowlist rejects all traversal/metachar cases
+  (`../…`, `/etc/passwd`, `sub/dir/g.duckdb`, `..`, `.`, `x.duckdb; … #`,
+  `g.duckdb $(id)`, `g .duckdb`, `g.sqlite`). Missing `tests/gold/` →
+  `_ensure_verifier_assets` raises `FileNotFoundError`.
+- **Shell/SQL injection sealed** — PASS. `harbor_view.py` `shlex.quote`s BOTH
+  `--predicted-db` and `--gold-db` at the single emission point;
+  `condition_tabs` is identifier-quoted (doubled `"`) in `_fetch_columns`, and a
+  breakout value (`realt"; select 999 AS a; --`) over genuinely-mismatched DBs
+  RAISES (cannot force a match) — confirmed live.
+- **Link-mode symlink-write-through** — PASS. All 5 verifier-asset copies route
+  through `_copy_into_view` (unlink-symlink-then-copy); test.sh, Dockerfile, and
+  preflight writes carry the same guard. Regression
+  `..._never_mutate_colliding_source_file` is green.
+- **AC-3 reward.json shape / never-crash-into-pass** — PASS (see AC-3).
 
-- `test_spider2_resolves_n_views_all_leakage_clean`
-- `test_planted_forbidden_files_are_excluded_from_view`
+## Suite results (clean branch checkout)
 
-The test file is **unchanged** by this branch (`git diff base..HEAD --
-test_translate_spider2_dbt.py` empty), so this is a behavior regression,
-not a test edit. Root cause: these tests drive the production path
-`spec_to_job_config → materialize_spider2_harbor_task_view`, and this
-branch's new `_ensure_verifier_assets` writes `duckdb_match.py`,
-`eval_spec.py`, `verify.py`, `gold.duckdb`, and `test.sh` into the view's
-`tests/`. The suite's `_leakage_hits` scans file NAME **and CONTENT** for
-the alternation `gold|expected|golden`; the assets contain "gold"
-(`gold.duckdb` filename; `--gold-db`/`gold_db`/`gold_rows`/docstrings
-inside the .py and test.sh — confirmed: duckdb_match.py has 9 hits,
-verify.py 5, eval_spec.py 4). All 5 assets are flagged as leakage.
+```
+$ uv run pytest -k spider2_dbt --ignore=tests/unit/test_task_identity_scoring.py -q
+93 passed, 751 deselected in 5.34s
 
-This is exactly the "no regression to ny's generic behavior" guard the
-entity required. The gating `-k spider2_dbt_verify` selector does NOT
-match `test_translate_spider2_dbt`, which is why the implementer's green
-run missed it.
+$ uv run pytest --ignore=tests/unit/test_task_identity_scoring.py -q
+4 failed, 828 passed, 12 skipped, 80 warnings in 68.05s
+```
 
-**Fix direction (for implementation):** reconcile the two leakage
-notions. Either (a) make `_ensure_verifier_assets` write the verifier
-modules under a name/location the content+name scanner treats as
-verifier-internal (the scanner already exempts `view_manifest.json` —
-an analogous exemption for the verifier `tests/` payload is the natural
-move), or (b) update the shipping leakage contract/test to recognize the
-verifier `tests/` payload as verifier-only (uploaded at verify time, not
-agent-visible) rather than answer leakage. Coordinate with whoever owns
-`test_translate_spider2_dbt.py`'s `_leakage_hits` contract; do not
-silently weaken the scan.
+The 4 full-suite failures are pre-existing on the merge-base `9c39af2`
+(verified by running exactly those 4 node-ids in a throwaway base worktree →
+`4 failed`) and live in files UNTOUCHED by this branch
+(`git diff 9c39af2..HEAD --name-only` is spider2_dbt scope + docs only).
+NOT regressions:
 
-### B2 — `duckdb_match` reproduction is NOT faithful to Spider2 eval_utils
+- `test_spacedock_solver_freeze_dir_mechanism.py::test_codex_runtime_dispatch_constructs_inner_agent`
+- `test_worktree_teardown_preserves_runs.py::test_worktree_remove_force_does_not_destroy_runs`
+- `test_generate_matrix_specs.py::test_matrix_specs_carry_query_mode_batch`
+- `test_rk_research_new.py::test_rk_research_new_creates_scaffold_tree`
 
-The canonical oracle is `spider2-dbt/evaluation_suite/eval_utils.py`
-`duckdb_match` (fetched from xlang-ai/Spider2 main). The reproduction
-diverges in ways that **flip the reward** versus the real benchmark, so a
-model scored by this verifier would be graded differently than by
-Spider2's own scorer:
+## Code review findings (superpowers:requesting-code-review)
 
-1. **Comparison axis — column-containment vs row-tuple.** Spider2
-   transposes both tables and checks *each gold column-vector matches
-   SOME pred column-vector* (`for gcol in t_gold: any(vectors_match(gcol,
-   pcol) for pcol in t_pred)`). The impl compares **row tuples
-   positionally** after `SELECT *`. Demonstrated divergences (Spider2 →
-   1, impl → 0): pred with **reordered columns**; pred with an **extra
-   column** beyond the gold/condition set.
-2. **Float tolerance.** Spider2 uses `math.isclose(abs_tol=1e-2)` (and
-   NaN-equality). The impl uses exact `==` on raw tuples. Gold 1.000 vs
-   pred 1.005 → Spider2 1, impl 0.
-3. **`ignore_orders` granularity.** Spider2 sorts **each column-vector
-   independently**; the impl sorts **row-tuples as units**. These are not
-   the same multiset relation — Spider2 can match a table whose
-   cross-column row association is scrambled; the impl cannot.
-4. **Eval-spec schema is incompatible.** Real `spider2_eval.jsonl` lines
-   are `{"instance_id":..., "evaluation":{"func":"duckdb_match",
-   "parameters":{"gold":..., "condition_tabs":[...],
-   "condition_cols":[[...],...], "ignore_orders":[bool,...]}}}` —
-   `condition_cols` is `List[List[int]]` (positional, parallel to
-   `condition_tabs`) and `ignore_orders` is `List[bool]` (per-table),
-   nested under `evaluation.parameters`. The impl's `EvalSpec` /
-   `load_eval_spec` model `condition_cols: dict[str,list[int]]` and a
-   single `ignore_orders: bool`, read flat from the top level. The impl's
-   loader would **not parse a real Spider2 gold line** — it would silently
-   produce empty `condition_tabs` (`raw.get("condition_tabs", [])`) and
-   score every prediction 1.0 (vacuous AND over zero tables).
+Reviewer dispatched against `9c39af2..965f2ea`; it independently fetched the
+upstream Spider2 oracle and ran the suite.
 
-The entity body asserts (verbatim) "per-table SELECT *, 0-based
-condition_cols subset, ignore_orders multiset, AND across condition_tabs,
-missing table = mismatch" — that description matches the IMPL but **not
-Spider2's actual `compare_pandas_table`**, which is column-containment +
-float-tolerant + per-column sort. The plan/AC contract treated a
-row-tuple multiset model as the target; the real oracle is materially
-different. This is the faithfulness check the rider demanded, and it
-fails.
+- **Critical:** none. The reviewer could not construct any external input
+  (eval-spec JSON, gold basename, condition_tabs, task profile) that forces a
+  false reward 1.0.
+- **Important:** none.
+- **Minor (non-blocking):**
+  1. `eval_spec.py:73` — `condition_cols` `[[]]`/`[None]` is expanded to
+     `[[]]*n` for any `n`; this is the *forgiving* direction and mirrors
+     upstream `compare_multi_pandas_table` defaulting (stricter `duckdb_match`
+     would assert). No correctness risk for well-formed specs; a clarifying
+     comment was suggested.
+  2. The leakage-scan scoping that excludes the verify-only `tests/` subtree
+     rests on the Harbor "tests/ uploaded only at verify time, reset around the
+     agent run" lifecycle; a version-pinned comment was suggested so a future
+     Harbor bump can't silently invalidate it. The guard test proves the change
+     is scoping not weakening.
+  3. `harbor_view.py:163` `spec.gold or "gold.duckdb"` fallback is effectively
+     dead for wrapped specs (they already raise without gold); reachable only
+     for the unwrapped-fixture path. A clarifying comment was suggested.
 
-**Fix direction (for implementation):** port `compare_pandas_table`
-(transpose + per-column vectors_match with `abs_tol=1e-2` + per-column
-ordered/sorted compare + gold-column-containment) rather than a row-tuple
-compare; adopt the real `List[List[int]]` / `List[bool]` /
-`evaluation.parameters` spec schema (or document an explicit, approved
-deviation if the dbt track intentionally tightens the oracle — but that
-needs a captain decision, not a silent reinterpretation). Update the gold
-fixture + AC-2 wording to the column-containment semantics.
-
-## Two pre-flagged deviations — explicit verdict each
-
-1. **Rider override of the plan's hardcoded `/app/spider2.duckdb`
-   test.sh path → resolver-driven `/app/<db_name>.duckdb`:**
-   **ACCEPTED / CORRECT.** This is exactly what the rider mandated;
-   proven for a non-spider2 slug above. Not a blocker.
-2. **Pruning the empty `gold/` dir left after deny-glob file-stripping:**
-   **ACCEPTED.** Narrow, targeted (`rglob("gold")` dirs, only removed
-   when `not any(iterdir())`), keeps the path-segment leakage assertion
-   exact, and does not touch non-empty dirs. Not a blocker. (Note: it
-   does not address B1, which is about file CONTENT, not the `gold/`
-   directory segment.)
-
-## Regression scope (full suite, minus known-broken file)
-
-`uv run pytest --ignore=tests/unit/test_task_identity_scoring.py` →
-**6 failed, 793 passed, 12 skipped**.
-- 4 failures (`test_spacedock_solver_freeze_dir_mechanism`,
-  `test_worktree_teardown_preserves_runs`,
-  `test_generate_matrix_specs`, `test_rk_research_new`) **also fail on
-  base `9c39af2`** → pre-existing, unrelated, NOT regressions.
-- 2 failures (`test_translate_spider2_dbt.py`, both) → **branch-induced
-  regression** (B1).
-- `test_task_identity_scoring.py` ignored per the assignment
-  (pre-existing `razorback.score.load` import break).
-- harbor_view + preflight suites (`-k "harbor_view or preflight"`):
-  **45 passed** — no regression there.
-
-## Code review
-
-The stage asks for `superpowers:requesting-code-review`. The substantive
-findings it would surface are captured above (B1 regression, B2
-faithfulness + schema). No additional blocking correctness issues found
-in `verify.py` / `eval_spec.py` / the materializer beyond B1/B2; the
-flat-import fallbacks, fail-closed `predicted_db` existence check, and
-harbor reward shape are sound.
+All three are clarity/robustness polish, not correctness defects — classified
+non-blocking. No production code was changed during validation.
 
 ## Gate decision
 
-**REJECTED → implementation.** Fix B1 (restore the spider2 translate
-leakage suite to green without weakening the leakage contract) and B2
-(make `duckdb_match` faithful to Spider2 `eval_utils.duckdb_match`, or
-get an explicit captain-approved deviation, AND adopt the real
-`spider2_eval.jsonl` schema so the loader parses real gold lines). The 3
-ACs as written pass and the rider is satisfied, but those ACs encode the
-wrong oracle semantics — re-derive AC-2 against column-containment when
-re-entering implementation.
+**PASSED → done.**
 
----
-
-# Re-review (cycle 2): validation gate
-
-**Branch:** `spacedock-ensign/spider2-dbt-duckdb-match-verifier` @ `f878967`
-**Merge-base with main:** `9c39af2`
-**Gate verdict:** **PASSED → done**
-
-Independent re-verification of the two cycle-1 blocking findings after the
-fix commits `61a1b9c` (B2) and `22b9b6c` (B1). The authoritative
-xlang-ai/Spider2 `spider2-dbt/evaluation_suite/eval_utils.py` was fetched
-live via `gh api` (387 lines, decoded to `/tmp`); the impl was checked
-line-by-line against it and differential-tested against an inline
-transcription of that source. Both findings are resolved; no new
-regressions; rider + AC-3 intact.
-
-## B2 — comparator faithfulness to Spider2 `eval_utils.duckdb_match`: CONFIRMED
-
-`src/razorback/benchmarks/spider2_dbt/duckdb_match.py` is a faithful port of
-Spider2 `duckdb_match` + `compare_pandas_table` + `vectors_match`:
-
-- **Column-containment** (not row-tuple equality): gold restricted to
-  `condition_cols` via `iloc[:, ...]`, pred uses all columns, both
-  transposed to column-vectors, each gold column must match SOME pred
-  column — matches Spider2 `eval_utils.py:132-149`. (impl drops Spider2's
-  dead `else` loop at 145-148; no behavioral effect.)
-- **Per-column sort under `ignore_order`** with Spider2's exact sort key
-  `(x is None, str(x), isinstance(x,(int,float)))` — matches 115-117.
-- **Numeric `math.isclose(abs_tol=1e-2)`** — matches 124.
-- **NaN: `pd.isna(a) and pd.isna(b)` → equal** — matches 121.
-- **AND across `condition_tabs`**, **predicted-fetch failure = mismatch**
-  (try/except → False) — matches 221-243.
-
-Differential test (impl vs an inline transcription of the upstream oracle)
-on 10 verdict-flipping cases — float within/beyond 1e-2, row reorder
-with/without ignore_order, extra pred columns, diff in non-condition col,
-NaN, missing pred table, multi-table 1-mismatch, multi-table all-match —
-**all 10 agree and match the expected verdict**.
-
-`load_eval_spec` drilled into the REAL `playbook001`/`provider001` gold
-lines fetched from upstream `gold/spider2_eval.jsonl`: parses
-`evaluation.parameters` with per-table `condition_tabs: List[str]`,
-`condition_cols: List[List[int]]` (`[[0,1],[0,1,2,5,6,7,9,10,11,12,13]]`),
-`ignore_orders: List[bool]` (`[True,True]`) — matches `evaluate.py:96-99`
-(`duckdb_match(result, **parameters)`). All 68 real duckdb_match gold lines
-carry explicit tabs/cols/orders, so the impl's explicit-`condition_tabs`
-requirement (no None→all-tables default) is never exercised on real data.
-
-Minor non-blocking note: impl uses `SELECT * FROM "{table}"` (quoted) vs
-Spider2's unquoted `{table_name}` — a robustness improvement, not a
-faithfulness divergence.
-
-## B1 — leakage scoping sound, protection not weakened: CONFIRMED
-
-`_leakage_hits` (in `tests/unit/test_translate_spider2_dbt.py`) now excludes
-the verify-time-only `tests/` subtree via `_is_verifier_only`. Verified the
-Harbor lifecycle claim against the installed package source:
-
-- `harbor/verifier/verifier.py:123 def verify()` → lines 133-138 upload
-  the task's `tests/` to `env_paths.tests_dir` ONLY inside `verify()`.
-- `harbor/trial/trial.py:570 _verify_step` → line 587-591
-  `reset_dirs(remove_dirs=[verifier_dir, tests_dir], create_dirs=[...])`
-  wipes+recreates them EMPTY immediately before verification.
-- The agent step receives only `_upload_step_workdir` (`workdir/`), never
-  the host view's `tests/`. So the host `tests/` assets genuinely never
-  reach the agent — excluding them from the host scan is principled.
-
-Scoping ≠ weakening, proven two ways: (1) the shipped guard test
-`test_leakage_scan_still_fires_on_agent_visible_answer_content` plants
-`gold`-content in BOTH an agent-visible path (caught) and `tests/`
-(ignored); (2) a mutation probe — forcing `_is_verifier_only` to blanket-
-`True` — makes that guard FAIL on the agent-visible leak, confirming the
-guard is meaningful. Production deny-globs (`gold/**`, `**/gold/**`,
-`expected/**`, `golden/**`) — the real agent-view protection — are
-UNCHANGED; only the test's scan scope moved.
-
-The 2 previously-failing `test_translate_spider2_dbt.py` tests are green:
-full file = 13 passed.
-
-## Regression / rider / AC-3
-
-- Acceptance/gating: `uv run pytest -k spider2_dbt --ignore=tests/unit/test_task_identity_scoring.py` → **66 passed**.
-- Rider (independent end-to-end): materialized a view with `task_slug=not-spider2-slug`; emitted `tests/test.sh` resolves `--predicted-db /app/not-spider2-slug.duckdb` (ny's `resolve_spider2_db_name`), no hardcoded `/app/spider2.duckdb`.
-- AC-3 (independent end-to-end): ran the emitted `verify.py` against the gold fixture → `/logs/verifier/reward.json` = `{"reward": 1.0}` (match) and `{"reward": 0.0}` (missing pred); reward is a float.
-- Branch touches only `spider2_dbt`-scoped modules/tests + the gold fixture. None of the 3 known pre-existing failures (`test_task_identity_scoring`, `test_generate_matrix_specs`, `test_rk_research_new`) are touched by this branch — not regressions. Ignored harness `uv.lock` churn.
-
-## Gate decision
-
-**PASSED → done.** Both cycle-1 blocking findings are independently
-resolved against the live Spider2 source: B2 — the comparator and eval-spec
-schema faithfully reproduce `eval_utils.duckdb_match` (verified by a 10-case
-differential test against the upstream oracle and a real multi-table gold
-line); B1 — the leakage fix is scoping, not weakening (mutation-probed),
-justified by the verified Harbor verify-only-tests/ lifecycle. Rider and
-AC-3 reward.json shape intact; no regressions outside the known pre-existing
-set. No blocking findings remain.
-
----
-
-# Re-review (cycle 3): validation gate — fail-closed fix
-
-**Branch:** `spacedock-ensign/spider2-dbt-duckdb-match-verifier` @ `11c66f4`
-**Merge-base with main:** `9c39af2`
-**Fix commit under review:** `869918d` (fail-closed eval-spec validation)
-**Gate verdict:** **PASSED → done**
-
-Independent re-verification of the cycle-2 fail-open hazard fix (Codex
-finding: empty/malformed eval spec awarded `{"reward": 1.0}`). No
-production code written.
-
-## Fail-closed fix is real and load-bearing: CONFIRMED
-
-`load_eval_spec` / `EvalSpec.__post_init__` (`eval_spec.py`) now fail closed,
-and `emit_reward` (`verify.py:33-42`) wraps spec-load + compare in
-`try/except → reward 0`. Independent probe at clean branch HEAD:
-
-- **RAISE cases** (all `ValueError`): empty file; `evaluation.parameters`
-  with no `condition_tabs`; explicit empty `condition_tabs`; non-`duckdb_match`
-  `evaluation.func` (`string_match`); direct `EvalSpec(condition_tabs=[])`.
-- **Hazard-beating** — over a MATCHING pred/gold pair (cloned tables):
-  an empty/zero-table spec → `{"reward": 0.0}` and a wrong-func spec →
-  `{"reward": 0.0}` — **not the prior 1.0**. Garbage non-JSON → `0.0` with
-  no exception (no crash-into-pass).
-- **Positive control:** a VALID matching spec still → `{"reward": 1.0}`,
-  so the guards are targeted, not blanket-failing.
-
-**Mutation test (guards are load-bearing):** stripping the `n==0` guard,
-the empty-file raise, and the wrong-func raise from `eval_spec.py` made all
-6 negative tests FAIL — and the CLI negative reproduced the exact
-`{'reward': 1.0}` == `{'reward': 0.0}` assertion failure, i.e. the original
-hazard returned. Tree restored to clean (`git diff` on `eval_spec.py` empty).
-
-Root-cause confirmed in source: `compare_duckdb` (`duckdb_match.py:116`)
-returns `True` after the per-table AND-loop, so a zero-`condition_tabs` spec
-would vacuously match — the guards prevent that spec from ever being built.
-
-## Cycle-1 fixes intact (B2 comparator + B1 leakage): CONFIRMED
-
-`git diff 0b64e92..869918d --name-only` (the cycle-2 fix delta) touches ONLY
-`eval_spec.py`, `verify.py`, `test_spider2_dbt_verify_cli.py`,
-`test_spider2_dbt_verify_comparator.py`. `duckdb_match.py` (B2),
-`harbor_view.py` + `test_translate_spider2_dbt.py` (B1) are **untouched** —
-cycle-1 is intact by construction, and re-confirmed live:
-
-- **B2 faithfulness:** column-containment with reordered + extra pred
-  columns → True; `math.isclose(1e-2)` within → True / beyond → False;
-  per-column sort under `ignore_order` → True; ordered mismatch → False;
-  missing pred table → False (mismatch).
-- **B1 leakage scoping:** `test_translate_spider2_dbt.py` leakage/planted/
-  resolves tests → 3 passed; the `leakage_scan_still_fires_on_agent_visible`
-  guard among 9 rider/AC-3/leakage tests → 9 passed (agent-visible leaks
-  still caught; only verify-only `tests/` excluded).
-
-## Regression / rider / AC-3
-
-- **Gating:** `uv run pytest -k spider2_dbt --ignore=tests/unit/test_task_identity_scoring.py`
-  → **73 passed, 751 deselected** (was 66 in cycle 2; +7 negatives).
-- **Rider:** materialized view with `task_slug=not-spider2-slug` → emitted
-  `test.sh` `--predicted-db /app/not-spider2-slug.duckdb`; `/app/spider2.duckdb`
-  absent (ny's `resolve_spider2_db_name`).
-- **AC-3:** independent end-to-end via `emit_reward` against the materialized
-  gold fixture — matching pred → `{"reward": 1.0}`, mismatch → `{"reward": 0.0}`;
-  `set(payload) == {"reward"}`, reward is `float`.
-- Working tree clean apart from the known harness `uv.lock` churn (ignored
-  per assignment). Pre-existing unrelated failures on base
-  (`test_task_identity_scoring`, `test_generate_matrix_specs`,
-  `test_rk_research_new`, etc.) are not regressions and not touched.
-
-## Gate decision
-
-**PASSED → done.** The cycle-2 fail-open hazard is independently closed:
-empty/malformed/schema-drifted specs raise or score 0, the matching-pair
-hazard now yields 0 not 1.0, and a mutation test proves the guards (and their
-negative tests) are load-bearing. Cycle-1 comparator faithfulness and leakage
-scoping are intact (untouched by the fix + re-confirmed live); rider and AC-3
-reward shape intact; no new regressions. Per the convergence plan this was the
-last re-validation before PR.
-
----
-
-## Re-validation (cycle-3 fix: gold DB basename) — 2026-06-18
-
-Independent re-review after the cycle-3 fix (commit `a677c36`) that threads
-the eval spec's `gold` basename through `EvalSpec` → materializer copy →
-`test.sh --gold-db`, replacing the hardcoded `gold.duckdb`. No production code
-written by this validator.
-
-### Fix is real (production code, branch HEAD `bac0705`)
-
-- `eval_spec.py`: `EvalSpec` gains `gold: str | None`; `load_eval_spec` parses
-  `evaluation.parameters.gold` and RAISES `ValueError` when a wrapped
-  `duckdb_match` spec omits/empties it (`eval_spec.py:128`).
-- `harbor_view.py`: `_ensure_verifier_assets` loads the spec, resolves
-  `gold_basename = spec.gold or "gold.duckdb"`, copies the EXACT named file
-  from `tests/gold/<basename>`, raises `FileNotFoundError` if absent
-  (`harbor_view.py:141`), and formats `_TEST_SH_TEMPLATE` with
-  `--gold-db /tests/{gold_db}` (`:63`, `:164`) — no hardcoded `gold.duckdb`.
-
-### Independent exercise (standalone probe, no test infra) — 11/11 PASS
-
-- Loader: wrapped spec missing `gold` RAISES; empty-string `gold` RAISES;
-  `gold` parsed verbatim (`playbook.duckdb`).
-- Materializer with `parameters.gold = playbook.duckdb` and NO `gold.duckdb`
-  present: `playbook.duckdb` copied; `gold.duckdb` NOT invented; test.sh emits
-  `--gold-db /tests/playbook.duckdb`, no `/tests/gold.duckdb`; leakage-clean
-  (no `gold/` path segment survives).
-- End-to-end over the materialized named gold via `emit_reward`: matching pred
-  → `{"reward": 1.0}`, mismatch → `{"reward": 0.0}`.
-- Missing named gold → `FileNotFoundError` (fail-closed).
-
-### Load-bearing (mutation tests)
-
-- Hardcoding `gold_basename = "gold.duckdb"` in `harbor_view.py` →
-  `test_spider2_dbt_verify_view_uses_non_default_gold_basename` and
-  `..._named_gold_actually_scores` FAIL (2 failed, 6 passed). Restored.
-- Disabling the wrapped-spec missing-`gold` raise in `eval_spec.py` →
-  `test_...load_eval_spec_missing_gold_in_wrapped_spec_raises` FAILS
-  (1 failed, 7 passed). Restored. Tree clean (only `uv.lock`).
-
-### No regression to prior cycles / rider / AC-3
-
-- Cycle-3 diff (`a677c36`) touches ONLY `eval_spec.py` + `harbor_view.py`
-  + their 2 test files. `duckdb_match.py` (cycle-1 comparator, last `61a1b9c`)
-  and `verify.py` (cycle-2 / AC-3, last `869918d`) UNTOUCHED — cycle-1/cycle-2
-  intact by construction.
-- Re-confirmed live: cycle-1 column-containment + `math.isclose(1e-2)` +
-  per-column sort under `ignore_order` + missing-table mismatch (3/3);
-  cycle-2 fail-closed empty-file / wrong-func / empty-`condition_tabs` raises
-  (3/3).
-- Rider: `task_slug=not-spider2-slug` → emitted test.sh
-  `--predicted-db /app/not-spider2-slug.duckdb`, no `/app/spider2.duckdb`
-  (`...test_sh_uses_resolved_db_name` 1 passed).
-- AC-3 reward shape `{"reward": <float>}` intact (end-to-end probe above).
-
-### Suites (clean checkout)
-
-- `uv run pytest -k spider2_dbt --ignore=tests/unit/test_task_identity_scoring.py`
-  = **78 passed**, 751 deselected.
-- `tests/unit/test_translate_spider2_dbt.py` = **13 passed**.
-- Full suite (`--ignore` the broken scoring file) = 813 passed, 4 failed.
-  The 4 failures (`test_spacedock_solver_freeze_dir_mechanism`,
-  `test_worktree_teardown_preserves_runs`, `test_generate_matrix_specs`,
-  `test_rk_research_new`) ALSO fail on merge-base `9c39af2` (verified in a
-  throwaway base worktree) — pre-existing, unrelated, NOT regressions. Branch
-  touches only spider2_dbt-scoped files.
-
-## Gate decision (cycle-3 re-validation)
-
-**PASSED → done.** The cycle-3 gold-basename fix is real and load-bearing: a
-non-default `playbook.duckdb` is honored (copied + scored, leakage-clean), a
-missing named gold fails closed, and a wrapped spec lacking `gold` raises —
-each proven by an independent probe and a mutation test that flips the
-regression tests red. Cycles 1-2, the predicted-DB rider, and the AC-3 reward
-shape are intact (untouched by the fix + re-confirmed live). The only
-remaining full-suite failures are pre-existing on base. Per the convergence
-plan, this is the last re-validation before PR.
+Rationale: all three ACs reproduce green from a clean checkout with actual
+command output (gating suite 93 passed; acceptance `-k spider2_dbt_verify` 49
+passed), every dispatch-named focus area is confirmed by live behavioral probes
+(comparator faithfulness, duckdb-only, fail-closed guards, shell+SQL injection
+sealed, symlink write-through, reward.json shape), the only full-suite failures
+are pre-existing on the merge-base and outside this branch's scope, and the
+independent code review found zero blocking issues (3 minor polish notes). No
+external input forces a false reward 1.0.
