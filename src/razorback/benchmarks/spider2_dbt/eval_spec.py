@@ -131,6 +131,20 @@ def load_eval_spec(path: Path) -> EvalSpec:
             "duckdb_match spec must name its per-task gold .duckdb (fail-open "
             "guard)"
         )
+    # `gold` is external Spider2 input that the materializer joins onto a path
+    # (tests/gold/<gold>) and emits into test.sh (--gold-db /tests/<gold>). It is
+    # documented as a bare basename; reject absolute paths, separators, and `..`
+    # so a malformed/hostile spec cannot read or write outside the verifier-only
+    # gold area. Fail closed at the trust boundary, not downstream.
+    if isinstance(gold, str) and gold.strip():
+        g = gold.strip()
+        if Path(g).name != g or g in (".", ".."):
+            raise ValueError(
+                f"unsafe evaluation.parameters.gold {gold!r} in {path}: must be "
+                "a bare .duckdb basename (no path separators, '..', or absolute "
+                "path) — refusing to score outside tests/gold/ (fail-closed)"
+            )
+        gold = g
 
     condition_tabs = list(params.get("condition_tabs", []))
     raw_cols = params.get("condition_cols")

@@ -209,3 +209,22 @@ Resolved the cycle-3 gold-DB-basename defect (commit a677c36). The verifier no l
 ### Summary
 
 Cycle-3-fix re-validation (commit a677c36) — independent verification only, no production code. The gold-DB-basename fix is real and load-bearing: a non-default `playbook.duckdb` (with NO `gold.duckdb` present) is copied + scored + leakage-clean, the emitted test.sh carries `--gold-db /tests/playbook.duckdb`, a wrapped spec lacking `gold` raises, and a missing named gold fails closed — each proven by a standalone 11/11 probe AND a mutation test that flips the regression tests red. Cycles 1-2 (faithful column-containment comparator + 1e-2 tolerance; fail-closed empty/malformed-spec guards), the predicted-DB resolver rider, and the AC-3 `{"reward": <float>}` shape are untouched by the fix and re-confirmed live. Gating suite 78 passed; translate suite 13 passed; the only remaining full-suite failures are pre-existing on base (verified). Gate verdict: PASSED → done. Full report: docs/razorback-implementation/validation/spider2-dbt-duckdb-match-verifier.md
+
+### Cycle 4 — validation gate REJECTED (2026-06-18, captain via Codex review)
+
+4th adversarial Codex pass found a path-traversal hole in the (now spec-driven) gold basename; captain chose fix-now. Confirmed live. Routing back to `implementation`:
+
+1. **[high] `evaluation.parameters.gold` used verbatim as a path component (trust boundary).**
+   `gold` is external Spider2 input. `harbor_view.py:139-147` joins it as `source_gold / gold` (read) and `tests / gold` (copy2), and emits `--gold-db /tests/<gold>` in test.sh. `Path` preserves `..`/absolute components, so a spec value like `../dbt_project/foo.duckdb` passes the `is_file()` check against a file OUTSIDE `tests/gold/`, then `copy2` writes outside `view/tests/` and the emitted path leaves `/tests` — benchmark corruption / leakage from a malformed or hostile task.
+   **Fix:** reject non-basename `gold` at the trust boundary (`load_eval_spec`): require `Path(g).name == g`, reject `.`/`..`/absolute/separators, before any path use. Add a `../`/absolute/separator regression test asserting fail-closed. Keep cycles 1-3 intact.
+
+## Stage Report: implementation (cycle 4)
+
+- DONE: Reject non-basename `gold` in `load_eval_spec` before it is used as a path component.
+  Guard added in `eval_spec.py` immediately after the missing-gold check: when `gold` is a non-empty str, require `Path(g).name == g` and reject `.`/`..` → raises `ValueError` (fail-closed at the trust boundary). Bare-fixture `gold=None` still falls back to `gold.duckdb` (safe). The materializer and test.sh emitter are unchanged — the basename is sanitized upstream so both inherit the guarantee.
+- DONE: Regression test for `../`/absolute/separator/`.`/`..` gold values.
+  Parametrized `test_..._rejects_non_basename_gold` (5 cases: `../dbt_project/foo.duckdb`, `/etc/passwd`, `sub/dir/g.duckdb`, `..`, `.`) asserts `load_eval_spec` raises. Comparator suite 28 passed (was 23); harbor_view + verify_cli + translate suites 34 passed. Cycles 1-3 untouched.
+
+### Summary
+
+Resolved the cycle-4 path-traversal defect. `load_eval_spec` now fails closed on any `gold` that is not a bare basename (`..`, `.`, absolute, or containing separators), sanitizing the value at the trust boundary so both the materializer's `copy2` targets and the emitted `--gold-db /tests/<gold>` path stay inside the verifier-only gold area. One file + one parametrized test (5 cases); cycles 1-3 left intact. spider2_dbt suite green (62 across comparator/harbor_view/verify_cli/translate).

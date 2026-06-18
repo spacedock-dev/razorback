@@ -184,6 +184,33 @@ def test_spider2_dbt_verify_load_eval_spec_missing_evaluation_raises(tmp_path: P
         load_eval_spec(spec_path)
 
 
+@pytest.mark.parametrize(
+    "bad_gold",
+    ["../dbt_project/foo.duckdb", "/etc/passwd", "sub/dir/g.duckdb", "..", "."],
+)
+def test_spider2_dbt_verify_load_eval_spec_rejects_non_basename_gold(
+    tmp_path: Path, bad_gold: str
+):
+    # `gold` is external Spider2 input the materializer joins onto a path and
+    # emits into test.sh. A `..`/absolute/separator value would let the verifier
+    # read or write outside tests/gold/, so it must fail closed at parse time.
+    spec_path = tmp_path / "spider2_eval.jsonl"
+    spec_path.write_text(
+        json.dumps(
+            {
+                "instance_id": "t",
+                "evaluation": {
+                    "func": "duckdb_match",
+                    "parameters": {"gold": bad_gold, "condition_tabs": ["orders"]},
+                },
+            }
+        )
+        + "\n"
+    )
+    with pytest.raises(ValueError):
+        load_eval_spec(spec_path)
+
+
 # --------------------------------------------------------------------------
 # comparator fixtures
 # --------------------------------------------------------------------------
