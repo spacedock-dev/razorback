@@ -76,3 +76,33 @@ live smoke fails.
 
 ### Summary
 Wrote the implementation plan via superpowers:writing-plans. The single wiring point is `_build_harbor` in `translate.py`: detect the spider2-dbt family by `PackageReference.short_name`, then materialize each resolved source dir through `materialize_spider2_harbor_task_view` into the run's `tasks_root`, emitting view dirs as `TaskConfig.path`. Tests reuse the existing resolver-monkeypatch seam for determinism; an `RAZORBACK_SPIDER2_DBT_SOURCE_ROOT` offline seam keeps the `rk run --explain` integration test network-free. Three claims were verified live against the repo (PackageReference parse behavior for short vs qualified refs, the explain payload key path `prompt.task_paths`, and `parse_spec_file`'s location). One open item flagged for the implementer: whether `exclude_tasks`/`n_tasks` should filter on view-dir names or source slugs.
+
+## Feedback Cycles
+
+### Cycle 1 — plan gate REJECTED (2026-06-18)
+
+Codex adversarial review (`--base HEAD~3`) surfaced three design-level
+defects; captain rejected the plan gate and chose **option B** (change
+the dataset-ref contract). Rework brief for the next plan pass:
+
+1. **[high] Dataset-ref contract (captain decision: B).** Amend the
+   user-facing contract to the fully-qualified `spider2-dbt/spider2-dbt@1.0`
+   ref **everywhere** — update AC-1 and the Problem § in this entity, and
+   the plan's fixture spec / detection prose. The bare `spider2-dbt@1.0`
+   form stays only as the `harbor download` CLI smoke (T7). Do NOT add
+   schema support for the bare ref (that was option A, declined).
+2. **[high] Env-override hijack.** The proposed
+   `RAZORBACK_SPIDER2_DBT_SOURCE_ROOT` branch at the top of
+   `_resolve_harbor_dataset_tasks` ignores `dataset_ref`, so a leaked env
+   var could route any `kind: harbor` dataset to the spider2 fixture
+   tree. Remove the production-resolver seam: keep the offline test seam
+   as pytest monkeypatch only (preferred), or if an env seam is truly
+   needed, guard it with `_is_spider2_dbt_dataset(dataset_ref)` so it
+   never captures non-spider2 datasets.
+3. **[medium] `exclude_tasks` semantics.** Apply `exclude_tasks` /
+   `n_tasks` to **source paths before materialization** (or carry an
+   explicit source-task-id map), so selectors stay bound to original
+   Harbor task names rather than the post-materialization
+   `<benchmark_kind>-<task_slug>` view names. Add a test where
+   `exclude_tasks=[source_slug]` proves the excluded spider2 task is not
+   emitted. Resolve this in the plan — do not defer it to the implementer.
