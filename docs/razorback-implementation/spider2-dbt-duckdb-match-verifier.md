@@ -95,3 +95,21 @@ Shipped the spider2-dbt duckdb_match verifier TDD-first across 3 commits: a pure
 ### Summary
 
 Independent verification only — no production code written. The 3 ACs as literally written reproduce green (18-passed gating suite + standalone AC repro + a real end-to-end test.sh run) and the mandatory resolver rider is satisfied for a non-spider2 slug. Verdict is REJECTED → implementation on two blocking findings: (B1) a branch-induced regression — the verifier assets written into the view's `tests/` trip `test_translate_spider2_dbt.py`'s content-leakage scanner, which passes on the merge-base; and (B2) the `duckdb_match` reproduction is not faithful to Spider2's `eval_utils.duckdb_match` (row-tuple/exact compare vs Spider2's column-containment + 1e-2 float tolerance + per-column sort) and models an incompatible eval-spec schema that would not parse a real `spider2_eval.jsonl` line. Both pre-flagged deviations (rider path override, empty `gold/` prune) are accepted as correct. Full report: docs/razorback-implementation/validation/spider2-dbt-duckdb-match-verifier.md
+
+## Feedback Cycles
+
+### Cycle 1 — validation gate REJECTED (2026-06-18)
+
+Validation (reviewer fetched the real xlang-ai/Spider2 `eval_utils.duckdb_match`)
+found two blocking defects. Routing back to `implementation`:
+
+1. **[Critical] B2 — comparator + eval-spec schema do NOT match Spider2's `duckdb_match`.**
+   The real Spider2 semantics (from `evaluation_suite/eval_utils.py`):
+   - **Column-containment, not row-tuple equality:** transpose both tables to column-vectors; for each GOLD column (restricted to `condition_cols`), assert some PRED column-vector matches it. Per-column sorting is applied; numeric compare uses `math.isclose(abs_tol=1e-2)`.
+   - **Eval-spec schema:** each gold line is `{"instance_id", "evaluation": {"func":"duckdb_match", "parameters": {"gold", "condition_tabs": [...], "condition_cols": [[int,...],...], "ignore_orders": [bool,...]}}}`. `condition_cols` is `List[List[int]]` and `ignore_orders` is `List[bool]` (per-table), NOT a flat dict + single bool. The current flat schema would silently score every prediction 1.0 on a real gold line.
+   **Fix:** re-derive `compare_duckdb` to reproduce Spider2's column-containment + `math.isclose(abs_tol=1e-2)` + per-column sort, AND across `condition_tabs`, missing table = mismatch. Load the real per-table `condition_cols`/`ignore_orders` lists from `evaluation.parameters`. Add tests for the verdict-flipping cases the reviewer found (float tolerance 1e-2, column reorder, extra pred columns) and a real multi-table gold line.
+2. **[high] B1 — verifier gold assets trip eg's agent-view leakage test (regression).**
+   `_ensure_verifier_assets` writes `gold.duckdb` / eval spec / comparator into the view's `tests/`, and `test_translate_spider2_dbt.py`'s leakage scan (pattern `gold|expected|golden` over the materialized view) now flags them — 2 tests that pass on base `9c39af2` fail on this branch.
+   **Fix:** make the agent-facing view leakage-clean while keeping the gold assets verifier-only. The view's `tests/` is uploaded only at verify time and removed during the agent run, so reconcile the leakage check to scope to the agent-visible portion (exclude the verifier-only `tests/` assets) — OR relocate/name the assets so the scan is clean — without weakening real agent-view leakage protection. Restore the 2 failing tests to green.
+
+Keep the rider (resolver-driven `/app/<db_name>.duckdb`) and AC-3 reward.json shape intact.
