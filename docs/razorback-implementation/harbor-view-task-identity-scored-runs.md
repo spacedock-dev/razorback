@@ -1,7 +1,7 @@
 ---
 id: b1fdqxbnr44efwjybdskqw47
 title: harbor-view task identity through scored runs (spider2-dbt + generic)
-status: implementation
+status: validation
 source: Codex adversarial review of spider2-dbt-source-resolution-and-run-wiring (2026-06-18); cross-cutting follow-up
 started: 2026-06-18T15:46:31Z
 completed:
