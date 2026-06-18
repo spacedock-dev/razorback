@@ -60,7 +60,7 @@ set -eu
 mkdir -p /logs/verifier
 python /tests/verify.py \\
   --predicted-db {predicted_db} \\
-  --gold-db /tests/gold.duckdb \\
+  --gold-db /tests/{gold_db} \\
   --eval-spec /tests/spider2_eval.jsonl \\
   --reward-out /logs/verifier/reward.json
 """
@@ -112,6 +112,13 @@ def _ensure_verifier_assets(
     `--predicted-db` is `/app/<db_name>.duckdb` where `<db_name>` comes from the
     SHARED `resolve_spider2_db_name` resolver (RIDER, Codex r5-plan finding) —
     never a hardcoded `/app/spider2.duckdb`.
+
+    The GOLD DB basename is driven by the eval spec's
+    ``evaluation.parameters.gold`` (real Spider2 tasks name the gold per task,
+    e.g. ``playbook.duckdb``) — the EXACT named file is copied and
+    ``--gold-db /tests/<basename>`` is emitted. Fails closed (raises) if the
+    spec names a gold file that does not exist under ``tests/gold/``, so the
+    verifier never scores against a missing/wrong gold.
     """
     source_gold = Path(source_task_dir) / "tests" / "gold"
     if not source_gold.is_dir():
@@ -122,8 +129,23 @@ def _ensure_verifier_assets(
     for mod in (_duckdb_match_mod, _eval_spec_mod, _verify_mod):
         src = Path(mod.__file__)
         shutil.copy2(src, tests / src.name)
-    shutil.copy2(source_gold / "gold.duckdb", tests / "gold.duckdb")
-    shutil.copy2(source_gold / "spider2_eval.jsonl", tests / "spider2_eval.jsonl")
+
+    # Resolve the gold DB basename from the spec (NOT hardcoded gold.duckdb).
+    # Real Spider2 tasks name the gold per task; scoring the wrong/missing file
+    # is a benchmark-correctness defect. A wrapped spec without parameters.gold
+    # fails closed inside load_eval_spec.
+    source_spec = source_gold / "spider2_eval.jsonl"
+    spec = _eval_spec_mod.load_eval_spec(source_spec)
+    gold_basename = spec.gold or "gold.duckdb"
+    source_gold_db = source_gold / gold_basename
+    if not source_gold_db.is_file():
+        raise FileNotFoundError(
+            f"spider2-dbt gold spec names gold DB {gold_basename!r} but "
+            f"{source_gold_db} does not exist; refusing to emit a verifier that "
+            "would score against a missing gold (fail-closed)"
+        )
+    shutil.copy2(source_gold_db, tests / gold_basename)
+    shutil.copy2(source_spec, tests / "spider2_eval.jsonl")
 
     # Resolve the agent-facing DuckDB stem from the dbt project (or the slug
     # fallback) so the verifier compares the SAME `/app/<db_name>.duckdb` the
@@ -138,7 +160,8 @@ def _ensure_verifier_assets(
         test_sh.unlink()
     test_sh.write_text(
         _TEST_SH_TEMPLATE.format(
-            predicted_db=f"{_APP_ROOT}/{db_name}.duckdb"
+            predicted_db=f"{_APP_ROOT}/{db_name}.duckdb",
+            gold_db=gold_basename,
         )
     )
     test_sh.chmod(

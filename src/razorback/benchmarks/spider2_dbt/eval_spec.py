@@ -23,6 +23,14 @@ class EvalSpec:
 
     The three list fields are positional and parallel to ``condition_tabs``:
 
+    gold: basename of the gold ``.duckdb`` to score against, taken verbatim
+        from ``evaluation.parameters.gold``. Real Spider2 tasks name the gold
+        DB per task (e.g. ``playbook.duckdb``, ``tpch.duckdb``), so this drives
+        which file the verifier compares — it is NOT hardcoded to
+        ``gold.duckdb``. Mirrors Spider2 ``evaluate.py:97``, which resolves
+        ``parameters['gold']`` to a per-task gold path before calling
+        ``duckdb_match``. ``None`` only for bare-``parameters`` fixtures with no
+        ``evaluation`` wrapper.
     condition_tabs: gold/pred table names to compare (``List[str]``).
     condition_cols: per-table 0-based gold column indices to restrict the
         gold side to before column-containment (``List[List[int]]``). An
@@ -40,6 +48,7 @@ class EvalSpec:
     condition_tabs: list[str]
     condition_cols: list[list[int]] = field(default_factory=list)
     ignore_orders: list[bool] = field(default_factory=list)
+    gold: str | None = None
 
     def __post_init__(self) -> None:
         n = len(self.condition_tabs)
@@ -81,9 +90,10 @@ def load_eval_spec(path: Path) -> EvalSpec:
     ``parameters``-shaped object (no ``evaluation`` wrapper) for fixtures.
 
     Fails closed on a corrupted/truncated/schema-drifted gold line: an empty
-    file, a wrong ``evaluation.func``, or a missing/empty ``condition_tabs``
-    each raise ``ValueError`` rather than yielding a zero-table spec that
-    ``compare_duckdb`` would silently score as a match (reward 1.0).
+    file, a wrong ``evaluation.func``, a missing/empty ``condition_tabs``, or
+    (for a real wrapped spec) a missing/empty ``parameters.gold`` each raise
+    ``ValueError`` rather than yielding a spec that ``compare_duckdb`` would
+    silently score as a match or that would score against the wrong gold file.
     """
     text = Path(path).read_text().strip()
     if not text:
@@ -98,7 +108,8 @@ def load_eval_spec(path: Path) -> EvalSpec:
     # duckdb_match — any other func means this verifier cannot faithfully score
     # the line, so refuse rather than fall through to a match.
     evaluation = raw.get("evaluation")
-    if evaluation is not None:
+    wrapped = evaluation is not None
+    if wrapped:
         func = evaluation.get("func")
         if func != "duckdb_match":
             raise ValueError(
@@ -108,6 +119,18 @@ def load_eval_spec(path: Path) -> EvalSpec:
         params = evaluation.get("parameters", {})
     else:
         params = raw
+
+    gold = params.get("gold")
+    # A real wrapped Spider2 gold line MUST name its per-task gold DB (Spider2
+    # evaluate.py resolves parameters['gold'] to a per-task path). A missing or
+    # empty gold basename means we cannot know which file to score against, so
+    # fail closed rather than fall back to a hardcoded gold.duckdb.
+    if wrapped and not (isinstance(gold, str) and gold.strip()):
+        raise ValueError(
+            f"missing/empty evaluation.parameters.gold in {path}: a wrapped "
+            "duckdb_match spec must name its per-task gold .duckdb (fail-open "
+            "guard)"
+        )
 
     condition_tabs = list(params.get("condition_tabs", []))
     raw_cols = params.get("condition_cols")
@@ -121,4 +144,5 @@ def load_eval_spec(path: Path) -> EvalSpec:
         condition_tabs=condition_tabs,
         condition_cols=condition_cols,
         ignore_orders=ignore_orders,
+        gold=gold if isinstance(gold, str) else None,
     )

@@ -163,6 +163,131 @@ def test_spider2_dbt_verify_view_carries_verifier_assets(tmp_path):
     assert not list(view.rglob("gold/*"))
 
 
+def _write_gold_source(
+    source: Path, *, gold_basename: str, with_default_gold: bool
+) -> Path:
+    # A minimal spider2-dbt source task whose gold line names a NON-default gold
+    # DB (e.g. playbook.duckdb), with NO gold.duckdb present. Mirrors a real
+    # Spider2 task that names its gold per task.
+    (source / "environment").mkdir(parents=True)
+    (source / "dbt_project" / "models").mkdir(parents=True)
+    (source / "task.toml").write_text(
+        "\n".join(
+            [
+                'schema_version = "1.0"',
+                "[environment]",
+                'os = "linux"',
+                "cpus = 1",
+                "memory_mb = 1024",
+                "storage_mb = 1024",
+                "",
+            ]
+        )
+    )
+    (source / "instruction.md").write_text("Fix the dbt project.\n")
+    (source / "dbt_project" / "dbt_project.yml").write_text(
+        "name: example\nprofile: example\n"
+    )
+    (source / "dbt_project" / "models" / "example.sql").write_text("select 1\n")
+    (source / "environment" / "Dockerfile").write_text(
+        "FROM python:3.12\nWORKDIR /app\nCMD [\"bash\"]\n"
+    )
+    gold_dir = source / "tests" / "gold"
+    gold_dir.mkdir(parents=True)
+    # The NAMED gold DB (the one the spec points at).
+    _build_db(gold_dir / gold_basename, [1, 2])
+    if with_default_gold:
+        _build_db(gold_dir / "gold.duckdb", [9, 9])  # a decoy default
+    (gold_dir / "spider2_eval.jsonl").write_text(
+        json.dumps(
+            {
+                "instance_id": "playbook001",
+                "evaluation": {
+                    "func": "duckdb_match",
+                    "parameters": {
+                        "gold": gold_basename,
+                        "condition_tabs": ["orders"],
+                        "condition_cols": [[]],
+                        "ignore_orders": [True],
+                    },
+                },
+            }
+        )
+        + "\n"
+    )
+    return source
+
+
+def test_spider2_dbt_verify_view_uses_non_default_gold_basename(tmp_path):
+    # REGRESSION (cycle-3): the gold DB basename is driven by parameters.gold,
+    # NOT hardcoded gold.duckdb. A task naming playbook.duckdb (and shipping NO
+    # gold.duckdb) must copy playbook.duckdb into the verifier-only tests/ and
+    # emit --gold-db /tests/playbook.duckdb.
+    source = _write_gold_source(
+        tmp_path / "source", gold_basename="playbook.duckdb", with_default_gold=False
+    )
+    view = materialize_spider2_harbor_task_view(
+        source_task_dir=source,
+        view_root=tmp_path / "views",
+        task_slug="playbook001",
+    )
+    tests = view / "tests"
+    # The NAMED gold file is copied; the hardcoded gold.duckdb is NOT invented.
+    assert (tests / "playbook.duckdb").is_file()
+    assert not (tests / "gold.duckdb").exists()
+    # test.sh scores against the named file.
+    test_sh = (tests / "test.sh").read_text()
+    assert "--gold-db /tests/playbook.duckdb" in test_sh
+    assert "/tests/gold.duckdb" not in test_sh
+    # leakage-clean: no gold/ segment survives.
+    assert not (view / "tests" / "gold").exists()
+    assert not list(view.rglob("gold/*"))
+
+
+def test_spider2_dbt_verify_view_named_gold_actually_scores(tmp_path):
+    # End-to-end: a predicted DB matching the NAMED gold scores 1.0 through the
+    # emitted verifier, proving the named file (not a missing/decoy gold.duckdb)
+    # is the one actually scored.
+    source = _write_gold_source(
+        tmp_path / "source", gold_basename="playbook.duckdb", with_default_gold=False
+    )
+    view = materialize_spider2_harbor_task_view(
+        source_task_dir=source,
+        view_root=tmp_path / "views",
+        task_slug="playbook001",
+    )
+    tests = view / "tests"
+    predicted = tmp_path / "pred.duckdb"
+    _build_db(predicted, [2, 1])  # reordered; ignore_orders -> match
+    reward_out = tmp_path / "logs" / "verifier" / "reward.json"
+    emit_reward(
+        predicted_db=predicted,
+        gold_db=tests / "playbook.duckdb",
+        eval_spec=tests / "spider2_eval.jsonl",
+        reward_out=reward_out,
+    )
+    assert json.loads(reward_out.read_text()) == {"reward": 1.0}
+
+
+def test_spider2_dbt_verify_view_missing_named_gold_fails_closed(tmp_path):
+    # Fail closed: if the spec names a gold DB that does NOT exist under
+    # tests/gold/, materialization must raise rather than silently emit a
+    # verifier that scores against a missing file.
+    source = _write_gold_source(
+        tmp_path / "source", gold_basename="playbook.duckdb", with_default_gold=False
+    )
+    # Delete the named gold so the spec points at a missing file.
+    (source / "tests" / "gold" / "playbook.duckdb").unlink()
+    import pytest
+
+    with pytest.raises((FileNotFoundError, ValueError)):
+        materialize_spider2_harbor_task_view(
+            source_task_dir=source,
+            view_root=tmp_path / "views",
+            task_slug="playbook001",
+        )
+
+
 def test_spider2_dbt_verify_test_sh_uses_resolved_db_name(tmp_path):
     # RIDER: the emitted test.sh predicted-DB path must come from
     # resolve_spider2_db_name, NOT a hardcoded /app/spider2.duckdb. This

@@ -38,10 +38,58 @@ def test_spider2_dbt_verify_loads_eval_spec_real_shape(tmp_path: Path):
     )
     spec = load_eval_spec(spec_path)
     assert spec == EvalSpec(
+        gold="gold.duckdb",
         condition_tabs=["orders", "customers"],
         condition_cols=[[0, 2], []],
         ignore_orders=[True, False],
     )
+
+
+def test_spider2_dbt_verify_load_eval_spec_parses_gold_basename(tmp_path: Path):
+    # Real Spider2 tasks name the gold DB per task (playbook.duckdb, tpch.duckdb,
+    # ...). load_eval_spec must carry parameters.gold through so the verifier
+    # scores against the NAMED file, not a hardcoded gold.duckdb.
+    spec_path = tmp_path / "spider2_eval.jsonl"
+    spec_path.write_text(
+        json.dumps(
+            {
+                "instance_id": "playbook001",
+                "evaluation": {
+                    "func": "duckdb_match",
+                    "parameters": {
+                        "gold": "playbook.duckdb",
+                        "condition_tabs": ["orders"],
+                    },
+                },
+            }
+        )
+        + "\n"
+    )
+    spec = load_eval_spec(spec_path)
+    assert spec.gold == "playbook.duckdb"
+
+
+def test_spider2_dbt_verify_load_eval_spec_missing_gold_in_wrapped_spec_raises(
+    tmp_path: Path,
+):
+    # A real wrapped (evaluation.func == duckdb_match) gold line MUST name its
+    # gold DB. A missing/empty parameters.gold is a schema drift the verifier
+    # cannot score against the right file -> fail closed.
+    spec_path = tmp_path / "spider2_eval.jsonl"
+    spec_path.write_text(
+        json.dumps(
+            {
+                "instance_id": "t",
+                "evaluation": {
+                    "func": "duckdb_match",
+                    "parameters": {"condition_tabs": ["orders"]},
+                },
+            }
+        )
+        + "\n"
+    )
+    with pytest.raises(ValueError):
+        load_eval_spec(spec_path)
 
 
 def test_spider2_dbt_verify_eval_spec_defaults(tmp_path: Path):
