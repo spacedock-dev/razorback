@@ -151,3 +151,25 @@ Wired spider2-dbt as a `kind: harbor` family in `_build_harbor`: detect by `Pack
 
 ### Summary
 Gate verdict: PASSED → done. All three ACs reproduced PASS from a clean worktree checkout; the generic non-spider2 harbor path is unchanged (7/7). Code review surfaced no Critical/Important issues, and both pre-flagged deviations are SOUND — the `view_manifest.json` exclusion (verified to hold only checksums + glob strings, not answer content) and the `harbor_view.py` deny-glob edit (a monotonic strengthening that closes a real top-level-dir leak, proven load-bearing by the revert-and-fail check). Cycle-1 defects did not regress: no production env seam, selectors bind to source slugs before materialization. T7 live `harbor download` smoke is non-gating and reproduces the PKG-40 git-checkout exit-128 blocker; recommendation is to DEFER the raw-dataset generator since the fixture suite fully gates the ACs. Report at docs/razorback-implementation/validation/spider2-dbt-source-resolution-and-run-wiring.md.
+
+### Cycle 2 — validation gate REJECTED (2026-06-18)
+
+Validation recommended PASSED (ACs met), but a Codex adversarial review of
+the code (`--base 1547f16`) surfaced one valid [medium] design gap and the
+captain chose **bounce-and-fix-now**. Routing back to `implementation`:
+
+1. **[medium] Spider2-dbt materialization ignores `--materialize=bind`
+   (`translate.py:363-367`).** `spec_to_job_config` accepts
+   `materialize_mode: Literal["bind","copy"] = "bind"` (`translate.py:93`),
+   but `_build_harbor` never receives it, and the spider2 call site invokes
+   `materialize_spider2_harbor_task_view(...)` with no `view_mode` -> defaults
+   to `copy`. So `--materialize bind` is silently ineffective for spider2 and
+   real (large) task trees are eagerly duplicated into `run_dir/tasks`. This
+   is a parity gap with ade-bench (which threads the mode via `cli/run.py:313`)
+   and matters for the N=1 full-dataset goal.
+   **Fix:** thread `materialize_mode` from `spec_to_job_config` -> `_build_harbor`,
+   map `bind`->`view_mode="link"` / `copy`->`view_mode="copy"`, pass it to
+   `materialize_spider2_harbor_task_view`, and add a regression test that
+   `--materialize bind` produces symlinked view files for spider2-dbt. Keep the
+   generic non-spider2 harbor path behavior unchanged. Do not regress the 3 ACs
+   or the cycle-1 fixes.
