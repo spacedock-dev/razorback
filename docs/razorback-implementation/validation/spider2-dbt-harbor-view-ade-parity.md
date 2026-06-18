@@ -332,3 +332,71 @@ difference correct.
 Both cycle-2 findings are genuinely fixed and load-bearing; the resolver is
 importable for r5; no regression to AC-1/2/3, the build-context rider, or the
 cycle-1 unlink fix. **PASSED → `done`.**
+
+---
+
+## Cycle 3 (preflight-helper symlink guard) re-review
+
+**Range:** `504c23c` (cycle-3 PASSED state) .. `c312719` (HEAD). Fix commit
+`c0d9da1`. Independent verification only — no production code written.
+
+**Context:** A Codex re-review found the symlink-write-through class was not
+fully closed: `_ensure_workspace_preflight_image_layer` wrote
+`environment/razorback_spider2_preflight.py` with NO `is_symlink()` guard, so a
+source task shipping a file of that exact name would be corrupted under
+`view_mode="link"` — the same class as the cycle-1 Dockerfile fix.
+
+### Fix confirmed (the last write-through instance)
+
+- The guard `if script_path.is_symlink(): script_path.unlink()` is present at
+  `harbor_view.py:210-211`, immediately before `script_path.write_text(...)`
+  (line 212), on the exact path written. Mirrors the cycle-1 Dockerfile guards
+  and `materialize.py:144-145`.
+- **Exercised end-to-end** (not text-inspected): built a real source task via
+  the test's `_write_source` helper, seeded
+  `environment/razorback_spider2_preflight.py` with a sentinel, materialized
+  `view_mode="link"`. Result: view script `is_file() and not is_symlink()` with
+  the generated content; the SOURCE file byte-for-byte unchanged (`== SENTINEL`).
+- **Guard proven load-bearing:** stripped ONLY the preflight-script guard →
+  re-running the same exercise CORRUPTS the source (it gets overwritten with the
+  full generated preflight content); the regression test
+  `test_link_mode_preflight_script_never_mutates_source_named_file` FAILS at
+  `assert not is_symlink()`. Restored → green; tree clean.
+
+### Full symlink-write-through class closed
+
+`harbor_view.py` now has 4 `is_symlink()` guards: 3 Dockerfile writes
+(build-context, dbt-deps, preflight RUN injection) + the preflight-script write.
+An exhaustive search of the spider2_dbt module (confirmed by the code-review
+agent) finds no remaining unguarded `write_text`/`open(...,'w')`. The lone
+`shutil.copytree` (line 140) writes into a fresh view-owned dir and is not a
+write-through risk (the materializer reflects directories as real dirs, only
+files as symlinks).
+
+### No regression (cycles 1-2 intact)
+
+- `uv run pytest -k spider2_dbt --ignore=tests/unit/test_task_identity_scoring.py`
+  → **39 passed, 751 deselected** (38 + the new regression test).
+- Cycle-1 Dockerfile guard test + cycle-2 db_name-pin/fail-closed/schema-aware
+  tests all present and green (10 passed in the targeted subset).
+- Generic `materialize.py`/`leakage.py`: `git diff 996d42b..HEAD` empty —
+  byte-for-byte unchanged. ade_bench harbor_view + preflight regression → 13 passed.
+- `/app` + `/app/<db_name>.duckdb` contract still pinned (`_APP_ROOT="/app"`,
+  preflight `--workspace /app --db-name <resolved>`, COPY `dbt_project/ /app/`).
+- Pre-existing unrelated failures confirmed on base: `razorback.score.load`
+  absent in `996d42b` (the `test_task_identity_scoring` import error); the three
+  named files untouched by this branch. Harness `uv.lock` ignored per dispatch.
+
+### Code review
+
+`superpowers:requesting-code-review` dispatched against `504c23c..c312719`.
+Verdict: **Ready to merge — Yes.** Zero Critical / Important findings. One Minor
+note (the preflight-script write has no idempotency short-circuit, so a repeat
+materialize re-unlinks-and-rewrites identical content) — harmless, explicitly
+not worth changing. The reviewer independently confirmed there is no 5th
+write-through site and the `copytree` is structurally safe.
+
+### Gate
+
+The cycle-3 fix is real and load-bearing, the full symlink-write-through class
+is closed, and nothing from cycles 1-2 regressed. **PASSED → `done`.**
