@@ -328,3 +328,22 @@ Closed a benchmark-integrity SQL-injection: `condition_tabs` (external eval-spec
 ### Summary
 
 Fixed a benchmark-correctness regression and a fail-open. (1) The cycle-7 pandas removal had left DECIMAL/NUMERIC values as `decimal.Decimal`, which bypassed `_vectors_match`'s `isclose(1e-2)` numeric branch (Decimal is Number, not Real) — so real dbt DECIMAL outputs within tolerance scored 0. Normalizing Decimal→float at fetch (one place) restores Spider2's float64 semantics with the comparator otherwise unchanged. (2) A spider2-dbt source missing `tests/gold/` silently kept its source `test.sh`, materializing an unscored / trivially-passing task; the materializer now fails closed, and `fixture-002` was given a real gold so the multi-instance + explain tests exercise two genuinely-scored tasks. Both proven by load-bearing regressions. Cycles 1-8 intact; spider2_dbt suite 92 passed.
+
+### Cycle 10 — validation gate REJECTED (2026-06-18, captain via Codex review)
+
+10th adversarial Codex pass found an unguarded symlink-write-through in the verifier-asset copies (same class as the Dockerfile/preflight/test.sh guards); captain chose fix-now. Confirmed live. Routing back to `implementation`:
+
+1. **[high] `_ensure_verifier_assets` `copy2` calls follow symlinks → source corruption in link mode.**
+   In `view_mode="link"` the generic materializer reflects allowed source files as symlinks. The 3 comparator-module copies + the gold-DB copy + the eval-spec copy used bare `shutil.copy2`, so a colliding source-provided name (`tests/verify.py`, `tests/eval_spec.py`, `tests/duckdb_match.py`, top-level `tests/spider2_eval.jsonl`, `tests/<gold>.duckdb`) is a symlink back to source → `copy2` follows it → overwrites the source task. spider2 translation binds to link mode, so this is on the live path. `test.sh`/Dockerfile/preflight already guarded this exact class; these copies didn't.
+   **Fix:** unlink-before-copy helper (`if dst.is_symlink(): dst.unlink()`) for all 5 verifier-asset copies; link-mode regression seeding a source `tests/verify.py` proving the source stays unchanged.
+
+## Stage Report: implementation (cycle 10)
+
+- DONE: Guard all 5 verifier-asset copies against symlink write-through.
+  `harbor_view.py`: new `_copy_into_view(src, dst)` unlinks a symlink `dst` before `shutil.copy2`; applied to the 3 module copies, the named gold-DB copy, and the eval-spec copy. The `test.sh` write keeps its existing guard. Same pattern as the Dockerfile/task.toml/preflight write-through fixes.
+- DONE: Link-mode regression proving a colliding source file is not corrupted.
+  `test_link_mode_verifier_assets_never_mutate_colliding_source_file`: seeds a source `tests/verify.py` with sentinel content, materializes in link mode, asserts the view owns a REAL (non-symlink) `verify.py` carrying the generated comparator CLI AND the source file is byte-for-byte unchanged. Load-bearing (without the guard, copy2 follows the symlink → view path stays a symlink + source content overwritten → both asserts fail). spider2_dbt suite = 93 passed.
+
+### Summary
+
+Closed the last instance of the link-mode symlink-write-through hazard: `_ensure_verifier_assets` copied the comparator modules, gold DB, and eval spec into `view/tests/` with bare `copy2`, so a source task shipping a colliding name (e.g. its own `tests/verify.py`) would have its source file overwritten during translate/materialize (spider2 binds to link mode). All 5 copies now route through `_copy_into_view`, which unlinks a symlink destination first — the same guard already applied to the Dockerfile, preflight script, and test.sh writes. Proven by a load-bearing link-mode regression. Cycles 1-9 intact; spider2_dbt suite 93 passed.

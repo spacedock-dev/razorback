@@ -100,6 +100,20 @@ def materialize_spider2_harbor_task_view(
     return view
 
 
+def _copy_into_view(src: Path, dst: Path) -> None:
+    """copy2 src->dst, first replacing any symlink dst with a view-owned file.
+
+    In link mode the generic materializer reflects allowed source files as
+    symlinks, so a view path that collides with a source-provided name (e.g. a
+    source `tests/verify.py` or top-level `tests/<gold>.duckdb`) is a symlink
+    back to the source; a bare copy2 would follow it and overwrite the source
+    task. Same write-through class the Dockerfile/preflight/test.sh writes guard.
+    """
+    if dst.is_symlink():
+        dst.unlink()
+    shutil.copy2(src, dst)
+
+
 def _ensure_verifier_assets(
     view_dir: Path, *, source_task_dir: Path, task_slug: str
 ) -> None:
@@ -139,7 +153,7 @@ def _ensure_verifier_assets(
     tests.mkdir(parents=True, exist_ok=True)
     for mod in (_duckdb_match_mod, _eval_spec_mod, _verify_mod):
         src = Path(mod.__file__)
-        shutil.copy2(src, tests / src.name)
+        _copy_into_view(src, tests / src.name)
 
     # Resolve the gold DB basename from the spec (NOT hardcoded gold.duckdb).
     # Real Spider2 tasks name the gold per task; scoring the wrong/missing file
@@ -154,8 +168,8 @@ def _ensure_verifier_assets(
             f"{source_gold_db} does not exist; refusing to emit a verifier that "
             "would score against a missing gold (fail-closed)"
         )
-    shutil.copy2(source_gold_db, tests / gold_basename)
-    shutil.copy2(source_spec, tests / "spider2_eval.jsonl")
+    _copy_into_view(source_gold_db, tests / gold_basename)
+    _copy_into_view(source_spec, tests / "spider2_eval.jsonl")
 
     # Resolve the agent-facing DuckDB stem from the dbt project (or the slug
     # fallback) so the verifier compares the SAME `/app/<db_name>.duckdb` the
