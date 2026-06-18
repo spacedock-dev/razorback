@@ -1,0 +1,24 @@
+# ABOUTME: User-facing spider2-dbt score spec — Harbor published dataset ref (kind: harbor, qualified-ref resolution path).
+# ABOUTME: A live run requires the spider2-dbt@1.0 harbor-package to be hydrated/checked-out first (the PKG-40 blocker); freeze + schema-validate work offline without it.
+version: 1
+experiment: spider2-dbt-harbor-codex
+agent:
+  kind: codex
+  model: gpt-5.5
+  sampling:
+    temperature: 0.0
+    top_p: null
+    seed: null
+  override_timeout_sec: 1200
+  max_timeout_sec: 1200
+  reasoning_effort: xhigh
+benchmark:
+  kind: harbor
+  dataset: spider2-dbt/spider2-dbt@1.0
+trials: 1
+concurrency:
+  trials: 1
+observers:
+  - kind: jsonl
+    path: events.jsonl
+  - kind: stdout

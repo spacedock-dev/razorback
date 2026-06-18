@@ -30,9 +30,15 @@ verifies what is checkable offline (schema-valid + freezes).
 ## Acceptance criteria
 
 **AC-1 — A `kind: harbor` spider2-dbt example spec exists and freezes cleanly.**
-Verified by: `uv run rk freeze examples/specs/<name>.yaml` exits 0 and
-writes `examples/specs/<name>.frozen.yaml` with
-`benchmark.dataset == "spider2-dbt/spider2-dbt@1.0"`.
+Verified by: `uv run rk freeze examples/specs/<name>.yaml --allow-missing`
+exits 0 and writes `examples/specs/<name>.frozen.yaml` with
+`benchmark.dataset == "spider2-dbt/spider2-dbt@1.0"`. (Captain-settled:
+`--allow-missing` is the offline-reproducible form — `freeze` writes
+`benchmark.dataset` verbatim; the `ANTHROPIC_API_KEY` only gates agent
+pre-flight model-alias resolution, not the dataset ref. The frozen
+`benchmark.dataset` is identical with or without the flag. A live run is
+NOT attempted — the `spider2-dbt@1.0` harbor-package hydration is the
+externally-owned PKG-40 blocker.)
 
 **AC-2 — The example records the `spider2-dbt@1.0` hydration prerequisite for a full run.**
 Verified by: `grep -F 'spider2-dbt@1.0' examples/specs/<name>.yaml` returns
@@ -163,3 +169,18 @@ flagged for validation/captain: plain `rk freeze` exits 11 offline with no
 `ANTHROPIC_API_KEY` (reproduced against an existing example too), so the
 offline-reproducible AC-1 command is `rk freeze --allow-missing` — the frozen
 `benchmark.dataset` is identical either way.
+
+## Stage Report: implementation
+
+- DONE: Add examples/specs/spider2-dbt-harbor-codex.yaml: kind: harbor + dataset: spider2-dbt/spider2-dbt@1.0 (qualified ref, NOT harbor-local) + a real kind: codex agent block; mirror the sibling examples/specs/ade-bench-harbor-dataset-codex.yaml shape. Include an `# ABOUTME:` header note naming the spider2-dbt@1.0 harbor-package hydration prerequisite / PKG-40 blocker (AC-2: `grep -F 'spider2-dbt@1.0'` returns it).
+  Authored the spec mirroring the ade-bench sibling (kind: codex, model: gpt-5.5, reasoning_effort: xhigh); `grep -F 'spider2-dbt@1.0'` returns both the 2nd `# ABOUTME:` header note (names hydration prereq / PKG-40 blocker) and the dataset line. AC-2 satisfied.
+- DONE: Prove AC-1 offline: `uv run rk freeze examples/specs/spider2-dbt-harbor-codex.yaml --allow-missing` exits 0 and writes spider2-dbt-harbor-codex.frozen.yaml with benchmark.dataset == "spider2-dbt/spider2-dbt@1.0". Commit the frozen file. ... update the entity AC-1 verification clause accordingly. Do NOT attempt a live run (PKG-40 blocker).
+  `rk freeze --allow-missing` exited 0; frozen file `benchmark.dataset: spider2-dbt/spider2-dbt@1.0` (verbatim). Updated entity AC-1 clause to the `--allow-missing` offline form with the captain rationale. Frozen file force-added (gitignored by `.gitignore:22` but tracked-sibling convention via `git add -f`, matching existing committed frozen specs). No live run attempted.
+
+### Implementation summary
+
+Modules added: one user-facing example spec `examples/specs/spider2-dbt-harbor-codex.yaml` plus its committed `examples/specs/spider2-dbt-harbor-codex.frozen.yaml`. No production code changes. Harbor surface touched: the `kind: harbor` qualified-ref resolution path (`HarborBenchmarkBlock`, schema.py:169) — the example is the first user-facing spec exercising the `<org>/<name>@<ref>` dataset form (previously only in the internal nop fixture). Deviations from plan: (1) the plan said "Plan stays on main (no worktree)" but the dispatch provided a worktree on branch `spacedock-ensign/spider2-dbt-example-spec`; all work was done there. (2) `examples/specs/provenance.yaml` (also written by freeze) is gitignored and NOT tracked upstream, so it is left uncommitted (consistent with `git ls-files` showing it untracked). (3) Reverted the incidental `uv.lock` resolution churn from `uv run` to keep the worktree free of unrelated changes.
+
+### Summary
+
+Added the `kind: harbor` spider2-dbt example spec with the qualified `spider2-dbt/spider2-dbt@1.0` ref. AC-2 grep returns the `# ABOUTME:` header note naming the PKG-40 hydration prerequisite. AC-1 `rk freeze --allow-missing` exits 0 and the frozen `benchmark.dataset` is the verbatim qualified ref; the frozen sibling is force-committed per the existing tracked-frozen convention. No live run attempted (PKG-40 blocker stands). Entity AC-1 clause updated to the captain-settled `--allow-missing` offline-reproducible form.
