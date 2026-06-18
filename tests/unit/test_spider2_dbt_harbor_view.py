@@ -51,6 +51,23 @@ def _write_source(
             conn.execute("CREATE TABLE orders (id INTEGER)")
         finally:
             conn.close()
+    # Every spider2-dbt task is duckdb_match-scored, so the materializer now
+    # fails closed without tests/gold/. Give the source a minimal gold so these
+    # layer-focused tests still materialize (they don't assert on the verifier).
+    import duckdb as _dk
+
+    gold = source / "tests" / "gold"
+    gold.mkdir(parents=True)
+    _conn = _dk.connect(str(gold / "gold.duckdb"))
+    try:
+        _conn.execute("CREATE TABLE orders (id INTEGER); INSERT INTO orders VALUES (1)")
+    finally:
+        _conn.close()
+    (gold / "spider2_eval.jsonl").write_text(
+        '{"instance_id": "spider2-fixture-001", "evaluation": {"func": '
+        '"duckdb_match", "parameters": {"gold": "gold.duckdb", "condition_tabs": '
+        '["orders"], "condition_cols": [[0]], "ignore_orders": [true]}}}\n'
+    )
     lines = dockerfile_lines or [
         "FROM python:3.12",
         "WORKDIR /app",
@@ -264,6 +281,22 @@ def test_preflight_layer_absent_when_not_a_dbt_project(tmp_path):
     (source / "environment" / "Dockerfile").write_text(
         "FROM python:3.12\nCMD [\"bash\"]\n"
     )
+    # Gold is required (the materializer fails closed without it); this test is
+    # about the preflight layer being absent for a non-dbt source, not scoring.
+    import duckdb as _dk
+
+    gold = source / "tests" / "gold"
+    gold.mkdir(parents=True)
+    _conn = _dk.connect(str(gold / "gold.duckdb"))
+    try:
+        _conn.execute("CREATE TABLE orders (id INTEGER); INSERT INTO orders VALUES (1)")
+    finally:
+        _conn.close()
+    (gold / "spider2_eval.jsonl").write_text(
+        '{"instance_id": "plain-001", "evaluation": {"func": "duckdb_match", '
+        '"parameters": {"gold": "gold.duckdb", "condition_tabs": ["orders"], '
+        '"condition_cols": [[0]], "ignore_orders": [true]}}}\n'
+    )
 
     view = materialize_spider2_harbor_task_view(
         source_task_dir=source,
@@ -384,3 +417,36 @@ def test_link_mode_preflight_script_never_mutates_source_named_file(tmp_path):
 
     # The SOURCE file is byte-for-byte unchanged — no write followed the symlink.
     assert source_script.read_text() == source_script_before
+
+
+def test_link_mode_verifier_assets_never_mutate_colliding_source_file(tmp_path):
+    """A source task shipping a colliding tests/verify.py must not be corrupted.
+
+    `_ensure_verifier_assets` copies the comparator modules + gold + eval spec
+    into view/tests/. Under `view_mode="link"` a source-provided tests/verify.py
+    is reflected as a symlink back into the source, so an unguarded copy2 would
+    follow it and overwrite the user's source file — same write-through class as
+    the Dockerfile/preflight/test.sh guards.
+    """
+    source = _write_source(
+        tmp_path / "source", with_packages=True, with_duckdb=True
+    )
+    source_verify = source / "tests" / "verify.py"
+    source_verify_before = "# user's own tests/verify.py, not the generated one\n"
+    source_verify.write_text(source_verify_before)
+
+    view = materialize_spider2_harbor_task_view(
+        source_task_dir=source,
+        view_root=tmp_path / "views",
+        task_slug="spider2-fixture-001",
+        view_mode="link",
+    )
+
+    # The view owns a real verify.py carrying the generated comparator CLI.
+    view_verify = view / "tests" / "verify.py"
+    assert view_verify.is_file()
+    assert not view_verify.is_symlink()
+    assert "emit_reward" in view_verify.read_text()
+
+    # The SOURCE file is byte-for-byte unchanged — no copy2 followed the symlink.
+    assert source_verify.read_text() == source_verify_before

@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import shlex
 import shutil
+import stat
 from pathlib import Path
 from typing import Literal
 
+from razorback.benchmarks.spider2_dbt import duckdb_match as _duckdb_match_mod
+from razorback.benchmarks.spider2_dbt import eval_spec as _eval_spec_mod
+from razorback.benchmarks.spider2_dbt import verify as _verify_mod
 from razorback.benchmarks.spider2_dbt.preflight import (
     preflight_script_text,
     resolve_spider2_db_name,
@@ -46,6 +50,21 @@ _SPIDER2_WORKSPACE_PREFLIGHT_MARKER = (
     "# Razorback: validate spider2-dbt source DuckDB before agent runtime."
 )
 
+# Emitted into the view's tests/ — Harbor uploads tests/ to the container only
+# at verify time, so the gold .duckdb + eval spec reach the verifier but never
+# the agent. `{predicted_db}` is filled from `resolve_spider2_db_name` (the
+# SHARED `/app/<db_name>.duckdb` contract) so the verifier scores the SAME
+# DuckDB the build-time preflight validated — NOT a hardcoded /app/spider2.duckdb.
+_TEST_SH_TEMPLATE = """#!/bin/sh
+set -eu
+mkdir -p /logs/verifier
+python /tests/verify.py \\
+  --predicted-db {predicted_db} \\
+  --gold-db {gold_db} \\
+  --eval-spec /tests/spider2_eval.jsonl \\
+  --reward-out /logs/verifier/reward.json
+"""
+
 
 def materialize_spider2_harbor_task_view(
     *,
@@ -75,7 +94,119 @@ def materialize_spider2_harbor_task_view(
     _ensure_spider2_build_context_layer(view)
     _ensure_dbt_deps_image_layer(view)
     _ensure_workspace_preflight_image_layer(view, task_slug=task_slug)
+    _ensure_verifier_assets(
+        view, source_task_dir=Path(source_task_dir), task_slug=task_slug
+    )
     return view
+
+
+def _copy_into_view(src: Path, dst: Path) -> None:
+    """copy2 src->dst, first replacing any symlink dst with a view-owned file.
+
+    In link mode the generic materializer reflects allowed source files as
+    symlinks, so a view path that collides with a source-provided name (e.g. a
+    source `tests/verify.py` or top-level `tests/<gold>.duckdb`) is a symlink
+    back to the source; a bare copy2 would follow it and overwrite the source
+    task. Same write-through class the Dockerfile/preflight/test.sh writes guard.
+    """
+    if dst.is_symlink():
+        dst.unlink()
+    shutil.copy2(src, dst)
+
+
+def _ensure_verifier_assets(
+    view_dir: Path, *, source_task_dir: Path, task_slug: str
+) -> None:
+    """Copy the comparator + gold data + test.sh into the view's tests/ dir.
+
+    Gold assets are read from the SOURCE task's tests/gold/ (the reflected view
+    stripped them via the **/gold/** deny-glob) and written WITHOUT a `gold/`
+    path segment so `assert_no_denied_paths` stays green while the
+    verifier-uploaded tests/ dir still carries them. The emitted test.sh's
+    `--predicted-db` is `/app/<db_name>.duckdb` where `<db_name>` comes from the
+    SHARED `resolve_spider2_db_name` resolver (RIDER, Codex r5-plan finding) —
+    never a hardcoded `/app/spider2.duckdb`.
+
+    The GOLD DB basename is driven by the eval spec's
+    ``evaluation.parameters.gold`` (real Spider2 tasks name the gold per task,
+    e.g. ``playbook.duckdb``) — the EXACT named file is copied and
+    ``--gold-db /tests/<basename>`` is emitted. Fails closed (raises) if the
+    spec names a gold file that does not exist under ``tests/gold/``, so the
+    verifier never scores against a missing/wrong gold.
+    """
+    # Every spider2-dbt task is duckdb_match-scored, so its source MUST ship
+    # tests/gold/spider2_eval.jsonl (+ the named gold DB). A missing gold dir is
+    # NOT a "skip scoring" signal — silently returning would leave the source
+    # test.sh in place (e.g. a stub `exit 0`), materializing an unscored /
+    # trivially-passing task under dataset skew or a resolver bug. Fail closed.
+    source_gold = Path(source_task_dir) / "tests" / "gold"
+    source_spec = source_gold / "spider2_eval.jsonl"
+    if not source_spec.is_file():
+        raise FileNotFoundError(
+            f"spider2-dbt task {task_slug!r} is missing its gold eval spec "
+            f"{source_spec} — every spider2-dbt task is duckdb_match-scored and "
+            "must ship tests/gold/spider2_eval.jsonl + its named gold DB; "
+            "refusing to materialize an unscored task (fail-closed)"
+        )
+
+    tests = view_dir / "tests"
+    tests.mkdir(parents=True, exist_ok=True)
+    for mod in (_duckdb_match_mod, _eval_spec_mod, _verify_mod):
+        src = Path(mod.__file__)
+        _copy_into_view(src, tests / src.name)
+
+    # Resolve the gold DB basename from the spec (NOT hardcoded gold.duckdb).
+    # Real Spider2 tasks name the gold per task; scoring the wrong/missing file
+    # is a benchmark-correctness defect. A wrapped spec without parameters.gold
+    # fails closed inside load_eval_spec.
+    spec = _eval_spec_mod.load_eval_spec(source_spec)
+    gold_basename = spec.gold or "gold.duckdb"
+    source_gold_db = source_gold / gold_basename
+    if not source_gold_db.is_file():
+        raise FileNotFoundError(
+            f"spider2-dbt gold spec names gold DB {gold_basename!r} but "
+            f"{source_gold_db} does not exist; refusing to emit a verifier that "
+            "would score against a missing gold (fail-closed)"
+        )
+    _copy_into_view(source_gold_db, tests / gold_basename)
+    _copy_into_view(source_spec, tests / "spider2_eval.jsonl")
+
+    # Resolve the agent-facing DuckDB stem from the dbt project (or the slug
+    # fallback) so the verifier compares the SAME `/app/<db_name>.duckdb` the
+    # preflight validated and the agent operates against.
+    project_dir = _dbt_project_dir(view_dir)
+    db_name = resolve_spider2_db_name(
+        project_dir if project_dir is not None else view_dir,
+        task_slug=task_slug,
+    )
+    test_sh = tests / "test.sh"
+    if test_sh.is_symlink():
+        test_sh.unlink()
+    # shlex.quote BOTH args: db_name is resolved from the task's profiles.yml
+    # path (external input) and gold_basename from the eval spec; emitting either
+    # unquoted into the verifier shell script is a command-injection boundary.
+    # gold_basename is also allowlisted in load_eval_spec (traversal defense);
+    # quoting closes the injection half for both arguments at the emission point.
+    test_sh.write_text(
+        _TEST_SH_TEMPLATE.format(
+            predicted_db=shlex.quote(f"{_APP_ROOT}/{db_name}.duckdb"),
+            gold_db=shlex.quote(f"/tests/{gold_basename}"),
+        )
+    )
+    test_sh.chmod(
+        test_sh.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+    )
+
+    # The deny-glob reflection strips gold FILES but leaves the now-empty
+    # `gold/` directory behind. Prune empty `gold/`-named dirs so no `gold/`
+    # path segment survives anywhere in the agent-facing view.
+    for gold_dir in sorted(
+        (p for p in view_dir.rglob("gold") if p.is_dir()),
+        key=lambda p: len(p.parts),
+        reverse=True,
+    ):
+        if not any(gold_dir.iterdir()):
+            gold_dir.rmdir()
 
 
 def _has_dbt_project(view_dir: Path) -> bool:
