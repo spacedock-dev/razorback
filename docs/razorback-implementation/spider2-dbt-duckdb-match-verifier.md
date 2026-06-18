@@ -1,9 +1,9 @@
 ---
 id: r5hpxtc97nws6qfjc2j8ewz3
 title: spider2-dbt — duckdb_match verifier emitting binary reward.json
-status: backlog
+status: plan
 source: Spider2 evaluation_suite/eval_utils.duckdb_match + gold/spider2_eval.jsonl schema; harbor verifier reward.json contract
-started:
+started: 2026-06-18T08:49:13Z
 completed:
 verdict:
 score:
