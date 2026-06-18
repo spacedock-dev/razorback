@@ -174,3 +174,86 @@ the fix. (The `uv.lock` modification is unrelated: `uv sync`/`uv run` drops the
 Everything else — all 3 ACs, the RIDER build-context proof, the pinned `/app`
 contract, unchanged generic materializer/leakage, no non-spider2 regressions —
 is verified and sound. Re-run this validation after B1 lands.
+
+---
+
+## Re-validation — cycle 2 (2026-06-18)
+
+**Range reviewed:** `996d42b` (base) .. `7f31b7b` (HEAD, includes cycle-1 fix).
+**Method:** fresh `git clone --single-branch` of the worktree branch into
+`/tmp/spider2-dbt-validate-c2` (since torn down); no production code written.
+Pre-existing dirty `uv.lock` in the worktree is a harness artifact — ignored.
+
+**Gate verdict: PASSED → `done`.**
+
+### B1 fix is real and load-bearing
+
+- **Fix present in all three helpers.** `git show 7f31b7b` adds the
+  `if dockerfile.is_symlink(): dockerfile.unlink()` guard immediately before
+  each `dockerfile.write_text(...)` in `_ensure_spider2_build_context_layer`
+  (harbor_view.py:135), `_ensure_dbt_deps_image_layer` (:163), and
+  `_ensure_workspace_preflight_image_layer` (:215). Byte-identical pattern to
+  the reference at `materialize.py:144-145`. The fourth `write_text` (:188,
+  `razorback_spider2_preflight.py`) correctly needs no guard — that file is
+  freshly created and view-owned, never symlinked into source.
+- **Fixtures restored / clean.** In the fresh clone `git status --short --
+  tests/fixtures` is empty; `git diff 996d42b HEAD -- tests/fixtures` is empty;
+  both `spider2-fixture-00{1,2}/environment/Dockerfile` are `FROM python:3.12`
+  with zero `Razorback:` markers.
+- **Regression test is load-bearing.** Stripped all three guards from a clean
+  checkout (left `write_text` intact); `test_link_mode_injects_layers_but_never_mutates_source_dockerfile`
+  then FAILS at `assert not view_dockerfile.is_symlink()` (the view Dockerfile
+  is still a symlink, so the write would follow it). Restored the guard → test
+  passes. Confirms the test guards the exact B1 hazard.
+- **Independent end-to-end proof.** Exercised `materialize_spider2_harbor_task_view(..., view_mode="link")`
+  directly (outside the test) against a source with `packages.yml` + a real
+  `.duckdb`: the source `environment/Dockerfile` is byte-for-byte unchanged
+  (sha unchanged), no `Razorback` marker leaked into source, and the view
+  Dockerfile `is_file() and not is_symlink()` carrying all three injected
+  layers (build-context COPY, `dbt deps` RUN, preflight COPY+RUN). The working
+  tree stayed clean after the run.
+
+### No regression to AC-1/AC-2/AC-3 + build-context rider
+
+`uv run pytest -k spider2_dbt --ignore=tests/unit/test_task_identity_scoring.py`
+→ **29 passed, 751 deselected** (clean checkout, `EXIT 0`) — matches the
+expected 29 (28 from cycle 1 + the new regression test). Generic
+`materialize.py`/`leakage.py` byte-for-byte unchanged vs base
+(`git diff --stat 996d42b HEAD` empty for both). Non-spider2 harbor behavior
+unchanged: `test_ade_bench_harbor_view.py` + `test_ade_bench_workspace_preflight.py`
+→ 13 passed.
+
+### `/app` contract still pinned for r5
+
+`_APP_ROOT = "/app"` (harbor_view.py:29); preflight script COPY'd to
+`/tmp/razorback_spider2_preflight.py` and invoked `--workspace /app`; agent DB
+lands at `/app/<db_name>.duckdb` via `COPY dbt_project/ /app/`. Stable invariant
+for the r5 `duckdb_match` verifier.
+
+### Code review (focused on the fix diff)
+
+No blocking findings. The `is_file()` precheck (:109/:146/:184) follows
+symlinks so link-mode Dockerfiles are still processed (reach the unlink guard);
+`text = dockerfile.read_text()` reads the source content as the injection base
+before the unlink, then the patched content is written to the fresh view-owned
+file. Non-blocking nit (N2): the identical 4-line guard comment is duplicated
+verbatim across the three helpers — a one-line `# see materialize.py:144` would
+suffice. Not a correctness issue; not gating.
+
+### Pre-existing, unrelated failures (NOT regressions)
+
+`tests/unit/test_task_identity_scoring.py` (`ModuleNotFoundError: razorback.score.load`)
+— confirmed present verbatim on base `996d42b`. While running the full unit
+suite I also observed `test_generate_matrix_specs.py::test_matrix_specs_carry_query_mode_batch`
+and `test_rk_research_new.py::test_rk_research_new_creates_scaffold_tree` failing;
+both ALSO fail on a clean `996d42b` worktree and this entity touches only
+`benchmarks/spider2_dbt/{harbor_view,preflight}.py` (the sole two source files
+in `git diff --name-only 996d42b HEAD`), so neither can be a regression from
+this work. Surfaced here for the captain's awareness, out of this entity's scope.
+
+### Decision
+
+All three ACs, the build-context rider, the pinned `/app` contract, and the
+cycle-1 Critical defect B1 are verified from a clean checkout. The fix is real,
+mirrors the established pattern, and its regression test is proven load-bearing.
+**PASSED → `done`.**

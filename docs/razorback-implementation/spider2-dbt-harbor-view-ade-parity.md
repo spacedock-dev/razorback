@@ -149,3 +149,18 @@ Routing back to `implementation`:
 ### Summary
 
 Fixed the Critical symlink-write-through defect: under `view_mode="link"` the reflected `environment/Dockerfile` is a symlink into the source tree, so the three layer-injection helpers' `write_text` calls followed the link and corrupted the version-controlled fixtures. Guarded all three with the existing unlink-then-write pattern, restored the two dirty fixtures, and added a regression test (proven red-then-green). The preflight helper's `script_path.write_text` needed no guard since that file is view-owned, not symlinked. Pre-existing unrelated `uv.lock` change left unstaged.
+
+## Stage Report: validation (cycle 2)
+
+- DONE: Confirm the Critical defect B1 is fixed: from a clean checkout, exercise the materializer in link mode and assert the SOURCE fixture Dockerfiles are NOT mutated (git diff tests/fixtures empty) while the view Dockerfile is a real file carrying the injected layers. Confirm the regression test `test_link_mode_injects_layers_but_never_mutates_source_dockerfile` is load-bearing (fails without the unlink guard).
+  Fresh clone of branch HEAD `7f31b7b`. Direct link-mode materialize: source Dockerfile sha unchanged + no marker leak; view Dockerfile `is_file() and not is_symlink()` with all 3 layers. `git diff tests/fixtures` empty (vs HEAD and vs base). Stripped all 3 guards → regression test FAILS at `assert not is_symlink()`; restored → passes. Guard mirrors `materialize.py:144-145`.
+- DONE: Confirm no regression to AC-1/AC-2/AC-3 + the build-context rider: `uv run pytest -k spider2_dbt --ignore=tests/unit/test_task_identity_scoring.py` (expect 29 passed). Generic `materialize.py`/`leakage.py` and non-spider2 harbor behavior unchanged.
+  29 passed, 751 deselected (EXIT 0). `materialize.py`/`leakage.py` byte-for-byte unchanged vs `996d42b`. ade_bench harbor_view + preflight → 13 passed.
+- DONE: Confirm the `/app` + `/app/<db_name>.duckdb` image/workdir contract is still pinned and stable for r5 to consume. Give a gate verdict.
+  `_APP_ROOT="/app"` (harbor_view.py:29); preflight at `/tmp/razorback_spider2_preflight.py --workspace /app`; agent DB at `/app/<db_name>.duckdb` via `COPY dbt_project/ /app/`. Pinned and stable.
+- DONE: Gate verdict.
+  PASSED → done. Report appended to validation/spider2-dbt-harbor-view-ade-parity.md (cycle-2 section).
+
+### Summary
+
+Independently re-verified the cycle-1 fix from a fresh clone of branch HEAD `7f31b7b` (no production code written). B1 is genuinely fixed: the unlink-then-write guard is present in all three Dockerfile-writing helpers (mirroring `materialize.py:144-145`), the two source fixtures are restored and clean (`git diff tests/fixtures` empty), and the regression test is proven load-bearing — stripping the three guards makes `test_link_mode_injects_layers_but_never_mutates_source_dockerfile` fail at `assert not is_symlink()`. A direct link-mode materialize leaves the source Dockerfile byte-for-byte unchanged (no marker leak) while the view Dockerfile is a real owned file carrying all three layers. Acceptance is `29 passed`; generic materializer/leakage unchanged; the `/app` contract is pinned for r5. The pre-existing `razorback.score.load` collection error (and two further base-failing tests in `test_generate_matrix_specs.py` / `test_rk_research_new.py`, both failing on clean `996d42b`) are unrelated and out of scope. **Gate: PASSED → done.**
