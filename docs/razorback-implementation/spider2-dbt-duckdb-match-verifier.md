@@ -56,3 +56,16 @@ the verifier only compares outputs) — covered by
 `spider2-dbt-harbor-view-ade-parity`. Multi-DB / non-DuckDB Spider2
 answer types (`string_match`, `table_match`, BigQuery/Snowflake) — the
 dbt track is DuckDB-only.
+
+## Stage Report: plan
+
+- DONE: Map the 3 ACs to concrete modules with a TDD checkpoint each
+  Plan AC↔Task table maps AC-1→T1/T2 (`duckdb_match.py`+`eval_spec.py`), AC-2→T3/T4, AC-3→T5/T6/T7 (`verify.py` + materializer-emitted `tests/test.sh`); each task has failing-test-first steps. Comparator module = `src/razorback/benchmarks/spider2_dbt/duckdb_match.py`; `test.sh` emitted by `_ensure_verifier_assets` in `spider2_dbt/harbor_view.py`.
+- DONE: Exercise the riskiest mechanism first (two tiny DuckDB fixtures + comparator reproducing duckdb_match) before wiring test.sh
+  T2–T4 build in-test DuckDB fixtures and prove per-table SELECT */condition_cols subset/ignore_orders semantics before any test.sh plumbing (T5–T7); reward-shaping cites `_legacy/benchmarks/dab/verify.py:30-32`.
+- DONE: Write a standard separate plan doc with an AC-to-task map and cites; keep gold .duckdb + eval spec on verifier-only paths excluded from the agent view
+  Plan at `docs/razorback-implementation/plans/spider2-dbt-duckdb-match-verifier.md` cites Spider2 `eval_utils.duckdb_match` + `spider2_eval.jsonl` schema. Locked design: gold lives under source `tests/gold/` (stripped by `**/gold/**`), re-copied explicitly to view `tests/` (verifier-uploaded only). Verified live: `tests/gold/gold.duckdb` denied=True, `tests/gold.duckdb`/`tests/spider2_eval.jsonl` denied=False; `duckdb` 1.5.2 importable.
+
+### Summary
+
+Wrote a separate implementation plan (3 ACs, 7 tasks) for the spider2-dbt duckdb_match verifier. Riskiest-first: the comparator reproducing Spider2 `duckdb_match` (per-table SELECT *, condition_cols subset, ignore_orders multiset compare, all-tables-AND) is built and proven against in-test DuckDB fixtures before any test.sh wiring. Key locked decision: gold `.duckdb` + eval spec are verifier-only by placing them under the view's `tests/` dir (Harbor uploads `tests/` to the container only at verify time, removes it around the agent run), copied explicitly so the `**/gold/**` deny-glob keeps the agent-facing tree clean — confirmed live against the deny-globs and the harbor verifier/trial source. One open item flagged: the agent-produced DB's container path (`/app/spider2.duckdb`) in the emitted test.sh is a placeholder pending the `spider2-dbt-harbor-view-ade-parity` image/workdir contract; it does not affect the gating `uv run pytest -k spider2_dbt_verify` suite.
