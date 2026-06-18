@@ -164,3 +164,18 @@ Fixed the Critical symlink-write-through defect: under `view_mode="link"` the re
 ### Summary
 
 Independently re-verified the cycle-1 fix from a fresh clone of branch HEAD `7f31b7b` (no production code written). B1 is genuinely fixed: the unlink-then-write guard is present in all three Dockerfile-writing helpers (mirroring `materialize.py:144-145`), the two source fixtures are restored and clean (`git diff tests/fixtures` empty), and the regression test is proven load-bearing — stripping the three guards makes `test_link_mode_injects_layers_but_never_mutates_source_dockerfile` fail at `assert not is_symlink()`. A direct link-mode materialize leaves the source Dockerfile byte-for-byte unchanged (no marker leak) while the view Dockerfile is a real owned file carrying all three layers. Acceptance is `29 passed`; generic materializer/leakage unchanged; the `/app` contract is pinned for r5. The pre-existing `razorback.score.load` collection error (and two further base-failing tests in `test_generate_matrix_specs.py` / `test_rk_research_new.py`, both failing on clean `996d42b`) are unrelated and out of scope. **Gate: PASSED → done.**
+
+### Cycle 2 — validation gate REJECTED (2026-06-18, captain via Codex review)
+
+A Codex adversarial review of the implementation surfaced two valid preflight
+robustness gaps; captain chose fix-both. Both confirmed live. Routing back to
+`implementation`:
+
+1. **[high] db_name not pinned — preflight glob-firsts; the `/app/<db_name>.duckdb` contract is prose-only.**
+   `preflight.py` supports `--db-name`/`--db-path` (resolves `workspace/f"{db_name}.duckdb"`, else `sorted(glob("*.duckdb"))[0]`), but the injected RUN (`harbor_view.py:194-202`) passes only `--task-id` + `--workspace`, so the build-time guard always glob-firsts and can validate the wrong DB under multi/stale-DB drift.
+   **Fix:** IMPLEMENT db_name resolution (parse the dbt `profiles.yml` `path:` / source `.duckdb` filename; slug fallback) and pass `--db-name` into the injected preflight RUN; OR fail closed when >1 `*.duckdb` and none specified. Expose the resolver as an importable function so the **r5 verifier can reuse it** (this IS the shared contract r5 consumes — don't leave it prose-only). Add a test: a multi-DB workspace pins the right DB (or fails closed), and the injected RUN carries `--db-name`.
+2. **[medium] Source-table check ignores schema.**
+   The dbt `sources:` parser records bare table names and the DuckDB query selects `DISTINCT table_name` (`preflight.py:161-163`), so `other.raw_orders` satisfies a source expecting `main.raw_orders`.
+   **Fix:** track required + observed relations as `(schema, table)` pairs (honor dbt source/table `schema` fields; compare against `information_schema.tables.table_schema` + `table_name`). Add a test: a table in the wrong schema does NOT satisfy the source.
+
+Keep AC-1/2/3, the build-context rider, and the cycle-1 unlink-then-write fix green.
