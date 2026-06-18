@@ -60,7 +60,7 @@ set -eu
 mkdir -p /logs/verifier
 python /tests/verify.py \\
   --predicted-db {predicted_db} \\
-  --gold-db /tests/{gold_db} \\
+  --gold-db {gold_db} \\
   --eval-spec /tests/spider2_eval.jsonl \\
   --reward-out /logs/verifier/reward.json
 """
@@ -158,10 +158,15 @@ def _ensure_verifier_assets(
     test_sh = tests / "test.sh"
     if test_sh.is_symlink():
         test_sh.unlink()
+    # shlex.quote BOTH args: db_name is resolved from the task's profiles.yml
+    # path (external input) and gold_basename from the eval spec; emitting either
+    # unquoted into the verifier shell script is a command-injection boundary.
+    # gold_basename is also allowlisted in load_eval_spec (traversal defense);
+    # quoting closes the injection half for both arguments at the emission point.
     test_sh.write_text(
         _TEST_SH_TEMPLATE.format(
-            predicted_db=f"{_APP_ROOT}/{db_name}.duckdb",
-            gold_db=gold_basename,
+            predicted_db=shlex.quote(f"{_APP_ROOT}/{db_name}.duckdb"),
+            gold_db=shlex.quote(f"/tests/{gold_basename}"),
         )
     )
     test_sh.chmod(

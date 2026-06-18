@@ -247,3 +247,22 @@ Resolved the cycle-4 path-traversal defect. `load_eval_spec` now fails closed on
 ### Summary
 
 Closed the cycle-5 shell-injection class definitively. The cycle-4 basename guard is replaced by a conservative `[A-Za-z0-9._-]+\.duckdb` allowlist in `load_eval_spec`, which subsumes the path-traversal checks and additionally rejects whitespace and shell metacharacters — so a spec-supplied gold name can neither escape `tests/gold/` nor inject into the unquoted `--gold-db` argument of the emitted test.sh. This is a terminal trust-boundary fix (allowlist, not edge-by-edge): one regex + the cycle-4 guard swap, 4 new regression cases (9 total). Cycles 1-4 intact; spider2_dbt suite 66 passed.
+
+### Cycle 6 — validation gate REJECTED (2026-06-18, captain via Codex review)
+
+6th adversarial Codex pass found the SYMMETRIC injection: the predicted-DB arg was still unquoted; captain chose fix-now. Confirmed live. Routing back to `implementation`:
+
+1. **[high] Predicted-DB `db_name` emitted UNQUOTED into test.sh → shell injection (the other arg).**
+   The cycle-5 gold allowlist only guarded `--gold-db`. `--predicted-db /app/{db_name}.duckdb` interpolated `db_name` — resolved from the task's `profiles.yml` `path:` (external input) by `resolve_spider2_db_name` — without quoting. A profile path with shell metacharacters executes during verification (overwrite reward.json / exfiltrate verifier assets). Preflight's Docker RUN already quoted this value; the verifier script did not.
+   **Fix:** `shlex.quote` BOTH args at the emission point in `_ensure_verifier_assets` (terminal, source-agnostic). Keep the gold allowlist (it also guards traversal). Add a regression with a `profiles.yml` DuckDB path containing `$()`/whitespace asserting the emitted arg is quoted.
+
+## Stage Report: implementation (cycle 6)
+
+- DONE: `shlex.quote` both `--predicted-db` and `--gold-db` values where test.sh is emitted.
+  `harbor_view.py`: `_TEST_SH_TEMPLATE` now takes fully-formed `{predicted_db}`/`{gold_db}` and `_ensure_verifier_assets` passes `shlex.quote(f"{_APP_ROOT}/{db_name}.duckdb")` and `shlex.quote(f"/tests/{gold_basename}")`. Safe names are unchanged by quoting (existing `/app/<slug>.duckdb` and `/tests/playbook.duckdb` assertions still pass); metacharacter names are single-quoted, so neither external-input arg can inject. Gold allowlist retained for traversal defense-in-depth.
+- DONE: Regression for a `profiles.yml` path with shell metacharacters.
+  `test_..._quotes_predicted_db_against_injection`: a `path: evil$(touch pwned).duckdb` profile materializes a test.sh whose `--predicted-db` is `shlex.quote`'d (raw `--predicted-db /app/evil$(touch pwned).duckdb` absent). Load-bearing: reverting the quote flips it red. spider2_dbt suite (comparator/harbor_view/verify_cli/translate) = 67 passed. Cycles 1-5 untouched.
+
+### Summary
+
+Closed the symmetric predicted-DB injection that the cycle-5 gold allowlist didn't cover. Both verifier arguments derived from external task input — `db_name` (from `profiles.yml` `path:`) and `gold_basename` (from the eval spec) — are now `shlex.quote`'d at the single test.sh emission point, so neither can be interpreted as shell syntax during verification regardless of source. The gold allowlist stays (it additionally blocks path-traversal, which quoting alone wouldn't). One-line template change + quoted format args + one load-bearing regression (profiles `$()` path). Cycles 1-5 intact; spider2_dbt suite 67 passed. The entire verifier shell boundary (both args, traversal + injection) is now sealed.

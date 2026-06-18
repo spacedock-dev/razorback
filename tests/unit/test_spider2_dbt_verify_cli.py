@@ -302,3 +302,38 @@ def test_spider2_dbt_verify_test_sh_uses_resolved_db_name(tmp_path):
     test_sh = (view / "tests" / "test.sh").read_text()
     assert "/app/not-spider2-slug.duckdb" in test_sh
     assert "/app/spider2.duckdb" not in test_sh
+
+
+def test_spider2_dbt_verify_test_sh_quotes_predicted_db_against_injection(tmp_path):
+    # SECURITY (cycle-5 symmetric): db_name is resolved from the task's
+    # profiles.yml `path:` (external input). A path carrying shell metacharacters
+    # must NOT be emitted raw into the verifier test.sh --predicted-db arg, or it
+    # executes during verification. shlex.quote at the emission point neutralizes
+    # it (the same class the gold allowlist blocks for --gold-db).
+    import shlex
+
+    source = _write_gold_source(
+        tmp_path / "source", gold_basename="g.duckdb", with_default_gold=False
+    )
+    (source / "dbt_project" / "profiles.yml").write_text(
+        "\n".join(
+            [
+                "example:",
+                "  outputs:",
+                "    dev:",
+                "      type: duckdb",
+                "      path: evil$(touch pwned).duckdb",
+                "  target: dev",
+                "",
+            ]
+        )
+    )
+    view = materialize_spider2_harbor_task_view(
+        source_task_dir=source,
+        view_root=tmp_path / "views",
+        task_slug="playbook001",
+    )
+    test_sh = (view / "tests" / "test.sh").read_text()
+    # The metacharacter path is present only in its safely-quoted form.
+    assert shlex.quote("/app/evil$(touch pwned).duckdb") in test_sh
+    assert "--predicted-db /app/evil$(touch pwned).duckdb" not in test_sh
