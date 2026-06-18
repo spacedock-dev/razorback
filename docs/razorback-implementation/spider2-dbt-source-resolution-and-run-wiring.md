@@ -1,7 +1,7 @@
 ---
 id: egz5hdxxfzxxtjfq7zn81100
 title: spider2-dbt — source resolution + rk run materialization wiring
-status: validation
+status: implementation
 source: PKG-40 spike (notes/pkg40-spider2-harbor-surface.md) + ade_bench dataset-ref path as reference; captain chose the harbor-package source path
 started: 2026-06-18T06:24:22Z
 completed:
