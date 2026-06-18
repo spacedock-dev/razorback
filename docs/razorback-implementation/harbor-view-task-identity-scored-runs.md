@@ -70,3 +70,16 @@ recorded.
 The spider2-dbt resolution + `--explain` wiring itself (shipped by
 `spider2-dbt-source-resolution-and-run-wiring`). The dbt-deps/preflight
 parity and the verifier (their own entities).
+
+## Stage Report: plan
+
+- DONE: Decide the discovery-root reconciliation direction (a/b/c) and record the trade-off and chosen direction explicitly.
+  Chose **(b)** point both consumers at `tasks_root` (`run_dir/tasks`); trade-off table in plan. Root cause: single producer (translate.py:369 → `tasks_root`) vs two consumers scanning a dead `_razorback/task_views` root (spacedock_solver.py:340, aggregate.py:131-132). (a) breaks the orchestrator contract (harbor runs trials from `tasks_root`); (c) is the wrong layer (`trial_name_map` feeds DAB per-query rewiring, not manifest identity).
+- DONE: Map each AC 1:1 to TDD checkpoints with file/spec cites (AC-1 / AC-2 / AC-3).
+  AC↔task table at plan top: AC-1→Tasks 3+5, AC-2→Tasks 1+2, AC-3→Tasks 1+4. Verified `test_translate_harbor_block.py` baseline + that the generic path materializes no manifest (translate.py:403-404), so AC-3 is structurally safe.
+- DONE: Sequence the riskiest contract first — tasks_root↔discovery-root agreement as the smallest end-to-end scored-run exercise.
+  Task 5 (integration: fixture spider2-dbt → scored artifacts) is named as the riskiest-contract proof; Tasks 1-3 are its unit scaffolding, Task 4 the AC-3 guardrail.
+
+### Summary
+
+Wrote a STANDARD separate plan doc at `docs/razorback-implementation/plans/harbor-view-task-identity-scored-runs.md`. The linchpin decision is direction (b): a single shared `task_views_root(run_dir) -> run_dir/"tasks"` resolver in `harbor_tasks/manifest.py`, with `spacedock_solver.py:340` and `aggregate.py:132` migrated onto it — the lowest-risk reconciliation that aligns the two readers to where the producer + orchestrator already write, leaving the generic `kind: harbor` path untouched. Confirmed aggregator entry points (`aggregate_summary`, `write_per_trial_outcomes`, both `-> None` writing under `run_dir`) and the ADE fixture exist, so the plan rests on verified anchors rather than guesses. No production code written (plan stage).
