@@ -223,6 +223,54 @@ def test_n_tasks_caps_spider2_before_materialize(tmp_path, monkeypatch):
     assert len(job_config.tasks) == 1
 
 
+def _materialize_spider2(tmp_path, monkeypatch, *, materialize_mode):
+    """Run the spider2-dbt translate branch and return the single emitted view.
+
+    Uses an isolated copy of the fixture as the source so a link-mode run can
+    never mutate the committed fixture tree (the view symlinks back into it).
+    """
+    source = tmp_path / "src" / "spider2-fixture-001"
+    shutil.copytree(FIXTURE_ROOT / "spider2-fixture-001", source)
+    monkeypatch.setattr(
+        "razorback.translate._resolve_harbor_dataset_tasks",
+        lambda **k: [source],
+    )
+    spec = _spec(
+        HarborBenchmarkBlock(kind="harbor", dataset="spider2-dbt/spider2-dbt@1.0")
+    )
+    job_config, _ = spec_to_job_config(
+        spec,
+        job_name="job",
+        jobs_dir=tmp_path,
+        tasks_root=tmp_path / "tasks",
+        materialize_mode=materialize_mode,
+    )
+    return job_config.tasks[0].path
+
+
+def test_materialize_bind_produces_symlinked_view_files(tmp_path, monkeypatch):
+    """`--materialize bind` must thread bind->view_mode='link' through
+    `_build_harbor` into `materialize_spider2_harbor_task_view`, so non-denied
+    source files appear as symlinks in the view (no eager duplication of large
+    task trees). Parity with ade-bench, which threads the mode via cli/run.py:313.
+    """
+    view = _materialize_spider2(tmp_path, monkeypatch, materialize_mode="bind")
+    # a non-denied source file (the dbt model) is materialized as a symlink
+    linked = view / "dbt_project" / "models" / "example.sql"
+    assert linked.is_file()
+    assert linked.is_symlink(), "bind mode must symlink, not copy, view files"
+
+
+def test_materialize_copy_still_copies_view_files(tmp_path, monkeypatch):
+    """`copy` mode (and the bind default mapping) must keep copying — the file
+    is a real copy, not a symlink, so reverting the bind->link mapping is caught.
+    """
+    view = _materialize_spider2(tmp_path, monkeypatch, materialize_mode="copy")
+    copied = view / "dbt_project" / "models" / "example.sql"
+    assert copied.is_file()
+    assert not copied.is_symlink(), "copy mode must copy, not symlink, view files"
+
+
 from harbor.models.task.config import TaskConfig as HarborTaskConfig
 
 

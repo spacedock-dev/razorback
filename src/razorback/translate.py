@@ -116,6 +116,7 @@ def spec_to_job_config(
             tasks_root=Path(tasks_root) if tasks_root else None,
             agent_cfg=agent_cfg,
             home=home,
+            materialize_mode=materialize_mode,
         )
     if isinstance(spec.benchmark, HarborLocalBenchmarkBlock):
         return _build_harbor_local(
@@ -303,6 +304,7 @@ def _build_harbor(
     agent_cfg: AgentConfig,
     home: Path | None = None,
     tasks_root: Path | None = None,
+    materialize_mode: Literal["bind", "copy"] = "bind",
 ) -> tuple[JobConfig, dict[str, tuple[str, int] | tuple[str, list[int]]]]:
     """Translate `kind: harbor` block into a Harbor JobConfig.
 
@@ -359,11 +361,21 @@ def _build_harbor(
                 n_tasks=block.n_tasks,
             )
             view_root = Path(tasks_root)
+            # Map the spec-level materialize mode onto the view-materializer's
+            # vocabulary: `bind` -> symlink the (large) task trees in place,
+            # `copy` -> eagerly duplicate. Mirrors how ade-bench threads the
+            # mode (cli/run.py:313). Defaulting to "bind" matches
+            # `spec_to_job_config`, so an un-threaded call no longer silently
+            # forces copy.
+            view_mode: Literal["copy", "link"] = (
+                "link" if materialize_mode == "bind" else "copy"
+            )
             task_paths = [
                 materialize_spider2_harbor_task_view(
                     source_task_dir=src,
                     view_root=view_root,
                     task_slug=src.name,
+                    view_mode=view_mode,
                 )
                 for src in selected_sources
             ]

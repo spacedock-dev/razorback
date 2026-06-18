@@ -137,6 +137,12 @@ def _patch_task_toml(
         if not hasattr(task_config.environment, key):
             raise ValueError(f"unsupported environment resource override: {key}")
         setattr(task_config.environment, key, value)
+    # In `view_mode="link"` the reflected task.toml is a symlink back into the
+    # shared source tree; writing through it would follow the link and corrupt
+    # the source (leaking the injected benchmark env onto disk). Replace the
+    # symlink with a real, view-owned file so the patch stays inside the view.
+    if task_toml.is_symlink():
+        task_toml.unlink()
     task_toml.write_text(task_config.model_dump_toml())
 
 

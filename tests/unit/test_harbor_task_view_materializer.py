@@ -75,6 +75,40 @@ def test_materializer_patches_task_toml_and_manifest(tmp_path):
     assert manifest["environment_overrides"]["resources"]["cpus"] == 2
 
 
+def test_link_mode_symlinks_files_but_never_mutates_source_task_toml(tmp_path):
+    """`view_mode="link"` must symlink the bulk task tree (the whole point of
+    bind mode: no eager duplication of large trees) yet keep `task.toml`
+    view-owned. Patching env/docker into a symlinked task.toml would otherwise
+    follow the link and corrupt the SHARED source fixture, leaking the
+    injected benchmark env back into the source on disk.
+    """
+    source = _write_source_task(tmp_path)
+    source_toml_before = (source / "task.toml").read_text()
+
+    view = materialize_harbor_task_view(
+        source_task_dir=source,
+        view_root=tmp_path / "views",
+        benchmark_kind="fixture-bench",
+        benchmark_task_id="task-001",
+        transform_name="fixture-transform",
+        environment_env={"RAZORBACK_BENCHMARK_TASK_ID": "task-001"},
+        view_mode="link",
+    )
+
+    # bulk files are symlinks (no copy) — that is the bind/link contract
+    assert (view / "instruction.md").is_symlink()
+    assert (view / "data" / "input.csv").is_symlink()
+    # but the patched task.toml is a real, view-owned file (not a symlink)
+    assert (view / "task.toml").is_file()
+    assert not (view / "task.toml").is_symlink()
+    # the view carries the injected env
+    task_toml = tomllib.loads((view / "task.toml").read_text())
+    assert task_toml["environment"]["env"]["RAZORBACK_BENCHMARK_TASK_ID"] == "task-001"
+    # and the SOURCE task.toml is byte-for-byte unchanged
+    assert (source / "task.toml").read_text() == source_toml_before
+    assert "RAZORBACK_BENCHMARK_TASK_ID" not in (source / "task.toml").read_text()
+
+
 def test_materialized_view_is_harbor_taskconfig_path_ready(tmp_path):
     source = _write_source_task(tmp_path)
 
