@@ -128,6 +128,12 @@ def _ensure_spider2_build_context_layer(view_dir: Path) -> None:
             f"COPY {_DBT_PROJECT_DIRNAME}/ {_APP_ROOT}/",
         ]
     )
+    # In `view_mode="link"` the reflected Dockerfile is a symlink back into the
+    # shared source tree; writing through it would follow the link and corrupt
+    # the version-controlled source. Replace the symlink with a real,
+    # view-owned file so the layer injection stays inside the view.
+    if dockerfile.is_symlink():
+        dockerfile.unlink()
     dockerfile.write_text(_insert_before_final_cmd(text, block))
 
 
@@ -150,6 +156,12 @@ def _ensure_dbt_deps_image_layer(view_dir: Path) -> None:
             "RUN if [ -f /app/packages.yml ]; then cd /app && dbt deps; fi",
         ]
     )
+    # In `view_mode="link"` the reflected Dockerfile is a symlink back into the
+    # shared source tree; writing through it would follow the link and corrupt
+    # the version-controlled source. Replace the symlink with a real,
+    # view-owned file so the layer injection stays inside the view.
+    if dockerfile.is_symlink():
+        dockerfile.unlink()
     dockerfile.write_text(_insert_before_final_cmd(text, block))
 
 
@@ -196,6 +208,12 @@ def _ensure_workspace_preflight_image_layer(
             f"RUN {command}",
         ]
     )
+    # In `view_mode="link"` the reflected Dockerfile is a symlink back into the
+    # shared source tree; writing through it would follow the link and corrupt
+    # the version-controlled source. Replace the symlink with a real,
+    # view-owned file so the layer injection stays inside the view.
+    if dockerfile.is_symlink():
+        dockerfile.unlink()
     dockerfile.write_text(_insert_before_final_cmd(text, block))
 
 

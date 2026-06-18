@@ -134,3 +134,18 @@ Routing back to `implementation`:
    proving link mode never mutates the source Dockerfile (mirror
    `test_link_mode_symlinks_files_but_never_mutates_source_task_toml`). Keep AC-1/2/3
    + the build-context rider green.
+
+## Stage Report: implementation (cycle 2)
+
+- DONE: Apply the unlink-then-write pattern to ALL THREE Dockerfile-writing helpers in `harbor_view.py`
+  Added `if dockerfile.is_symlink(): dockerfile.unlink()` before each `dockerfile.write_text(...)` in `_ensure_spider2_build_context_layer`, `_ensure_dbt_deps_image_layer`, `_ensure_workspace_preflight_image_layer`, mirroring `materialize.py:140-146`.
+- DONE: Restore the two corrupted source fixture Dockerfiles and confirm a clean `git status`
+  `git checkout` on `spider2-fixture-00{1,2}/environment/Dockerfile`; `git diff tests/fixtures/` is now empty.
+- DONE: Add a regression test proving link mode never mutates the source Dockerfile; FAILS without guard, passes with it
+  `test_link_mode_injects_layers_but_never_mutates_source_dockerfile`: confirmed FAILED on stashed (un-guarded) helper (`assert not is_symlink` -> True), PASSES with the fix.
+- DONE: Keep AC-1/AC-2/AC-3 + the build-context rider green
+  `uv run pytest -k spider2_dbt --ignore=tests/unit/test_task_identity_scoring.py` -> 29 passed.
+
+### Summary
+
+Fixed the Critical symlink-write-through defect: under `view_mode="link"` the reflected `environment/Dockerfile` is a symlink into the source tree, so the three layer-injection helpers' `write_text` calls followed the link and corrupted the version-controlled fixtures. Guarded all three with the existing unlink-then-write pattern, restored the two dirty fixtures, and added a regression test (proven red-then-green). The preflight helper's `script_path.write_text` needed no guard since that file is view-owned, not symlinked. Pre-existing unrelated `uv.lock` change left unstaged.

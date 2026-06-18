@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from razorback.benchmarks.spider2_dbt.harbor_view import (
+    _DBT_PROJECT_DIRNAME,
     SPIDER2_DBT_DENY_GLOBS,
     materialize_spider2_harbor_task_view,
 )
@@ -248,3 +249,43 @@ def test_spider2_view_excludes_gold_solution_expected_paths(tmp_path):
 def test_spider2_deny_globs_cover_required_families():
     assert {"gold/**", "expected/**", "golden/**"} <= set(SPIDER2_DBT_DENY_GLOBS)
     assert set(DEFAULT_SOLUTION_DENY_GLOBS) <= set(SPIDER2_DBT_DENY_GLOBS)
+
+
+# --- REGRESSION: link mode must never mutate the source Dockerfile ---------
+# Mirrors test_link_mode_symlinks_files_but_never_mutates_source_task_toml.
+# Under `view_mode="link"` the reflected environment/Dockerfile is a symlink
+# back into the shared source tree; the three image-layer helpers each call
+# `dockerfile.write_text(...)`, which would FOLLOW the symlink and corrupt the
+# version-controlled source (and leak idempotency markers, suppressing layer
+# injection on later runs). Each helper must unlink the symlink before writing
+# so the view owns a real file.
+
+
+def test_link_mode_injects_layers_but_never_mutates_source_dockerfile(tmp_path):
+    source = _write_source(
+        tmp_path / "source", with_packages=True, with_duckdb=True
+    )
+    source_dockerfile = source / "environment" / "Dockerfile"
+    source_dockerfile_before = source_dockerfile.read_text()
+
+    view = materialize_spider2_harbor_task_view(
+        source_task_dir=source,
+        view_root=tmp_path / "views",
+        task_slug="spider2-fixture-001",
+        view_mode="link",
+    )
+
+    # The view's Dockerfile is a real, view-owned file (not a symlink) and
+    # carries all three injected layers.
+    view_dockerfile = view / "environment" / "Dockerfile"
+    assert view_dockerfile.is_file()
+    assert not view_dockerfile.is_symlink()
+    view_text = view_dockerfile.read_text()
+    assert "Razorback: install declared dbt packages before agent runtime." in view_text
+    assert "Razorback: validate spider2-dbt source DuckDB before agent runtime." in view_text
+    assert f"COPY {_DBT_PROJECT_DIRNAME}/ /app/" in view_text
+
+    # The SOURCE Dockerfile is byte-for-byte unchanged — no write followed the
+    # symlink, and no idempotency marker leaked back into the source.
+    assert source_dockerfile.read_text() == source_dockerfile_before
+    assert "Razorback:" not in source_dockerfile.read_text()
