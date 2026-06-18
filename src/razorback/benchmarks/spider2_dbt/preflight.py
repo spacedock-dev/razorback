@@ -96,8 +96,11 @@ def resolve_spider2_db_name(workspace: Path, *, task_slug: str) -> str:
     resolution so all three agree on which DuckDB the agent operates against.
 
     Resolution order:
-      1. The dbt `profiles.yml` `path:` value — strip directories and the
-         `.duckdb` suffix to get the stem.
+      1. The dbt `profiles.yml` active output's `path:` value — the active
+         output is `outputs[target]` (dbt's own selection rule), not whichever
+         output is listed first. Strip directories and the `.duckdb` suffix to
+         get the stem. Fails closed when several outputs exist but `target:` is
+         missing/unknown, or when the target output is non-DuckDB.
       2. Exactly one `*.duckdb` already present in the workspace — use its stem.
       3. The task slug (used as the DB name when the project ships nothing).
 
@@ -107,7 +110,7 @@ def resolve_spider2_db_name(workspace: Path, *, task_slug: str) -> str:
     """
     workspace = Path(workspace)
 
-    profile_path = _read_profiles_db_path(workspace)
+    profile_path = _read_profiles_db_path(workspace, task_slug=task_slug)
     if profile_path:
         return Path(profile_path).name.removesuffix(".duckdb")
 
@@ -128,14 +131,39 @@ def resolve_spider2_db_name(workspace: Path, *, task_slug: str) -> str:
     return task_slug
 
 
-def _read_profiles_db_path(workspace: Path) -> str | None:
-    """Return the first dbt `profiles.yml` DuckDB output `path:`, if any."""
+def _read_profiles_db_path(workspace: Path, *, task_slug: str) -> str | None:
+    """Return the active dbt `profiles.yml` DuckDB output `path:`, if any.
+
+    dbt selects the active output as `outputs[target]`, so this honors the
+    profile's `target:` field rather than returning whichever output happens
+    to be listed first. With multiple outputs the `target:` is REQUIRED and
+    must name a DuckDB output:
+
+      * a profile with exactly one output uses it (no `target:` needed);
+      * a profile with several outputs and a `target:` returns
+        `outputs[target]`'s DuckDB `path:`;
+      * fail CLOSED (`Spider2WorkspacePreflightError`) when several outputs
+        exist but `target:` is missing/unknown (`unresolved dbt target`), or
+        when the target-selected output is not DuckDB (`target output not
+        duckdb`) — never silently pin the wrong DB.
+
+    Profiles whose active output ships no `.duckdb` `path:` contribute nothing
+    here, leaving the single-glob / slug fallbacks in `resolve_spider2_db_name`
+    to take over.
+    """
     try:
         import yaml
     except Exception:
         return None
     if not workspace.is_dir():
         return None
+
+    def _duckdb_path(output: dict[str, Any]) -> str | None:
+        path = output.get("path")
+        if isinstance(path, str) and path.strip().endswith(".duckdb"):
+            return path.strip()
+        return None
+
     for profiles_path in sorted(workspace.rglob("profiles.yml")):
         try:
             document = yaml.safe_load(profiles_path.read_text())
@@ -143,10 +171,59 @@ def _read_profiles_db_path(workspace: Path) -> str | None:
             continue
         for profile in _iter_dicts(list(_as_dict(document).values())):
             outputs = _as_dict(profile.get("outputs"))
-            for output in _iter_dicts(list(outputs.values())):
-                path = output.get("path")
-                if isinstance(path, str) and path.strip().endswith(".duckdb"):
-                    return path.strip()
+            output_dicts = {
+                name: out
+                for name, out in outputs.items()
+                if isinstance(out, dict)
+            }
+            if not output_dicts:
+                continue
+
+            target = profile.get("target")
+            if isinstance(target, str) and target.strip():
+                target = target.strip()
+                if target not in output_dicts:
+                    raise Spider2WorkspacePreflightError(
+                        {
+                            "status": "failed",
+                            "reason": "unresolved dbt target",
+                            "task_id": task_slug,
+                            "target": target,
+                            "outputs": sorted(output_dicts),
+                        }
+                    )
+                selected = output_dicts[target]
+                path = _duckdb_path(selected)
+                if path is None:
+                    raise Spider2WorkspacePreflightError(
+                        {
+                            "status": "failed",
+                            "reason": "target output not duckdb",
+                            "task_id": task_slug,
+                            "target": target,
+                            "type": selected.get("type"),
+                        }
+                    )
+                return path
+
+            # No explicit target. A single output is unambiguous; preserve the
+            # historical single-output fallback. With several outputs and no
+            # target, dbt cannot pick one either -> fail closed.
+            if len(output_dicts) == 1:
+                (only_output,) = output_dicts.values()
+                path = _duckdb_path(only_output)
+                if path is not None:
+                    return path
+                continue
+            raise Spider2WorkspacePreflightError(
+                {
+                    "status": "failed",
+                    "reason": "unresolved dbt target",
+                    "task_id": task_slug,
+                    "target": None,
+                    "outputs": sorted(output_dicts),
+                }
+            )
     return None
 
 

@@ -314,3 +314,73 @@ def test_resolve_db_name_profile_pins_db_among_many(tmp_path: Path) -> None:
         )
     )
     assert resolve_spider2_db_name(tmp_path, task_slug="x") == "warehouse"
+
+
+def test_resolve_db_name_honors_target_not_first_output(tmp_path: Path) -> None:
+    # dbt resolves the active output via `outputs[target]`. With `target: prod`
+    # but `dev` listed FIRST, the resolver must pin the prod DB, not dev.
+    # (Old first-output behavior returned dev_warehouse here — wrong DB.)
+    (tmp_path / "profiles.yml").write_text(
+        "\n".join(
+            [
+                "example:",
+                "  target: prod",
+                "  outputs:",
+                "    dev:",
+                "      type: duckdb",
+                "      path: dev_warehouse.duckdb",
+                "    prod:",
+                "      type: duckdb",
+                "      path: prod_warehouse.duckdb",
+                "",
+            ]
+        )
+    )
+    assert resolve_spider2_db_name(tmp_path, task_slug="x") == "prod_warehouse"
+
+
+def test_resolve_db_name_fails_closed_when_target_missing(tmp_path: Path) -> None:
+    # A profile with outputs but no `target:` cannot be resolved unambiguously.
+    (tmp_path / "profiles.yml").write_text(
+        "\n".join(
+            [
+                "example:",
+                "  outputs:",
+                "    dev:",
+                "      type: duckdb",
+                "      path: dev_warehouse.duckdb",
+                "    prod:",
+                "      type: duckdb",
+                "      path: prod_warehouse.duckdb",
+                "",
+            ]
+        )
+    )
+    with pytest.raises(Spider2WorkspacePreflightError) as exc_info:
+        resolve_spider2_db_name(tmp_path, task_slug="x")
+    assert exc_info.value.payload["reason"] == "unresolved dbt target"
+
+
+def test_resolve_db_name_fails_closed_when_target_output_non_duckdb(
+    tmp_path: Path,
+) -> None:
+    # target points at a postgres output -> the duckdb contract cannot be honored.
+    (tmp_path / "profiles.yml").write_text(
+        "\n".join(
+            [
+                "example:",
+                "  target: prod",
+                "  outputs:",
+                "    dev:",
+                "      type: duckdb",
+                "      path: dev_warehouse.duckdb",
+                "    prod:",
+                "      type: postgres",
+                "      host: db",
+                "",
+            ]
+        )
+    )
+    with pytest.raises(Spider2WorkspacePreflightError) as exc_info:
+        resolve_spider2_db_name(tmp_path, task_slug="x")
+    assert exc_info.value.payload["reason"] == "target output not duckdb"
