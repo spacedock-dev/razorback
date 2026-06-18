@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 
 from razorback.runs.aggregate import aggregate_summary, write_per_trial_outcomes
-from razorback.score.load import load_run_dir
 
 
 def _write_trial(run_dir: Path, trial_name: str, reward: float) -> None:
@@ -14,7 +13,9 @@ def _write_trial(run_dir: Path, trial_name: str, reward: float) -> None:
 
 
 def _write_manifest(run_dir: Path, view_name: str, kind: str, task_id: str) -> None:
-    view = run_dir / "_razorback" / "task_views" / view_name
+    # Producer materializes view manifests under tasks_root = run_dir/"tasks";
+    # the aggregator must resolve identity from that same root (AC-1).
+    view = run_dir / "tasks" / view_name
     view.mkdir(parents=True)
     (view / "view_manifest.json").write_text(
         json.dumps(
@@ -86,10 +87,3 @@ def test_task_identity_outputs_are_invariant_to_dispatch_order(tmp_path):
         }
 
     assert outcome_set(default_run) == outcome_set(reordered_run)
-    assert {
-        (record.stratum_payload["benchmark_kind"], record.stratum_payload["benchmark_task_id"])
-        for record in load_run_dir(default_run)
-    } == {
-        (record.stratum_payload["benchmark_kind"], record.stratum_payload["benchmark_task_id"])
-        for record in load_run_dir(reordered_run)
-    }

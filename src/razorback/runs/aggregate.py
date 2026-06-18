@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, NotRequired, TypedDict
 
 from razorback.diff.stats import wilson_ci
+from razorback.harbor_tasks.manifest import task_views_root
 
 MANIFEST_SCHEMA_VERSION = 1
 
@@ -129,7 +130,7 @@ def _resolve_stratum(trial_dir: Path) -> dict | None:
 
 def _resolve_stratum_from_task_view_manifest(trial_dir: Path) -> dict | None:
     run_dir = trial_dir.parent
-    views_root = run_dir / "_razorback" / "task_views"
+    views_root = task_views_root(run_dir)
     if not views_root.is_dir():
         return None
 
