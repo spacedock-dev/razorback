@@ -244,3 +244,15 @@ Closed the remaining symlink-write-through gap (cycle-2 Codex finding): `_ensure
 ### Summary
 
 Independently re-verified the cycle-3 preflight-symlink-guard fix (commit `c0d9da1`, HEAD `c312719`) with no production code written. The guard (`if script_path.is_symlink(): script_path.unlink()` before the preflight-script `write_text`) is real and load-bearing: exercised end-to-end against a seeded colliding source file in link mode, the SOURCE stays byte-for-byte unchanged while the view owns a real file; stripping the guard corrupts the source and fails the regression test. This closes the last instance of the symlink-write-through class — `harbor_view.py` now carries 4 `is_symlink()` guards (3 Dockerfile + preflight script) and an exhaustive search (corroborated by the code-review agent) finds no remaining unguarded write-through site. No regression: acceptance is 39 passed, generic materializer/leakage unchanged, ade_bench 13 passed, the `/app` contract pinned, and cycles 1-2 (db_name pin, fail-closed multi-DB, schema-aware sources, importable r5 resolver, Dockerfile guards) are intact. Pre-existing unrelated failures predate the branch on base `996d42b`. Code review verdict: Ready to merge. **Gate: PASSED → done.**
+
+### Cycle 4 — validation gate REJECTED (2026-06-18, captain via Codex review)
+
+Codex found a real correctness bug in the db_name resolver; captain chose
+fix-now-then-converge (no further re-review after this). Routing back to
+`implementation`:
+
+1. **[high] profiles.yml resolver ignores the dbt `target:` (`preflight.py` `_read_profiles_db_path`).**
+   The resolver iterates `outputs.values()` and returns the FIRST DuckDB `path:`, never reading the profile's `target:` field. dbt uses `outputs[target]`, so on a multi-output profile (dev/prod) the resolver can pin the wrong DB — the preflight would validate `/app/<dev>.duckdb` while dbt/the agent use the target-selected database. Confirmed live (no `target` reference in the module). Shared with r5, which imports this resolver.
+   **Fix:** resolve the active output via the profile's `target:` value before returning its `path:`; fail closed if `target` is missing/unknown or the selected output is non-DuckDB. Add a test with `dev`/`prod` outputs where `target` is NOT the first mapping entry, asserting the target output's DB is pinned. Keep all prior ACs + cycle-1/2/3 fixes green.
+
+Per captain: after this fix re-validates clean, proceed to PR — no further per-fix re-review cycle on ny.
