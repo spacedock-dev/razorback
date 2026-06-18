@@ -174,3 +174,12 @@ Resolved the cycle-2 fail-open hazard with a focused fix. `EvalSpec` and `load_e
 ### Summary
 
 Cycle-3 re-validation of the fail-closed fix (commit 869918d) — independent verification only, no production code. The fix is real and load-bearing: empty file / missing-or-empty `condition_tabs` / non-`duckdb_match` func all RAISE, `emit_reward` surfaces any failure as reward 0 (no crash-into-pass, no silent 1.0), and over a MATCHING pred/gold pair the prior would-be-1.0 hazard now scores 0 — proven by a mutation test where removing the guards makes all 6 negatives fail (CLI mutation reproduced the literal `{'reward': 1.0}` hazard). A positive control confirms a valid matching spec still scores 1.0. Cycle-1 fixes (faithful column-containment comparator + 1e-2 tolerance; verify-only-tests/ leakage scoping) are untouched by the cycle-2 diff and re-confirmed live; rider (`/app/<db_name>.duckdb`) and AC-3 reward shape intact; gating suite 73 passed; only the known pre-existing unrelated failures + harness `uv.lock` churn remain. Gate verdict: PASSED -> done. Full report: docs/razorback-implementation/validation/spider2-dbt-duckdb-match-verifier.md
+
+### Cycle 3 — validation gate REJECTED (2026-06-18, captain via Codex review)
+
+Codex found the verifier ignores the eval spec's gold-DB basename; captain chose
+fix-now. Confirmed live. Routing back to `implementation`:
+
+1. **[high] Verifier hardcodes `gold.duckdb`, ignoring `evaluation.parameters.gold`.**
+   `EvalSpec` has no `gold` field and `load_eval_spec` discards `parameters.gold`; `harbor_view.py:63` emits `--gold-db /tests/gold.duckdb` and `:125` copies a hardcoded `gold.duckdb`. Real Spider2 tasks name the gold DB per task (e.g. `playbook.duckdb`, `tpch.duckdb`), so the verifier would fail to find the gold or score against the wrong file — a benchmark-correctness defect. This is the gold-DB analog of the predicted-DB resolver ny added.
+   **Fix:** add `gold` to `EvalSpec`, parse it from `evaluation.parameters.gold` (validate present for real wrapped specs), copy THAT exact file from the source `tests/gold/<gold>` into the view's verifier-only `tests/`, and emit `--gold-db /tests/<basename>`; fail closed if the named gold file is missing. Add a regression test with `parameters.gold` set to a NON-default basename (and no `gold.duckdb` present), proving the named file is used. Keep the cycle-1 comparator/leakage fixes, the cycle-2 fail-closed validation, the rider, and AC-3 reward shape intact.
