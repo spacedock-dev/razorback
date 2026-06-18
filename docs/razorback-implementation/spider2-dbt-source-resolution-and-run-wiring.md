@@ -21,19 +21,28 @@ exist but nothing in the `rk run` path invokes
 `materialize_spider2_harbor_task_view`, so a spider2-dbt spec cannot
 resolve into Harbor task views. This task wires spider2-dbt in as a
 recognized benchmark family: a `kind: harbor` spec with
-`dataset: spider2-dbt@1.0` resolves source task dirs (captain-chosen
-harbor-package path, mirroring the ade-bench dataset-ref flow in
-`translate.py:_resolve_harbor_dataset_tasks`), runs each through the
-spider2 view materializer, and emits `TaskConfig(path=view_dir)`
-entries. Tests run against a local fixture source tree so the suite
-stays deterministic; the live `spider2-dbt@1.0` download is a smoke,
-not a gating AC (the PKG-40 spike recorded its git-checkout failure).
+`dataset: spider2-dbt/spider2-dbt@1.0` resolves source task dirs
+(captain-chosen harbor-package path, mirroring the ade-bench dataset-ref
+flow in `translate.py:_resolve_harbor_dataset_tasks`), runs each through
+the spider2 view materializer, and emits `TaskConfig(path=view_dir)`
+entries. The fully-qualified `<org>/<name>@<ref>` form is mandatory:
+`HarborBenchmarkBlock` rejects a bare ref at spec-parse time when
+`plugin is None` (`spec/schema.py:209-226`), and Harbor's
+`PackageReference.parse` raises on `spider2-dbt@1.0` (verified at plan
+time) — so the bare ref can never be a valid spec dataset. Tests run
+against a local fixture source tree so the suite stays deterministic;
+the bare `spider2-dbt@1.0` form appears only as the live
+`harbor download` CLI smoke, which is not a gating AC (the PKG-40 spike
+recorded its git-checkout failure).
 
 `auto-approve: false` — touches the spec/translate surface.
 
 ## Acceptance criteria
 
-**AC-1 — A `kind: harbor` / `dataset: spider2-dbt@1.0` spec resolves to N spider2 task-view dirs.**
+**AC-1 — A `kind: harbor` / `dataset: spider2-dbt/spider2-dbt@1.0` spec resolves to N spider2 task-view dirs.**
+The fully-qualified ref is the user-facing contract (the bare
+`spider2-dbt@1.0` is rejected by the schema validator and is reserved
+for the live `harbor download` CLI smoke only).
 Verified by: an integration test that runs the resolver against
 `tests/fixtures/spider2_dbt/` and asserts each emitted dir contains
 `task.toml` and that `rg -l 'gold|expected|golden'` over the view
@@ -106,3 +115,15 @@ the dataset-ref contract). Rework brief for the next plan pass:
    `<benchmark_kind>-<task_slug>` view names. Add a test where
    `exclude_tasks=[source_slug]` proves the excluded spider2 task is not
    emitted. Resolve this in the plan — do not defer it to the implementer.
+
+## Stage Report: plan (cycle 1)
+
+- DONE: Amend the dataset-ref contract to the fully-qualified `spider2-dbt/spider2-dbt@1.0` everywhere (AC-1 + Problem § in the entity, and the plan's fixture spec + detection prose); keep bare `spider2-dbt@1.0` only as the harbor-download CLI smoke. Do NOT add schema support for the bare ref.
+  Entity Problem § + AC-1 now use the qualified ref and cite the schema-validator rejection of the bare form (`spec/schema.py:209-226`). Plan goal/architecture/design/fixture-spec (line 553) all use the qualified ref; bare ref kept only in T7 + the live-smoke constraint. Re-verified live: `PackageReference.parse("spider2-dbt@1.0")` raises, `"spider2-dbt/spider2-dbt@1.0"` parses (short_name=="spider2-dbt").
+- DONE: Remove the global production-resolver env seam: keep the offline test seam as a pytest monkeypatch only (preferred), or guard any env seam with `_is_spider2_dbt_dataset`.
+  `RAZORBACK_SPIDER2_DBT_SOURCE_ROOT` removed entirely; `_resolve_harbor_dataset_tasks` untouched. T6 rewritten to invoke `rk run --explain` in-process via Typer `CliRunner` (pattern: `tests/unit/test_rk_run_harbor_cache_dir.py`) and monkeypatch the resolver. Verified live: `--explain` returns before `_invoke_harbor` (`cli/run.py:335-346`); fixture spec has no `provenance:` so drift checks skip; `_resolve_harbor_dataset_tasks` is a monkeypatchable module attr.
+- DONE: Apply `exclude_tasks`/`n_tasks` to source paths BEFORE materialization, decide it in the plan, and add a test proving `exclude_tasks=[source_slug]` drops the excluded spider2 task.
+  T2 hoists selectors onto `source_paths` via a new `_apply_task_selectors`, then materializes survivors (spider2 branch returns early; generic path byte-identical). New T3b proves `exclude_tasks=["spider2-fixture-001"]` drops that source and its `spider2-dbt-<slug>` view; pins ordering against regression. Root cause confirmed live: `materialize.py:_view_name` yields `spider2-dbt-<slug>`, so a post-materialize `p.name` filter can never match a source slug.
+
+### Summary
+Reworked both the entity (Problem § + AC-1) and the plan doc to resolve the three Codex-surfaced defects per captain option B. Contract is now the fully-qualified `spider2-dbt/spider2-dbt@1.0` everywhere with no schema change; the bare ref is the `harbor download` CLI smoke only. The env-override hijack is eliminated by removing the production-resolver seam and driving the AC-3 `--explain` test in-process via `CliRunner` so a pytest monkeypatch reaches the resolver. `exclude_tasks`/`n_tasks` now filter source paths before materialization (decided in-plan, not deferred), with a dedicated T3b regression test. Every changed contract assumption was re-verified live against the repo (PackageReference.parse, schema validator shape, `_view_name`, the explain short-circuit, and the CliRunner/monkeypatch surface).
