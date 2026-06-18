@@ -400,3 +400,59 @@ write-through site and the `copytree` is structurally safe.
 
 The cycle-3 fix is real and load-bearing, the full symlink-write-through class
 is closed, and nothing from cycles 1-2 regressed. **PASSED → `done`.**
+
+## Cycle 4 — final re-review (honor dbt `target:` in db_name resolver)
+
+Independent re-verification of the cycle-4 fix (commit `462cbf2`, branch HEAD
+`5d16851`) from the clean worktree. No production code written — verification
+only. Per captain: last re-validation before PR.
+
+### The fix is real and load-bearing
+
+`_read_profiles_db_path` (`preflight.py:134-227`) now reads the profile's
+`target:` and returns `outputs[target]`'s DuckDB `path:` instead of the first
+output. Exercised the importable `resolve_spider2_db_name` directly against
+temp profiles — 7/7 behaviors confirmed:
+
+- `target: prod` with `dev` listed FIRST → pins `prod_warehouse` (NOT `dev`).
+- multi-output, no `target:` → fails closed `reason="unresolved dbt target"`.
+- `target:` names an unknown output → fails closed `unresolved dbt target`.
+- `target:` points at a `postgres` output → fails closed
+  `reason="target output not duckdb"`.
+- single output, no `target:` → still resolves (fallback preserved).
+- no profiles + exactly one `*.duckdb` → glob-stem fallback works.
+- no profiles + no DB → task-slug fallback works.
+
+**Regression tests proven load-bearing.** Temporarily reverted
+`_read_profiles_db_path` to first-output behavior in the working tree and
+re-ran the three cycle-4 tests: all 3 FAILED
+(`honors_target_not_first_output`, `fails_closed_when_target_missing`,
+`fails_closed_when_target_output_non_duckdb`) — the target-not-first case
+returned the wrong DB (`dev_warehouse`) under the old logic. Reverted the
+patch; `preflight.py` is byte-identical to committed (`git diff` empty).
+
+### No regression across cycles 1-3
+
+- `uv run pytest -k spider2_dbt --ignore=tests/unit/test_task_identity_scoring.py`
+  → **42 passed, 751 deselected** (EXIT 0) — was 39 + 3 new target tests.
+- Cycle-1 Dockerfile guard, cycle-3 preflight-symlink guard, cycle-2
+  schema-aware source + db_name-pin/fail-closed tests → 6 passed targeted subset.
+  `harbor_view.py` still carries 4 `is_symlink()` guards.
+- Generic `materialize.py`/`leakage.py`: `git diff 996d42b..HEAD` empty —
+  byte-for-byte unchanged. ade_bench harbor_view + preflight → 40 passed, 1 skipped.
+- `resolve_spider2_db_name` importable for r5
+  (`from razorback.benchmarks.spider2_dbt.preflight import resolve_spider2_db_name`).
+- `/app` + `/app/<db_name>.duckdb` contract still pinned.
+- Branch touches only `spider2_dbt/{harbor_view,preflight}.py`, their two test
+  files, and the entity/validation docs. The three pre-existing-failing test
+  files (`test_task_identity_scoring`, `test_generate_matrix_specs`,
+  `test_rk_research_new`) are untouched; `razorback.score.load` is genuinely
+  absent on base `996d42b` — pre-existing, not a regression. Harness `uv.lock`
+  ignored per dispatch; worktree clean.
+
+### Gate
+
+The cycle-4 resolver fix honors `outputs[target]`, fails closed correctly, and
+is proven load-bearing by reverting the regression tests. Cycles 1-3 are
+intact, generic surfaces unchanged, acceptance is 42 passed.
+**PASSED → `done`.**
