@@ -10,7 +10,7 @@ score:
 worktree: .worktrees/spacedock-ensign-harbor-view-task-identity-scored-runs
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 auto-approve: false
 ---
 
