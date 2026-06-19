@@ -1,13 +1,13 @@
 ---
 id: b1fdqxbnr44efwjybdskqw47
 title: harbor-view task identity through scored runs (spider2-dbt + generic)
-status: validation
+status: done
 source: Codex adversarial review of spider2-dbt-source-resolution-and-run-wiring (2026-06-18); cross-cutting follow-up
 started: 2026-06-18T15:46:31Z
-completed:
-verdict:
+completed: 2026-06-19T17:05:24Z
+verdict: PASSED
 score:
-worktree: .worktrees/spacedock-ensign-harbor-view-task-identity-scored-runs
+worktree:
 issue:
 pr: "#16"
 mod-block:
