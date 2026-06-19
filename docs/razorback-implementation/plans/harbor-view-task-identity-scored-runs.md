@@ -291,7 +291,7 @@ Expected: PASS (all existing generic/harbor-local translation tests). This is th
 Add to `tests/unit/test_translate_harbor_block.py`:
 
 ```python
-def test_generic_harbor_path_writes_no_view_manifest(tmp_path):
+def test_harbor_local_path_writes_no_view_manifest(tmp_path):
     """AC-3: the generic harbor-local path emits TaskConfig(path=source) and
     materializes NO view_manifest under tasks_root. Identity on this path must
     keep coming from stratum.json / trial-name parsing, not manifest discovery.
@@ -316,7 +316,7 @@ def test_generic_harbor_path_writes_no_view_manifest(tmp_path):
 
 - [ ] **Step 3: Run test to verify it passes**
 
-Run: `uv run pytest tests/unit/test_translate_harbor_block.py -k generic_harbor_path_writes_no_view_manifest -v`
+Run: `uv run pytest tests/unit/test_translate_harbor_block.py -k harbor_local_path_writes_no_view_manifest -v`
 Expected: PASS (generic path never materializes; `run_dir/tasks` either absent or has no manifests).
 
 - [ ] **Step 4: Confirm consumers fall back unchanged on this path**
