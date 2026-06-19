@@ -63,9 +63,11 @@ def generate(
         help="Dataset materialization mode: bind (default — bind-mount dumps from data_root) or copy (per-task workdir copy).",
     ),
     postgres_volume_mode: str = typer.Option(
-        "reuse",
+        "fresh",
         "--postgres-volume-mode",
-        help="postgres data volume strategy: reuse (default — dataset-keyed shared volume) or fresh (per-task unique volume).",
+        help="postgres data volume strategy: fresh (default — per-task unique volume, "
+             "concurrency-safe) or reuse (dataset-keyed shared volume; NOT safe under "
+             "concurrency.trials>1 — two same-dataset cells collide on one writable PGDATA).",
     ),
     query_mode: str = typer.Option(
         "per-query",
