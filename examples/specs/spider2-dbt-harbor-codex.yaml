@@ -17,11 +17,28 @@ benchmark:
   dataset: spider2-dbt/spider2-dbt@1.0
   # Smoke-test a subset (spec-side selectors; same semantics as harbor -l/-i/-x):
   #   n_tasks: 1                 # quickest: cap to the first N tasks (no names needed)
-  #   tasks:                     # or run only these tasks (PackageTaskId.name, verbatim)
-  #     - <task-name>
+  #   tasks:                     # or run only specific tasks (uncomment + keep the ones you want)
+  #     - tpch001
+  #     - activity001
   #   exclude_tasks:             # or run everything except these
-  #     - <task-name>
+  #     - synthea001
   # All commented out: the default is a full dataset run.
+  #
+  # All 69 spider2-dbt@1.0 task names (PackageTaskId.name, verbatim) — pick any for `tasks:`:
+  #   activity001  airbnb001  airbnb002  airport001  analytics_engineering001
+  #   app_reporting001  app_reporting002  apple_store001  asana001  asset001
+  #   atp_tour001  biketheft001  chinook001  danish_democracy_data001  divvy001
+  #   f1001  f1002  f1003  flicks001  gitcoin001
+  #   google_ads001  google_play001  google_play002  greenhouse001  hive001
+  #   hubspot001  intercom001  inzight001  jira001  lever001
+  #   marketo001  maturity001  movie_recomm001  mrr001  mrr002
+  #   nba001  netflix001  pendo001  playbook001  playbook002
+  #   provider001  qualtrics001  quickbooks001  quickbooks002  quickbooks003
+  #   recharge001  recharge002  reddit001  retail001  salesforce001
+  #   sap001  scd001  shopify001  shopify002  shopify_holistic_reporting001
+  #   social_media001  superstore001  synthea001  tickit001  tickit002
+  #   tpch001  tpch002  twilio001  workday001  workday002
+  #   xero001  xero_new001  xero_new002  zuora001
 trials: 1
 concurrency:
   trials: 1
