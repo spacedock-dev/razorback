@@ -15,6 +15,13 @@ agent:
 benchmark:
   kind: harbor
   dataset: spider2-dbt/spider2-dbt@1.0
+  # Smoke-test a subset (spec-side selectors; same semantics as harbor -l/-i/-x):
+  #   n_tasks: 1                 # quickest: cap to the first N tasks (no names needed)
+  #   tasks:                     # or run only these tasks (PackageTaskId.name, verbatim)
+  #     - <task-name>
+  #   exclude_tasks:             # or run everything except these
+  #     - <task-name>
+  # All commented out: the default is a full dataset run.
 trials: 1
 concurrency:
   trials: 1
