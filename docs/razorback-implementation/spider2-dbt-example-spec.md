@@ -10,7 +10,7 @@ score:
 worktree: .worktrees/spacedock-ensign-spider2-dbt-example-spec
 issue:
 pr: "#17"
-mod-block: merge:pr-merge
+mod-block:
 ---
 
 ## Problem
