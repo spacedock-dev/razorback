@@ -30,9 +30,15 @@ verifies what is checkable offline (schema-valid + freezes).
 ## Acceptance criteria
 
 **AC-1 — A `kind: harbor` spider2-dbt example spec exists and freezes cleanly.**
-Verified by: `uv run rk freeze examples/specs/<name>.yaml` exits 0 and
-writes `examples/specs/<name>.frozen.yaml` with
-`benchmark.dataset == "spider2-dbt/spider2-dbt@1.0"`.
+Verified by: `uv run rk freeze examples/specs/<name>.yaml --allow-missing`
+exits 0 and writes `examples/specs/<name>.frozen.yaml` with
+`benchmark.dataset == "spider2-dbt/spider2-dbt@1.0"`. (Captain-settled:
+`--allow-missing` is the offline-reproducible form — `freeze` writes
+`benchmark.dataset` verbatim; the `ANTHROPIC_API_KEY` only gates agent
+pre-flight model-alias resolution, not the dataset ref. The frozen
+`benchmark.dataset` is identical with or without the flag. A live run is
+NOT attempted — the `spider2-dbt@1.0` harbor-package hydration is the
+externally-owned PKG-40 blocker.)
 
 **AC-2 — The example records the `spider2-dbt@1.0` hydration prerequisite for a full run.**
 Verified by: `grep -F 'spider2-dbt@1.0' examples/specs/<name>.yaml` returns
@@ -163,3 +169,31 @@ flagged for validation/captain: plain `rk freeze` exits 11 offline with no
 `ANTHROPIC_API_KEY` (reproduced against an existing example too), so the
 offline-reproducible AC-1 command is `rk freeze --allow-missing` — the frozen
 `benchmark.dataset` is identical either way.
+
+## Stage Report: implementation
+
+- DONE: Add examples/specs/spider2-dbt-harbor-codex.yaml: kind: harbor + dataset: spider2-dbt/spider2-dbt@1.0 (qualified ref, NOT harbor-local) + a real kind: codex agent block; mirror the sibling examples/specs/ade-bench-harbor-dataset-codex.yaml shape. Include an `# ABOUTME:` header note naming the spider2-dbt@1.0 harbor-package hydration prerequisite / PKG-40 blocker (AC-2: `grep -F 'spider2-dbt@1.0'` returns it).
+  Authored the spec mirroring the ade-bench sibling (kind: codex, model: gpt-5.5, reasoning_effort: xhigh); `grep -F 'spider2-dbt@1.0'` returns both the 2nd `# ABOUTME:` header note (names hydration prereq / PKG-40 blocker) and the dataset line. AC-2 satisfied.
+- DONE: Prove AC-1 offline: `uv run rk freeze examples/specs/spider2-dbt-harbor-codex.yaml --allow-missing` exits 0 and writes spider2-dbt-harbor-codex.frozen.yaml with benchmark.dataset == "spider2-dbt/spider2-dbt@1.0". Commit the frozen file. ... update the entity AC-1 verification clause accordingly. Do NOT attempt a live run (PKG-40 blocker).
+  `rk freeze --allow-missing` exited 0; frozen file `benchmark.dataset: spider2-dbt/spider2-dbt@1.0` (verbatim). Updated entity AC-1 clause to the `--allow-missing` offline form with the captain rationale. Captain decision (PR #17): the `.frozen.yaml` is a local build/test artifact and is NOT committed — it stays gitignored (`.gitignore:22`, `examples/specs/**/*.frozen.yaml`) and was untracked via `git rm --cached`. AC-1 evidence is the freeze COMMAND (`rk freeze --allow-missing`, which regenerates the gitignored file locally), not a committed file. No live run attempted.
+
+### Implementation summary
+
+Modules added: one user-facing example spec `examples/specs/spider2-dbt-harbor-codex.yaml`. The spec also documents subset smoke-testing via commented-out `n_tasks` / `tasks` / `exclude_tasks` selectors under the `benchmark:` block (default stays a full run; PR #17). Its `examples/specs/spider2-dbt-harbor-codex.frozen.yaml` is a local build/test artifact (gitignored, NOT committed) per the captain decision on PR #17; AC-1 is verified by running `rk freeze --allow-missing`, which regenerates it locally. No production code changes. Harbor surface touched: the `kind: harbor` qualified-ref resolution path (`HarborBenchmarkBlock`, schema.py:169) — the example is the first user-facing spec exercising the `<org>/<name>@<ref>` dataset form (previously only in the internal nop fixture). Deviations from plan: (1) the plan said "Plan stays on main (no worktree)" but the dispatch provided a worktree on branch `spacedock-ensign/spider2-dbt-example-spec`; all work was done there. (2) `examples/specs/provenance.yaml` (also written by freeze) is gitignored and NOT tracked upstream, so it is left uncommitted (consistent with `git ls-files` showing it untracked). (3) Reverted the incidental `uv.lock` resolution churn from `uv run` to keep the worktree free of unrelated changes.
+
+### Summary
+
+Added the `kind: harbor` spider2-dbt example spec with the qualified `spider2-dbt/spider2-dbt@1.0` ref. AC-2 grep returns the `# ABOUTME:` header note naming the PKG-40 hydration prerequisite. AC-1 `rk freeze --allow-missing` exits 0 and the frozen `benchmark.dataset` is the verbatim qualified ref. Captain decision (PR #17): the `.frozen.yaml` is a local artifact (gitignored, NOT committed); AC-1 is verified by running `rk freeze --allow-missing`, which regenerates it locally, not by a committed file. No live run attempted (PKG-40 blocker stands). Entity AC-1 clause updated to the captain-settled `--allow-missing` offline-reproducible form.
+
+## Stage Report: validation
+
+- DONE: Rerun both ACs from a clean checkout of the worktree branch with ACTUAL output: AC-1 (`uv run rk freeze examples/specs/spider2-dbt-harbor-codex.yaml --allow-missing` exits 0 and the frozen spider2-dbt-harbor-codex.frozen.yaml has benchmark.dataset == "spider2-dbt/spider2-dbt@1.0"), AC-2 (`grep -F 'spider2-dbt@1.0' examples/specs/spider2-dbt-harbor-codex.yaml` returns the header note naming the harbor-package hydration prerequisite). Confirm the spec is kind: harbor with the qualified dataset ref, NOT harbor-local.
+  AC-1: freeze exited 0, regenerated frozen `benchmark.dataset == "spider2-dbt/spider2-dbt@1.0"`, `kind: harbor` (both PASS). AC-2: grep GREP_EXIT=0 returns the 2nd `# ABOUTME:` note naming the PKG-40 hydration prereq (PASS). Spec confirmed `kind: harbor` qualified ref; `grep -c harbor-local → 0`. Frozen file verified as real freeze output (only `harness_git_sha` differs on regen).
+- DONE: Run `superpowers:requesting-code-review` against the worktree branch (base main); classify findings blocking/non-blocking. Scrutinize the implementer's flagged convention call: the .frozen.yaml is gitignored (.gitignore:22) yet tracked siblings exist, so it was force-added — confirm that matches the established repo convention and the frozen file is the real freeze output.
+  Reviewer verdict "Yes, ready to merge": zero Critical/Important (blocking), three Minor (non-blocking, cosmetic). Convention call confirmed: 3 pre-existing tracked frozen siblings (`_codex-smoke`, `_deterministic-smoke`, `bookreview-claude` @ 40ed8a2) → force-add is established convention; frozen file is genuine freeze output.
+- DONE: Write the validation report at docs/razorback-implementation/validation/spider2-dbt-example-spec.md (or sibling): PASS/FAIL per AC with exact command+output, code-review findings, and a gate decision (approve to done, or reject to implementation with concrete fixes).
+  Report at `docs/razorback-implementation/validation/spider2-dbt-example-spec.md`: AC-1 PASS, AC-2 PASS, code-review findings classified, gate decision APPROVE → done.
+
+### Summary
+
+Both ACs reproduced independently from a clean checkout with actual output (freeze exit 0 + verbatim qualified `benchmark.dataset`; grep returns the PKG-40 hydration-prereq header note). Spec confirmed `kind: harbor` qualified-ref, not `harbor-local`. Code review returned ready-to-merge with no blocking findings; the flagged gitignored-but-tracked `.frozen.yaml` force-add matches an established convention (three tracked frozen siblings already exist) and the frozen file is the real freeze output. Gate decision: APPROVE → done.
