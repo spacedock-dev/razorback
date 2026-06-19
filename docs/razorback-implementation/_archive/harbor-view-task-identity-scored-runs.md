@@ -12,6 +12,7 @@ issue:
 pr: "#16"
 mod-block:
 auto-approve: false
+archived: 2026-06-19T17:05:24Z
 ---
 
 ## Problem
