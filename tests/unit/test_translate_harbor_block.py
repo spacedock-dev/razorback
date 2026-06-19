@@ -166,9 +166,8 @@ def test_translator_resolves_dabstep_via_package_dataset_client(tmp_path):
     assert (resolved_path / "instruction.md").exists()
 
 
-def test_generic_harbor_path_writes_no_view_manifest(tmp_path):
-    """AC-3: the generic harbor-local path emits TaskConfig(path=source) and
-    materializes NO view_manifest under tasks_root. Identity on this path must
+def test_harbor_local_path_writes_no_view_manifest(tmp_path):
+    """AC-3: the harbor-local path emits TaskConfig(path=source) and materializes NO view_manifest under tasks_root. Identity on this path must
     keep coming from stratum.json / trial-name parsing, not manifest discovery,
     so the tasks_root reconciliation (direction b) leaves it untouched.
     """

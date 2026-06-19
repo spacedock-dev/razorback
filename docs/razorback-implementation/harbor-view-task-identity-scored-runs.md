@@ -91,7 +91,7 @@ Wrote a STANDARD separate plan doc at `docs/razorback-implementation/plans/harbo
 - DONE: Prove AC-1 end-to-end: an integration test running a fixture spider2-dbt job to scored artifacts asserts summary.json / per_trial_outcomes.json carry benchmark_kind=spider2-dbt and the correct per-task benchmark_task_id (not collapsed/default). Prove AC-2: the solver views_root scan resolves the materialized view manifests.
   AC-1: tests/integration/test_spider2_dbt_scored_run_identity.py (63109ea) — fixture producer materializes a view manifest under run_dir/tasks, scoring reads it, summary.json["trials"][0]["stratum"] and per_trial_outcomes.json["trials"][0] both carry benchmark_kind=spider2-dbt + task_id. Negative control verified: reverting the aggregator root makes it fail (KeyError benchmark_kind). AC-2: test_discovery_resolves_manifest_under_tasks_root asserts `_discover_task_identity_from_manifest()` resolves identity from run_dir/tasks.
 - DONE: Pin AC-3 regression: the generic kind:harbor path identity is unchanged — test_translate_harbor_block stays green and a test confirms the root reconciliation does not regress non-spider2 harbor identity.
-  test_translate_harbor_block.py: all 7 baseline tests green + new test_generic_harbor_path_writes_no_view_manifest (e8fa458) pins that harbor-local emits TaskConfig(path=source), materializes no manifest under run_dir/tasks, and trial_name_map stays empty.
+  test_translate_harbor_block.py: all 7 baseline tests green + new test_harbor_local_path_writes_no_view_manifest (e8fa458) pins that harbor-local emits TaskConfig(path=source), materializes no manifest under run_dir/tasks, and trial_name_map stays empty.
 
 ### Summary
 

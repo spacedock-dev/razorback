@@ -81,10 +81,10 @@ tests/unit/test_translate_harbor_block.py::test_translator_rejects_missing_local
 tests/unit/test_translate_harbor_block.py::test_harbor_block_respects_n_tasks_cap_after_resolution PASSED
 tests/unit/test_translate_harbor_block.py::test_harbor_block_respects_exclude_tasks_after_resolution PASSED
 tests/unit/test_translate_harbor_block.py::test_translator_resolves_dabstep_via_package_dataset_client PASSED
-tests/unit/test_translate_harbor_block.py::test_generic_harbor_path_writes_no_view_manifest PASSED
+tests/unit/test_translate_harbor_block.py::test_harbor_local_path_writes_no_view_manifest PASSED
 ```
 
-All 7 baseline tests green + the new `test_generic_harbor_path_writes_no_view_manifest`
+All 7 baseline tests green + the new `test_harbor_local_path_writes_no_view_manifest`
 pins that the generic harbor path emits `TaskConfig(path=source)`, materializes
 no manifest under `run_dir/tasks`, and leaves `trial_name_map` empty.
 `task_views_root` is also unit-pinned (`test_task_views_root.py`, 1 passed).
