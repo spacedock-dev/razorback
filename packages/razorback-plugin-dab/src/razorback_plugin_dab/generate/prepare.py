@@ -65,7 +65,7 @@ def prepare_dataset_tasks(
     docker_image: str = DEFAULT_AGENT_IMAGE,
     container_workdir: str = DEFAULT_CONTAINER_WORKDIR,
     materialize_mode: str = "bind",
-    postgres_volume_mode: str = "reuse",
+    postgres_volume_mode: str = "fresh",
     query_mode: str = "per-query",
 ) -> list[TaskManifestEntry]:
     """Materialize one harbor task dir per query under tasks_root/<dataset>-q<n>/.
@@ -80,10 +80,21 @@ def prepare_dataset_tasks(
             the other dataset payload. Preserved for provenance-strict runs.
 
     postgres_volume_mode:
-        "reuse" (default) — postgres data volume is keyed on (dataset,
-            schema_version) so init.d runs ONCE per dataset across variants
-            and trials.
-        "fresh" — per-task unique volume; init.d runs every trial.
+        "fresh" (default) — per-task unique postgres data volume (keyed on
+            task_id). CONCURRENCY-SAFE: under concurrency.trials>1, two cells
+            of the same dataset must NOT share one writable PGDATA dir —
+            postgres locks the data dir, so the second container can't start,
+            goes unhealthy, and the cell errors. Per-task volumes also avoid
+            stale cross-run data (the volume does not survive across runs as a
+            dataset-keyed one would). Cost: init.d (DB restore) runs per cell
+            instead of once per dataset; DAB postgres dumps are small
+            (≤8.5MB / ~90k lines for crmarenapro, the worst concurrent case;
+            PATENTS is 129MB but only 3 queries) and restore well within the
+            healthcheck budget.
+        "reuse" — postgres data volume keyed on (dataset, schema_version) so
+            init.d runs ONCE per dataset. Restore-once optimization, but NOT
+            concurrency-safe (see above). Only safe for serial single-trial
+            runs.
     """
     if materialize_mode not in ("bind", "copy"):
         raise ValueError(
