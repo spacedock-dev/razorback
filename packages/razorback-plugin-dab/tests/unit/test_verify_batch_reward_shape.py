@@ -114,3 +114,39 @@ def test_batch_verify_does_not_mask_validator_import_errors(tmp_path: Path) -> N
     assert "missing_verifier_dependency" in result.stderr
     assert not reward_out.exists()
     assert not per_query_out.exists()
+
+
+def test_batch_verify_isolates_per_query_runtime_validator_error(tmp_path: Path) -> None:
+    """A single query's validator raising at call time (e.g. a non-string answer)
+    must score that query 0 and continue grading the rest — not abort the whole
+    dataset (which would drop it from the run as a RewardFileNotFoundError)."""
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    shutil.copy2(Path(verify_batch_module.__file__), tests_dir / "verify_batch.py")
+    # q1 validator crashes on a non-string answer; q2 validator is well-behaved.
+    (tests_dir / "validate_q1.py").write_text(
+        "def validate(answer):\n"
+        "    return (answer.lower() == 'x', 'checked')\n"
+    )
+    (tests_dir / "validate_q2.py").write_text(
+        "def validate(answer):\n"
+        "    return (answer == 'ok', 'checked')\n"
+    )
+    answers = tmp_path / "answers.json"
+    answers.write_text(json.dumps({"q1": ["a", "b"], "q2": "ok"}))  # q1 is a LIST
+    reward_out = tmp_path / "reward.json"
+    per_query_out = tmp_path / "reward_per_query.json"
+
+    result = _run_generated_verify_batch(
+        tests_dir=tests_dir,
+        answers_path=answers,
+        reward_out=reward_out,
+        per_query_out=per_query_out,
+    )
+
+    assert result.returncode == 0, result.stderr
+    per_query = json.loads(per_query_out.read_text())
+    assert per_query["q1"]["reward"] == 0.0
+    assert "validator error" in per_query["q1"]["reason"]
+    assert per_query["q2"]["reward"] == 1.0  # the good query still graded
+    assert json.loads(reward_out.read_text()) == {"reward": 0.5}

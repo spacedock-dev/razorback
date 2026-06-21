@@ -24,7 +24,15 @@ def emit_reward(
         answer = answers.get(key, "") if isinstance(answers, dict) else ""
         validate_fn = _load_validate(validators[query_id])
         if answer:
-            is_valid, reason = validate_fn(answer)
+            # Isolate per-query validator failures: a single validator raising
+            # (e.g. a validator calling .lower() on a non-string answer) must NOT
+            # abort grading for the whole dataset — that would write no reward.json
+            # and silently drop the entire dataset from the run (RewardFileNotFoundError).
+            # Score the offending query 0 with the error as the reason and continue.
+            try:
+                is_valid, reason = validate_fn(answer)
+            except Exception as exc:  # noqa: BLE001 — robustness boundary, any validator error
+                is_valid, reason = False, f"validator error: {type(exc).__name__}: {exc}"
         else:
             is_valid, reason = False, "empty answer"
         reward = 1.0 if is_valid else 0.0
