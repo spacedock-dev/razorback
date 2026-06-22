@@ -54,13 +54,26 @@ schema_version = "1.2"
 
 [task]
 name = "spider2-dbt/{task_id}"
-description = {description!r}
+description = {description}
 
 [environment]
 os = "linux"
 cpus = 2
 memory_mb = 2048
 """
+
+
+def _toml_basic_string(value: str) -> str:
+    """Return a valid single-line TOML basic-string literal for `value`.
+
+    Python's `repr()` is NOT valid TOML (it can emit single-quoted strings or
+    `\\'` escapes), so escape `\\` and `"` explicitly and collapse newlines/tabs
+    to spaces (TOML basic strings forbid raw control characters).
+    """
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    for ws in ("\r\n", "\r", "\n", "\t"):
+        escaped = escaped.replace(ws, " ")
+    return '"' + escaped + '"'
 
 
 def _load_instructions(spider2_root: Path) -> dict[str, dict]:
@@ -90,8 +103,13 @@ def _load_eval_lines(spider2_root: Path) -> dict[str, dict]:
 
 
 def _find_source_duckdb(example_dir: Path) -> Path | None:
-    cands = sorted(example_dir.rglob("*.duckdb"))
-    return cands[0] if len(cands) >= 1 else None
+    # The upstream source DuckDB sits at the example root; a shallow glob avoids
+    # walking vendored dbt_packages/. Fall back to rglob for unexpected layouts.
+    shallow = sorted(example_dir.glob("*.duckdb"))
+    if shallow:
+        return shallow[0]
+    deep = sorted(example_dir.rglob("*.duckdb"))
+    return deep[0] if deep else None
 
 
 def _resolve_gold(gold_root: Path, task_id: str, eval_line: dict) -> tuple[Path, str] | None:
@@ -103,7 +121,7 @@ def _resolve_gold(gold_root: Path, task_id: str, eval_line: dict) -> tuple[Path,
     fall back to the single *.duckdb present in gold/<id>/ and report the
     reconciliation by using the on-disk basename.
     """
-    params = eval_line["evaluation"]["parameters"]
+    params = eval_line.get("evaluation", {}).get("parameters", {}) or {}
     spec_name = params.get("gold")
     inst_dir = gold_root / task_id
     if spec_name and (inst_dir / spec_name).is_file():
@@ -144,29 +162,62 @@ def _stage_task(
         _DOCKERFILE.format(base_image=base_image, dbt_spec=dbt_spec)
     )
 
-    # task.toml (no docker_image => Harbor builds from the Dockerfile)
+    # task.toml (no docker_image => Harbor builds from the Dockerfile). The
+    # description is emitted as an escaped single-line TOML basic string.
     (src / "task.toml").write_text(
-        _TASK_TOML.format(task_id=task_id, description=instruction[:300] or task_id)
+        _TASK_TOML.format(
+            task_id=task_id,
+            description=_toml_basic_string(instruction[:300] or task_id),
+        )
     )
     (src / "instruction.md").write_text(instruction.rstrip() + "\n")
 
     # tests/gold/: this instance's eval line + gold DuckDB, with the gold
     # basename reconciled to what actually exists on disk.
     line = json.loads(json.dumps(eval_line))  # deep copy
-    line["evaluation"]["parameters"]["gold"] = gold_basename
+    line.setdefault("evaluation", {}).setdefault("parameters", {})["gold"] = gold_basename
     (tests_gold / "spider2_eval.jsonl").write_text(json.dumps(line) + "\n")
     shutil.copy2(gold_db, tests_gold / gold_basename)
     return src
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--spider2-root", type=Path, default=Path("/home/kent/Spider2/spider2-dbt"))
-    ap.add_argument("--out", type=Path, default=Path("/home/kent/razorback-smoke-runs/_views_spider2"))
-    ap.add_argument("--staging", type=Path, default=None, help="default: <out>/_staging")
-    ap.add_argument("--tasks", type=str, default=None, help="comma-separated instance_ids to limit to")
-    ap.add_argument("--base-image", type=str, default="python:3.12")
-    ap.add_argument("--dbt-spec", type=str, default="dbt-duckdb==1.9.4")
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    ap.add_argument(
+        "--spider2-root",
+        type=Path,
+        required=True,
+        help="Path to the upstream spider2-dbt checkout (post-setup.py): the dir "
+        "containing examples/ and evaluation_suite/.",
+    )
+    ap.add_argument(
+        "--out",
+        type=Path,
+        required=True,
+        help="Output dir for the emitted Harbor task views (created if absent).",
+    )
+    ap.add_argument(
+        "--staging",
+        type=Path,
+        default=None,
+        help="Where per-task source dirs are staged before materialization. "
+        "Default: <out>/_staging.",
+    )
+    ap.add_argument(
+        "--tasks", type=str, default=None, help="Comma-separated instance_ids to limit to."
+    )
+    ap.add_argument("--base-image", type=str, default="python:3.12", help="Base Docker image.")
+    ap.add_argument(
+        "--dbt-spec",
+        type=str,
+        default="dbt-duckdb==1.9.4",
+        help="pip requirement spec for dbt installed into the task image.",
+    )
+    ap.add_argument(
+        "--debug", action="store_true", help="Print full tracebacks for per-task failures."
+    )
     args = ap.parse_args()
 
     spider2_root: Path = args.spider2_root
@@ -235,7 +286,7 @@ def main() -> int:
         except Exception as exc:  # noqa: BLE001 — report per-task and continue
             failed.append((task_id, f"{type(exc).__name__}: {exc}"))
             print(f"[FAIL] {task_id}: {type(exc).__name__}: {exc}", file=sys.stderr)
-            if "--debug" in sys.argv:
+            if args.debug:
                 traceback.print_exc()
 
     print("\n==== SUMMARY ====")
