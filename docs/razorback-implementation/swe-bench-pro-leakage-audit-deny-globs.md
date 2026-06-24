@@ -1,9 +1,9 @@
 ---
 id: zkn663pcbvd5sbaaxwx5f1z5
 title: swe-bench-pro — leakage deny-globs (gold/test patch isolation)
-status: backlog
+status: plan
 source: docs/superpowers/specs/2026-06-24-swe-bench-pro-on-harbor-design.md (E2); harbor_tasks/leakage.py DEFAULT_SOLUTION_DENY_GLOBS + spider2-dbt deny-glob precedent
-started:
+started: 2026-06-24T04:44:28Z
 completed:
 verdict:
 score:
