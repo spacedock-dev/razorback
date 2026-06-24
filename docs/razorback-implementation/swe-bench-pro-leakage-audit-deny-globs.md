@@ -227,3 +227,37 @@ follow-up style commit (e6b84d7) — no behavior change, tests stay green.
 Full suite: 853 passed, 4 pre-existing failures (test_codex_runtime_dispatch,
 test_worktree_remove_force, test_matrix_specs_carry_query_mode_batch,
 test_rk_research_new) confirmed identical on main — not regressions.
+
+## Stage Report: validation
+
+- DONE: Confirm worktree clean + at branch tip
+  `git status` clean, tip `a06a51d`; base `main` @ `31d796e`.
+- DONE: Independently re-derive fnmatch evidence against IMPLEMENTED set
+  Own probe (leakage.py:38-56 verbatim): 14/14 allow clean incl. `src/answer_engine.py`; 14/14 deny matched; broad `**/answer*`/`**/solution.*`/`**/*answers*` ABSENT (standalone). PASS.
+- DONE: AC-1 — view excludes answers, keeps nested files
+  `pytest -k 'swe_bench_pro and leak'` → 9 passed; positive materialize test green. PASS.
+- DONE: AC-2 LOAD-BEARING revert check
+  Reverted constant to `(solution/**,solutions/**,tests/expected/**)` → 4 failed (incl. production-path leak + `LeakageError` DID NOT RAISE); restored → 8 passed. Genuinely load-bearing. PASS.
+- DONE: AC-3 wiring
+  `grep -nF` → translate.py:432 `exclude_globs=SWE_BENCH_PRO_DENY_GLOBS`; runtime spy captured curated set != default. PASS.
+- DONE: Shared default + generic materializer param unchanged
+  `git diff main -- leakage.py` shows only additions; `DEFAULT_SOLUTION_DENY_GLOBS` (7-14) and materialize.py:36 default param untouched.
+- DONE: Full suite + regression-vs-preexisting
+  853 passed, 4 failed; throwaway detached `main` worktree confirms all 4 PRE-EXISTING (SWE set absent there) — not regressions. E1 swe + spider2 green.
+- DONE: Deviation scrutiny (ruff E402)
+  `git show e6b84d7`: test-file-only import consolidation, identical symbols, no behavior change. Benign.
+- DONE: Code review (superpowers:requesting-code-review, base main)
+  No blocking. Two Important under-match findings (case-sensitivity; `gold.diff` variant) + one Minor (nested dirs) independently reproduced — all reduce to captain-decision-1 (exact harbor filenames, unhydrate-able offline), not AC failures, not over-match.
+
+### Summary
+
+Independent verifier reproduced all 3 ACs from the committed branch: AC-1/AC-2/AC-3 PASS,
+with the AC-2 revert proof (4 tests fail on revert incl. a real production-path leak and a
+LeakageError no-raise) confirming the negative test is load-bearing. The independent fnmatch
+probe confirms `src/answer_engine.py` is clean, all task-root answer artifacts are denied, and
+the set is standalone. Shared `DEFAULT_SOLUTION_DENY_GLOBS` and the generic materializer default
+param are byte-for-byte unchanged; the 4 full-suite failures are confirmed pre-existing on main.
+Code review found no blocking issues — the under-match shapes (casing, `gold.diff`, nested dirs)
+are the already-flagged captain-verifiable filename assumption, recommended for captain
+confirmation at merge but not gate-blocking. **GATE: APPROVE.** Full report:
+`docs/razorback-implementation/validation/swe-bench-pro-leakage-audit-deny-globs.md`.
