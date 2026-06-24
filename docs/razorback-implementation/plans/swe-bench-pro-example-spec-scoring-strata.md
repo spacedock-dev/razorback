@@ -1,33 +1,35 @@
-# swe-bench-pro Example Spec + Scoring-Strata Confirmation Implementation Plan
+# swe-bench-pro Scoring-Join Fix + Example Spec Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a user-facing `examples/specs/swe-bench-pro-spacedock-codex.yaml` (schema-valid `spacedock_solver`/`runtime: codex` agent, SWE-tuned budget, hydration-prereq header note, freezes offline) and prove the view-manifest-driven aggregator stratifies real long swe-bench-pro task slugs into distinct per-task query cells.
+**Goal:** FIX the scoring aggregator so swe-bench-pro's canonical project-prefixed task slugs (which contain `__` and exceed the 32-char join window) stratify into distinct per-task query cells instead of collapsing to `dataset="default"`, and add a user-facing `examples/specs/swe-bench-pro-spacedock-codex.yaml` that freezes offline.
 
-**Architecture:** Two surfaces, no production-code change. (1) A new example spec YAML mirroring `examples/specs/dabstep-claude-harbor.yaml`'s `spacedock_solver` shape, swapped to `runtime: codex` + the existing `codex-benchmark-solver` workflow, with a swe-tuned turn/timeout budget and an ABOUTME hydration-prereq note. (2) A fixture-backed unit test that builds a synthetic run dir with `view_manifest.json` sidecars and realistic LONG swe-bench-pro trial-dir names, runs `aggregate_summary`, and asserts `summary.json`'s `swe-bench-pro` stratum carries one query cell per task slug — exercising the real `trial_dir.name.split("__")[0] == view_dir.name[:32].rstrip("_-")` join key so long/`__`-bearing slugs do NOT collapse to `dataset="default"`.
+**Architecture:** This is a **production-code change** (the cycle-1 doc-only premise was disproven — see entity `## Feedback Cycles`). The aggregator's view-manifest join parses the trial dir NAME (`trial_dir.name.split("__")[0] == view_dir.name[:32].rstrip("_-")`), which is doubly broken for swe-bench-pro: the `__` split mis-cuts canonical slugs and the `[:32]` truncation collides distinct slugs. The robust fix resolves the view manifest DIRECTLY from each trial's persisted `config.json["task"]["path"]` (the full materialized view-dir path Harbor records), eliminating all dir-name parsing. The legacy dir-name join is retained as a fallback so dabstep/spider2/ade (short, `__`-free slugs, possibly older run dirs without a usable config) do not regress. Plus the unchanged AC-1/AC-2 example-spec authoring from cycle 1.
 
-**Tech Stack:** Python 3, pytest, `uv run`, Typer CLI (`rk`), pydantic spec schema, YAML.
+**Tech Stack:** Python 3, pytest, `uv run`, harbor 0.6.6 (`harbor.models.trial.config.TrialConfig`), Typer CLI (`rk`), pydantic spec schema, YAML.
 
 ## Global Constraints
 
-- Spec source of truth: `docs/razorback-implementation/swe-bench-pro-example-spec-scoring-strata.md` (3 ACs, each with a `Verified by:` clause). Design §: `docs/superpowers/specs/2026-06-24-swe-bench-pro-on-harbor-design.md` (E3, lines 133-148).
-- The agent block MUST be `kind: spacedock_solver` / `runtime: codex`. `CodexAgentBlock` (`src/razorback/spec/schema.py:49-89`) has NO `solver_workflow`/`max_turns`; those live only on `SpacedockSolverAgentBlock` (`schema.py:92-119`).
-- Dataset ref form is `scale-ai/swe-bench-pro@<ref>`. Offline placeholder `@latest` (see OPEN CAPTAIN DECISIONS); `PackageReference.parse` validates the `<org>/<name>@<ref>` form (design doc lines 33-37).
-- SWE-tuned budget MUST sit ABOVE the 1200s codex default (`spider2-dbt-harbor-codex.yaml` uses `override_timeout_sec: 1200`). Plan values: `max_turns: 400`, `override_timeout_sec: 5400`, `max_timeout_sec: 7200`. `max_timeout_sec >= override_timeout_sec` is schema-enforced (`schema.py:122-132`).
-- The solver workflow dir `./examples/solver_workflows/codex-benchmark-solver` MUST exist (verified live at plan time — it does).
-- Committed `*.frozen.yaml` and `provenance.yaml` under `examples/specs/` are gitignored (verified live: `git check-ignore` matches both). AC-1 is verified by RUNNING `rk freeze --allow-missing`, NOT by a committed frozen file. Do NOT `git add` the frozen/provenance artifacts.
-- Do NOT write production code. The aggregator (`aggregate.py`) is already correct; AC-3 only adds a TEST that pins its behavior on long slugs.
-- Do NOT conflate the two scoring surfaces: `aggregate_summary` writes `summary.json`; `rk score` (`cli/score.py:122-125`) echoes a SEPARATE `score_version`/`strata` JSON. AC-3 asserts ONLY `summary.json`.
+- Spec source of truth: `docs/razorback-implementation/swe-bench-pro-example-spec-scoring-strata.md` (Problem § + 3 ACs revised for cycle 2). Design §: `docs/superpowers/specs/2026-06-24-swe-bench-pro-on-harbor-design.md` (E3, lines 133-148).
+- AC-3 is now a FIX, not a confirmation. The fix lives in `src/razorback/runs/aggregate.py` `_resolve_stratum_from_task_view_manifest` (`:131-155`). It MUST handle canonical `__` slugs AND long-slug `[:32]` collisions.
+- The fix MUST NOT regress dabstep/spider2/ade: `tests/unit/test_task_identity_scoring.py` and `tests/integration/test_spider2_dbt_scored_run_identity.py` (short, `__`-free slugs) must still pass.
+- Agent block MUST be `kind: spacedock_solver` / `runtime: codex` (the only schema shape with `solver_workflow`/`max_turns`; `CodexAgentBlock` `schema.py:49-89` lacks them; `SpacedockSolverAgentBlock` `schema.py:92-119` has them).
+- Dataset ref `scale-ai/swe-bench-pro@latest` (offline placeholder; see OPEN CAPTAIN DECISIONS). SWE-tuned budget above the 1200s codex default: `max_turns: 400`, `override_timeout_sec: 5400`, `max_timeout_sec: 7200` (`max_timeout_sec >= override_timeout_sec` enforced, `schema.py:122-132`).
+- `./examples/solver_workflows/codex-benchmark-solver` exists (verified).
+- Committed `*.frozen.yaml` + `provenance.yaml` under `examples/specs/` are gitignored (verified). AC-1 is verified by RUNNING `rk freeze --allow-missing`, NOT a committed frozen file. Do NOT `git add` them.
+- Do NOT conflate scoring surfaces: `aggregate_summary` → `summary.json`; `rk score` (`cli/score.py:122-125`) → separate `score_version`/`strata`. AC-3 asserts ONLY `summary.json`.
 
 ---
 
 ## Plan-Time Live Verifications (recorded)
 
-All three confirmed before authoring (riskiest-first; recorded so the implementer trusts the surfaces):
+All reproduced/prototyped with `.venv/bin/python` before authoring:
 
-1. **`SpacedockSolverAgentBlock` accepts `runtime: codex` + tuned budget.** Constructed `SpacedockSolverAgentBlock(kind="spacedock_solver", runtime="codex", model="gpt-5.5", solver_workflow="./examples/solver_workflows/codex-benchmark-solver", max_turns=400, override_timeout_sec=5400, max_timeout_sec=7200, reasoning_effort="xhigh")` → OK. Fields present and typed as expected (`schema.py:100-119`).
-2. **`rk freeze --allow-missing` exits 0 offline and writes `benchmark.dataset` verbatim.** Ran `uv run rk freeze examples/specs/spider2-dbt-harbor-codex.yaml --allow-missing --out <scratch>` → exit 0, frozen body line `dataset: spider2-dbt/spider2-dbt@1.0` (verbatim, no download). Side effect: also writes `examples/specs/provenance.yaml` (gitignored).
-3. **The aggregator join key is `trial_dir.name.split("__",1)[0] == manifest.parent.name[:32].rstrip("_-")`** (`aggregate.py:137-143`), manifest stratum has precedence over name-parse (`aggregate.py:112-114`), and the `default` collapse is at `aggregate.py:414-418`. View dir names are built by `_view_name(kind, task_id) = f"{kind}-{task_id}"` sanitized + truncated to **160** chars (`materialize.py:149-152`) — so the 32-char join truncation, not the 160-char view truncation, is what governs matching. Computed real swe-bench-pro slugs (e.g. `astropy__astropy-7166`) → view `swe-bench-pro-astropy__astropy-7166`, 32-char key `swe-bench-pro-astropy__astropy-7`. The `swe-bench-pro-` prefix is 14 chars, leaving only 18 task-id chars in the join key — the truncation/collision surface AC-3 must exercise.
+1. **Both bugs reproduced against live code.** Real `generate_trial_name` (`harbor/models/trial/config.py:219` = `task_name[:32].rstrip("_-") + "__" + ShortUUID().random(7)`) + the live `aggregate_summary`: canonical slugs `astropy__astropy-7166`, `django__django-11099`, `django__django-11098` → `summary.json` `datasets` = `['default']` with `n_queries=1` (two of three lost to the `[:32]` collision). Confirms the `default` collapse + collision.
+2. **Spike: Harbor persists the task path per trial.** `harbor/trial/trial.py:934` writes `self._trial_paths.config_path.write_text(self.config.model_dump_json(indent=4))`. `harbor.models.trial.paths.TrialPaths.config_path = trial_dir / "config.json"`. The serialized `TrialConfig.task` (`TaskConfig`, `harbor/models/trial/config.py:129`) carries `path` = the view-dir path razorback passed (e.g. `tasks/swe-bench-pro-astropy__astropy-7166`) — FULL, untruncated. `TrialConfig(task=TaskConfig(path=...))` round-trips `task.path` verbatim in `model_dump_json`.
+3. **Fix prototype is GREEN.** Resolving `config.json → task["path"] → <re-anchored view>/view_manifest.json` over the three canonical slugs yields query_ids `['astropy__astropy-7166','django__django-11098','django__django-11099']` — 3 distinct, all `dataset="swe-bench-pro"`, no `default`, no collision.
+4. **Aggregator surfaces confirmed live:** `_read_json` helper (`aggregate.py:96`), `task_views_root` import already present (`aggregate.py:14`, = `run_dir/"tasks"`), manifest-stratum precedence (`aggregate.py:112-114`), `default` collapse (`aggregate.py:414-418`), `aggregate_summary` (`aggregate.py:526-563`). `_iter_trial_dirs` requires `result.json` to exist in a trial dir (`aggregate.py:90`).
+5. **`SpacedockSolverAgentBlock` accepts `runtime: codex` + tuned budget** (constructed OK); `rk freeze --allow-missing` exits 0 offline writing `benchmark.dataset` verbatim; frozen/provenance gitignored. (Carried from cycle 1, re-confirmed.)
 
 ---
 
@@ -35,143 +37,299 @@ All three confirmed before authoring (riskiest-first; recorded so the implemente
 
 | AC | Requirement | Task(s) | TDD checkpoint |
 |----|-------------|---------|----------------|
-| AC-3 | Aggregator stratifies swe-bench-pro slugs into per-task query cells via the real long-slug join key | Task 1 (load-bearing, riskiest-first) | New fixture-backed test: synthetic run dir + long-slug view manifests + long trial names → `aggregate_summary` → assert distinct `swe-bench-pro` query cells, NOT `default` collapse. Red→green by construction (aggregator already correct). |
-| AC-1 | Schema-valid `spacedock_solver`/`runtime: codex` spec with SWE-tuned budget, freezes via `rk freeze --allow-missing`; frozen `benchmark.dataset == "scale-ai/swe-bench-pro@<ref>"`; grep confirms agent shape + tuned budget | Task 2 | `uv run rk freeze … --allow-missing` exits 0 + frozen dataset assertion + grep for `kind: spacedock_solver|runtime: codex|max_turns|override_timeout_sec`. |
-| AC-2 | ABOUTME header note names the harbor-package hydration prerequisite for a live run | Task 2 (same file; folded in) | `grep -F 'scale-ai/swe-bench-pro' …` returns the ABOUTME hydration-prereq line. |
+| AC-3 | FIX the join so canonical `__` swe-bench-pro slugs stratify into distinct cells (no `default`, no `[:32]` collision); no regression | Task 1 (load-bearing, riskiest-first) | RED-first test (canonical `__` slugs + real `generate_trial_name` + real `config.json`) FAILS on current aggregator, PASSES after the `config.json`-path resolution fix. Regression: existing identity + spider2 tests stay green. |
+| AC-1 | Schema-valid `spacedock_solver`/`runtime: codex` spec, SWE-tuned budget, freezes via `rk freeze --allow-missing`; frozen dataset verbatim; grep agent shape + budget | Task 2 | `rk freeze … --allow-missing` exit 0 + frozen dataset assertion + grep. |
+| AC-2 | ABOUTME header note names the hydration prerequisite | Task 2 (same file) | `grep -F 'scale-ai/swe-bench-pro' …` returns the ABOUTME line. |
 
-Riskiest-first ordering: **Task 1 (AC-3) before Task 2 (AC-1/AC-2)** — the scoring-strata test against the real long-slug join key is the load-bearing contract; the freeze/grep checks are cheap.
+Riskiest-first: **Task 1 (AC-3 fix) before Task 2 (AC-1/AC-2)** — the scoring-join fix is the load-bearing contract; the freeze/grep checks are cheap and already validated.
 
 ---
 
 ## File Structure
 
-- **Create** `tests/unit/test_swe_bench_pro_scoring_strata.py` — the AC-3 fixture-backed test (Task 1). Sibling to `tests/unit/test_task_identity_scoring.py`, which it mirrors but with LONG swe-bench-pro slugs and the explicit anti-`default` assertion.
-- **Create** `examples/specs/swe-bench-pro-spacedock-codex.yaml` — the AC-1/AC-2 user-facing spec (Task 2). Mirrors `examples/specs/dabstep-claude-harbor.yaml` (agent shape) + `examples/specs/spider2-dbt-harbor-codex.yaml` (ABOUTME header + qualified-ref + commented task-selector block).
-- **No production files modified.**
+- **Modify** `src/razorback/runs/aggregate.py` — `_resolve_stratum_from_task_view_manifest` (`:131-155`): add a `config.json`-task-path resolution that runs FIRST, falling back to the existing dir-name join. New private helpers `_stratum_from_config_task_path(trial_dir)` and `_stratum_from_manifest_payload(payload)`. (Task 1)
+- **Create** `tests/unit/test_swe_bench_pro_scoring_strata.py` — the AC-3 red-first test + collision case + regression assertions. (Task 1)
+- **Create** `examples/specs/swe-bench-pro-spacedock-codex.yaml` — the AC-1/AC-2 example spec. (Task 2)
 
 ---
 
-### Task 1: AC-3 — Aggregator stratifies long swe-bench-pro slugs (load-bearing, riskiest-first)
+### Task 1: AC-3 — FIX the scoring join for canonical swe-bench-pro slugs (load-bearing, riskiest-first)
 
 **Files:**
+- Modify: `src/razorback/runs/aggregate.py:131-155` (`_resolve_stratum_from_task_view_manifest` + new helpers)
 - Create: `tests/unit/test_swe_bench_pro_scoring_strata.py`
-- Reference (read-only, do NOT modify): `src/razorback/runs/aggregate.py:131-155` (join), `:414-418` (default collapse), `:526-563` (`aggregate_summary`); `tests/unit/test_task_identity_scoring.py` (pattern to mirror); `src/razorback/harbor_tasks/manifest.py:15-24` (`task_views_root` = `run_dir/"tasks"`).
+- Reference (read-only): `harbor/models/trial/config.py:208-221` (`generate_trial_name`, `TrialConfig`, `TaskConfig`), `harbor/trial/trial.py:934` (config.json write), existing `tests/unit/test_task_identity_scoring.py` + `tests/integration/test_spider2_dbt_scored_run_identity.py` (regression guards).
 
 **Interfaces:**
-- Consumes: `from razorback.runs.aggregate import aggregate_summary`. `aggregate_summary(run_dir: Path) -> None` (writes `run_dir/summary.json` as a side effect).
-- Join contract being exercised: a trial dir `<run_dir>/<prefix>__<suffix>/result.json` matches the view `<run_dir>/tasks/<view_name>/view_manifest.json` iff `prefix == view_name[:32].rstrip("_-")`. Manifest must carry non-empty `benchmark_kind` AND `benchmark_task_id` or the join returns `None` (`aggregate.py:147-148`). Trial reward read from `result.json` → `verifier_result.rewards.reward` (`aggregate.py:259-266`).
-- Produces: nothing consumed downstream (leaf test).
+- Consumes: `from razorback.runs.aggregate import aggregate_summary`; `from harbor.models.trial.config import TrialConfig, TaskConfig` (test only, to generate REAL trial names + the REAL config.json). `aggregate_summary(run_dir) -> None`.
+- The fix's resolution contract: for a trial dir, read `trial_dir/"config.json"` → `["task"]["path"]`; the view dir is located by re-anchoring `Path(task_path).name` under `task_views_root(run_dir)` (= `run_dir/"tasks"`), then read `<view>/view_manifest.json` for `benchmark_kind`/`benchmark_task_id`. Returns `{dataset, query_id, benchmark_kind, benchmark_task_id}` exactly as the existing path does (`aggregate.py:149-154`), or `None` to fall through to the dir-name join.
+- Produces: no downstream consumers (`aggregate_summary` writes `summary.json` as a side effect).
 
-**Why long slugs matter (design doc lines 141-147 + AC-3):** `_view_name` truncates to 160 but the JOIN truncates to 32. With the 14-char `swe-bench-pro-` prefix, only 18 task-id chars survive the join key. The existing `test_task_identity_scoring.py` uses SHORT names (`ade-bench-adebench-fixture-001`, < 32 chars) so `[:32]` is a no-op there and never exercises truncation. This test MUST use realistic long, project-prefixed swe-bench-pro slugs so a trial lands in its OWN cell and never in the `dataset="default"` bucket.
-
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing test (RED-first, with real harbor naming + config.json)**
 
 Create `tests/unit/test_swe_bench_pro_scoring_strata.py`:
 
 ```python
-# ABOUTME: AC-3 — aggregate_summary stratifies long swe-bench-pro task slugs into
-# ABOUTME: distinct per-task query cells via the real 32-char manifest-join key.
+# ABOUTME: AC-3 — aggregate_summary stratifies CANONICAL swe-bench-pro task slugs
+# ABOUTME: (containing __, exceeding the 32-char join window) into distinct per-task
+# ABOUTME: query cells. RED on the dir-name join; GREEN via config.json task-path
+# ABOUTME: resolution. Regression-guards short __-free slugs (dabstep/spider2/ade).
 import json
+import re
 from pathlib import Path
+
+from harbor.models.trial.config import TaskConfig, TrialConfig
 
 from razorback.runs.aggregate import aggregate_summary
 
 
-def _write_manifest(run_dir: Path, view_name: str, task_id: str) -> None:
-    # Views live under tasks_root = run_dir/"tasks" (harbor_tasks/manifest.py:15-24);
-    # the aggregator resolves identity from this same root.
-    view = run_dir / "tasks" / view_name
-    view.mkdir(parents=True)
-    (view / "view_manifest.json").write_text(
-        json.dumps(
-            {
-                "benchmark_kind": "swe-bench-pro",
-                "benchmark_task_id": task_id,
-                "view_mode": "copy",
-            }
-        )
-    )
+def _view_name(slug: str) -> str:
+    # Mirrors harbor_tasks/materialize.py:_view_name (kind-task, sanitized, [:160]).
+    raw = f"swe-bench-pro-{slug}"
+    return re.sub(r"[^A-Za-z0-9_.-]+", "-", raw).strip("-._")[:160] or "task-view"
 
 
-def _write_trial(run_dir: Path, trial_name: str, reward: float) -> None:
-    trial = run_dir / trial_name
-    trial.mkdir(parents=True)
-    (trial / "result.json").write_text(
-        json.dumps({"verifier_result": {"rewards": {"reward": reward}}})
-    )
-
-
-def test_aggregator_stratifies_long_swe_bench_pro_slugs(tmp_path):
-    """Realistic project-prefixed swe-bench-pro slugs land in DISTINCT query
-    cells under the `swe-bench-pro` dataset stratum, never the `default`
-    collapse. Exercises the real join key:
-    trial_dir.name.split('__',1)[0] == view_dir.name[:32].rstrip('_-')
-    (aggregate.py:137-143)."""
+def _build_swe_run(tmp_path: Path, slugs_rewards: list[tuple[str, float]]) -> Path:
+    """Synthetic run dir using REAL harbor trial naming + the REAL per-trial
+    config.json harbor persists (trial.py:934). Each view dir carries a
+    view_manifest.json sidecar; each trial dir carries result.json + config.json
+    whose task.path points at its view dir."""
     run_dir = tmp_path / "run"
     run_dir.mkdir()
+    for slug, reward in slugs_rewards:
+        view = run_dir / "tasks" / _view_name(slug)
+        view.mkdir(parents=True)
+        (view / "view_manifest.json").write_text(
+            json.dumps(
+                {
+                    "benchmark_kind": "swe-bench-pro",
+                    "benchmark_task_id": slug,
+                    "view_mode": "copy",
+                }
+            )
+        )
+        # REAL harbor TrialConfig: trial_name via generate_trial_name, task.path
+        # = the view dir. This is exactly what harbor writes to config.json.
+        tc = TrialConfig(task=TaskConfig(path=str(view)))
+        trial = run_dir / tc.trial_name
+        trial.mkdir()
+        (trial / "result.json").write_text(
+            json.dumps({"verifier_result": {"rewards": {"reward": reward}}})
+        )
+        (trial / "config.json").write_text(tc.model_dump_json(indent=4))
+    return run_dir
 
-    # Realistic long swe-bench-pro task slugs (project-prefixed, > 18 chars
-    # so the 32-char join truncation is genuinely exercised). _view_name
-    # builds f"swe-bench-pro-{task_id}" (materialize.py:149-152).
-    task_slugs = [
-        "astropy-astropy-7166",
-        "django-django-11099",
-        "matplotlib-matplotlib-26020",
-    ]
 
-    for slug, reward in zip(task_slugs, (1.0, 0.0, 1.0)):
-        view_name = f"swe-bench-pro-{slug}"
-        _write_manifest(run_dir, view_name, slug)
-        # The orchestrator names a trial after the view's 32-char join key
-        # (see tests/integration/test_spider2_dbt_scored_run_identity.py).
-        trial_prefix = view_name[:32].rstrip("_-")
-        _write_trial(run_dir, f"{trial_prefix}__deadbee", reward)
+def test_aggregator_stratifies_canonical_swe_bench_pro_slugs(tmp_path):
+    """Canonical project-prefixed swe-bench-pro slugs (with __, > 18 task-id
+    chars) land in DISTINCT swe-bench-pro query cells, never the `default`
+    collapse, and -11099/-11098 do NOT collide. RED on the dir-name join."""
+    run_dir = _build_swe_run(
+        tmp_path,
+        [
+            ("astropy__astropy-7166", 1.0),
+            ("django__django-11099", 0.0),
+            ("django__django-11098", 1.0),
+        ],
+    )
 
     aggregate_summary(run_dir)
     summary = json.loads((run_dir / "summary.json").read_text())
-
     datasets = summary["datasets"]
-    # The swe-bench-pro stratum exists and carries one cell per task slug.
+
     assert "swe-bench-pro" in datasets, (
         f"expected swe-bench-pro stratum, got {sorted(datasets)}"
     )
-    # CRITICAL: nothing collapsed into the `default` bucket
-    # (aggregate.py:414-418). A truncation/join mismatch would land trials
-    # in `default` and silently pass a weaker assertion.
     assert "default" not in datasets, (
-        f"long slugs collapsed to default: {datasets.get('default')}"
+        f"canonical __ slugs collapsed to default: {datasets.get('default')}"
     )
     cells = datasets["swe-bench-pro"]["queries"]
-    assert datasets["swe-bench-pro"]["n_queries"] == len(task_slugs)
+    assert datasets["swe-bench-pro"]["n_queries"] == 3, datasets["swe-bench-pro"]
     cell_ids = {c["query_id"] for c in cells}
-    assert cell_ids == set(task_slugs), (
-        f"query cells {cell_ids} != task slugs {set(task_slugs)}"
-    )
-    # Every per-trial row also carries the resolved swe-bench-pro identity.
+    assert cell_ids == {
+        "astropy__astropy-7166",
+        "django__django-11099",
+        "django__django-11098",
+    }, f"collision/mis-cut: cells={cell_ids}"
     kinds = {t["stratum"].get("benchmark_kind") for t in summary["trials"]}
     assert kinds == {"swe-bench-pro"}, kinds
+
+
+def test_short_dunderless_slugs_still_stratify_via_fallback(tmp_path):
+    """Regression guard: short, __-free slugs that DON'T carry a config.json
+    task path still resolve through the retained dir-name join (the
+    dabstep/spider2/ade path). No config.json written here on purpose."""
+    run_dir = tmp_path / "legacy"
+    run_dir.mkdir()
+    for view_name, slug, reward in [
+        ("ade-bench-adebench-fixture-001", "adebench-fixture-001", 1.0),
+        ("spider2-dbt-spider2-fixture-001", "spider2-fixture-001", 0.0),
+    ]:
+        view = run_dir / "tasks" / view_name
+        view.mkdir(parents=True)
+        kind = "ade-bench" if view_name.startswith("ade") else "spider2-dbt"
+        (view / "view_manifest.json").write_text(
+            json.dumps({"benchmark_kind": kind, "benchmark_task_id": slug})
+        )
+        trial_prefix = view_name[:32].rstrip("_-")
+        trial = run_dir / f"{trial_prefix}__deadbee"
+        trial.mkdir()
+        (trial / "result.json").write_text(
+            json.dumps({"verifier_result": {"rewards": {"reward": reward}}})
+        )
+    aggregate_summary(run_dir)
+    datasets = json.loads((run_dir / "summary.json").read_text())["datasets"]
+    assert set(datasets) == {"ade-bench", "spider2-dbt"}, sorted(datasets)
+    assert "default" not in datasets
 ```
 
-- [ ] **Step 2: Run test to verify it passes (green-by-construction)**
+- [ ] **Step 2: Run test to verify it FAILS (RED) on the current aggregator**
+
+Run: `uv run pytest tests/unit/test_swe_bench_pro_scoring_strata.py::test_aggregator_stratifies_canonical_swe_bench_pro_slugs -v`
+Expected: FAIL on `assert "swe-bench-pro" in datasets` / `assert "default" not in datasets` — the current dir-name join collapses all three canonical slugs to `default`. (The regression test `test_short_dunderless_slugs_still_stratify_via_fallback` should already PASS on current code — confirm with `uv run pytest tests/unit/test_swe_bench_pro_scoring_strata.py::test_short_dunderless_slugs_still_stratify_via_fallback -v`.)
+
+- [ ] **Step 3: Implement the fix in `aggregate.py`**
+
+The current function (`src/razorback/runs/aggregate.py:131-155`):
+
+```python
+def _resolve_stratum_from_task_view_manifest(trial_dir: Path) -> dict | None:
+    run_dir = trial_dir.parent
+    views_root = task_views_root(run_dir)
+    if not views_root.is_dir():
+        return None
+
+    trial_prefix = trial_dir.name.split("__", 1)[0]
+    for manifest_path in sorted(views_root.glob("*/view_manifest.json")):
+        payload = _read_json(manifest_path)
+        if payload is None:
+            continue
+        view_name = manifest_path.parent.name[:32].rstrip("_-")
+        if trial_prefix != view_name:
+            continue
+        benchmark_kind = payload.get("benchmark_kind")
+        benchmark_task_id = payload.get("benchmark_task_id")
+        if not benchmark_kind or not benchmark_task_id:
+            return None
+        return {
+            "dataset": str(benchmark_kind),
+            "query_id": str(benchmark_task_id),
+            "benchmark_kind": str(benchmark_kind),
+            "benchmark_task_id": str(benchmark_task_id),
+        }
+    return None
+```
+
+Replace that entire block (`:131-155`) with the following — a shared payload shaper, the new config-path resolver run FIRST, and the dir-name join kept as a fallback:
+
+```python
+def _stratum_from_manifest_payload(payload: dict | None) -> dict | None:
+    """Shape a view_manifest.json payload into a stratum dict, or None when it
+    lacks the required identity fields."""
+    if payload is None:
+        return None
+    benchmark_kind = payload.get("benchmark_kind")
+    benchmark_task_id = payload.get("benchmark_task_id")
+    if not benchmark_kind or not benchmark_task_id:
+        return None
+    return {
+        "dataset": str(benchmark_kind),
+        "query_id": str(benchmark_task_id),
+        "benchmark_kind": str(benchmark_kind),
+        "benchmark_task_id": str(benchmark_task_id),
+    }
+
+
+def _stratum_from_config_task_path(trial_dir: Path) -> dict | None:
+    """Resolve the view manifest from the trial's recorded task path.
+
+    Harbor persists `<trial_dir>/config.json` (TrialConfig) carrying
+    `task.path` = the full materialized view-dir path razorback passed
+    (harbor/trial/trial.py writes config.json; TaskConfig.path round-trips
+    verbatim). Reading the manifest from that path avoids ALL trial-dir-name
+    parsing, so canonical swe-bench-pro slugs (which contain `__` and exceed
+    the 32-char join window) resolve correctly — no `__` mis-cut, no `[:32]`
+    collision. Returns None to fall back to the dir-name join when config.json
+    is absent or carries no usable task path.
+    """
+    config = _read_json(trial_dir / "config.json")
+    if not isinstance(config, dict):
+        return None
+    task = config.get("task")
+    if not isinstance(task, dict):
+        return None
+    raw_path = task.get("path")
+    if not raw_path:
+        return None
+    view_dir_name = Path(str(raw_path)).name
+    # Re-anchor under this run's tasks_root: the recorded path may be absolute,
+    # cwd-relative, or from another machine; the view-dir name is the stable
+    # join key and the view always lives under run_dir/tasks.
+    views_root = task_views_root(trial_dir.parent)
+    for candidate in (Path(str(raw_path)), views_root / view_dir_name):
+        manifest = candidate / "view_manifest.json"
+        if manifest.is_file():
+            stratum = _stratum_from_manifest_payload(_read_json(manifest))
+            if stratum is not None:
+                return stratum
+    return None
+
+
+def _resolve_stratum_from_task_view_manifest(trial_dir: Path) -> dict | None:
+    # Preferred: resolve directly from the trial's recorded task path
+    # (robust to canonical `__` slugs + long-slug [:32] collisions).
+    via_config = _stratum_from_config_task_path(trial_dir)
+    if via_config is not None:
+        return via_config
+
+    # Fallback: the legacy dir-name join. Keeps short, __-free slugs
+    # (dabstep/spider2/ade) and config-less/legacy run dirs working.
+    run_dir = trial_dir.parent
+    views_root = task_views_root(run_dir)
+    if not views_root.is_dir():
+        return None
+
+    trial_prefix = trial_dir.name.split("__", 1)[0]
+    for manifest_path in sorted(views_root.glob("*/view_manifest.json")):
+        view_name = manifest_path.parent.name[:32].rstrip("_-")
+        if trial_prefix != view_name:
+            continue
+        return _stratum_from_manifest_payload(_read_json(manifest_path))
+    return None
+```
+
+Note: `task_views_root` is already imported (`aggregate.py:14`) and `_read_json` already defined (`aggregate.py:96`) — no new imports. The refactor folds the shared payload-shaping into `_stratum_from_manifest_payload` (DRY). The one behavioral nuance: the old fallback `return None` immediately when a matched manifest lacked identity fields; the new fallback returns `None` from the helper and the loop then exhausts (no other view matches the same unique `trial_prefix`) and returns `None` — same net result.
+
+- [ ] **Step 4: Run the test to verify it PASSES (GREEN)**
 
 Run: `uv run pytest tests/unit/test_swe_bench_pro_scoring_strata.py -v`
-Expected: PASS. The aggregator is already correct (verified at plan time); this test PINS that long slugs join correctly. If it FAILS with the `default`-collapse assertion, the trial-name/view-name join math in the test does not mirror the real key — re-derive `trial_prefix = view_name[:32].rstrip("_-")` and fix the test, NOT the aggregator.
+Expected: BOTH tests PASS — canonical `__` slugs land in 3 distinct `swe-bench-pro` cells (no `default`, no collision) via config-path resolution; short `__`-free slugs still stratify via the fallback.
 
-- [ ] **Step 3: Prove the test is load-bearing (mutation check, do not commit the mutation)**
+- [ ] **Step 5: Run the regression guard (dabstep/spider2/ade must not regress)**
 
-Temporarily edit the test's `trial_prefix` to a deliberately wrong value (e.g. `view_name[:20]`) and re-run:
-Run: `uv run pytest tests/unit/test_swe_bench_pro_scoring_strata.py -v`
-Expected: FAIL on `assert "default" not in datasets` (the mismatch routes trials to `default`). This confirms the test actually catches the truncation/collapse failure mode. Then REVERT to `view_name[:32].rstrip("_-")` and re-run → PASS.
+Run: `uv run pytest tests/unit/test_task_identity_scoring.py tests/integration/test_spider2_dbt_scored_run_identity.py tests/unit/test_translate_swe_bench_pro.py -v`
+Expected: ALL PASS. These use short, `__`-free slugs without a config.json task path, exercising the retained dir-name fallback unchanged.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 6: Run the broader scoring test surface for safety**
+
+Run: `uv run pytest tests/unit/ -k "aggregate or scoring or identity or strat" -v`
+Expected: PASS (no collateral breakage).
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add tests/unit/test_swe_bench_pro_scoring_strata.py
-git commit -m "test: AC-3 aggregate_summary stratifies long swe-bench-pro slugs
+git add src/razorback/runs/aggregate.py tests/unit/test_swe_bench_pro_scoring_strata.py
+git commit -m "fix: resolve scoring strata from trial config.json task path
 
-Pins that realistic project-prefixed swe-bench-pro task slugs land in
-distinct per-task query cells via the 32-char manifest-join key, not the
-dataset=default collapse. Entity: swe-bench-pro-example-spec-scoring-strata.
+The view-manifest join parsed the trial dir NAME
+(trial_dir.name.split('__')[0] == view_dir.name[:32].rstrip('_-')), which
+collapsed every canonical swe-bench-pro slug to dataset=default: the __ split
+mis-cut slugs like astropy__astropy-7166 and the [:32] truncation collided
+django__django-11099/-11098. Resolve the view manifest directly from the
+trial's persisted config.json[task][path] (the full view-dir path harbor
+records), eliminating all dir-name parsing. Retain the dir-name join as a
+fallback so dabstep/spider2/ade short __-free slugs do not regress.
+Entity: swe-bench-pro-example-spec-scoring-strata (plan-gate cycle 2).
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
@@ -180,13 +338,15 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 ### Task 2: AC-1 + AC-2 — User-facing example spec (freezes offline; hydration-prereq note)
 
+(Unchanged from cycle 1 — the spec shape + offline freeze passed Codex review.)
+
 **Files:**
 - Create: `examples/specs/swe-bench-pro-spacedock-codex.yaml`
-- Reference (read-only): `examples/specs/dabstep-claude-harbor.yaml` (spacedock_solver agent shape), `examples/specs/spider2-dbt-harbor-codex.yaml` (ABOUTME header + qualified-ref + commented task-selector block).
+- Reference (read-only): `examples/specs/dabstep-claude-harbor.yaml` (spacedock_solver shape), `examples/specs/spider2-dbt-harbor-codex.yaml` (ABOUTME + qualified-ref + commented selector block).
 
 **Interfaces:**
-- Consumes: the schema in `src/razorback/spec/schema.py` (`SpacedockSolverAgentBlock`, `HarborBenchmarkBlock`) and `rk freeze` (`src/razorback/provenance/freeze_cmd.py`).
-- Produces: a frozen spec (transient, gitignored) whose `benchmark.dataset` equals the spec's verbatim `scale-ai/swe-bench-pro@latest`.
+- Consumes: `src/razorback/spec/schema.py` (`SpacedockSolverAgentBlock`, `HarborBenchmarkBlock`) + `rk freeze`.
+- Produces: a transient gitignored frozen spec whose `benchmark.dataset` equals `scale-ai/swe-bench-pro@latest` verbatim.
 
 - [ ] **Step 1: Write the spec file**
 
@@ -234,32 +394,28 @@ observers:
   - kind: stdout
 ```
 
-Note: keep `sampling.seed: null` — `SpacedockSolverAgentBlock` does not reject sampling controls the way `CodexAgentBlock` does, but `null` is the safe default mirrored from `spider2-dbt-harbor-codex.yaml`. Verify the `tasks:` example slugs (`astropy__astropy-7166`) against the real dataset form — see OPEN CAPTAIN DECISIONS on the `__` separator; if the real benchmark_task_id uses no `__`, update the comment slugs (comment-only, non-load-bearing for freeze/grep).
-
 - [ ] **Step 2: Verify the spec freezes offline (AC-1 freeze check)**
 
 Run: `uv run rk freeze examples/specs/swe-bench-pro-spacedock-codex.yaml --allow-missing --out /tmp/swe-bench-pro.frozen.yaml`
 Expected: exit 0; stdout `wrote /tmp/swe-bench-pro.frozen.yaml` + `wrote examples/specs/provenance.yaml`.
 
-Then assert the frozen dataset is verbatim:
-Run: `grep -n 'dataset:' /tmp/swe-bench-pro.frozen.yaml`
+Then: `grep -n 'dataset:' /tmp/swe-bench-pro.frozen.yaml`
 Expected: `dataset: scale-ai/swe-bench-pro@latest`
 
 - [ ] **Step 3: Verify the agent shape + tuned budget grep (AC-1 grep check)**
 
 Run: `grep -E 'kind: spacedock_solver|runtime: codex|max_turns|override_timeout_sec' examples/specs/swe-bench-pro-spacedock-codex.yaml`
-Expected: matches all four — `kind: spacedock_solver`, `runtime: codex`, `max_turns: 400`, `override_timeout_sec: 5400` (the latter two confirm a budget above the 1200s codex default).
+Expected: all four match — `kind: spacedock_solver`, `runtime: codex`, `max_turns: 400`, `override_timeout_sec: 5400`.
 
 - [ ] **Step 4: Verify the hydration-prereq note (AC-2 grep check)**
 
 Run: `grep -F 'scale-ai/swe-bench-pro' examples/specs/swe-bench-pro-spacedock-codex.yaml`
-Expected: returns the ABOUTME header line(s) naming the `scale-ai/swe-bench-pro` harbor-package hydration step (the PKG-40-style blocker) a live run requires.
+Expected: returns the ABOUTME header line(s) naming the `scale-ai/swe-bench-pro` harbor-package hydration step (the PKG-40-style blocker).
 
-- [ ] **Step 5: Clean up the gitignored freeze side effects**
+- [ ] **Step 5: Clean up gitignored freeze side effects**
 
-The freeze wrote `examples/specs/provenance.yaml` (gitignored) and `/tmp/swe-bench-pro.frozen.yaml` (outside the repo). Confirm they are NOT staged:
 Run: `git status --short examples/specs/`
-Expected: shows ONLY `?? examples/specs/swe-bench-pro-spacedock-codex.yaml` (the spec). If `provenance.yaml` appears, it is gitignored and must NOT be added; `git checkout examples/specs/provenance.yaml` or leave it untracked.
+Expected: shows ONLY `?? examples/specs/swe-bench-pro-spacedock-codex.yaml`. If `provenance.yaml` appears it is gitignored — do NOT `git add` it (`git checkout examples/specs/provenance.yaml` or leave untracked).
 
 - [ ] **Step 6: Commit (spec only)**
 
@@ -280,23 +436,22 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 ## Final Verification (all ACs, run together)
 
-- [ ] **AC-3:** `uv run pytest tests/unit/test_swe_bench_pro_scoring_strata.py -v` → PASS.
-- [ ] **AC-1:** `uv run rk freeze examples/specs/swe-bench-pro-spacedock-codex.yaml --allow-missing --out /tmp/swe.frozen.yaml` → exit 0; `grep 'dataset:' /tmp/swe.frozen.yaml` → `scale-ai/swe-bench-pro@latest`; `grep -E 'kind: spacedock_solver|runtime: codex|max_turns|override_timeout_sec' examples/specs/swe-bench-pro-spacedock-codex.yaml` → all four match.
-- [ ] **AC-2:** `grep -F 'scale-ai/swe-bench-pro' examples/specs/swe-bench-pro-spacedock-codex.yaml` → ABOUTME hydration note.
-- [ ] **No regressions / no stray adds:** `git status --short` shows only the two intended new files committed; no `.frozen.yaml` / `provenance.yaml` staged.
+- [ ] **AC-3:** `uv run pytest tests/unit/test_swe_bench_pro_scoring_strata.py tests/unit/test_task_identity_scoring.py tests/integration/test_spider2_dbt_scored_run_identity.py -v` → ALL PASS (fix works on canonical `__` slugs; no regression).
+- [ ] **AC-1:** `uv run rk freeze examples/specs/swe-bench-pro-spacedock-codex.yaml --allow-missing --out /tmp/swe.frozen.yaml` → exit 0; `grep 'dataset:' /tmp/swe.frozen.yaml` → `scale-ai/swe-bench-pro@latest`; `grep -E 'kind: spacedock_solver|runtime: codex|max_turns|override_timeout_sec' examples/specs/swe-bench-pro-spacedock-codex.yaml` → all four.
+- [ ] **AC-2:** `grep -F 'scale-ai/swe-bench-pro' examples/specs/swe-bench-pro-spacedock-codex.yaml` → ABOUTME note.
+- [ ] **No stray adds:** `git status --short` → only the three intended files committed (`aggregate.py`, the new test, the spec); no `.frozen.yaml`/`provenance.yaml` staged.
 
 ---
 
 ## OPEN CAPTAIN DECISIONS
 
-1. **The `@<ref>` pin.** AC-1 verifies `benchmark.dataset == "scale-ai/swe-bench-pro@<ref>"`. The plan uses `@latest` as the offline placeholder (mirrors `dabstep@latest`; `spider2-dbt` pinned `@1.0`). DECISION: keep `@latest`, or pin a concrete published ref (e.g. `@1.0`) if the captain knows one is published? `@latest` is safe offline since `rk freeze --allow-missing` writes the ref verbatim without resolving it.
-
-2. **The `__` separator in real swe-bench-pro slugs / `[:32]` truncation risk.** Real SWE-bench instance_ids canonically contain `__` (e.g. `astropy__astropy-7166`). The aggregator join is asymmetric: the trial dir does `split("__",1)[0]` but the view join-key does `view_name[:32].rstrip("_-")` (no split). If the materialized `benchmark_task_id` contains `__`, the view name `swe-bench-pro-astropy__astropy-7166` truncates to `swe-bench-pro-astropy__astropy-7` while a trial named off `split("__")` would yield `swe-bench-pro-astropy` — a MISMATCH that collapses to `default`. The plan's Task 1 sidesteps this by deriving the trial prefix from the SAME `view_name[:32].rstrip("_-")` the orchestrator uses (mirroring `test_spider2_dbt_scored_run_identity.py`), and by using `-`-separated slugs in the test. DECISIONS for the captain: (a) does the swe-bench-pro materializer emit `benchmark_task_id` WITH `__` (E1's output — worth confirming against E1's fixture/live), and if so (b) is the 32-char truncation/`__`-asymmetry a real production risk worth a dedicated additional test case (two slugs sharing the first 18 task-id chars → forced collision), or is it out of scope for this mechanism-smoke entity (the aggregator code is owned upstream; E3 only confirms stratification)? The plan currently treats it as a flagged risk, not a code fix.
+1. **The `@<ref>` pin.** Plan uses `@latest` offline placeholder (mirrors `dabstep@latest`; `spider2-dbt` pinned `@1.0`). Keep `@latest`, or pin a concrete published ref? Safe offline either way (`rk freeze --allow-missing` writes verbatim).
+2. **Residual fallback exposure (LOW).** The fix prefers `config.json` task-path resolution; the dir-name join survives only as a fallback. If a real swe-bench-pro run dir ever lacked a usable `config.json` task path (it should not — harbor always writes it, `trial.py:934`), the fallback's `__`/`[:32]` bugs would re-appear for that trial. The spike confirms harbor always persists it, so this is not expected in practice; flagged for captain awareness. Optionally, a future hardening could DROP the dir-name fallback for swe-bench-pro once E1's live hydration smoke confirms real run dirs carry config.json — out of scope for this mechanism-smoke entity.
 
 ---
 
 ## Self-Review
 
-- **Spec coverage:** AC-1 → Task 2 (freeze + grep). AC-2 → Task 2 (ABOUTME note). AC-3 → Task 1 (fixture test, riskiest-first). Test plan's "reuse the task-identity scoring surface" → Task 1 mirrors `test_task_identity_scoring.py`. Out-of-scope items (hydration unblock, leakage hardening, full-dataset score, swe-tuned solver authoring) are NOT tasks. No gaps.
-- **Placeholder scan:** No TBD/TODO. All test/spec code is complete and literal. Commands have expected output. No "similar to Task N" references.
-- **Type/name consistency:** `aggregate_summary(run_dir)` signature matches `aggregate.py:526`. View root `run_dir/"tasks"` matches `manifest.py:24`. Join key `view_name[:32].rstrip("_-")` matches `aggregate.py:142`. Reward path `verifier_result.rewards.reward` matches `aggregate.py:261-263`. Budget fields (`max_turns`, `override_timeout_sec`, `max_timeout_sec`) match `schema.py:106-110` and were live-validated. `datasets[...]["queries"]`/`n_queries`/`query_id` match the `_render_legacy_datasets` shape (`aggregate.py:493-508`).
+- **Spec coverage:** AC-3 (fix) → Task 1 (red-first test + production fix + regression guard). AC-1 → Task 2 (freeze + grep). AC-2 → Task 2 (ABOUTME). Entity Problem § fix-mechanism (config.json task path) → Task 1 Step 3. Regression requirement → Task 1 Steps 5-6. No gaps.
+- **Placeholder scan:** No TBD/TODO. All test + fix + spec code is complete and literal. Commands carry expected output.
+- **Type/name consistency:** Fix helper names `_stratum_from_config_task_path`, `_stratum_from_manifest_payload` used consistently in Step 3. `aggregate_summary(run_dir)` matches `aggregate.py:526`. `task_views_root` already imported (`aggregate.py:14`), `_read_json` already defined (`aggregate.py:96`) — no new `aggregate.py` imports. Test imports `TrialConfig, TaskConfig` from `harbor.models.trial.config` (verified path). View-name builder mirrors `materialize.py:_view_name`. Stratum dict shape matches the existing return (`aggregate.py:149-154`). `datasets[...]["queries"]`/`n_queries`/`query_id` match `_render_legacy_datasets` (`aggregate.py:493-508`).
