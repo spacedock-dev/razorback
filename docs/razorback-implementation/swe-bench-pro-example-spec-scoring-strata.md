@@ -130,6 +130,12 @@ underperforms on a live task.
 
 ## Stage Report: plan
 
+**[SUPERSEDED by cycle 2 — this cycle-1 report describes a doc-only confirming
+test and "no production-code change". That premise was DISPROVEN: the
+aggregator genuinely cannot stratify swe-bench-pro (`__` split + `[:32]`
+collision). Cycle 2 re-planned E3 as a production fix. Read "## Stage Report:
+plan (cycle 2)" + "## Feedback Cycles" below for the authoritative plan.]**
+
 - DONE: Write the implementation plan (STANDARD — separate plan doc)
   `docs/razorback-implementation/plans/swe-bench-pro-example-spec-scoring-strata.md`: header, Global Constraints, AC↔task map, 2 tasks (riskiest-first), final verification, open decisions, self-review.
 - DONE: AC↔task map with 1:1 TDD checkpoints

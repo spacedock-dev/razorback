@@ -26,7 +26,7 @@
 All reproduced/prototyped with `.venv/bin/python` before authoring:
 
 1. **Both bugs reproduced against live code.** Real `generate_trial_name` (`harbor/models/trial/config.py:219` = `task_name[:32].rstrip("_-") + "__" + ShortUUID().random(7)`) + the live `aggregate_summary`: canonical slugs `astropy__astropy-7166`, `django__django-11099`, `django__django-11098` → `summary.json` `datasets` = `['default']` with `n_queries=1` (two of three lost to the `[:32]` collision). Confirms the `default` collapse + collision.
-2. **Spike: Harbor persists the task path per trial.** `harbor/trial/trial.py:934` writes `self._trial_paths.config_path.write_text(self.config.model_dump_json(indent=4))`. `harbor.models.trial.paths.TrialPaths.config_path = trial_dir / "config.json"`. The serialized `TrialConfig.task` (`TaskConfig`, `harbor/models/trial/config.py:129`) carries `path` = the view-dir path razorback passed (e.g. `tasks/swe-bench-pro-astropy__astropy-7166`) — FULL, untruncated. `TrialConfig(task=TaskConfig(path=...))` round-trips `task.path` verbatim in `model_dump_json`.
+2. **Spike: Harbor persists the task path per trial.** `harbor/trial/trial.py:934` writes `self._trial_paths.config_path.write_text(self.config.model_dump_json(indent=4))`. `harbor.models.trial.paths.TrialPaths.config_path = trial_dir / "config.json"`. The serialized `TrialConfig.task` (`TaskConfig`, `harbor/models/trial/config.py:129`) carries `path` = the exact view-dir path razorback passed (e.g. `tasks/swe-bench-pro-astropy__astropy-7166`). Harbor records it VERBATIM (unlike the trial NAME, which Harbor truncates to `[:32]`); `TrialConfig(task=TaskConfig(path=...))` round-trips `task.path` unchanged in `model_dump_json`. Note the view-dir NAME itself is the materializer's `_view_name` output (sanitized, `[:160]` — `materialize.py:149`), so `Path(task.path).name` equals the on-disk view dir basename exactly, regardless of slug length — re-anchoring by `.name` resolves precisely. The only collision risk is two DISTINCT slugs whose `_view_name` collides under `[:160]`; that is a materialization-time concern (it would share one view dir), impossible for swe-bench-pro's short instance_ids (view names ~45-55 chars), and out of scope here.
 3. **Fix prototype is GREEN.** Resolving `config.json → task["path"] → <re-anchored view>/view_manifest.json` over the three canonical slugs yields query_ids `['astropy__astropy-7166','django__django-11098','django__django-11099']` — 3 distinct, all `dataset="swe-bench-pro"`, no `default`, no collision.
 4. **Aggregator surfaces confirmed live:** `_read_json` helper (`aggregate.py:96`), `task_views_root` import already present (`aggregate.py:14`, = `run_dir/"tasks"`), manifest-stratum precedence (`aggregate.py:112-114`), `default` collapse (`aggregate.py:414-418`), `aggregate_summary` (`aggregate.py:526-563`). `_iter_trial_dirs` requires `result.json` to exist in a trial dir (`aggregate.py:90`).
 5. **`SpacedockSolverAgentBlock` accepts `runtime: codex` + tuned budget** (constructed OK); `rk freeze --allow-missing` exits 0 offline writing `benchmark.dataset` verbatim; frozen/provenance gitignored. (Carried from cycle 1, re-confirmed.)
@@ -262,16 +262,16 @@ def _stratum_from_config_task_path(trial_dir: Path) -> dict | None:
     if not raw_path:
         return None
     view_dir_name = Path(str(raw_path)).name
-    # Re-anchor under this run's tasks_root: the recorded path may be absolute,
-    # cwd-relative, or from another machine; the view-dir name is the stable
-    # join key and the view always lives under run_dir/tasks.
+    # Re-anchor under THIS run's tasks_root and ONLY there. The recorded
+    # `task.path` may be absolute, cwd-relative, or from another machine; for a
+    # moved/copied run the stale absolute path can still exist and point at the
+    # WRONG run's manifest, so we MUST NOT read `Path(raw_path)` directly — we
+    # use only the basename re-anchored under this run. The view-dir name is the
+    # stable join key and the view always lives under run_dir/tasks.
     views_root = task_views_root(trial_dir.parent)
-    for candidate in (Path(str(raw_path)), views_root / view_dir_name):
-        manifest = candidate / "view_manifest.json"
-        if manifest.is_file():
-            stratum = _stratum_from_manifest_payload(_read_json(manifest))
-            if stratum is not None:
-                return stratum
+    manifest = views_root / view_dir_name / "view_manifest.json"
+    if manifest.is_file():
+        return _stratum_from_manifest_payload(_read_json(manifest))
     return None
 
 
