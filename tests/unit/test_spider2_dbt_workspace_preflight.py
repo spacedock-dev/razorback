@@ -129,6 +129,64 @@ def test_dbt_source_metadata_required_tables_enforced(tmp_path: Path) -> None:
     assert result["required_tables_source"] == "dbt_source_metadata"
 
 
+def test_unused_dbt_source_metadata_is_not_required(tmp_path: Path) -> None:
+    models = tmp_path / "models"
+    models.mkdir()
+    (models / "sources.yml").write_text(
+        "\n".join(
+            [
+                "version: 2",
+                "sources:",
+                "  - name: canonical",
+                "    schema: main",
+                "    tables:",
+                "      - name: orders",
+                "        identifier: raw_orders",
+                "      - name: stale_positions",
+                "        identifier: positions",
+                "",
+            ]
+        )
+    )
+    (models / "uses_orders.sql").write_text(
+        "select * from {{ source('canonical', 'orders') }}\n"
+    )
+
+    _write_duckdb(tmp_path / "db.duckdb", {"raw_orders"})
+
+    result = preflight_spider2_workspace(task_id="t", workspace=tmp_path)
+
+    assert result["status"] == "passed"
+    assert result["required_tables"] == ["main.raw_orders"]
+
+
+def test_unreadable_sql_file_is_skipped_for_source_reference_scan(
+    tmp_path: Path,
+) -> None:
+    models = tmp_path / "models"
+    models.mkdir()
+    (models / "sources.yml").write_text(
+        "\n".join(
+            [
+                "version: 2",
+                "sources:",
+                "  - name: canonical",
+                "    schema: main",
+                "    tables:",
+                "      - name: orders",
+                "        identifier: raw_orders",
+                "",
+            ]
+        )
+    )
+    (models / "broken.sql").symlink_to(tmp_path / "missing.sql")
+    _write_duckdb(tmp_path / "db.duckdb", {"raw_orders"})
+
+    result = preflight_spider2_workspace(task_id="t", workspace=tmp_path)
+
+    assert result["status"] == "passed"
+
+
 def test_preflight_cli_exits_nonzero_and_emits_json_payload(tmp_path: Path) -> None:
     completed = subprocess.run(
         [
@@ -150,9 +208,7 @@ def test_preflight_cli_exits_nonzero_and_emits_json_payload(tmp_path: Path) -> N
 
     assert completed.returncode == 2
     assert "RAZORBACK_SPIDER2_PREFLIGHT" in completed.stderr
-    payload = json.loads(
-        completed.stderr.split("RAZORBACK_SPIDER2_PREFLIGHT ", 1)[1]
-    )
+    payload = json.loads(completed.stderr.split("RAZORBACK_SPIDER2_PREFLIGHT ", 1)[1])
     assert payload["task_id"] == "spider2-fixture-001"
     assert payload["reason"] == "duckdb file missing"
 
@@ -270,12 +326,17 @@ def test_resolve_db_name_from_profiles_path(tmp_path: Path) -> None:
             ]
         )
     )
-    assert resolve_spider2_db_name(tmp_path, task_slug="spider2-fixture-001") == "warehouse"
+    assert (
+        resolve_spider2_db_name(tmp_path, task_slug="spider2-fixture-001")
+        == "warehouse"
+    )
 
 
 def test_resolve_db_name_from_single_duckdb_file(tmp_path: Path) -> None:
     _write_duckdb(tmp_path / "anything.duckdb", {"t1"})
-    assert resolve_spider2_db_name(tmp_path, task_slug="spider2-fixture-001") == "anything"
+    assert (
+        resolve_spider2_db_name(tmp_path, task_slug="spider2-fixture-001") == "anything"
+    )
 
 
 def test_resolve_db_name_falls_back_to_task_slug(tmp_path: Path) -> None:
@@ -285,7 +346,9 @@ def test_resolve_db_name_falls_back_to_task_slug(tmp_path: Path) -> None:
     )
 
 
-def test_resolve_db_name_fails_closed_on_multi_db_with_no_profile(tmp_path: Path) -> None:
+def test_resolve_db_name_fails_closed_on_multi_db_with_no_profile(
+    tmp_path: Path,
+) -> None:
     _write_duckdb(tmp_path / "a.duckdb", {"t1"})
     _write_duckdb(tmp_path / "b.duckdb", {"t2"})
     with pytest.raises(Spider2WorkspacePreflightError) as exc_info:

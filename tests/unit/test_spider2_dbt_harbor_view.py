@@ -82,9 +82,7 @@ def _write_source(
 
 
 def test_spider2_view_installs_dbt_packages_when_packages_yml_present(tmp_path):
-    source = _write_source(
-        tmp_path / "source", with_packages=True, with_duckdb=True
-    )
+    source = _write_source(tmp_path / "source", with_packages=True, with_duckdb=True)
 
     view = materialize_spider2_harbor_task_view(
         source_task_dir=source,
@@ -94,20 +92,14 @@ def test_spider2_view_installs_dbt_packages_when_packages_yml_present(tmp_path):
 
     dockerfile = (view / "environment" / "Dockerfile").read_text()
     assert (
-        "Razorback: install declared dbt packages before agent runtime."
-        in dockerfile
+        "Razorback: install declared dbt packages before agent runtime." in dockerfile
     )
-    assert (
-        "RUN if [ -f /app/packages.yml ]; then cd /app && dbt deps; fi"
-        in dockerfile
-    )
+    assert "RUN if [ -f /app/packages.yml ]; then cd /app && dbt deps; fi" in dockerfile
     assert dockerfile.index("dbt deps") < dockerfile.index('CMD ["bash"]')
 
 
 def test_spider2_view_omits_dbt_deps_layer_when_no_packages_yml(tmp_path):
-    source = _write_source(
-        tmp_path / "source", with_packages=False, with_duckdb=True
-    )
+    source = _write_source(tmp_path / "source", with_packages=False, with_duckdb=True)
 
     view = materialize_spider2_harbor_task_view(
         source_task_dir=source,
@@ -124,9 +116,7 @@ def test_spider2_view_omits_dbt_deps_layer_when_no_packages_yml(tmp_path):
 
 
 def test_spider2_view_injects_workspace_preflight_before_cmd(tmp_path):
-    source = _write_source(
-        tmp_path / "source", with_packages=True, with_duckdb=True
-    )
+    source = _write_source(tmp_path / "source", with_packages=True, with_duckdb=True)
 
     view = materialize_spider2_harbor_task_view(
         source_task_dir=source,
@@ -163,9 +153,7 @@ def test_spider2_view_injects_workspace_preflight_before_cmd(tmp_path):
 
 
 def test_preflight_build_context_holds_duckdb_before_preflight_run(tmp_path):
-    source = _write_source(
-        tmp_path / "source", with_packages=True, with_duckdb=True
-    )
+    source = _write_source(tmp_path / "source", with_packages=True, with_duckdb=True)
 
     view = materialize_spider2_harbor_task_view(
         source_task_dir=source,
@@ -211,6 +199,113 @@ def test_preflight_build_context_holds_duckdb_before_preflight_run(tmp_path):
     )
 
 
+def test_materializer_repairs_missing_referenced_source_from_gold(tmp_path):
+    source = _write_source(tmp_path / "source", with_packages=False, with_duckdb=True)
+    (source / "dbt_project" / "models" / "sources.yml").write_text(
+        "\n".join(
+            [
+                "version: 2",
+                "sources:",
+                "  - name: canonical",
+                "    schema: main",
+                "    tables:",
+                "      - name: customers",
+                "        identifier: raw_customers",
+                "",
+            ]
+        )
+    )
+    (source / "dbt_project" / "models" / "uses_customers.sql").write_text(
+        "select * from {{ source('canonical', 'customers') }}\n"
+    )
+
+    import duckdb as _duckdb
+
+    gold_db = source / "tests" / "gold" / "gold.duckdb"
+    conn = _duckdb.connect(str(gold_db))
+    try:
+        conn.execute("CREATE TABLE raw_customers (id INTEGER, name VARCHAR)")
+        conn.execute("INSERT INTO raw_customers VALUES (1, 'Ada')")
+    finally:
+        conn.close()
+
+    view = materialize_spider2_harbor_task_view(
+        source_task_dir=source,
+        view_root=tmp_path / "views",
+        task_slug="spider2-fixture-001",
+    )
+
+    source_db = view / _DBT_PROJECT_DIRNAME / "spider2-fixture-001.duckdb"
+    conn = _duckdb.connect(str(source_db), read_only=True)
+    try:
+        rows = conn.execute("SELECT * FROM raw_customers").fetchall()
+    finally:
+        conn.close()
+    assert rows == [(1, "Ada")]
+
+
+def test_link_mode_source_repair_never_mutates_source_duckdb(tmp_path):
+    source = _write_source(tmp_path / "source", with_packages=False, with_duckdb=True)
+    (source / "dbt_project" / "models" / "sources.yml").write_text(
+        "\n".join(
+            [
+                "version: 2",
+                "sources:",
+                "  - name: canonical",
+                "    schema: main",
+                "    tables:",
+                "      - name: customers",
+                "        identifier: raw_customers",
+                "",
+            ]
+        )
+    )
+    (source / "dbt_project" / "models" / "uses_customers.sql").write_text(
+        "select * from {{ source('canonical', 'customers') }}\n"
+    )
+
+    import duckdb as _duckdb
+
+    gold_db = source / "tests" / "gold" / "gold.duckdb"
+    conn = _duckdb.connect(str(gold_db))
+    try:
+        conn.execute("CREATE TABLE raw_customers (id INTEGER, name VARCHAR)")
+        conn.execute("INSERT INTO raw_customers VALUES (1, 'Ada')")
+    finally:
+        conn.close()
+
+    source_db = source / "dbt_project" / "spider2-fixture-001.duckdb"
+    view = materialize_spider2_harbor_task_view(
+        source_task_dir=source,
+        view_root=tmp_path / "views",
+        task_slug="spider2-fixture-001",
+        view_mode="link",
+    )
+
+    view_db = view / _DBT_PROJECT_DIRNAME / "spider2-fixture-001.duckdb"
+    assert not view_db.is_symlink()
+
+    view_conn = _duckdb.connect(str(view_db), read_only=True)
+    try:
+        view_rows = view_conn.execute("SELECT * FROM raw_customers").fetchall()
+    finally:
+        view_conn.close()
+    assert view_rows == [(1, "Ada")]
+
+    source_conn = _duckdb.connect(str(source_db), read_only=True)
+    try:
+        source_tables = {
+            row[0]
+            for row in source_conn.execute(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema = 'main'"
+            ).fetchall()
+        }
+    finally:
+        source_conn.close()
+    assert "raw_customers" not in source_tables
+
+
 # --- Finding 1 (cycle 2): injected RUN must pin --db-name ------------------
 # The build-time preflight must validate the SAME DB the agent runs against
 # (`/app/<db_name>.duckdb`), not glob-first. The materializer resolves the
@@ -218,9 +313,7 @@ def test_preflight_build_context_holds_duckdb_before_preflight_run(tmp_path):
 
 
 def test_injected_preflight_run_carries_db_name(tmp_path):
-    source = _write_source(
-        tmp_path / "source", with_packages=True, with_duckdb=True
-    )
+    source = _write_source(tmp_path / "source", with_packages=True, with_duckdb=True)
 
     view = materialize_spider2_harbor_task_view(
         source_task_dir=source,
@@ -237,9 +330,7 @@ def test_injected_preflight_run_carries_db_name(tmp_path):
 def test_injected_preflight_run_pins_db_among_many(tmp_path):
     # A multi-DB workspace with a profiles.yml `path:` pins the right DB into
     # the injected RUN (not a glob-first of whichever sorts first).
-    source = _write_source(
-        tmp_path / "source", with_packages=True, with_duckdb=True
-    )
+    source = _write_source(tmp_path / "source", with_packages=True, with_duckdb=True)
     import duckdb as _duckdb
 
     stale = source / "dbt_project" / "aaa_stale.duckdb"
@@ -279,7 +370,7 @@ def test_preflight_layer_absent_when_not_a_dbt_project(tmp_path):
     (source / "environment").mkdir(parents=True)
     (source / "task.toml").write_text(_TASK_TOML)
     (source / "environment" / "Dockerfile").write_text(
-        "FROM python:3.12\nCMD [\"bash\"]\n"
+        'FROM python:3.12\nCMD ["bash"]\n'
     )
     # Gold is required (the materializer fails closed without it); this test is
     # about the preflight layer being absent for a non-dbt source, not scoring.
@@ -313,9 +404,7 @@ def test_preflight_layer_absent_when_not_a_dbt_project(tmp_path):
 
 
 def test_spider2_view_excludes_gold_solution_expected_paths(tmp_path):
-    source = _write_source(
-        tmp_path / "source", with_packages=False, with_duckdb=False
-    )
+    source = _write_source(tmp_path / "source", with_packages=False, with_duckdb=False)
     (source / "gold").mkdir()
     (source / "gold" / "answer.sql").write_text("select 'gold';\n")
     (source / "golden").mkdir()
@@ -356,9 +445,7 @@ def test_spider2_deny_globs_cover_required_families():
 
 
 def test_link_mode_injects_layers_but_never_mutates_source_dockerfile(tmp_path):
-    source = _write_source(
-        tmp_path / "source", with_packages=True, with_duckdb=True
-    )
+    source = _write_source(tmp_path / "source", with_packages=True, with_duckdb=True)
     source_dockerfile = source / "environment" / "Dockerfile"
     source_dockerfile_before = source_dockerfile.read_text()
 
@@ -376,7 +463,10 @@ def test_link_mode_injects_layers_but_never_mutates_source_dockerfile(tmp_path):
     assert not view_dockerfile.is_symlink()
     view_text = view_dockerfile.read_text()
     assert "Razorback: install declared dbt packages before agent runtime." in view_text
-    assert "Razorback: validate spider2-dbt source DuckDB before agent runtime." in view_text
+    assert (
+        "Razorback: validate spider2-dbt source DuckDB before agent runtime."
+        in view_text
+    )
     assert f"COPY {_DBT_PROJECT_DIRNAME}/ /app/" in view_text
 
     # The SOURCE Dockerfile is byte-for-byte unchanged — no write followed the
@@ -395,9 +485,7 @@ def test_link_mode_preflight_script_never_mutates_source_named_file(tmp_path):
     `write_text` would follow the link and overwrite the user's source file —
     the same symlink-write-through class fixed for the Dockerfile/task.toml.
     """
-    source = _write_source(
-        tmp_path / "source", with_packages=True, with_duckdb=True
-    )
+    source = _write_source(tmp_path / "source", with_packages=True, with_duckdb=True)
     source_script = source / "environment" / "razorback_spider2_preflight.py"
     source_script_before = "# user's own file, not the generated preflight\n"
     source_script.write_text(source_script_before)
@@ -428,9 +516,7 @@ def test_link_mode_verifier_assets_never_mutate_colliding_source_file(tmp_path):
     follow it and overwrite the user's source file — same write-through class as
     the Dockerfile/preflight/test.sh guards.
     """
-    source = _write_source(
-        tmp_path / "source", with_packages=True, with_duckdb=True
-    )
+    source = _write_source(tmp_path / "source", with_packages=True, with_duckdb=True)
     source_verify = source / "tests" / "verify.py"
     source_verify_before = "# user's own tests/verify.py, not the generated one\n"
     source_verify.write_text(source_verify_before)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -172,9 +173,7 @@ def _read_profiles_db_path(workspace: Path, *, task_slug: str) -> str | None:
         for profile in _iter_dicts(list(_as_dict(document).values())):
             outputs = _as_dict(profile.get("outputs"))
             output_dicts = {
-                name: out
-                for name, out in outputs.items()
-                if isinstance(out, dict)
+                name: out for name, out in outputs.items() if isinstance(out, dict)
             }
             if not output_dicts:
                 continue
@@ -241,20 +240,33 @@ def _resolve_db_path(
     return None
 
 
+_SOURCE_CALL_RE = re.compile(
+    r"""\bsource\s*\(\s*(['"])(?P<source>[^'"]+)\1\s*,\s*(['"])(?P<table>[^'"]+)\3\s*\)"""
+)
+
+
 def _read_dbt_source_tables(workspace: Path) -> set[tuple[str, str]]:
     """Read dbt `sources:` as `(schema, table)` relations.
 
     The relation schema is resolved with dbt's precedence: a table-level
     `schema` overrides a source-level `schema`, which in turn defaults to the
     source `name` (dbt's documented default when a source omits `schema`). The
-    table identifier follows the same `identifier`-over-`name` precedence. Both
-    parts are lowercased to match `_read_duckdb_tables`.
+    table identifier follows the same `identifier`-over-`name` precedence.
+
+    When the project contains static `source('source_name', 'table_name')`
+    references, only those referenced declarations are required. Some upstream
+    Spider2 exports carry stale or duplicate source metadata for tables that no
+    model reads; failing the image build on those unused declarations rejects an
+    otherwise runnable task. If no static references are found, fall back to
+    enforcing every declared source table. Both relation parts are lowercased to
+    match `_read_duckdb_tables`.
     """
     try:
         import yaml
     except Exception:
         return set()
 
+    referenced_sources = _read_referenced_source_names(workspace)
     relations: set[tuple[str, str]] = set()
     for yaml_path in _iter_candidate_dbt_yaml_files(workspace):
         try:
@@ -265,16 +277,47 @@ def _read_dbt_source_tables(workspace: Path) -> set[tuple[str, str]]:
             source_name = source.get("name")
             source_schema = source.get("schema") or source_name
             for table in _iter_dicts(_as_list(source.get("tables"))):
-                name = table.get("identifier") or table.get("name")
-                if not (isinstance(name, str) and name.strip()):
+                table_name = table.get("name")
+                if not (
+                    isinstance(source_name, str)
+                    and source_name.strip()
+                    and isinstance(table_name, str)
+                    and table_name.strip()
+                ):
                     continue
+                source_key = (source_name.strip().lower(), table_name.strip().lower())
+                if referenced_sources and source_key not in referenced_sources:
+                    continue
+                name = table.get("identifier") or table_name
                 schema = table.get("schema") or source_schema
                 if not (isinstance(schema, str) and schema.strip()):
                     continue
-                relations.add(
-                    (schema.strip().lower(), name.strip().lower())
-                )
+                relations.add((schema.strip().lower(), name.strip().lower()))
     return relations
+
+
+def _read_referenced_source_names(workspace: Path) -> set[tuple[str, str]]:
+    """Return static dbt source references as `(source_name, table_name)` pairs."""
+    if not workspace.is_dir():
+        return set()
+
+    referenced: set[tuple[str, str]] = set()
+    excluded_parts = {".git", ".venv", "dbt_packages", "logs", "target"}
+    for sql_path in sorted(workspace.rglob("*.sql")):
+        if excluded_parts & set(sql_path.relative_to(workspace).parts):
+            continue
+        try:
+            text = sql_path.read_text()
+        except (OSError, UnicodeDecodeError):
+            continue
+        for match in _SOURCE_CALL_RE.finditer(text):
+            referenced.add(
+                (
+                    match.group("source").strip().lower(),
+                    match.group("table").strip().lower(),
+                )
+            )
+    return referenced
 
 
 def _format_relations(relations: set[tuple[str, str]]) -> list[str]:
