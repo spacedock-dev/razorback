@@ -226,3 +226,38 @@ def test_reverting_swe_globs_leaks_planted_answers_leak(tmp_path, monkeypatch):
     # the curated (production) SWE set WOULD reject the leaked view
     with pytest.raises(LeakageError):
         assert_no_denied_paths(view, deny_globs=SWE_BENCH_PRO_DENY_GLOBS)
+
+
+def test_swe_branch_passes_curated_exclude_globs_leak(tmp_path, monkeypatch):
+    # AC-3: spy on materialize_harbor_task_view to capture the exclude_globs the
+    # PRODUCTION swe branch passes; assert it is the curated SWE set, not the
+    # bare default. Mirrors how E1 proves the branch supplies environment_env.
+    base = FIXTURE_ROOT / "swe-bench-pro-fixture-001"
+    source = tmp_path / "src_copy" / "swe-bench-pro-fixture-001"
+    shutil.copytree(base, source)
+
+    captured = {}
+    real = materialize_harbor_task_view
+
+    def spy(**kwargs):
+        captured["exclude_globs"] = kwargs.get("exclude_globs")
+        return real(**kwargs)
+
+    monkeypatch.setattr("razorback.translate.materialize_harbor_task_view", spy)
+    monkeypatch.setattr(
+        "razorback.translate._resolve_harbor_dataset_tasks", lambda **k: [source]
+    )
+    spec_to_job_config(
+        _swe_spec(), job_name="job", jobs_dir=tmp_path, tasks_root=tmp_path / "tasks"
+    )
+    assert captured["exclude_globs"] == SWE_BENCH_PRO_DENY_GLOBS
+    assert captured["exclude_globs"] != DEFAULT_SOLUTION_DENY_GLOBS
+
+
+def test_swe_branch_wiring_grep_leak():
+    # AC-3 (static): the swe branch source literally passes the curated set.
+    src = (
+        Path(__file__).parent.parent.parent
+        / "src" / "razorback" / "translate.py"
+    ).read_text()
+    assert "exclude_globs=SWE_BENCH_PRO_DENY_GLOBS" in src
