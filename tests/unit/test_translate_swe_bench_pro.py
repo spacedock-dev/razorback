@@ -119,3 +119,72 @@ def test_swe_resolves_n_views_with_manifest_leakage_clean(tmp_path, monkeypatch)
         assert not (view / "solution" / "gold_patch.diff").exists()
         if (view / "solution").exists():
             assert not any(p.is_file() for p in (view / "solution").rglob("*"))
+
+
+def test_exclude_tasks_drops_swe_source_slug(tmp_path, monkeypatch):
+    sources = sorted(FIXTURE_ROOT.glob("swe-bench-pro-fixture-*"))
+    assert len(sources) >= 2
+    excluded_slug = sources[0].name  # SOURCE slug, e.g. "swe-bench-pro-fixture-001"
+
+    monkeypatch.setattr(
+        "razorback.translate._resolve_harbor_dataset_tasks",
+        lambda **k: list(sources),
+    )
+    spec = _spec(
+        HarborBenchmarkBlock(
+            kind="harbor",
+            dataset="scale-ai/swe-bench-pro@latest",
+            exclude_tasks=[excluded_slug],
+        )
+    )
+    job_config, _ = spec_to_job_config(
+        spec, job_name="job", jobs_dir=tmp_path, tasks_root=tmp_path / "tasks"
+    )
+    assert len(job_config.tasks) == len(sources) - 1
+    view_names = {t.path.name for t in job_config.tasks}
+    # filter ran on the SOURCE slug, so neither the source slug nor its
+    # `swe-bench-pro-<slug>` view appears in the emitted set
+    assert excluded_slug not in view_names
+    assert f"swe-bench-pro-{excluded_slug}" not in view_names
+    # a surviving task IS the `swe-bench-pro-<slug>` view form
+    kept_slug = sources[1].name
+    assert f"swe-bench-pro-{kept_slug}" in view_names
+
+
+def test_swe_ref_takes_materializer_branch_not_passthrough(tmp_path, monkeypatch):
+    # AC-1: the swe ref must take the materializer branch. The generic
+    # pass-through emits the RAW source dir (no manifest, name == source slug);
+    # the materializer branch emits a `swe-bench-pro-<slug>` view WITH a
+    # manifest. Assert the latter to prove the branch — not the pass-through.
+    source = FIXTURE_ROOT / "swe-bench-pro-fixture-001"
+    monkeypatch.setattr(
+        "razorback.translate._resolve_harbor_dataset_tasks",
+        lambda **k: [source],
+    )
+    spec = _spec(
+        HarborBenchmarkBlock(kind="harbor", dataset="scale-ai/swe-bench-pro@latest")
+    )
+    job_config, _ = spec_to_job_config(
+        spec, job_name="job", jobs_dir=tmp_path, tasks_root=tmp_path / "tasks"
+    )
+    view = job_config.tasks[0].path
+    assert view != source                       # NOT the raw source dir
+    assert view.name == "swe-bench-pro-swe-bench-pro-fixture-001"
+    assert (view / "view_manifest.json").is_file()  # only the materializer writes this
+
+
+def test_n_tasks_caps_swe_before_materialize(tmp_path, monkeypatch):
+    sources = sorted(FIXTURE_ROOT.glob("swe-bench-pro-fixture-*"))
+    monkeypatch.setattr(
+        "razorback.translate._resolve_harbor_dataset_tasks",
+        lambda **k: list(sources),
+    )
+    spec = _spec(
+        HarborBenchmarkBlock(
+            kind="harbor", dataset="scale-ai/swe-bench-pro@latest", n_tasks=1
+        )
+    )
+    job_config, _ = spec_to_job_config(
+        spec, job_name="job", jobs_dir=tmp_path, tasks_root=tmp_path / "tasks"
+    )
+    assert len(job_config.tasks) == 1
