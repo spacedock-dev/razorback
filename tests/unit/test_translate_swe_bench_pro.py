@@ -188,3 +188,27 @@ def test_n_tasks_caps_swe_before_materialize(tmp_path, monkeypatch):
         spec, job_name="job", jobs_dir=tmp_path, tasks_root=tmp_path / "tasks"
     )
     assert len(job_config.tasks) == 1
+
+
+from harbor.models.task.config import TaskConfig as HarborTaskConfig
+
+
+def test_materialized_view_carries_benchmark_env(tmp_path, monkeypatch):
+    source = FIXTURE_ROOT / "swe-bench-pro-fixture-001"
+    monkeypatch.setattr(
+        "razorback.translate._resolve_harbor_dataset_tasks",
+        lambda **k: [source],
+    )
+    spec = _spec(
+        HarborBenchmarkBlock(kind="harbor", dataset="scale-ai/swe-bench-pro@latest")
+    )
+    job_config, _ = spec_to_job_config(
+        spec, job_name="job", jobs_dir=tmp_path, tasks_root=tmp_path / "tasks"
+    )
+    view_toml = job_config.tasks[0].path / "task.toml"
+    cfg = HarborTaskConfig.model_validate_toml(view_toml.read_text())
+    # env passed by the _build_harbor swe branch, MERGED into task.toml by
+    # materialize_harbor_task_view (_patch_task_toml) — the materializer does
+    # NOT synthesize these; the branch supplies them.
+    assert cfg.environment.env["RAZORBACK_BENCHMARK_KIND"] == "swe-bench-pro"
+    assert cfg.environment.env["RAZORBACK_BENCHMARK_TASK_ID"] == "swe-bench-pro-fixture-001"
