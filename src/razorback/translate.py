@@ -17,6 +17,7 @@ from razorback.agents.auth import resolve_claude_auth, resolve_codex_auth
 from razorback.benchmarks.spider2_dbt.harbor_view import (
     materialize_spider2_harbor_task_view,
 )
+from razorback.harbor_tasks.leakage import SWE_BENCH_PRO_DENY_GLOBS
 from razorback.harbor_tasks.materialize import materialize_harbor_task_view
 from razorback.agents.proxy import PROXY_BLOCK_ENV
 from razorback.errors import SpecError
@@ -412,10 +413,11 @@ def _build_harbor(
             else:
                 # swe-bench-pro uses the GENERIC materializer directly — no
                 # benchmark-specific view transform (design doc Architecture
-                # decision). The BRANCH passes environment_env; the materializer
-                # MERGES it into the view's task.toml and records benchmark_kind
-                # in view_manifest.json. Default deny-globs only (swe-specific
-                # hardening is entity E2, out of scope here).
+                # decision). The BRANCH passes environment_env (merged into the
+                # view's task.toml) AND the STANDALONE curated deny set
+                # SWE_BENCH_PRO_DENY_GLOBS (task-root gold patch / test patch /
+                # FAIL_TO_PASS answer artifacts; root-anchored so it never
+                # strips the repo checkout the agent edits — E2).
                 task_paths = [
                     materialize_harbor_task_view(
                         source_task_dir=src,
@@ -427,6 +429,7 @@ def _build_harbor(
                             "RAZORBACK_BENCHMARK_KIND": "swe-bench-pro",
                             "RAZORBACK_BENCHMARK_TASK_ID": src.name,
                         },
+                        exclude_globs=SWE_BENCH_PRO_DENY_GLOBS,
                         view_mode=view_mode,
                     )
                     for src in selected_sources
