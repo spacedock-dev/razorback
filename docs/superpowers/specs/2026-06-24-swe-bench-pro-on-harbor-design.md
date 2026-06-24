@@ -41,10 +41,12 @@ verification surface (see each entity).
   path deny-globs (`harbor_tasks/leakage.py:DEFAULT_SOLUTION_DENY_GLOBS`),
   merging the caller-supplied `environment_env` into the view's task.toml,
   and writing a `view_manifest.json` (with `benchmark_kind` /
-  `benchmark_task_id` from its params). spider2/ade wire it in via a
-  per-benchmark branch in `_build_harbor` that passes
+  `benchmark_task_id` from its params). spider2 wires it through a
+  per-benchmark branch in `_build_harbor` (`translate.py:348-401`); the
+  spider2/ade helper wrappers
+  (`spider2_dbt/harbor_view.py`, `ade_bench/harbor_view.py`) pass
   `environment_env={"RAZORBACK_BENCHMARK_KIND": ..., "RAZORBACK_BENCHMARK_TASK_ID": ...}`
-  explicitly (`ade_bench/harbor_view.py`, `spider2_dbt/harbor_view.py`).
+  explicitly. swe-bench-pro follows the spider2 wiring shape.
 - **Scoring stratifies off the view manifest.** The aggregator
   (`src/razorback/runs/aggregate.py:_resolve_stratum_from_task_view_manifest`)
   reads each view's `view_manifest.json` to recover
