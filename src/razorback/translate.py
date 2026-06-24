@@ -17,6 +17,7 @@ from razorback.agents.auth import resolve_claude_auth, resolve_codex_auth
 from razorback.benchmarks.spider2_dbt.harbor_view import (
     materialize_spider2_harbor_task_view,
 )
+from razorback.harbor_tasks.materialize import materialize_harbor_task_view
 from razorback.agents.proxy import PROXY_BLOCK_ENV
 from razorback.errors import SpecError
 from razorback.spec.agent_kwargs import build_spacedock_harbor_agent_kwargs
@@ -64,6 +65,28 @@ def _is_spider2_dbt_dataset(dataset_ref: str) -> bool:
     except Exception:
         return False
     return parsed.short_name == SPIDER2_DBT_SHORT_NAME
+
+
+SWE_BENCH_PRO_SHORT_NAME = "swe-bench-pro"
+
+
+def _is_swe_bench_pro_dataset(dataset_ref: str) -> bool:
+    """True when a `kind: harbor` dataset ref names the swe-bench-pro family.
+
+    Mirrors the spider2-dbt / ade-bench dataset-ref flow: the dataset ref is
+    the family signal. The fully-qualified `<org>/swe-bench-pro@<ref>` form
+    (e.g. `scale-ai/swe-bench-pro@latest`) resolves to
+    short_name == "swe-bench-pro"; the bare `swe-bench-pro@<ref>` form is the
+    `harbor download` CLI concept (not a valid spec dataset) and raises on
+    parse, so the helper swallows the error and returns False.
+    """
+    from harbor.models.package.reference import PackageReference
+
+    try:
+        parsed = PackageReference.parse(dataset_ref)
+    except Exception:
+        return False
+    return parsed.short_name == SWE_BENCH_PRO_SHORT_NAME
 
 
 def _apply_task_selectors(
@@ -340,15 +363,17 @@ def _build_harbor(
             tasks_root=Path(tasks_root),
         )
     else:
-        # Fail fast on the spider2-dbt tasks_root contract BEFORE the network
-        # resolve: `_is_spider2_dbt_dataset` is a cheap ref-parse, while
-        # `_resolve_harbor_dataset_tasks` can trigger a dataset download. A
-        # spider2-dbt dataset with `tasks_root is None` is mis-wired regardless
-        # of resolution, so reject it without touching the network.
+        # Detect benchmark families up front. `_is_*` are cheap ref-parses;
+        # a family dataset with `tasks_root is None` is mis-wired regardless of
+        # resolution, so fail fast BEFORE the (network) resolve, mirroring the
+        # plugin branch's guard.
         is_spider2_dbt = _is_spider2_dbt_dataset(block.dataset)
-        if is_spider2_dbt and tasks_root is None:
+        is_swe_bench_pro = _is_swe_bench_pro_dataset(block.dataset)
+        is_view_family = is_spider2_dbt or is_swe_bench_pro
+        if is_view_family and tasks_root is None:
+            family = "spider2-dbt" if is_spider2_dbt else "swe-bench-pro"
             raise SpecError(
-                "`kind: harbor` spider2-dbt dataset requires tasks_root "
+                f"`kind: harbor` {family} dataset requires tasks_root "
                 "(the run orchestrator passes it)."
             )
         home_dir = Path(home) if home is not None else Path.home()
@@ -358,9 +383,9 @@ def _build_harbor(
             tasks=block.tasks,
             cache_root=cache_root,
         )
-        if is_spider2_dbt:
+        if is_view_family:
             # Filter on SOURCE slugs BEFORE materialization so selectors bind
-            # to Harbor task names, not the `spider2-dbt-<slug>` view names.
+            # to Harbor task names, not the `<benchmark>-<slug>` view names.
             selected_sources = _apply_task_selectors(
                 source_paths,
                 exclude_tasks=block.exclude_tasks,
@@ -369,22 +394,43 @@ def _build_harbor(
             view_root = Path(tasks_root)
             # Map the spec-level materialize mode onto the view-materializer's
             # vocabulary: `bind` -> symlink the (large) task trees in place,
-            # `copy` -> eagerly duplicate. Mirrors how ade-bench threads the
-            # mode (cli/run.py:313). Defaulting to "bind" matches
-            # `spec_to_job_config`, so an un-threaded call no longer silently
-            # forces copy.
+            # `copy` -> eagerly duplicate. Mirrors how ade-bench/spider2 thread
+            # the mode (cli/run.py:313, translate.py:376-378).
             view_mode: Literal["copy", "link"] = (
                 "link" if materialize_mode == "bind" else "copy"
             )
-            task_paths = [
-                materialize_spider2_harbor_task_view(
-                    source_task_dir=src,
-                    view_root=view_root,
-                    task_slug=src.name,
-                    view_mode=view_mode,
-                )
-                for src in selected_sources
-            ]
+            if is_spider2_dbt:
+                task_paths = [
+                    materialize_spider2_harbor_task_view(
+                        source_task_dir=src,
+                        view_root=view_root,
+                        task_slug=src.name,
+                        view_mode=view_mode,
+                    )
+                    for src in selected_sources
+                ]
+            else:
+                # swe-bench-pro uses the GENERIC materializer directly — no
+                # benchmark-specific view transform (design doc Architecture
+                # decision). The BRANCH passes environment_env; the materializer
+                # MERGES it into the view's task.toml and records benchmark_kind
+                # in view_manifest.json. Default deny-globs only (swe-specific
+                # hardening is entity E2, out of scope here).
+                task_paths = [
+                    materialize_harbor_task_view(
+                        source_task_dir=src,
+                        view_root=view_root,
+                        benchmark_kind="swe-bench-pro",
+                        benchmark_task_id=src.name,
+                        transform_name="swe-bench-pro-harbor-task-view",
+                        environment_env={
+                            "RAZORBACK_BENCHMARK_KIND": "swe-bench-pro",
+                            "RAZORBACK_BENCHMARK_TASK_ID": src.name,
+                        },
+                        view_mode=view_mode,
+                    )
+                    for src in selected_sources
+                ]
             trial_name_map = {}
 
             cfg = JobConfig(
