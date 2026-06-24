@@ -126,3 +126,103 @@ def test_materialized_swe_view_strips_root_answers_keeps_nested_repo_leak(tmp_pa
     ]
     assert survivors == [], survivors
     assert_no_denied_paths(view, deny_globs=SWE_BENCH_PRO_DENY_GLOBS)  # no raise
+
+
+import shutil
+
+import pytest
+
+from razorback.harbor_tasks.leakage import LeakageError
+from razorback.spec.schema import HarborBenchmarkBlock, NopAgentBlock, Spec
+from razorback.translate import spec_to_job_config
+
+# Revert baseline: the curated SWE set with the answer-ARTIFACT globs removed,
+# leaving only the root solution/answer-DIR family. Simulates "before E2 added
+# the swe answer-artifact coverage". Verified at plan time: this baseline
+# catches NONE of the planted task-root patch files.
+_REVERT_BASELINE = ("solution/**", "solutions/**", "tests/expected/**")
+
+
+def _swe_spec():
+    return Spec(
+        version=1,
+        experiment="swe-bench-pro-leakage-smoke",
+        agent=NopAgentBlock(kind="nop"),
+        benchmark=HarborBenchmarkBlock(
+            kind="harbor", dataset="scale-ai/swe-bench-pro@latest"
+        ),
+        trials=1,
+        observers=[],
+    )
+
+
+def _plant_swe_leakage(source: Path) -> None:
+    """Plant task-root answer files the REVERT baseline does NOT catch (so the
+    revert half truly leaks). Verified at plan time."""
+    (source / "gold").mkdir(exist_ok=True)
+    (source / "gold" / "gold_patch.diff").write_text("+return 42\n")
+    (source / "test_patch.diff").write_text("+assert buggy() == 42\n")
+    (source / "FAIL_TO_PASS.json").write_text('["test_returns_42"]\n')
+    (source / "patch.diff").write_text("+return 42\n")
+    (source / "solution.patch").write_text("+return 42\n")
+
+
+def test_planted_swe_answers_are_excluded_from_view_leak(tmp_path, monkeypatch):
+    # AC-2 (forward): plant task-root answer files in an ISOLATED source copy,
+    # run the FULL production path, assert none survive into the view.
+    base = FIXTURE_ROOT / "swe-bench-pro-fixture-001"
+    source = tmp_path / "src_copy" / "swe-bench-pro-fixture-001"
+    shutil.copytree(base, source)
+    _plant_swe_leakage(source)
+
+    monkeypatch.setattr(
+        "razorback.translate._resolve_harbor_dataset_tasks", lambda **k: [source]
+    )
+    job_config, _ = spec_to_job_config(
+        _swe_spec(), job_name="job", jobs_dir=tmp_path, tasks_root=tmp_path / "tasks"
+    )
+    view = job_config.tasks[0].path
+    for rel in [
+        "gold/gold_patch.diff", "test_patch.diff", "FAIL_TO_PASS.json",
+        "patch.diff", "solution.patch",
+    ]:
+        assert not (view / rel).exists(), rel
+    survivors = [
+        p.relative_to(view).as_posix()
+        for p in view.rglob("*")
+        if p.is_file()
+        and matches_denied_path(
+            p.relative_to(view).as_posix(), SWE_BENCH_PRO_DENY_GLOBS
+        )
+    ]
+    assert survivors == [], survivors
+
+
+def test_reverting_swe_globs_leaks_planted_answers_leak(tmp_path, monkeypatch):
+    # AC-2 (revert / load-bearing): with the swe answer-artifact globs REMOVED
+    # (revert baseline = root solution/answer-dir family only), the planted
+    # task-root answers SURVIVE (proving the SWE answer-artifact globs are
+    # load-bearing), and the curated SWE set WOULD reject that leaked view.
+    base = FIXTURE_ROOT / "swe-bench-pro-fixture-001"
+    source = tmp_path / "src_copy" / "swe-bench-pro-fixture-001"
+    shutil.copytree(base, source)
+    _plant_swe_leakage(source)
+
+    view = materialize_harbor_task_view(
+        source_task_dir=source,
+        view_root=tmp_path / "views",
+        benchmark_kind="swe-bench-pro",
+        benchmark_task_id=source.name,
+        transform_name="swe-bench-pro-harbor-task-view",
+        exclude_globs=_REVERT_BASELINE,  # REVERTED (answer-artifact globs removed)
+        view_mode="copy",
+    )
+    # the planted answer files LEAK through the revert baseline
+    assert (view / "gold" / "gold_patch.diff").is_file()
+    assert (view / "test_patch.diff").is_file()
+    assert (view / "FAIL_TO_PASS.json").is_file()
+    assert (view / "patch.diff").is_file()
+    assert (view / "solution.patch").is_file()
+    # the curated (production) SWE set WOULD reject the leaked view
+    with pytest.raises(LeakageError):
+        assert_no_denied_paths(view, deny_globs=SWE_BENCH_PRO_DENY_GLOBS)
