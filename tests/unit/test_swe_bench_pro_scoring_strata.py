@@ -109,3 +109,45 @@ def test_short_dunderless_slugs_still_stratify_via_fallback(tmp_path):
     datasets = json.loads((run_dir / "summary.json").read_text())["datasets"]
     assert set(datasets) == {"ade-bench", "spider2-dbt"}, sorted(datasets)
     assert "default" not in datasets
+
+
+def test_short_dunderless_slugs_stratify_via_config_first_path(tmp_path):
+    """Backward-compat lock-in: short, __-free slugs that DO carry a real
+    config.json resolve through the NEW config-first path (not the fallback)
+    to the SAME {dataset, query_id} identity the legacy dir-name join would.
+    Permanent version of Codex's one-off old==new probe for spider2-dbt/ade."""
+    run_dir = tmp_path / "config_first"
+    run_dir.mkdir()
+    expected = {
+        "spider2-dbt": "spider2-fixture-001",
+        "ade-bench": "adebench-fixture-001",
+    }
+    for kind, slug, reward in [
+        ("spider2-dbt", "spider2-fixture-001", 0.0),
+        ("ade-bench", "adebench-fixture-001", 1.0),
+    ]:
+        view = run_dir / "tasks" / f"{kind}-{slug}"
+        view.mkdir(parents=True)
+        (view / "view_manifest.json").write_text(
+            json.dumps({"benchmark_kind": kind, "benchmark_task_id": slug})
+        )
+        # REAL per-trial config.json — drives the config-FIRST resolution path.
+        tc = TrialConfig(task=TaskConfig(path=str(view)))
+        trial = run_dir / tc.trial_name
+        trial.mkdir()
+        (trial / "result.json").write_text(
+            json.dumps({"verifier_result": {"rewards": {"reward": reward}}})
+        )
+        (trial / "config.json").write_text(tc.model_dump_json(indent=4))
+
+    aggregate_summary(run_dir)
+    summary = json.loads((run_dir / "summary.json").read_text())
+    datasets = summary["datasets"]
+    assert set(datasets) == {"spider2-dbt", "ade-bench"}, sorted(datasets)
+    assert "default" not in datasets
+    for kind, slug in expected.items():
+        cells = datasets[kind]["queries"]
+        assert datasets[kind]["n_queries"] == 1, datasets[kind]
+        assert {c["query_id"] for c in cells} == {slug}, (kind, cells)
+    by_kind = {t["stratum"].get("benchmark_kind") for t in summary["trials"]}
+    assert by_kind == {"spider2-dbt", "ade-bench"}, by_kind
