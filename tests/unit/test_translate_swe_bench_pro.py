@@ -86,3 +86,36 @@ def test_swe_dataset_requires_tasks_root(tmp_path, monkeypatch):
     with pytest.raises(Exception) as exc:
         spec_to_job_config(spec, job_name="job", jobs_dir=tmp_path, tasks_root=None)
     assert "tasks_root" in str(exc.value).lower()
+
+
+def test_swe_resolves_n_views_with_manifest_leakage_clean(tmp_path, monkeypatch):
+    sources = sorted(FIXTURE_ROOT.glob("swe-bench-pro-fixture-*"))
+    assert len(sources) >= 2, "need >1 fixture instance to prove N task-view dirs"
+
+    monkeypatch.setattr(
+        "razorback.translate._resolve_harbor_dataset_tasks",
+        lambda **k: list(sources),
+    )
+    spec = _spec(
+        HarborBenchmarkBlock(kind="harbor", dataset="scale-ai/swe-bench-pro@latest")
+    )
+    job_config, _ = spec_to_job_config(
+        spec, job_name="job", jobs_dir=tmp_path, tasks_root=tmp_path / "tasks"
+    )
+    assert len(job_config.tasks) == len(sources)
+    for task in job_config.tasks:
+        view = task.path
+        assert view.name.startswith("swe-bench-pro-")
+        assert (view / "task.toml").is_file()
+        manifest = json.loads((view / "view_manifest.json").read_text())
+        assert manifest["benchmark_kind"] == "swe-bench-pro"
+        assert manifest["benchmark_task_id"].startswith("swe-bench-pro-fixture-")
+        # leakage-clean: the planted DEFAULT-deny file did not survive. The
+        # `solution/**` glob strips files UNDER solution/; the materializer may
+        # leave an empty `solution/` dir node (it carries no answer content,
+        # and the materializer's own assert_no_denied_paths only inspects
+        # files/symlinks). The leakage contract is "no answer content
+        # survives" — assert no files remain anywhere under solution/.
+        assert not (view / "solution" / "gold_patch.diff").exists()
+        if (view / "solution").exists():
+            assert not any(p.is_file() for p in (view / "solution").rglob("*"))
