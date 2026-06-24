@@ -66,6 +66,28 @@ def _is_spider2_dbt_dataset(dataset_ref: str) -> bool:
     return parsed.short_name == SPIDER2_DBT_SHORT_NAME
 
 
+SWE_BENCH_PRO_SHORT_NAME = "swe-bench-pro"
+
+
+def _is_swe_bench_pro_dataset(dataset_ref: str) -> bool:
+    """True when a `kind: harbor` dataset ref names the swe-bench-pro family.
+
+    Mirrors the spider2-dbt / ade-bench dataset-ref flow: the dataset ref is
+    the family signal. The fully-qualified `<org>/swe-bench-pro@<ref>` form
+    (e.g. `scale-ai/swe-bench-pro@latest`) resolves to
+    short_name == "swe-bench-pro"; the bare `swe-bench-pro@<ref>` form is the
+    `harbor download` CLI concept (not a valid spec dataset) and raises on
+    parse, so the helper swallows the error and returns False.
+    """
+    from harbor.models.package.reference import PackageReference
+
+    try:
+        parsed = PackageReference.parse(dataset_ref)
+    except Exception:
+        return False
+    return parsed.short_name == SWE_BENCH_PRO_SHORT_NAME
+
+
 def _apply_task_selectors(
     paths: list[Path], *, exclude_tasks: list[str] | None, n_tasks: int | None
 ) -> list[Path]:
