@@ -100,7 +100,7 @@ captain decision rather than building a new transform.
 - DONE: Settle deny-glob design (constant vs default)
   Chose `SWE_BENCH_PRO_DENY_GLOBS = DEFAULT_SOLUTION_DENY_GLOBS + (...)` in leakage.py (NOT a new harbor_view.py, NOT mutating the global default); justified inline.
 - DONE: fnmatch top-level-dir hole handled
-  Both bare (`gold/**`) and nested (`**/gold/**`) forms for denied dirs; cited spider2 precedent (`harbor_view.py:20-31`).
+  SUPERSEDED by cycle 3: the final set has NO `**/gold/**` (the cycle-1 bare+nested-dir claim is obsolete). The curated set uses only root-anchored `gold/**`; see the cycle-3 report below.
 - DONE: Honor Out of scope
   No `rk audit` SWE signatures; no new view transform; escalation hook is a Task 0 HALT-and-surface.
 - DONE: Verified glob set against live fnmatch
@@ -149,3 +149,36 @@ gold.patch, test_patch*, FAIL_TO_PASS*, PASS_TO_PASS*, patch, patch.diff,
 solution.patch, answer*)`. Residual captain decisions: (1) exact harbor
 answer filenames; (2) explicit no-blanket-`*.patch` judgement; (3) bare
 `patch`/`answer*` root-segment surface; (4) inline-patch escalation hook.
+
+## Stage Report: plan (cycle 3)
+
+Reworked per captain decision on deny-glob scope: curate a precise swe set; do NOT inherit the broad cross-`/` default globs.
+
+- DONE: standalone curated set, NOT `DEFAULT + (...)`
+  `SWE_BENCH_PRO_DENY_GLOBS` is now a standalone tuple; dropped `**/answer*`/`**/solution.*`/`**/*answers*`. A test asserts those are absent and the set is not a default superset.
+- DONE: re-verify with fnmatch deny/allow probe
+  19 deny match; 18 allow clean INCLUDING `src/answer_engine.py`, `lib/myanswers.py`, `pkg/solution_helpers.py`, `src/solution_loader.py`, `config/answers_schema.json` + the earlier set. Reproduced via `python -c 'import fnmatch...'`.
+- DONE: AC-2 negative test stays load-bearing
+  Revert baseline is the curated set with the answer-artifact globs removed (`solution/**`,`solutions/**`,`tests/expected/**`); verified the 5 planted task-root patch files all escape it, so revert truly leaks.
+- DONE: [P2a] root-token collision note lists ALL collisions
+  Captain-decision 3 names `answer*`/`answers*`/`gold_patch*`/`test_patch*`/`gold.patch`/`solution.*`/`patch` with their hypothetical-root files; nested forms NOT denied.
+- DONE: [P2b] stale `**/gold/**` claim removed
+  Corrected the cycle-1 DONE line (marked SUPERSEDED); the final set has no `**/gold/**`.
+- DONE: flag default over-broad for repo benchmarks (NOT fixed)
+  Plan's "Separate observation" section flags the shared default as a possible follow-up entity; E2 does not touch it.
+
+### Summary
+
+Captain chose a STANDALONE curated set over `DEFAULT + (...)`: the inherited
+`**/answer*`/`**/solution.*`/`**/*answers*` strip nested repo files like
+`src/answer_engine.py` under `fnmatch` (`*` crosses `/`). The final set is
+`SWE_BENCH_PRO_DENY_GLOBS = (solution/**, solutions/**, tests/expected/**,
+solution.*, answer*, answers*, gold/**, gold_patch*, gold.patch, test_patch*,
+FAIL_TO_PASS*, PASS_TO_PASS*, patch, patch.diff, solution.patch)` — all
+root-anchored task-root answer artifacts, no broad `**/<token>` forms. AC-2's
+revert baseline drops the answer-artifact globs and the planted task-root
+patches are verified to leak through it. Residual captain decisions: (1)
+exact harbor answer filenames; (2) no-blanket-`*.patch`; (3) the full
+root-token collision surface; (4) inline-patch escalation hook. Flagged
+(out of scope): the shared default remains over-broad for future repo-based
+benchmarks.

@@ -2,24 +2,29 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Harden the path deny-glob set the swe-bench-pro task-view materializer passes as `exclude_globs`, so a resolved swe-bench-pro task's gold patch / test patch / FAIL_TO_PASS-shaped answer files (which sit at the task root next to `task.toml`) never reach the agent — WITHOUT stripping legitimate files inside the repo checkout the agent edits — and prove the exclusion is fail-closed with a load-bearing negative leakage test.
+**Goal:** Give the swe-bench-pro task-view materializer a STANDALONE, curated, task-root-scoped deny-glob set so a resolved task's gold patch / test patch / FAIL_TO_PASS answer artifacts (which sit at the task root next to the repo checkout, NOT inside it) never reach the agent — WITHOUT stripping legitimate nested files in the repo the agent edits — and prove the exclusion is fail-closed with a load-bearing negative leakage test.
 
-**Architecture:** swe-bench-pro rides the GENERIC `materialize_harbor_task_view` (design doc Architecture decision — *no* benchmark-specific view transform, unlike spider2's `harbor_view.py` wrapper). E1 wired the swe branch in `_build_harbor` to call the generic materializer WITHOUT `exclude_globs` (so it uses `DEFAULT_SOLUTION_DENY_GLOBS`). E2 adds a swe-specific constant `SWE_BENCH_PRO_DENY_GLOBS` in `leakage.py` (next to the default, NOT a new `harbor_view.py`), extends the deny set for SWE answer artifacts, and wires the swe branch to pass it as `exclude_globs=`. The fail-closed mechanism (`assert_no_denied_paths`, already called inside the materializer) is reused unchanged.
+**Architecture:** swe-bench-pro rides the GENERIC `materialize_harbor_task_view` (design doc Architecture decision — *no* benchmark-specific view transform, unlike spider2's `harbor_view.py` wrapper). E1 wired the swe branch in `_build_harbor` to call the generic materializer WITHOUT `exclude_globs` (so it uses `DEFAULT_SOLUTION_DENY_GLOBS`). E2 adds a swe-specific constant `SWE_BENCH_PRO_DENY_GLOBS` in `leakage.py` (next to the default, NOT a new `harbor_view.py`) that is a **standalone curated tuple — NOT `DEFAULT_SOLUTION_DENY_GLOBS + (...)`** — and wires the swe branch to pass it as `exclude_globs=`. The fail-closed mechanism (`assert_no_denied_paths`, already called inside the materializer) is reused unchanged.
 
 **Tech Stack:** Python 3, `fnmatch`-based glob matching (`harbor_tasks/leakage.py`), `uv run pytest`, existing E1 fixture tree under `tests/fixtures/swe_bench_pro/`.
 
-## CRITICAL: fnmatch semantics (the root-cause constraint)
+## CRITICAL: fnmatch semantics + why the set is STANDALONE (the root-cause constraint)
 
-`matches_denied_path` uses `fnmatch.fnmatch(rel_posix, pattern)` (`src/razorback/harbor_tasks/leakage.py:21-23`). **`fnmatch`'s `*` CROSSES `/`** — it is NOT path-segment globbing. Two load-bearing consequences every glob in this plan was re-verified against (reproduce with `python -c 'import fnmatch; ...'`):
+`matches_denied_path` uses `fnmatch.fnmatch(rel_posix, pattern)` (`src/razorback/harbor_tasks/leakage.py:21-23`). **`fnmatch`'s `*` CROSSES `/`** — it is NOT path-segment globbing. Two load-bearing consequences (reproduce with `python -c 'import fnmatch; ...'`):
 
-1. **Broad token globs OVER-MATCH legitimate repo files.** `**/gold*` matches `docs/gold_notes.md` and `tests/fixtures/gold_case.py`; `**/test_patch*` matches `tests/test_patch_helpers.py` and `a/test_patch/file.py`. swe-bench-pro tasks ARE real repos (django, astropy, sympy, …) that legitimately ship such files. Stripping them corrupts the task and invalidates the benchmark. **This plan therefore uses NO broad `**/<token>*` forms for the SWE answer artifacts.** The gold/test patch are answer artifacts at the TASK ROOT (siblings of `task.toml`), so they are anchored at the root with bare forms.
-2. **`**/<pat>` MISSES the top level.** `**/solution.*`, `**/answer*`, `**/*answers*` in the inherited `DEFAULT_SOLUTION_DENY_GLOBS` do NOT match a TOP-LEVEL `solution.patch` / `answer.json` / `answers.json` (the `**/` needs a leading path segment). The SWE set therefore adds bare top-level forms (swe-scoped) to close that hole — see Global Constraints.
+1. **Broad cross-`/` globs OVER-MATCH legitimate nested repo files.** The shared `DEFAULT_SOLUTION_DENY_GLOBS` (`leakage.py:7-14`) contains `**/answer*`, `**/solution.*`, `**/*answers*` — and because `*` crosses `/`, `**/answer*` strips `src/answer_engine.py`, `lib/myanswers.py`; `**/solution.*` strips `pkg/solution.cfg`; `**/*answers*` strips `config/myanswers_schema.json`. swe-bench-pro tasks ARE real repos (django, astropy, sympy, …) that legitimately ship such files. **Therefore the SWE set is a STANDALONE curated tuple — it does NOT inherit the default's broad cross-`/` globs.** It keeps only the ROOT-ANCHORED members of the solution/answer family plus root-anchored SWE answer artifacts.
+2. **`**/<pat>` MISSES the top level.** `**/solution.*` etc. also do not match a TOP-LEVEL `solution.patch`/`answer.json` (the `**/` needs a leading path segment). The curated set therefore uses root-anchored forms (`solution.*`, `answer*`, `answers*`) which DO match the task-root answer files and CANNOT match nested repo files.
+
+**Why root-anchored is safe + sufficient:** the gold/test patch are task-root **answer artifacts** — siblings of the repo checkout, not files inside it (the E1 fixture already models this with `solution/gold_patch.diff` at the task root). A root-anchored glob (`answer*`, no `/`) matches `answer.json` at the task root but cannot match `src/answer_engine.py`. This targets the answers precisely without reaching into the repo.
 
 ## Global Constraints
 
-- Do NOT mutate `DEFAULT_SOLUTION_DENY_GLOBS` — it is shared by spider2/ade/dabstep/generic harbor; widening it changes their behavior. Add a swe-specific constant that is `DEFAULT_SOLUTION_DENY_GLOBS + (...)`, mirroring `SPIDER2_DBT_DENY_GLOBS` (`benchmarks/spider2_dbt/harbor_view.py:20-31`) and `ADE_BENCH_DENY_GLOBS` (`benchmarks/ade_bench/harbor_view.py:16-18`).
-- **Anchor SWE answer artifacts at the task root.** Because `*` crosses `/`, the only safe way to deny `gold_patch`/`test_patch`/`FAIL_TO_PASS`/`patch`/top-level `solution.patch`/`answer*` without over-matching repo contents is bare root-anchored forms (`gold_patch*`, `test_patch*`, `FAIL_TO_PASS*`, `patch`, `patch.diff`, `solution.patch`, `answer*`) plus `gold/**` for a root `gold/` answer dir. **Do NOT add `**/<token>*` token globs** — they strip legitimate repo files (see CRITICAL above).
-- The inherited default `**/solution.*` / `**/answer*` MISSES top-level `solution.patch` / `answer.json`. The SWE set closes that hole with bare top-level forms; the shared default is NOT mutated (swe-scoped fix). Do NOT claim the default already covers the top-level solution/answer family — it does not.
+- **`SWE_BENCH_PRO_DENY_GLOBS` is a STANDALONE curated tuple, NOT `DEFAULT_SOLUTION_DENY_GLOBS + (...)`.** Do not inherit the default's broad cross-`/` globs (`**/answer*`, `**/solution.*`, `**/*answers*`) — they strip legitimate nested repo files. (Contrast spider2/ade, which DO use `DEFAULT + (...)` because their trees are controlled, not arbitrary repos.)
+- **Curated members (all task-root-scoped):**
+  - root solution/answer family: `solution/**`, `solutions/**`, `tests/expected/**`, `solution.*`, `answer*`, `answers*`
+  - swe answer artifacts (task-root): `gold/**`, `gold_patch*`, `gold.patch`, `test_patch*`, `FAIL_TO_PASS*`, `PASS_TO_PASS*`, `patch`, `patch.diff`, `solution.patch`
+- Use NO broad `**/<token>*` / `**/<token>` globs — they over-match the repo checkout (CRITICAL above).
+- Do NOT mutate the shared `DEFAULT_SOLUTION_DENY_GLOBS` (spider2/ade/dabstep depend on it). The SWE set is independent.
 - The defense is the materializer's path-based exclusion (`assert_no_denied_paths`, `harbor_tasks/leakage.py:26-44`), NOT `rk audit`. Do NOT add trace-level `rk audit` SWE signatures — out of scope (entity Out of scope; `audit/cli.py:79-92` only taints `forbidden_lookup`).
 - Reuse E1's fixture tree (`tests/fixtures/swe_bench_pro/harbor_task_minimal/`); do not invent a new fixture root.
 - All tests fixture-backed and network-free (monkeypatch `_resolve_harbor_dataset_tasks`, as the E1 tests do).
@@ -29,12 +34,23 @@
 
 ## Captain decisions to flag (open)
 
-The plan picks a justified default for each so implementation is unblocked; each is captain-overridable.
+Captain has decided the scope (standalone curated set, decision relayed). Remaining captain-verifiable items:
 
-1. **The exact swe glob set + the harbor filename assumption.** The set (Task 1) is DERIVED from the SWE-bench-Pro instance format — each instance ships a gold `patch`, a `test_patch`, and `FAIL_TO_PASS`/`PASS_TO_PASS` test-name lists — serialized by harbor as **sibling files at the task root** (the same place the E1 fixture put `solution/gold_patch.diff`). We CANNOT hydrate `scale-ai/swe-bench-pro` to confirm the exact on-disk filenames. **ASSUMPTION (captain-verifiable):** harbor lands these answer artifacts at the task root as `gold_patch.diff` / `gold.patch` / a `gold/` dir, `test_patch.diff`, `FAIL_TO_PASS.json`, `PASS_TO_PASS.json`, and/or a plain `patch`/`patch.diff`/`solution.patch`/`answer*`. If harbor's real filenames differ, Task 0 records the gap and the captain amends the root-anchored names before merge. The set is intentionally root-anchored, NOT repo-wide, to avoid false positives (decision 2).
-2. **`*.patch` / `*.diff` false-positive judgement (explicit).** The design doc (`:70-74`) calls out `*.patch` coverage. A blanket `**/*.patch` / `**/*.diff` would strip legitimate `.patch`/`.diff` fixtures real repos ship (e.g. `docs/changelog.diff`, `lib/patches/*.patch`) and corrupt the benchmark. **Decision: do NOT add any `**/*.patch` or `**/*.diff` glob.** Cover only the root-anchored answer names (`patch`, `patch.diff`, `gold.patch`, `solution.patch`, `gold_patch*`, `test_patch*`). If a probe ever shows harbor scatters answer patches deeper in the tree under a known answer dir, the captain may add a dir-anchored form (e.g. `<answerdir>/**`) — never a bare `**/*.patch`.
-3. **`patch` / `answer*` bare-root residual risk (explicit).** Bare `patch` denies a root file literally named `patch` (rare in a repo root; `patch` is a Unix tool, not typical repo content). Bare `answer*` denies root `answer.json`/`answers.json` but would also deny a hypothetical root `answers.py`. These are root-anchored (a single path segment, no `/`), so they CANNOT match `src/answer.py` or `docs/patch_notes.md` — the false-positive surface is only the repo's TOP-LEVEL directory. Judged acceptable: a top-level file named `answer*`/`patch` in a SWE task root is overwhelmingly answer data, not repo source. Captain may narrow to exact names (`answer.json`, `answers.json`) if a real task root collides.
-4. **Escalation hook (design doc E2).** IF Task 0 (or the captain's knowledge of harbor) shows the gold/test patch is NOT a sibling file but lives **inline** in `task.toml` / verifier metadata / an env var, path globs cannot strip it. The plan does NOT silently build a view transform — Task 0 HALTS and surfaces: "swe-bench-pro gold/test patch is inline, not a sibling file; path globs insufficient — captain decision needed (defense-in-depth audit layer or a view content transform, both out of E2 scope)."
+1. **The exact harbor answer filenames (Task 0 assumption).** The set is DERIVED from the SWE-bench-Pro instance format — gold `patch`, `test_patch`, `FAIL_TO_PASS`/`PASS_TO_PASS` — serialized by harbor as sibling files at the task root. We CANNOT hydrate `scale-ai/swe-bench-pro` to confirm exact filenames. **ASSUMPTION:** harbor lands them at the task root as `gold/`, `gold_patch.diff`/`gold.patch`, `test_patch.diff`, `FAIL_TO_PASS.json`, `PASS_TO_PASS.json`, and/or `patch`/`patch.diff`/`solution.patch`/`answer*`. If harbor's real filenames differ, Task 0 records the gap and the captain amends the root-anchored names before merge.
+2. **`*.patch` / `*.diff` false-positive judgement (explicit).** The design doc (`:70-74`) calls out `*.patch` coverage. A blanket `**/*.patch` / `**/*.diff` would strip legitimate `.patch`/`.diff` fixtures real repos ship (`docs/changelog.diff`, `lib/patches/*.patch`). **Decision: add NO `**/*.patch` / `**/*.diff`.** Cover only the root-anchored answer names (`patch`, `patch.diff`, `gold.patch`, `solution.patch`, `gold_patch*`, `test_patch*`).
+3. **Root-token collision residual (ALL collisions named).** The root-anchored token globs deny a TOP-LEVEL repo file whose name starts with these prefixes. Because they are root-anchored (one path segment, no `/`), they CANNOT match any nested path — the collision surface is ONLY the repo's top-level directory. The full list of files that WOULD be denied if they existed at the task root (acceptable — answer data overwhelmingly lives there, repo source rarely does):
+   - `answer*` → root `answer.json`, `answers.json`, AND a hypothetical root `answer_engine.py`
+   - `answers*` → root `answers_schema.json` and similar
+   - `gold_patch*` → root `gold_patch.diff` AND a hypothetical root `gold_patch_notes.md`
+   - `test_patch*` → root `test_patch.diff` AND a hypothetical root `test_patch_helpers.py`
+   - `gold.patch` / `solution.patch` / `solution.*` → root `solution.cfg` etc.
+   - `patch` / `patch.diff` → a root file literally named `patch` (Unix-tool name, not typical repo content)
+   NESTED versions of every one of these (`src/answer_engine.py`, `tests/test_patch_helpers.py`, `tools/gold_patch_notes.md`, `a/test_patch/file.py`) are NOT denied — proven in the allow-list test. Captain may narrow `answer*`→`answer.json` if a real task root collides.
+4. **Escalation hook (design doc E2).** IF Task 0 (or captain knowledge) shows the gold/test patch is NOT a sibling file but lives **inline** in `task.toml` / verifier metadata / an env var, path globs cannot strip it. The plan does NOT silently build a view transform — Task 0 HALTS and surfaces: "swe-bench-pro gold/test patch is inline, not a sibling file; path globs insufficient — captain decision needed (defense-in-depth audit layer or a view content transform, both out of E2 scope)."
+
+### Separate observation (FLAG ONLY — out of E2 scope)
+
+The shared `DEFAULT_SOLUTION_DENY_GLOBS` RETAINS the broad cross-`/` globs (`**/answer*`, `**/solution.*`, `**/*answers*`) for spider2/ade/dabstep. Those run on CONTROLLED task trees (curated dbt projects, not arbitrary repos), so the over-match risk is low there. **But the default is over-broad for ANY future repo-based benchmark** — a possible follow-up entity should curate the default or document the repo-vs-controlled-tree distinction. E2 does NOT touch the shared default; this is flagged, not fixed.
 
 ---
 
@@ -42,91 +58,88 @@ The plan picks a justified default for each so implementation is unblocked; each
 
 | Acceptance criterion | Task(s) | TDD checkpoint (failing test first) |
 | --- | --- | --- |
-| (probe, Test plan) Probe the resolved-task shape, derive the glob set, commit as evidence | Task 0 | n/a — committed probe note that DRIVES the Task 1 set + records the assumption/escalation |
-| **AC-1** — materialized swe view excludes gold/test-patch/answer paths AND keeps legit repo files | Task 1 (constant + deny/allow fnmatch tests), Task 2 (positive materialize test) | Task 1 Step 1 (deny+allow tests) and Task 2 Step 1 (materialize) → fail before the constant + wiring exist |
-| **AC-2** — negative leakage test FAILS when swe globs reverted | Task 3 (wire branch) + Task 4 (negative leakage test, load-bearing) | Task 4 Step 1: plant root answer files → materialize via swe branch → assert excluded; revert proof asserts they leak (planted files escape the bare default) → fails without Task 1+Task 3 |
-| **AC-3** — the swe branch actually passes the extended `exclude_globs` | Task 3 (wire) + Task 5 (runtime spy + `grep -F`) | Task 5 Step 1 → fails before Task 3 |
+| (probe, Test plan) Probe the resolved-task shape, DERIVE the curated set, commit as evidence | Task 0 | n/a — committed probe note that DRIVES the Task 1 set + records the assumption/escalation |
+| **AC-1** — materialized swe view excludes gold/test-patch/answer paths AND keeps legit nested repo files | Task 1 (standalone tuple + deny/allow fnmatch tests), Task 2 (positive materialize test) | Task 1 Step 1 (deny+allow tests) and Task 2 Step 1 (materialize) → fail before the constant + wiring exist |
+| **AC-2** — negative leakage test FAILS when swe answer-artifact globs reverted | Task 3 (wire branch) + Task 4 (negative leakage test, load-bearing) | Task 4 Step 1: plant task-root answer files → materialize via swe branch → assert excluded; revert (answer-artifact globs removed) → assert they survive / no `LeakageError` → fails without Task 1+Task 3 |
+| **AC-3** — the swe branch actually passes the curated `exclude_globs` | Task 3 (wire) + Task 5 (runtime spy + `grep -F`) | Task 5 Step 1 → fails before Task 3 |
 
-**Riskiest-first ordering rationale:** The load-bearing proof is the **negative leakage test (Task 4)** — plant → materialize → assert excluded → revert globs → assert leak. It is the entity's AC-2 and the whole reason E2 exists. The planted answer files are chosen so the bare DEFAULT set does NOT catch them (verified at plan time), so reverting the SWE set genuinely leaks them. Tasks are ordered so the deny set (Task 1) and production wiring (Task 3) exist before Task 4 exercises them. Task 0 runs first because it derives the set and can trigger the escalation HALT.
+**Riskiest-first ordering rationale:** The load-bearing proof is the **negative leakage test (Task 4)** — plant → materialize → assert excluded → revert globs → assert leak. The planted task-root answer files are chosen so the **revert baseline** (the curated set with the SWE answer-artifact globs removed, leaving only `solution/**`/`solutions/**`/`tests/expected/**`) does NOT catch them (verified at plan time), so reverting genuinely leaks. Tasks are ordered so the deny set (Task 1) and production wiring (Task 3) exist before Task 4 exercises them. Task 0 runs first because it derives the set and can trigger the escalation HALT.
 
 ---
 
 ## File Structure
 
-- **Modify** `src/razorback/harbor_tasks/leakage.py` — add `SWE_BENCH_PRO_DENY_GLOBS` constant (Task 1). Lives here (not a new `benchmarks/swe_bench_pro/harbor_view.py`) because the design doc mandates swe uses the GENERIC materializer with no benchmark-specific transform; the constant is the *only* swe-specific artifact, so it belongs beside `DEFAULT_SOLUTION_DENY_GLOBS`.
+- **Modify** `src/razorback/harbor_tasks/leakage.py` — add `SWE_BENCH_PRO_DENY_GLOBS` STANDALONE tuple (Task 1). Lives here (not a new `benchmarks/swe_bench_pro/harbor_view.py`) because the design doc mandates swe uses the GENERIC materializer with no benchmark-specific transform; the constant is the *only* swe-specific artifact, so it belongs beside `DEFAULT_SOLUTION_DENY_GLOBS`.
 - **Modify** `src/razorback/translate.py` — swe branch in `_build_harbor` (currently lines ~412-433) passes `exclude_globs=SWE_BENCH_PRO_DENY_GLOBS` and imports it (Task 3).
-- **Modify** `tests/fixtures/swe_bench_pro/harbor_task_minimal/swe-bench-pro-fixture-001/` — add root-anchored SWE answer files + one legit repo file (Task 2): a root `gold/gold_patch.diff`, a root `test_patch.diff`, a root `FAIL_TO_PASS.json`, and `app/buggy.py` (legit). (fixture-002 left as-is for the multi-instance E1 tests.)
+- **Modify** `tests/fixtures/swe_bench_pro/harbor_task_minimal/swe-bench-pro-fixture-001/` — add task-root SWE answer files + one legit NESTED repo file (Task 2): root `gold/gold_patch.diff`, root `test_patch.diff`, root `FAIL_TO_PASS.json`, and `src/answer_engine.py` (legit nested — proves non-overmatch). (fixture-002 left as-is for the multi-instance E1 tests.)
 - **Create** `tests/unit/test_swe_bench_pro_leakage.py` — the swe deny/allow unit tests, positive materialize test, negative leakage test, and AC-3 wiring assertion (Tasks 1, 2, 4, 5). New file; every test name contains `leak` to match the entity's `-k 'swe_bench_pro and leak'` acceptance filter.
 
 ---
 
-### Task 0: Probe the resolved swe-bench-pro task shape — DERIVE the glob set (evidence + escalation gate)
+### Task 0: Probe the resolved swe-bench-pro task shape — DERIVE the curated set (evidence + escalation gate)
 
 **Files:**
 - Create: `docs/razorback-implementation/plans/swe-bench-pro-leakage-probe-note.md` (committed evidence)
 
 **Interfaces:**
-- Produces: the DERIVED Task 1 glob set + a documented decision — either "answer artifacts are root-anchored sibling files, proceed with the derived set" OR "gold/test patch is inline, not a sibling file → HALT + captain decision".
+- Produces: the DERIVED standalone curated Task 1 glob set + a documented decision — either "answer artifacts are task-root sibling files, proceed" OR "gold/test patch is inline → HALT + captain decision".
 
-This task does NOT hydrate the network dataset (entity: network-free; E1's live `harbor download` smoke was non-gating). It records what is knowable offline, derives the set from the SWE-bench answer-field format, and pins the assumption. **The glob set is OUTPUT of this task, not an input — Task 1 implements what Task 0 derives.**
+Network-free (entity constraint). Records what is knowable offline, derives the curated set from the SWE answer-field format + the task-root-layout fact, pins the assumption. **The glob set is OUTPUT of this task — Task 1 implements what Task 0 derives.**
 
-- [ ] **Step 1: Confirm the inherited default's coverage AND its top-level hole**
+- [ ] **Step 1: Reproduce the fnmatch evidence that drives the curated (not inherited) set**
 
-Run (reproduce the fnmatch reasoning concretely):
+Run:
 
 ```bash
 uv run python -c "
 import fnmatch
-from razorback.harbor_tasks.leakage import matches_denied_path, DEFAULT_SOLUTION_DENY_GLOBS as D
-print('=== SWE shapes the default MISSES (the gap E2 closes) ===')
-for p in ['gold/patch.diff','test_patch.diff','FAIL_TO_PASS.json','PASS_TO_PASS.json','patch','patch.diff']:
-    print(matches_denied_path(p, D), p)
-print('=== default top-level HOLE: **/ misses the root ===')
-for pat,p in [('**/solution.*','solution.patch'),('**/answer*','answer.json'),('**/*answers*','answers.json')]:
+print('=== why we DROP the default broad cross-/ globs: they strip nested repo files ===')
+for pat,p in [('**/answer*','src/answer_engine.py'),('**/answer*','lib/myanswers.py'),('**/solution.*','pkg/solution.cfg'),('**/*answers*','config/myanswers_schema.json')]:
+    print(fnmatch.fnmatch(p, pat), repr(pat), repr(p), '<- legit nested repo file STRIPPED by inherited default')
+print('=== root-anchored answer* is SAFE: cannot match nested ===')
+for pat,p in [('answer*','src/answer_engine.py'),('answer*','answer.json')]:
     print(fnmatch.fnmatch(p, pat), repr(pat), repr(p))
-print('=== why broad token globs are UNSAFE: * crosses / ===')
-for pat,p in [('**/gold*','docs/gold_notes.md'),('**/test_patch*','tests/test_patch_helpers.py')]:
-    print(fnmatch.fnmatch(p, pat), repr(pat), repr(p), '<- legit repo file WOULD be stripped')
 "
 ```
 
-Expected: the SWE shapes all print `False` (default misses them); the top-level solution/answer forms print `False` (the `**/` hole); the broad-token rows print `True` (proving `**/gold*`/`**/test_patch*` strip legit repo files — why the plan forbids them).
+Expected: the `**/...` rows print `True` (the inherited default WOULD strip nested repo files — why E2 curates a standalone set); `answer*` vs `src/answer_engine.py` prints `False` (root-anchored is safe) and `answer*` vs `answer.json` prints `True` (still catches the task-root answer).
 
-- [ ] **Step 2: Derive the root-anchored glob set + record the assumption/escalation**
+- [ ] **Step 2: Derive the standalone curated set + record the assumption/escalation**
 
 Write `swe-bench-pro-leakage-probe-note.md` documenting:
-- (a) The SWE-bench-Pro instance format: gold `patch`, `test_patch`, `FAIL_TO_PASS`/`PASS_TO_PASS` test-name lists.
-- (b) The KEY architectural fact: these are **answer artifacts** that harbor lands at the TASK ROOT (siblings of `task.toml`, like the E1 fixture's `solution/gold_patch.diff`), NOT scattered through the repo checkout the agent edits. Therefore the deny set is **root-anchored**, never repo-wide `**/<token>*`.
-- (c) The derived set (this becomes Task 1): `gold/**`, `gold_patch*`, `gold.patch`, `test_patch*`, `FAIL_TO_PASS*`, `PASS_TO_PASS*`, `patch`, `patch.diff`, `solution.patch`, `answer*`.
-- (d) The captain-verifiable ASSUMPTION: the exact harbor filenames (decision 1) and the residual bare-`patch`/`answer*` root surface (decision 3).
-- (e) The escalation decision: since the patches ARE root sibling files, path globs are the right defense — proceed. IF a future hydration shows the patch is inline in `task.toml`/verifier metadata, that is the captain-decision escalation (decision 4), NOT an E2 code change.
+- (a) SWE-bench-Pro instance format: gold `patch`, `test_patch`, `FAIL_TO_PASS`/`PASS_TO_PASS` lists.
+- (b) KEY fact: harbor lands these as sibling files at the TASK ROOT (like E1's `solution/gold_patch.diff`), NOT inside the repo checkout the agent edits → the set is task-root-scoped, standalone, never inherits the default's broad cross-`/` globs.
+- (c) The derived STANDALONE set (this becomes Task 1): `solution/**`, `solutions/**`, `tests/expected/**`, `solution.*`, `answer*`, `answers*`, `gold/**`, `gold_patch*`, `gold.patch`, `test_patch*`, `FAIL_TO_PASS*`, `PASS_TO_PASS*`, `patch`, `patch.diff`, `solution.patch`.
+- (d) The captain-verifiable assumption (exact filenames, decision 1) and the full root-token collision list (decision 3).
+- (e) The escalation decision: patches are root sibling files → path globs are the right defense → proceed. IF a future hydration shows the patch is inline, that is the captain escalation (decision 4), NOT an E2 code change.
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add docs/razorback-implementation/plans/swe-bench-pro-leakage-probe-note.md
-git commit -m "plan(E2): probe swe-bench-pro leakage shape; derive root-anchored glob set"
+git commit -m "plan(E2): probe swe leakage shape; derive STANDALONE curated glob set"
 ```
 
 ---
 
-### Task 1: Add the `SWE_BENCH_PRO_DENY_GLOBS` constant (root-anchored, no over-match)
+### Task 1: Add the STANDALONE `SWE_BENCH_PRO_DENY_GLOBS` curated tuple
 
 **Files:**
 - Modify: `src/razorback/harbor_tasks/leakage.py:7-14` (add constant after `DEFAULT_SOLUTION_DENY_GLOBS`)
 - Test: `tests/unit/test_swe_bench_pro_leakage.py` (created here)
 
 **Interfaces:**
-- Produces: `SWE_BENCH_PRO_DENY_GLOBS: tuple[str, ...]` exported from `razorback.harbor_tasks.leakage`, equal to `DEFAULT_SOLUTION_DENY_GLOBS + (<root-anchored SWE additions>)`. Consumed by Task 3's `_build_harbor` swe branch and Tasks 2/4/5 tests.
+- Produces: `SWE_BENCH_PRO_DENY_GLOBS: tuple[str, ...]` exported from `razorback.harbor_tasks.leakage`, a STANDALONE curated tuple (NOT derived from the default). Consumed by Task 3's `_build_harbor` swe branch and Tasks 2/4/5 tests.
 
 - [ ] **Step 1: Write the failing deny + allow tests**
 
-Create `tests/unit/test_swe_bench_pro_leakage.py` (file + every test name contains `leak` so `-k 'swe_bench_pro and leak'` selects them):
+Create `tests/unit/test_swe_bench_pro_leakage.py` (file + every test name contains `leak`):
 
 ```python
 # tests/unit/test_swe_bench_pro_leakage.py
 # ABOUTME: AC-1/AC-2/AC-3 — swe-bench-pro gold/test-patch leakage deny-globs.
-# ABOUTME: fnmatch's `*` crosses `/`, so the SWE set is ROOT-ANCHORED, never **/token.
+# ABOUTME: fnmatch's `*` crosses `/`, so the SWE set is a STANDALONE curated,
+# ABOUTME: task-root-scoped tuple — it does NOT inherit the default's broad **/ globs.
 from razorback.harbor_tasks.leakage import (
     DEFAULT_SOLUTION_DENY_GLOBS,
     SWE_BENCH_PRO_DENY_GLOBS,
@@ -134,10 +147,16 @@ from razorback.harbor_tasks.leakage import (
 )
 
 
-def test_swe_leak_globs_extend_default_without_mutating_it():
-    # The swe set is a SUPERSET of the default (does not replace it) and the
-    # shared default is left untouched (spider2/ade/dabstep depend on it).
-    assert set(DEFAULT_SOLUTION_DENY_GLOBS) <= set(SWE_BENCH_PRO_DENY_GLOBS)
+def test_swe_leak_globs_are_standalone_not_default_superset():
+    # The SWE set is STANDALONE (captain decision): it must NOT inherit the
+    # default's broad cross-`/` globs that strip nested repo files.
+    swe = set(SWE_BENCH_PRO_DENY_GLOBS)
+    assert "**/answer*" not in swe
+    assert "**/solution.*" not in swe
+    assert "**/*answers*" not in swe
+    # It is NOT a superset of the default (proves it is curated, not DEFAULT + ...).
+    assert not (set(DEFAULT_SOLUTION_DENY_GLOBS) <= swe)
+    # The shared default is left untouched (spider2/ade/dabstep depend on it).
     assert DEFAULT_SOLUTION_DENY_GLOBS == (
         "solution/**",
         "solutions/**",
@@ -148,9 +167,8 @@ def test_swe_leak_globs_extend_default_without_mutating_it():
     )
 
 
-def test_swe_leak_globs_deny_root_answer_artifacts():
-    # SWE answer artifacts at the TASK ROOT (siblings of task.toml). The default
-    # set + **/ forms MISS the top-level forms; the SWE set closes that hole.
+def test_swe_leak_globs_deny_task_root_answer_artifacts():
+    # SWE answer artifacts at the TASK ROOT (siblings of the repo checkout).
     for path in [
         "gold/patch.diff",     # root gold answer dir
         "gold/gold_patch.diff",
@@ -159,23 +177,30 @@ def test_swe_leak_globs_deny_root_answer_artifacts():
         "test_patch.diff",     # root test patch (hidden grading tests)
         "test_patch",
         "FAIL_TO_PASS.json",   # root fail-to-pass set
-        "FAIL_TO_PASS.txt",
         "PASS_TO_PASS.json",   # root pass-to-pass set
         "patch",               # plain gold patch artifact
         "patch.diff",
-        "solution.patch",      # top-level solution (default **/ MISSES this)
-        "answer.json",         # top-level answer (default **/ MISSES this)
-        "answers.json",
-        "solution/gold_patch.diff",  # still covered by default solution/**
+        "solution.patch",      # root solution patch (default **/ MISSES this)
+        "solution.cfg",        # root solution.* family
+        "answer.json",         # root answer (default **/ MISSES this)
+        "answers.json",        # root answers
+        "solution/x.py",       # root solution/ dir
+        "solutions/y.sql",     # root solutions/ dir
+        "tests/expected/out.csv",
     ]:
         assert matches_denied_path(path, SWE_BENCH_PRO_DENY_GLOBS), path
 
 
-def test_swe_leak_globs_do_not_overmatch_repo_files():
-    # CRITICAL false-positive guard. fnmatch's `*` crosses `/`, so a broad
-    # `**/gold*` / `**/test_patch*` would strip these legit files real SWE
-    # repos (django/astropy/sympy) ship. The ROOT-ANCHORED set must NOT.
+def test_swe_leak_globs_do_not_overmatch_nested_repo_files():
+    # CRITICAL false-positive guard. fnmatch's `*` crosses `/`; the curated set
+    # is root-anchored so NONE of these legit NESTED repo files (django/astropy/
+    # sympy ship them) are stripped — incl. the captain-named answer_engine etc.
     for path in [
+        "src/answer_engine.py",
+        "lib/myanswers.py",
+        "pkg/solution_helpers.py",
+        "src/solution_loader.py",
+        "config/answers_schema.json",
         "docs/gold_notes.md",
         "tests/fixtures/gold_case.py",
         "tests/gold_helper.py",
@@ -186,12 +211,12 @@ def test_swe_leak_globs_do_not_overmatch_repo_files():
         "django/test/patches.py",
         "lib/patch.py",
         "src/patches/apply.py",
-        "docs/changelog.diff",     # a `.diff` NOT at root / not an answer name
+        "docs/changelog.diff",
+        "docs/patch_notes.md",
+        "tools/gold_standard.py",
         "app/buggy.py",
         "README.md",
         "tests/test_app.py",
-        "src/answer_engine.py",    # nested answer*: NOT root-anchored
-        "docs/patch_notes.md",     # nested patch*: NOT root-anchored
     ]:
         assert not matches_denied_path(path, SWE_BENCH_PRO_DENY_GLOBS), path
 ```
@@ -207,70 +232,74 @@ In `src/razorback/harbor_tasks/leakage.py`, after the `DEFAULT_SOLUTION_DENY_GLO
 
 ```python
 # swe-bench-pro ships the gold patch + test patch + FAIL_TO_PASS/PASS_TO_PASS
-# answer artifacts at the TASK ROOT (siblings of task.toml), next to — but
-# distinct from — the repo checkout the agent edits. The DEFAULT set covers
-# solution*/answer* but NONE of these SWE shapes, and its `**/` forms MISS the
-# top level (`**/solution.*` does not match a root `solution.patch`).
+# answer artifacts at the TASK ROOT (siblings of the repo checkout, NOT inside
+# the repo the agent edits).
 #
-# IMPORTANT: `matches_denied_path` uses `fnmatch.fnmatch` (leakage.py:21-23),
-# where `*` CROSSES `/`. A broad `**/gold*` / `**/test_patch*` would therefore
-# strip LEGITIMATE repo files (`docs/gold_notes.md`, `tests/test_patch_helpers.py`)
-# that real SWE repos (django/astropy/sympy) ship — corrupting the task. So we
-# ROOT-ANCHOR every SWE answer-artifact glob (a single path segment, no `**/`),
-# matching only the task-root answer files, never repo contents. We add NO
-# `**/*.patch` / `**/*.diff` for the same false-positive reason (design-doc
-# `*.patch` coverage is satisfied by the root-anchored `patch`/`patch.diff`/
-# `gold.patch`/`solution.patch` names).
+# This is a STANDALONE curated tuple, NOT `DEFAULT_SOLUTION_DENY_GLOBS + (...)`
+# (captain decision). `matches_denied_path` uses `fnmatch.fnmatch` (leakage.py:
+# 21-23) where `*` CROSSES `/`, so the default's broad cross-`/` globs
+# (`**/answer*`, `**/solution.*`, `**/*answers*`) would strip LEGITIMATE nested
+# repo files (`src/answer_engine.py`, `lib/myanswers.py`, `pkg/solution.cfg`)
+# that real SWE repos (django/astropy/sympy) ship — corrupting the task. We
+# therefore curate only ROOT-ANCHORED globs (one path segment, no `**/`): they
+# match the task-root answer files and CANNOT reach into the repo checkout.
 #
-# This superset is passed as `exclude_globs=` from the swe branch in
-# translate._build_harbor; it does NOT mutate the shared DEFAULT (spider2/ade/
-# dabstep/generic-harbor depend on it).
-SWE_BENCH_PRO_DENY_GLOBS = DEFAULT_SOLUTION_DENY_GLOBS + (
-    # root gold answer dir + root gold-prefixed answer files
+# We add NO `**/*.patch` / `**/*.diff` for the same false-positive reason
+# (design-doc `*.patch` coverage is satisfied by the root-anchored
+# `patch`/`patch.diff`/`gold.patch`/`solution.patch` names).
+#
+# Root-token collision residual: a TOP-LEVEL repo file named `answer*`,
+# `gold_patch*`, `test_patch*`, `patch`, etc. would be denied (acceptable —
+# answer data lives at the task root, repo source rarely does); their NESTED
+# forms are NOT denied. The shared DEFAULT is left untouched.
+SWE_BENCH_PRO_DENY_GLOBS = (
+    # root solution/answer family (root-anchored; NOT the default's `**/` forms)
+    "solution/**",
+    "solutions/**",
+    "tests/expected/**",
+    "solution.*",
+    "answer*",
+    "answers*",
+    # swe answer artifacts at the task root
     "gold/**",
     "gold_patch*",
     "gold.patch",
-    # the test patch (the hidden tests that grade the fix), root-anchored
     "test_patch*",
-    # FAIL_TO_PASS / PASS_TO_PASS test-name sets, root-anchored
     "FAIL_TO_PASS*",
     "PASS_TO_PASS*",
-    # plain root answer-artifact names (the default `**/` forms MISS the top
-    # level; swe lands these at the task root)
     "patch",
     "patch.diff",
     "solution.patch",
-    "answer*",
 )
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `uv run pytest tests/unit/test_swe_bench_pro_leakage.py -v`
-Expected: PASS (3 tests — extend/deny/allow).
+Expected: PASS (3 tests — standalone/deny/allow).
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add src/razorback/harbor_tasks/leakage.py tests/unit/test_swe_bench_pro_leakage.py
-git commit -m "feat(leakage): add root-anchored SWE_BENCH_PRO_DENY_GLOBS (no repo over-match)"
+git commit -m "feat(leakage): add STANDALONE curated SWE_BENCH_PRO_DENY_GLOBS"
 ```
 
 ---
 
-### Task 2: Plant root SWE answer fixtures + positive materialize test (AC-1)
+### Task 2: Plant task-root SWE answer fixtures + positive materialize test (AC-1)
 
 **Files:**
-- Modify: `tests/fixtures/swe_bench_pro/harbor_task_minimal/swe-bench-pro-fixture-001/` (add root answer files + a legit repo file)
+- Modify: `tests/fixtures/swe_bench_pro/harbor_task_minimal/swe-bench-pro-fixture-001/` (add root answer files + a legit NESTED repo file)
 - Test: `tests/unit/test_swe_bench_pro_leakage.py` (append)
 
 **Interfaces:**
 - Consumes: `SWE_BENCH_PRO_DENY_GLOBS` (Task 1); `materialize_harbor_task_view`, `assert_no_denied_paths` (`harbor_tasks/materialize.py:26`, `leakage.py:26`).
-- Produces: a fixture-001 tree carrying root SWE answer files + `app/buggy.py`, used by Task 4's negative test too.
+- Produces: a fixture-001 tree carrying root SWE answer files + `src/answer_engine.py`, used by Task 4's negative test too.
 
-The E1 fixture only has `solution/gold_patch.diff` (caught by DEFAULT `solution/**`). Add root answer shapes the default MISSES so the materialize test is meaningful, plus a legit repo file to prove non-overmatch end-to-end.
+The E1 fixture only has `solution/gold_patch.diff`. Add task-root answer shapes plus a legit NESTED file the curated set must NOT strip — `src/answer_engine.py` is the captain-named over-match case, so it proves the standalone set fixed the inheritance bug end-to-end.
 
-- [ ] **Step 1: Add root answer files + a legit repo file to fixture-001**
+- [ ] **Step 1: Add task-root answer files + a legit nested repo file to fixture-001**
 
 Create these committed files under `tests/fixtures/swe_bench_pro/harbor_task_minimal/swe-bench-pro-fixture-001/`:
 
@@ -297,10 +326,10 @@ Create these committed files under `tests/fixtures/swe_bench_pro/harbor_task_min
 ["tests/test_buggy.py::test_returns_42"]
 ```
 
-`app/buggy.py` (a legitimate repo file the agent MUST see — proves non-overmatch):
+`src/answer_engine.py` (a legit NESTED repo file the agent MUST see — the captain-named over-match case; the inherited default's `**/answer*` would have stripped it, the standalone set must NOT):
 ```
-def buggy():
-    return None
+def answer_engine():
+    return "legit repo module, not an answer key"
 ```
 
 (Leave the existing `solution/gold_patch.diff`, `instruction.md`, `task.toml`, `environment/Dockerfile` untouched.)
@@ -321,10 +350,9 @@ FIXTURE_ROOT = (
 )
 
 
-def test_materialized_swe_view_excludes_root_answers_keeps_repo_leak(tmp_path):
-    # AC-1: materialize fixture-001 with the SWE deny set; assert root answer
-    # files are stripped, the legit repo file survives, and the fail-closed gate
-    # does not raise.
+def test_materialized_swe_view_strips_root_answers_keeps_nested_repo_leak(tmp_path):
+    # AC-1: materialize fixture-001 with the curated SWE set; root answer files
+    # stripped, the legit NESTED repo file survives, fail-closed gate quiet.
     source = FIXTURE_ROOT / "swe-bench-pro-fixture-001"
     view = materialize_harbor_task_view(
         source_task_dir=source,
@@ -339,9 +367,10 @@ def test_materialized_swe_view_excludes_root_answers_keeps_repo_leak(tmp_path):
     assert not (view / "gold" / "gold_patch.diff").exists()
     assert not (view / "test_patch.diff").exists()
     assert not (view / "FAIL_TO_PASS.json").exists()
-    assert not (view / "solution" / "gold_patch.diff").exists()  # DEFAULT still holds
-    # the legit repo file the agent MUST see DID survive (non-overmatch)
-    assert (view / "app" / "buggy.py").is_file()
+    assert not (view / "solution" / "gold_patch.diff").exists()  # solution/** holds
+    # the legit NESTED repo file the agent MUST see DID survive (the inherited
+    # default's **/answer* would have wrongly stripped this; standalone fixes it)
+    assert (view / "src" / "answer_engine.py").is_file()
     # no denied file survives anywhere; fail-closed gate does not raise
     survivors = [
         p.relative_to(view).as_posix()
@@ -357,14 +386,14 @@ def test_materialized_swe_view_excludes_root_answers_keeps_repo_leak(tmp_path):
 
 - [ ] **Step 3: Run test to verify it passes**
 
-Run: `uv run pytest "tests/unit/test_swe_bench_pro_leakage.py::test_materialized_swe_view_excludes_root_answers_keeps_repo_leak" -v`
-Expected: PASS. (Passes once Task 1's constant exists — calls the materializer directly with the swe set, does NOT depend on Task 3 wiring; Tasks 4/5 prove the wiring.)
+Run: `uv run pytest "tests/unit/test_swe_bench_pro_leakage.py::test_materialized_swe_view_strips_root_answers_keeps_nested_repo_leak" -v`
+Expected: PASS. (Passes once Task 1's constant exists — calls the materializer directly; Tasks 4/5 prove the wiring.)
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add tests/fixtures/swe_bench_pro/harbor_task_minimal/swe-bench-pro-fixture-001 tests/unit/test_swe_bench_pro_leakage.py
-git commit -m "test(leakage): swe view strips root answers, keeps repo files (AC-1)"
+git commit -m "test(leakage): swe view strips root answers, keeps nested repo files (AC-1)"
 ```
 
 ---
@@ -376,11 +405,11 @@ git commit -m "test(leakage): swe view strips root answers, keeps repo files (AC
 
 **Interfaces:**
 - Consumes: `SWE_BENCH_PRO_DENY_GLOBS` (Task 1).
-- Produces: the production swe branch now passes `exclude_globs=SWE_BENCH_PRO_DENY_GLOBS` (no longer the bare default). Tasks 4 and 5 assert this.
+- Produces: the production swe branch now passes `exclude_globs=SWE_BENCH_PRO_DENY_GLOBS`. Tasks 4 and 5 assert this.
 
 - [ ] **Step 1: Add the import**
 
-In `src/razorback/translate.py`, the existing import block already imports `materialize_harbor_task_view` (line 20). Add the deny-glob constant import. First locate the sibling import:
+In `src/razorback/translate.py`, the existing import block already imports `materialize_harbor_task_view` (line 20). First locate the sibling import:
 
 Run: `grep -n "harbor_tasks.leakage\|harbor_tasks.materialize" src/razorback/translate.py`
 
@@ -392,17 +421,17 @@ from razorback.harbor_tasks.leakage import SWE_BENCH_PRO_DENY_GLOBS
 
 - [ ] **Step 2: Pass `exclude_globs` in the swe branch**
 
-In the swe-bench-pro `else` branch of `_build_harbor` (currently `translate.py:419-433`), add `exclude_globs=SWE_BENCH_PRO_DENY_GLOBS,` to the `materialize_harbor_task_view(...)` call and update the now-stale comment. The block becomes:
+In the swe-bench-pro `else` branch of `_build_harbor` (currently `translate.py:419-433`), add `exclude_globs=SWE_BENCH_PRO_DENY_GLOBS,` and update the now-stale comment. The block becomes:
 
 ```python
             else:
                 # swe-bench-pro uses the GENERIC materializer directly — no
                 # benchmark-specific view transform (design doc Architecture
                 # decision). The BRANCH passes environment_env (merged into the
-                # view's task.toml) AND the SWE-hardened deny set
-                # SWE_BENCH_PRO_DENY_GLOBS (root-anchored gold patch / test
-                # patch / FAIL_TO_PASS answer artifacts the DEFAULT set misses;
-                # root-anchored to avoid stripping repo-checkout files — E2).
+                # view's task.toml) AND the STANDALONE curated deny set
+                # SWE_BENCH_PRO_DENY_GLOBS (task-root gold patch / test patch /
+                # FAIL_TO_PASS answer artifacts; root-anchored so it never
+                # strips the repo checkout the agent edits — E2).
                 task_paths = [
                     materialize_harbor_task_view(
                         source_task_dir=src,
@@ -424,7 +453,7 @@ In the swe-bench-pro `else` branch of `_build_harbor` (currently `translate.py:4
 - [ ] **Step 3: Run the E1 wiring suite to confirm no regression**
 
 Run: `uv run pytest tests/unit/test_translate_swe_bench_pro.py -v`
-Expected: PASS (all E1 tests still green — env/manifest assertions unaffected; `test_swe_resolves_n_views_with_manifest_leakage_clean` still passes because `solution/**` is in both sets).
+Expected: PASS (all E1 tests still green — `test_swe_resolves_n_views_with_manifest_leakage_clean` still passes because the curated set includes `solution/**`).
 
 - [ ] **Step 4: Commit**
 
@@ -441,9 +470,9 @@ git commit -m "feat(translate): swe-bench-pro branch passes SWE_BENCH_PRO_DENY_G
 - Test: `tests/unit/test_swe_bench_pro_leakage.py` (append)
 
 **Interfaces:**
-- Consumes: `SWE_BENCH_PRO_DENY_GLOBS`, `DEFAULT_SOLUTION_DENY_GLOBS`, `LeakageError` (`leakage.py:17`); `spec_to_job_config`, `HarborBenchmarkBlock`, `NopAgentBlock`, `Spec` (mirroring E1 test imports `test_translate_swe_bench_pro.py:8-15`).
+- Consumes: `SWE_BENCH_PRO_DENY_GLOBS`, `LeakageError` (`leakage.py:17`); `spec_to_job_config`, `HarborBenchmarkBlock`, `NopAgentBlock`, `Spec` (mirroring E1 test imports `test_translate_swe_bench_pro.py:8-15`).
 
-The entity's load-bearing proof. It drives the FULL production path (`spec_to_job_config` → `_build_harbor` swe branch → materializer), mirroring spider2's `test_planted_forbidden_files_are_excluded_from_view` (`test_translate_spider2_dbt.py:182-213`). **The planted files are chosen so the bare DEFAULT set does NOT catch them** (verified at plan time: `gold/gold_patch.diff`, `test_patch.diff`, `FAIL_TO_PASS.json`, `patch.diff`, `solution.patch`, `answer.json` all escape the default) — so the revert half genuinely leaks, keeping the test load-bearing.
+The entity's load-bearing proof. It drives the FULL production path, mirroring spider2's `test_planted_forbidden_files_are_excluded_from_view`. **Since the SWE set is standalone, the revert baseline is the curated set with the SWE answer-artifact globs REMOVED — leaving only the root solution/answer-dir family (`solution/**`, `solutions/**`, `tests/expected/**`).** The planted task-root patch files are chosen so this revert baseline does NOT catch them (verified at plan time: `gold_patch.diff`, `test_patch.diff`, `FAIL_TO_PASS.json`, `patch.diff`, `solution.patch` all escape it — none lives under `solution/`), so reverting genuinely leaks.
 
 - [ ] **Step 1: Write the test**
 
@@ -454,9 +483,15 @@ import shutil
 
 import pytest
 
-from razorback.harbor_tasks.leakage import DEFAULT_SOLUTION_DENY_GLOBS, LeakageError
+from razorback.harbor_tasks.leakage import LeakageError
 from razorback.spec.schema import HarborBenchmarkBlock, NopAgentBlock, Spec
 from razorback.translate import spec_to_job_config
+
+# Revert baseline: the curated SWE set with the answer-ARTIFACT globs removed,
+# leaving only the root solution/answer-DIR family. Simulates "before E2 added
+# the swe answer-artifact coverage". Verified at plan time: this baseline
+# catches NONE of the planted task-root patch files.
+_REVERT_BASELINE = ("solution/**", "solutions/**", "tests/expected/**")
 
 
 def _swe_spec():
@@ -473,23 +508,21 @@ def _swe_spec():
 
 
 def _plant_swe_leakage(source: Path) -> None:
-    """Plant ROOT answer files the bare DEFAULT set does NOT catch (so the
-    revert half truly leaks). Verified at plan time: none of these match
-    DEFAULT_SOLUTION_DENY_GLOBS."""
+    """Plant task-root answer files the REVERT baseline does NOT catch (so the
+    revert half truly leaks). Verified at plan time."""
     (source / "gold").mkdir(exist_ok=True)
     (source / "gold" / "gold_patch.diff").write_text("+return 42\n")
     (source / "test_patch.diff").write_text("+assert buggy() == 42\n")
     (source / "FAIL_TO_PASS.json").write_text('["test_returns_42"]\n')
     (source / "patch.diff").write_text("+return 42\n")
     (source / "solution.patch").write_text("+return 42\n")
-    (source / "answer.json").write_text('{"answer": 42}\n')
 
 
 def test_planted_swe_answers_are_excluded_from_view_leak(tmp_path, monkeypatch):
-    # AC-2 (forward): plant root answer files in an ISOLATED source copy, run
-    # the FULL production path, assert none survive into the view.
+    # AC-2 (forward): plant task-root answer files in an ISOLATED source copy,
+    # run the FULL production path, assert none survive into the view.
     base = FIXTURE_ROOT / "swe-bench-pro-fixture-001"
-    source = tmp_path / "src" / "swe-bench-pro-fixture-001"
+    source = tmp_path / "src_copy" / "swe-bench-pro-fixture-001"
     shutil.copytree(base, source)
     _plant_swe_leakage(source)
 
@@ -502,7 +535,7 @@ def test_planted_swe_answers_are_excluded_from_view_leak(tmp_path, monkeypatch):
     view = job_config.tasks[0].path
     for rel in [
         "gold/gold_patch.diff", "test_patch.diff", "FAIL_TO_PASS.json",
-        "patch.diff", "solution.patch", "answer.json",
+        "patch.diff", "solution.patch",
     ]:
         assert not (view / rel).exists(), rel
     survivors = [
@@ -517,12 +550,12 @@ def test_planted_swe_answers_are_excluded_from_view_leak(tmp_path, monkeypatch):
 
 
 def test_reverting_swe_globs_leaks_planted_answers_leak(tmp_path, monkeypatch):
-    # AC-2 (revert / load-bearing): with the SWE globs REVERTED to the bare
-    # DEFAULT set, the planted ROOT answer files SURVIVE into the view (proving
-    # the default is insufficient and the SWE additions are load-bearing), and
-    # the SWE fail-closed gate WOULD reject that leaked view.
+    # AC-2 (revert / load-bearing): with the swe answer-artifact globs REMOVED
+    # (revert baseline = root solution/answer-dir family only), the planted
+    # task-root answers SURVIVE (proving the SWE answer-artifact globs are
+    # load-bearing), and the curated SWE set WOULD reject that leaked view.
     base = FIXTURE_ROOT / "swe-bench-pro-fixture-001"
-    source = tmp_path / "src" / "swe-bench-pro-fixture-001"
+    source = tmp_path / "src_copy" / "swe-bench-pro-fixture-001"
     shutil.copytree(base, source)
     _plant_swe_leakage(source)
 
@@ -532,17 +565,16 @@ def test_reverting_swe_globs_leaks_planted_answers_leak(tmp_path, monkeypatch):
         benchmark_kind="swe-bench-pro",
         benchmark_task_id=source.name,
         transform_name="swe-bench-pro-harbor-task-view",
-        exclude_globs=DEFAULT_SOLUTION_DENY_GLOBS,  # REVERTED
+        exclude_globs=_REVERT_BASELINE,  # REVERTED (answer-artifact globs removed)
         view_mode="copy",
     )
-    # the planted answer files LEAK through the bare default
+    # the planted answer files LEAK through the revert baseline
     assert (view / "gold" / "gold_patch.diff").is_file()
     assert (view / "test_patch.diff").is_file()
     assert (view / "FAIL_TO_PASS.json").is_file()
     assert (view / "patch.diff").is_file()
     assert (view / "solution.patch").is_file()
-    assert (view / "answer.json").is_file()
-    # the SWE (production) deny set WOULD reject the leaked view
+    # the curated (production) SWE set WOULD reject the leaked view
     with pytest.raises(LeakageError):
         assert_no_denied_paths(view, deny_globs=SWE_BENCH_PRO_DENY_GLOBS)
 ```
@@ -550,14 +582,14 @@ def test_reverting_swe_globs_leaks_planted_answers_leak(tmp_path, monkeypatch):
 - [ ] **Step 2: Run the tests to verify both pass (after the fix)**
 
 Run: `uv run pytest tests/unit/test_swe_bench_pro_leakage.py -k leak -v`
-Expected: PASS. Forward test passes (Task 3 wired the swe set into production); revert test passes (reverting to the default lets the planted root answers survive AND the swe gate raises on them).
+Expected: PASS. Forward test passes (Task 3 wired the curated set into production); revert test passes (the revert baseline lets the planted task-root answers survive AND the curated set raises on them).
 
 - [ ] **Step 3: Prove the test is load-bearing (manual sanity, do NOT commit the revert)**
 
-Temporarily edit `leakage.py` so `SWE_BENCH_PRO_DENY_GLOBS = DEFAULT_SOLUTION_DENY_GLOBS` (collapse the additions), then run:
+Temporarily edit `leakage.py` so `SWE_BENCH_PRO_DENY_GLOBS = ("solution/**", "solutions/**", "tests/expected/**")` (drop the answer-artifact globs), then run:
 
 Run: `uv run pytest tests/unit/test_swe_bench_pro_leakage.py -k leak -v`
-Expected: `test_planted_swe_answers_are_excluded_from_view_leak` FAILS (planted root answers now survive) and `test_reverting_swe_globs_leaks_planted_answers_leak`'s `pytest.raises(LeakageError)` FAILS (gate no longer raises). Confirms the suite is load-bearing. **Revert the edit** (`git checkout src/razorback/harbor_tasks/leakage.py`) and re-run to confirm green before committing.
+Expected: `test_planted_swe_answers_are_excluded_from_view_leak` FAILS (planted task-root answers now survive in production) and `test_reverting_swe_globs_leaks_planted_answers_leak`'s `pytest.raises(LeakageError)` FAILS (curated set no longer raises). Confirms load-bearing. **Revert the edit** (`git checkout src/razorback/harbor_tasks/leakage.py`) and re-run green before committing.
 
 - [ ] **Step 4: Commit**
 
@@ -568,27 +600,27 @@ git commit -m "test(leakage): negative swe leakage proof — revert globs => lea
 
 ---
 
-### Task 5: AC-3 wiring assertion — the branch passes the extended set, not the bare default
+### Task 5: AC-3 wiring assertion — the branch passes the curated set, not the default
 
 **Files:**
 - Test: `tests/unit/test_swe_bench_pro_leakage.py` (append)
 
 **Interfaces:**
-- Consumes: `SWE_BENCH_PRO_DENY_GLOBS`, `materialize_harbor_task_view` (for the monkeypatch spy), `spec_to_job_config`.
+- Consumes: `SWE_BENCH_PRO_DENY_GLOBS`, `DEFAULT_SOLUTION_DENY_GLOBS`, `materialize_harbor_task_view` (for the spy), `spec_to_job_config`.
 
-AC-3 demands proof the PRODUCTION swe branch passes the extended `exclude_globs` (not a test-only constant). Two independent checks: a runtime spy on the materializer call, AND a static `grep -F` over the wiring.
+AC-3 demands proof the PRODUCTION swe branch passes the curated `exclude_globs`. Two independent checks: a runtime spy + a static `grep -F`.
 
 - [ ] **Step 1: Write the test (runtime spy + static grep)**
 
 Append to `tests/unit/test_swe_bench_pro_leakage.py`:
 
 ```python
-def test_swe_branch_passes_extended_exclude_globs_leak(tmp_path, monkeypatch):
+def test_swe_branch_passes_curated_exclude_globs_leak(tmp_path, monkeypatch):
     # AC-3: spy on materialize_harbor_task_view to capture the exclude_globs the
-    # PRODUCTION swe branch passes; assert it is the SWE set, not the bare
-    # default. Mirrors how E1 proves the branch supplies environment_env.
+    # PRODUCTION swe branch passes; assert it is the curated SWE set, not the
+    # bare default. Mirrors how E1 proves the branch supplies environment_env.
     base = FIXTURE_ROOT / "swe-bench-pro-fixture-001"
-    source = tmp_path / "src" / "swe-bench-pro-fixture-001"
+    source = tmp_path / "src_copy" / "swe-bench-pro-fixture-001"
     shutil.copytree(base, source)
 
     captured = {}
@@ -610,7 +642,7 @@ def test_swe_branch_passes_extended_exclude_globs_leak(tmp_path, monkeypatch):
 
 
 def test_swe_branch_wiring_grep_leak():
-    # AC-3 (static): the swe branch source literally passes the SWE deny set.
+    # AC-3 (static): the swe branch source literally passes the curated set.
     src = (
         Path(__file__).parent.parent.parent
         / "src" / "razorback" / "translate.py"
@@ -632,7 +664,7 @@ Expected: one matching line in the swe branch.
 
 ```bash
 git add tests/unit/test_swe_bench_pro_leakage.py
-git commit -m "test(translate): assert swe branch passes extended exclude_globs (AC-3)"
+git commit -m "test(translate): assert swe branch passes curated exclude_globs (AC-3)"
 ```
 
 ---
@@ -644,7 +676,7 @@ git commit -m "test(translate): assert swe branch passes extended exclude_globs 
 - [ ] **Step 1: Run the entity's acceptance command**
 
 Run: `uv run pytest tests/ -k 'swe_bench_pro and leak' -v`
-Expected: all tests in `test_swe_bench_pro_leakage.py` PASS (the `-k` filter selects every test — each test name contains `leak`). Record the pass count.
+Expected: all tests in `test_swe_bench_pro_leakage.py` PASS (every test name contains `leak`). Record the pass count.
 
 - [ ] **Step 2: Run the broader swe + leakage suites for regression**
 
@@ -653,27 +685,29 @@ Expected: all PASS — confirms E1 wiring untouched and spider2 deny-glob proof 
 
 - [ ] **Step 3: No-commit verification gate**
 
-Confirm `git status` shows a clean tree (all task commits landed) and `grep -F 'exclude_globs=SWE_BENCH_PRO_DENY_GLOBS' src/razorback/translate.py` returns the wiring line. Do not claim completion without these two observed.
+Confirm `git status` shows a clean tree and `grep -F 'exclude_globs=SWE_BENCH_PRO_DENY_GLOBS' src/razorback/translate.py` returns the wiring line. Do not claim completion without these two observed.
 
 ---
 
 ## Self-Review
 
 **1. Spec coverage:**
-- AC-1 (view excludes gold/test-patch/answer paths) → Task 1 (constant + deny/allow tests) + Task 2 (positive materialize test, keeps legit repo file). ✓
-- AC-2 (negative test fails when globs reverted) → Task 4; planted files verified to escape the bare default so the revert genuinely leaks; Step 3 proves load-bearing. ✓
-- AC-3 (branch passes extended set, not bare default) → Task 3 (wire) + Task 5 (runtime spy + `grep -F`). ✓
-- Test plan: probe-then-harden → Task 0 (probe note DRIVES the set) + Tasks 1/2/4/5. Acceptance `uv run pytest tests/ -k 'swe_bench_pro and leak'` → Task 6 Step 1; every test name contains `leak`. ✓
-- Out of scope honored: NO `rk audit` SWE signatures; NO new view transform; escalation hook is a Task 0 HALT-and-surface. ✓
+- AC-1 → Task 1 (standalone tuple + deny/allow tests) + Task 2 (positive materialize, keeps `src/answer_engine.py`). ✓
+- AC-2 → Task 4; planted files verified to escape the revert baseline (`solution/**`/`solutions/**`/`tests/expected/**`) so revert genuinely leaks; Step 3 proves load-bearing. ✓
+- AC-3 → Task 3 (wire) + Task 5 (runtime spy + `grep -F`). ✓
+- Test plan: probe-then-harden → Task 0 (probe DRIVES the set) + Tasks 1/2/4/5. Acceptance `-k 'swe_bench_pro and leak'` → Task 6 Step 1. ✓
+- Out of scope honored: NO `rk audit` SWE signatures; NO new view transform; escalation hook is a Task 0 HALT. ✓
 
-**2. Codex P1/P2 findings resolved:**
-- P1 over-match → set is ROOT-ANCHORED (no `**/<token>*`); `test_swe_leak_globs_do_not_overmatch_repo_files` proves `docs/gold_notes.md`/`tests/test_patch_helpers.py`/`a/test_patch/file.py` survive. ✓
-- P1 probe drives set → Task 0 derives the set from the SWE answer-field format and is the explicit producer; the glob set is its OUTPUT. ✓
-- P1 inherited default top-level hole → SWE set adds bare `solution.patch`/`answer*`/`patch`/`patch.diff`; the plan never claims the default covers the top-level family (CRITICAL section states it does not). ✓
-- P2 gold-dir reasoning → dropped the bare-vs-nested-dir closure claim; coverage is FILES under the answer path (`gold/**`), consistent with `assert_no_denied_paths` checking files/symlinks. ✓
+**2. Captain decision (standalone curated set) applied:**
+- `SWE_BENCH_PRO_DENY_GLOBS` is a STANDALONE tuple, NOT `DEFAULT + (...)`; `test_swe_leak_globs_are_standalone_not_default_superset` asserts the broad `**/answer*`/`**/solution.*`/`**/*answers*` are ABSENT and the set is not a default superset. ✓
+- Dropped broad cross-`/` globs; allow-list test proves `src/answer_engine.py`, `lib/myanswers.py`, `pkg/solution_helpers.py` + the earlier set survive. ✓
+- AC-2 revert baseline = answer-artifact globs removed; planted files verified to leak. ✓
+- P2(a): captain-decision note lists ALL root-token collisions (`answer*`/`answers*`/`gold_patch*`/`test_patch*`/`gold.patch`/`solution.*`/`patch`) with the named hypothetical-root files. ✓
+- P2(b): no `**/gold/**` exists in the final set; the stale cycle-1 "bare + nested" entity report line is corrected in the cycle-3 Stage Report. ✓
+- Separate observation (default over-broad for future repo benchmarks) FLAGGED, not fixed. ✓
 
-**3. fnmatch re-verification (deny + allow):** Run at plan time over the final set — all DENY paths match, all ALLOW (legit repo) paths clean, and all planted negative-test files escape the bare default. Evidence reproduced in Task 0 Step 1 and the Task 1 deny/allow tests.
+**3. fnmatch re-verification (deny + allow):** Run at plan time over the final standalone set — all deny paths match, all allow (legit nested repo) paths clean (incl. `src/answer_engine.py`), and all planted negative-test files escape the revert baseline. Evidence reproduced in Task 0 Step 1 and the Task 1 deny/allow tests.
 
 **4. Placeholder scan:** No TBD/TODO/"handle edge cases"/"similar to Task N". Every code step shows complete code; every run step shows command + expected output. ✓
 
-**5. Type consistency:** `SWE_BENCH_PRO_DENY_GLOBS` named identically across Tasks 1-5. `matches_denied_path`, `assert_no_denied_paths`, `materialize_harbor_task_view`, `LeakageError` match `leakage.py`/`materialize.py`. `spec_to_job_config`/`HarborBenchmarkBlock`/`NopAgentBlock`/`Spec` match the E1 test imports. Task 4 plants the same names into an isolated tmp copy as Task 2's committed fixture extras (identical overwrite, no collision). ✓
+**5. Type consistency:** `SWE_BENCH_PRO_DENY_GLOBS` named identically across Tasks 1-5. `matches_denied_path`, `assert_no_denied_paths`, `materialize_harbor_task_view`, `LeakageError` match `leakage.py`/`materialize.py`. `spec_to_job_config`/`HarborBenchmarkBlock`/`NopAgentBlock`/`Spec` match E1 test imports. Task 4 plants into an isolated tmp copy (`src_copy/`) so the committed fixture extras and planted extras overwrite identically — no collision. ✓
