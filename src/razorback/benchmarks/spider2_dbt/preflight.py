@@ -243,6 +243,15 @@ def _resolve_db_path(
 _SOURCE_CALL_RE = re.compile(
     r"""\bsource\s*\(\s*(['"])(?P<source>[^'"]+)\1\s*,\s*(['"])(?P<table>[^'"]+)\3\s*\)"""
 )
+_JINJA_IF_ELSE_RE = re.compile(
+    r"""\{%\s*if\s+(?P<condition>.*?)\s*%\}(?P<true>.*?)\{%\s*else\s*%\}(?P<false>.*?)\{%\s*endif\s*%\}""",
+    re.DOTALL,
+)
+_JINJA_EXPR_RE = re.compile(r"""\{\{\s*(?P<expr>.*?)\s*\}\}""", re.DOTALL)
+_VAR_CALL_RE = re.compile(
+    r"""^var\s*\(\s*(['"])(?P<name>[^'"]+)\1(?:\s*,\s*(?P<default>.*?))?\s*\)$""",
+    re.DOTALL,
+)
 
 
 def _read_dbt_source_tables(workspace: Path) -> set[tuple[str, str]]:
@@ -267,6 +276,7 @@ def _read_dbt_source_tables(workspace: Path) -> set[tuple[str, str]]:
         return set()
 
     referenced_sources = _read_referenced_source_names(workspace)
+    render_context = _read_dbt_render_context(workspace, yaml)
     relations: set[tuple[str, str]] = set()
     for yaml_path in _iter_candidate_dbt_yaml_files(workspace):
         try:
@@ -276,6 +286,9 @@ def _read_dbt_source_tables(workspace: Path) -> set[tuple[str, str]]:
         for source in _iter_dicts(_as_list(_as_dict(document).get("sources"))):
             source_name = source.get("name")
             source_schema = source.get("schema") or source_name
+            source_external_location = _as_dict(source.get("meta")).get(
+                "external_location"
+            )
             for table in _iter_dicts(_as_list(source.get("tables"))):
                 table_name = table.get("name")
                 if not (
@@ -288,9 +301,23 @@ def _read_dbt_source_tables(workspace: Path) -> set[tuple[str, str]]:
                 source_key = (source_name.strip().lower(), table_name.strip().lower())
                 if referenced_sources and source_key not in referenced_sources:
                     continue
+                table_external_location = _as_dict(table.get("meta")).get(
+                    "external_location"
+                )
+                if source_external_location or table_external_location:
+                    continue
                 name = table.get("identifier") or table_name
                 schema = table.get("schema") or source_schema
-                if not (isinstance(schema, str) and schema.strip()):
+                if not (
+                    isinstance(name, str)
+                    and name.strip()
+                    and isinstance(schema, str)
+                    and schema.strip()
+                ):
+                    continue
+                name = _render_dbt_metadata_value(name, render_context)
+                schema = _render_dbt_metadata_value(schema, render_context)
+                if "{{" in name or "{%" in name or "{{" in schema or "{%" in schema:
                     continue
                 relations.add((schema.strip().lower(), name.strip().lower()))
     return relations
@@ -318,6 +345,141 @@ def _read_referenced_source_names(workspace: Path) -> set[tuple[str, str]]:
                 )
             )
     return referenced
+
+
+def _read_dbt_render_context(workspace: Path, yaml_module: Any) -> dict[str, Any]:
+    context: dict[str, Any] = {
+        "vars": {},
+        "target": {"schema": "main"},
+    }
+
+    project_path = workspace / "dbt_project.yml"
+    if project_path.is_file():
+        try:
+            document = yaml_module.safe_load(project_path.read_text())
+        except Exception:
+            document = None
+        vars_value = _as_dict(_as_dict(document).get("vars"))
+        context["vars"] = _flatten_dbt_vars(vars_value)
+
+    target_schema = _read_profiles_target_schema(workspace, yaml_module)
+    if target_schema:
+        context["target"]["schema"] = target_schema
+
+    return context
+
+
+def _flatten_dbt_vars(value: dict[str, Any]) -> dict[str, Any]:
+    flattened: dict[str, Any] = {}
+    for key, child in value.items():
+        if not isinstance(key, str):
+            continue
+        flattened[key] = child
+
+    for child in value.values():
+        if not isinstance(child, dict):
+            continue
+        for key, nested_child in child.items():
+            if isinstance(key, str) and key not in flattened:
+                flattened[key] = nested_child
+    return flattened
+
+
+def _read_profiles_target_schema(workspace: Path, yaml_module: Any) -> str | None:
+    for profiles_path in sorted(workspace.rglob("profiles.yml")):
+        try:
+            document = yaml_module.safe_load(profiles_path.read_text())
+        except Exception:
+            continue
+        for profile in _iter_dicts(list(_as_dict(document).values())):
+            outputs = {
+                name: out
+                for name, out in _as_dict(profile.get("outputs")).items()
+                if isinstance(out, dict)
+            }
+            if not outputs:
+                continue
+
+            target = profile.get("target")
+            selected = None
+            if isinstance(target, str) and target.strip() in outputs:
+                selected = outputs[target.strip()]
+            elif len(outputs) == 1:
+                (selected,) = outputs.values()
+
+            schema = _as_dict(selected).get("schema")
+            if isinstance(schema, str) and schema.strip():
+                return schema.strip()
+    return None
+
+
+def _render_dbt_metadata_value(value: str, context: dict[str, Any]) -> str:
+    text = value
+    while True:
+        match = _JINJA_IF_ELSE_RE.search(text)
+        if match is None:
+            break
+        replacement = (
+            match.group("true")
+            if _eval_dbt_condition(match.group("condition"), context)
+            else match.group("false")
+        )
+        text = text[: match.start()] + replacement + text[match.end() :]
+
+    return _JINJA_EXPR_RE.sub(
+        lambda match: _stringify_dbt_value(
+            _eval_dbt_expr(match.group("expr"), context)
+        ),
+        text,
+    )
+
+
+def _eval_dbt_condition(expr: str, context: dict[str, Any]) -> bool:
+    value = _eval_dbt_expr(expr, context)
+    if isinstance(value, str):
+        return value.lower() not in {"", "0", "false", "none", "null"}
+    return bool(value)
+
+
+def _eval_dbt_expr(expr: str, context: dict[str, Any]) -> Any:
+    parts = [part.strip() for part in expr.split("~")]
+    if len(parts) > 1:
+        return "".join(
+            _stringify_dbt_value(_eval_dbt_expr(part, context)) for part in parts
+        )
+
+    value = expr.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    if value == "target.schema":
+        return _as_dict(context.get("target")).get("schema", "main")
+    if value.lower() == "true":
+        return True
+    if value.lower() == "false":
+        return False
+
+    var_match = _VAR_CALL_RE.match(value)
+    if var_match:
+        var_name = var_match.group("name")
+        vars_value = _as_dict(context.get("vars"))
+        if var_name in vars_value:
+            return vars_value[var_name]
+        default = var_match.group("default")
+        if default is not None:
+            return _eval_dbt_expr(default, context)
+        return ""
+
+    return value
+
+
+def _stringify_dbt_value(value: Any) -> str:
+    if value is True:
+        return "true"
+    if value is False:
+        return "false"
+    if value is None:
+        return ""
+    return str(value)
 
 
 def _format_relations(relations: set[tuple[str, str]]) -> list[str]:
