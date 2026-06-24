@@ -142,3 +142,27 @@ The single production change is in `src/razorback/translate.py`: added `_is_swe_
 Full suite: `uv run --frozen pytest tests/ -q` → 4 failed, 845 passed, 12 skipped. The 11 new swe-bench-pro tests all pass. The 4 failures (`test_codex_runtime_dispatch_constructs_inner_agent`, `test_worktree_remove_force_does_not_destroy_runs`, `test_matrix_specs_carry_query_mode_batch`, `test_rk_research_new_creates_scaffold_tree`) reproduce IDENTICALLY on the base commit 31dadd0 — they are pre-existing, NOT regressions. `ruff check` clean on all changed files.
 
 **Deviation (test-only, no production impact):** Plan T4 Step 1 asserted `not (view / "solution").exists()`. The materializer's `solution/**` deny-glob strips files UNDER `solution/` but leaves the empty `solution/` directory node (the glob does not match the bare `solution` path; `_reflect_allowed_files` recreates dirs unconditionally; `assert_no_denied_paths` only inspects files/symlinks). This is intrinsic materializer behavior owned by E2 (deny-glob hardening, out of scope here), and the materializer is read-only for this entity. The leaked-FILE assertion (`not (view/"solution"/"gold_patch.diff").exists()`) — the real leakage contract AC-1 gates on — holds. I relaxed the over-strict empty-dir assertion to "no files survive anywhere under `solution/`", which proves leakage-clean without depending on E2-owned behavior. The plan itself anticipated friction here ("If the `solution/` assertion FAILS, confirm `DEFAULT_SOLUTION_DENY_GLOBS` still contains `solution/**`" — it does).
+
+## Stage Report: validation
+
+- DONE: Confirm worktree clean + at branch tip.
+  `git status` clean; `git log --oneline main..HEAD` = 10 commits ending f838094. Production diff contained to `src/razorback/translate.py`.
+- DONE: AC-1 — N materialized view dirs with `view_manifest.json benchmark_kind == "swe-bench-pro"`, materializer branch NOT pass-through.
+  PASS. `test_swe_resolves_n_views_with_manifest_leakage_clean` + `test_swe_ref_takes_materializer_branch_not_passthrough` (+3) PASSED.
+- DONE: AC-2 — each view `task.toml` carries `RAZORBACK_BENCHMARK_KIND` + `RAZORBACK_BENCHMARK_TASK_ID`.
+  PASS. `test_materialized_view_carries_benchmark_env` PASSED; env merged (not synthesized).
+- DONE: AC-3 — `rk run <spec>.frozen.yaml --explain --explain-format json` via in-process CliRunner asserting `payload["prompt"]["task_paths"]`.
+  PASS. `test_rk_run_explain_lists_swe_task_views` PASSED; reproduced exit 0 + 2 task_paths; patches BOTH `_resolve_harbor_dataset_tasks` AND `razorback.cli.run._run_canary`.
+- DONE: Full suite `uv run pytest tests/ -q` with regression-vs-preexisting classification.
+  845 passed / 4 failed / 12 skipped. All 4 failures INDEPENDENTLY reproduced on base `main` (detached worktree HEAD ccc2f3a) → PRE-EXISTING, zero regressions.
+- DONE: Pass-through + spider2 path unchanged.
+  `pytest tests/unit/test_translate_harbor_block.py tests/unit/test_translate_spider2_dbt.py -q` → 21 passed.
+- DONE: Scrutinize T4 deviation (relaxed empty-`solution/`-dir assertion).
+  SOUND. On-disk repro: `solution/` is an empty dir (rglob `[]`, no files/symlinks); `gold_patch.diff` ABSENT. Not a leakage concern — empty dir carries no answer content; E2-owned behavior.
+- DONE: `superpowers:requesting-code-review` against base `main`.
+  No Critical/Important; 3 Minor (import-order — active `ruff check` passes; fixture double-prefix; literal-vs-constant). All NON-blocking.
+- DONE: T8 live `harbor download` smoke correctly NOT run by implementation.
+  Confirmed non-gating, validation-owned. Recorded as DEFERRED follow-up; no network access attempted. PKG-40 blocker status UNVERIFIED (no live run); captain to pin a concrete `@<ref>` before E3/live.
+
+### Summary
+Fresh independent verification reproduced all 3 ACs from the committed branch tip — all PASS. The full suite shows 845 passed / 4 failed; I independently confirmed (in a detached `main` worktree) that all 4 failures reproduce identically on base and are pre-existing, NOT regressions from this branch. Code review surfaced only cosmetic Minor nits (none blocking; active ruff is clean). The one documented deviation (empty `solution/` dir survives but holds no files) was verified true on disk and is not a leakage concern — the load-bearing `gold_patch.diff`-absent assertion holds. T8 live smoke correctly deferred as non-gating. Full report: `docs/razorback-implementation/validation/swe-bench-pro-hydration-resolve-smoke.md`. **GATE DECISION: APPROVE** (status field left unchanged — captain/FO owns the gate).
