@@ -281,6 +281,25 @@ the backstop (copy-time deny-globs stay as best-effort stripping). Also: add
 the top-level-collision over-match a documented residual tied to
 captain-decision #1 (real layout). Addressed in cycle 2 below.
 
+### Cycle 2 — validation gate REJECTED (2026-06-24)
+
+The fail-closed guard was correct in shape, but a fresh validator and Codex
+independently found TWO probe-proven residual LEAKS in `is_swe_answer_artifact`
+/ `assert_no_swe_answer_leak`:
+1. **Guard basename set omitted `patch` / `patch.diff` (Codex P1).** The
+   deny-glob set strips these at the root, but the deep guard's basename set
+   did not include them — so nested `repo/patch`, `repo/patch.diff`,
+   `meta/patch.diff` leaked (a backstop weaker than the front-line strip). Fix:
+   add `patch` + `patch.diff` to `_SWE_ANSWER_BASENAMES` (exact-basename match
+   keeps `lib/patch.py`, `src/patches/apply.py`, `mypatch.diff` clean).
+2. **`gold/` parent-dir rule was case-SENSITIVE (validator, blocking).** A file
+   under `Gold/` or `GOLD/` leaked (`is_swe_answer_artifact('x/Gold/secret.diff')
+   == False`). Fix: case-fold the compare — `parts[-2].lower() ==
+   _SWE_ANSWER_PARENT_DIR`.
+Out of scope (kept as documented residual, captain-decision #1): bare `gold`
+(no ext), `golden_patch.diff`, `test_patch.txt`, answers under a non-`gold`
+dir, top-level over-match. Addressed in cycle 3 below.
+
 ## Stage Report: implementation (cycle 2)
 
 - DONE: PRIMARY FIX — fail-closed deep-scan leak guard `assert_no_swe_answer_leak`
@@ -358,3 +377,39 @@ own "safe superset" claim is false for the dir rule. CONCRETE FIX (one word):
 guard-raises test. Re-validate: case-folded dir rule catches `Gold/`/`GOLD/`. The two
 Minor findings (basename-glob redundancy, dir-symlink scan-stop) and all uncovered
 unknowable-filename leak shapes remain captain-decision #1 and are non-blocking.
+
+## Stage Report: implementation (cycle 3)
+
+- DONE: FIX 1 — guard basename set now includes `patch` / `patch.diff`
+  Added both to `_SWE_ANSWER_BASENAMES`; probe-confirmed `is_swe_answer_artifact('repo/patch.diff')==True`. Backstop no longer weaker than the deny-glob strip (commit 668e18d).
+- DONE: FIX 1 no-false-positive
+  `test_swe_answer_leak_guard_patch_basename_no_false_positive_leak` — `lib/patch.py`, `src/patches/apply.py`, `mypatch.diff`, `patch_utils.py`, `docs/patch_notes.md` stay clean (exact-basename match).
+- DONE: FIX 2 — `gold/` parent-dir rule case-folded
+  Changed to `parts[-2].lower() == _SWE_ANSWER_PARENT_DIR` (leakage.py); probe-confirmed `is_swe_answer_artifact('x/Gold/secret.diff')==True`, `repo/GOLD/x.diff==True`.
+- DONE: load-bearing for BOTH new cases
+  Neuter guard → `test_swe_answer_leak_guard_raises_on_nested_plain_patch_leak` AND `..._raises_on_uppercase_gold_dir_leak` FAIL ("DID NOT RAISE"); restore → green.
+- DONE: minor — `gold_patch.*` glob kept (NOT redundant)
+  Documented inline: the glob covers `gold_patch.patch`/`gold_patch.json` variants the `gold_patch.diff` literal does not; kept.
+- DONE: minor — `rglob` symlink-descent flagged
+  One-line code comment in `assert_no_swe_answer_leak` notes rglob does not descend directory-level symlinks (latent, non-reachable for copy-mode); not re-architected.
+- DONE: out-of-scope residuals not chased
+  bare `gold`, `golden_patch.diff`, `test_patch.txt`, non-`gold`-dir nesting, top-level over-match left as documented captain-decision #1 residual.
+- DONE: gates
+  `pytest tests/ -q` → 860 passed / 4 pre-existing failures (unchanged) / 12 skipped; `ruff check` clean on changed files; shared `DEFAULT_SOLUTION_DENY_GLOBS` byte-identical to main; generic materialize default param + spider2 path untouched; guard referenced only in the swe-bench-pro branch.
+
+### Implementation summary (cycle 3)
+
+Two exact, load-bearing fixes in `src/razorback/harbor_tasks/leakage.py`:
+(1) added `patch` and `patch.diff` to the deep guard's `_SWE_ANSWER_BASENAMES`
+so the backstop is no weaker than the front-line deny-glob strip (exact-basename
+match keeps repo files that merely contain "patch" clean); (2) case-folded the
+`gold/` parent-dir comparison so `Gold/`/`GOLD/` directories no longer leak.
+Three cycle-3 tests added to `tests/unit/test_swe_bench_pro_leakage.py` (two
+guard-RAISES — both proven load-bearing by neutering — plus one
+no-false-positive); both fixes also verified at the predicate level via probe.
+Minor: kept the non-redundant `gold_patch.*` glob with an explanatory comment;
+flagged the rglob symlink-descent latent in a one-line code comment. No
+deviation from the cycle-3 brief. Out-of-scope residuals (bare `gold`,
+`golden_patch.diff`, non-`gold`-dir nesting, top-level over-match) left as the
+documented captain-decision #1 residual. Full suite 860 passed, 4 pre-existing
+failures unchanged. Shared default + generic/spider2 paths untouched.
