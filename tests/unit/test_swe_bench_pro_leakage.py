@@ -353,3 +353,65 @@ def test_swe_branch_deep_guard_raises_on_nested_leak_in_production_leak(
             jobs_dir=tmp_path,
             tasks_root=tmp_path / "tasks",
         )
+
+
+# --- cycle 3: close two probe-proven residual guard leaks ---
+
+
+def test_swe_answer_leak_guard_raises_on_nested_plain_patch_leak(tmp_path):
+    # FIX 1 (LOAD-BEARING): SWE_BENCH_PRO_DENY_GLOBS strips root `patch`/
+    # `patch.diff` but the deep guard's basename set omitted them, so nested
+    # `repo/patch`, `repo/patch.diff`, `meta/patch.diff` leaked. A backstop
+    # weaker than the front-line strip is the bug. Guard must RAISE on them.
+    from razorback.harbor_tasks.leakage import (
+        assert_no_swe_answer_leak,
+        is_swe_answer_artifact,
+    )
+
+    for rel in ["repo/patch", "repo/patch.diff", "meta/patch.diff"]:
+        assert is_swe_answer_artifact(rel), rel
+    view = tmp_path / "view"
+    (view / "repo").mkdir(parents=True)
+    (view / "meta").mkdir()
+    (view / "repo" / "patch").write_text("+return 42\n")
+    (view / "repo" / "patch.diff").write_text("+return 42\n")
+    (view / "meta" / "patch.diff").write_text("+return 42\n")
+    with pytest.raises(LeakageError):
+        assert_no_swe_answer_leak(view)
+
+
+def test_swe_answer_leak_guard_patch_basename_no_false_positive_leak():
+    # FIX 1 guard: exact-basename match means repo files whose name merely
+    # CONTAINS "patch" must NOT trip (`lib/patch.py`, `src/patches/apply.py`,
+    # `mypatch.diff`, `patch_utils.py`).
+    from razorback.harbor_tasks.leakage import is_swe_answer_artifact
+
+    for rel in [
+        "lib/patch.py",
+        "src/patches/apply.py",
+        "mypatch.diff",
+        "patch_utils.py",
+        "docs/patch_notes.md",
+    ]:
+        assert not is_swe_answer_artifact(rel), rel
+
+
+def test_swe_answer_leak_guard_raises_on_uppercase_gold_dir_leak(tmp_path):
+    # FIX 2 (LOAD-BEARING): the `gold/` parent-dir rule was case-SENSITIVE, so
+    # a file under `Gold/` or `GOLD/` leaked. Guard must RAISE on them.
+    from razorback.harbor_tasks.leakage import (
+        assert_no_swe_answer_leak,
+        is_swe_answer_artifact,
+    )
+
+    for rel in ["repo/Gold/anything", "repo/GOLD/x.diff", "x/Gold/secret.diff"]:
+        assert is_swe_answer_artifact(rel), rel
+    # Use distinct parent paths for the on-disk walk: a case-insensitive FS
+    # (macOS) would collide `repo/Gold` and `repo/GOLD` as one dir.
+    view = tmp_path / "view"
+    (view / "a" / "Gold").mkdir(parents=True)
+    (view / "b" / "GOLD").mkdir(parents=True)
+    (view / "a" / "Gold" / "anything").write_text("+secret\n")
+    (view / "b" / "GOLD" / "x.diff").write_text("+secret\n")
+    with pytest.raises(LeakageError):
+        assert_no_swe_answer_leak(view)

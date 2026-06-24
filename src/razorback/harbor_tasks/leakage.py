@@ -84,8 +84,16 @@ _SWE_ANSWER_BASENAMES = frozenset(
         "fail_to_pass.json",
         "pass_to_pass.json",
         "solution.patch",
+        # `patch` / `patch.diff` are answer artifacts the deny-glob set strips at
+        # the root; the deep guard MUST cover them too or it is weaker than the
+        # front-line strip (a nested `repo/patch.diff` would leak). Exact-basename
+        # match keeps `lib/patch.py`, `src/patches/apply.py`, `mypatch.diff` clean.
+        "patch",
+        "patch.diff",
     }
 )
+# Keep the `gold_patch.*` glob alongside the `gold_patch.diff` literal: it is NOT
+# redundant — it also covers `gold_patch.patch` / `gold_patch.json` variants.
 _SWE_ANSWER_BASENAME_GLOBS = ("gold_patch.*",)
 _SWE_ANSWER_PARENT_DIR = "gold"
 
@@ -103,7 +111,9 @@ def is_swe_answer_artifact(rel_path: str | Path) -> bool:
         return True
     if any(fnmatch.fnmatch(base, glob) for glob in _SWE_ANSWER_BASENAME_GLOBS):
         return True
-    if len(parts) >= 2 and parts[-2] == _SWE_ANSWER_PARENT_DIR:
+    # case-fold the parent-dir compare too, so files under `Gold/`/`GOLD/` are
+    # caught (the basenames are already case-folded above).
+    if len(parts) >= 2 and parts[-2].lower() == _SWE_ANSWER_PARENT_DIR:
         return True
     return False
 
@@ -117,6 +127,10 @@ def assert_no_swe_answer_leak(view_dir: Path) -> None:
     """
     root = Path(view_dir)
     leaked: list[str] = []
+    # NOTE: `rglob` does not descend INTO directory-level symlinks; a view that
+    # symlinked a whole answer dir in would not be walked through. Latent and
+    # non-reachable for the copy-mode materializer (view_mode="copy"); flagged,
+    # not re-architected.
     for path in sorted(root.rglob("*")):
         if not path.is_file() and not path.is_symlink():
             continue
