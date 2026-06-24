@@ -1,0 +1,21 @@
+# ABOUTME: Fixture frozen spec — kind:harbor swe-bench-pro for rk run --explain (AC-3).
+# ABOUTME: T7 resolves it offline by monkeypatching _resolve_harbor_dataset_tasks in-process.
+version: 1
+experiment: swe-bench-pro-fixture
+agent:
+  kind: nop
+benchmark:
+  kind: harbor
+  dataset: scale-ai/swe-bench-pro@latest
+  tasks: null
+  exclude_tasks: null
+  n_tasks: null
+  plugin: null
+  plugin_args: null
+trials: 1
+concurrency:
+  trials: 1
+observers:
+  - kind: jsonl
+    path: events.jsonl
+  - kind: stdout
