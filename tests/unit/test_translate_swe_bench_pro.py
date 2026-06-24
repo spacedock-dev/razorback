@@ -1,7 +1,14 @@
 # tests/unit/test_translate_swe_bench_pro.py
 # ABOUTME: AC-1/AC-2 — swe-bench-pro kind:harbor wiring through the generic materializer.
 # ABOUTME: Fixture-backed, network-free via the _resolve_harbor_dataset_tasks monkeypatch seam.
-from razorback.translate import _is_swe_bench_pro_dataset
+import json
+from pathlib import Path
+
+import pytest
+from harbor.models.task.config import TaskConfig as HarborTaskConfig
+
+from razorback.spec.schema import HarborBenchmarkBlock, NopAgentBlock, Spec
+from razorback.translate import _is_swe_bench_pro_dataset, spec_to_job_config
 
 
 def test_detects_swe_bench_pro_fully_qualified():
@@ -22,14 +29,6 @@ def test_rejects_unparseable_bare_form():
     # the helper swallows the error and returns False. Verified at plan time.
     assert _is_swe_bench_pro_dataset("swe-bench-pro@latest") is False
 
-
-import json
-from pathlib import Path
-
-import pytest
-
-from razorback.spec.schema import HarborBenchmarkBlock, NopAgentBlock, Spec
-from razorback.translate import spec_to_job_config
 
 FIXTURE_ROOT = (
     Path(__file__).parent.parent
@@ -188,9 +187,6 @@ def test_n_tasks_caps_swe_before_materialize(tmp_path, monkeypatch):
         spec, job_name="job", jobs_dir=tmp_path, tasks_root=tmp_path / "tasks"
     )
     assert len(job_config.tasks) == 1
-
-
-from harbor.models.task.config import TaskConfig as HarborTaskConfig
 
 
 def test_materialized_view_carries_benchmark_env(tmp_path, monkeypatch):
