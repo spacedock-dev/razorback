@@ -117,3 +117,35 @@ reverted to the bare default. Open captain decisions: (1) the exact swe glob
 set, (2) the offline-unverifiable assumption that harbor lands the gold/test
 patch as sibling files (not inline in task.toml/verifier metadata) — Task 0
 records this and HALTs to the captain if a future hydration shows inline.
+
+## Stage Report: plan (cycle 2)
+
+Reworked after a Codex antagonist review found 3 P1 + 1 P2. Root cause: `matches_denied_path` uses `fnmatch.fnmatch` where `*` CROSSES `/` — the cycle-1 broad `**/gold*`/`**/test_patch*` globs over-matched legit repo files.
+
+- DONE: [P1] over-match / false positives
+  Redesigned to a ROOT-ANCHORED set (no `**/<token>*`); added an allow-side test proving `docs/gold_notes.md`, `tests/test_patch_helpers.py`, `a/test_patch/file.py` are NOT stripped. Verified live via fnmatch.
+- DONE: [P1] probe must DRIVE the set
+  Task 0 now derives the glob set from the SWE answer-field format; the set is its explicit OUTPUT, not finalized blind. Covers plain `patch`/`patch.diff` per design doc :70-74.
+- DONE: [P1] inherited default top-level hole
+  Added bare `solution.patch`/`answer*`/`patch`/`patch.diff` (swe-scoped, not mutating the shared default). Plan's CRITICAL section states the default does NOT cover the top-level family. Verified `**/solution.*` misses root `solution.patch`.
+- DONE: [P2] gold-dir reasoning
+  Dropped the bare-vs-nested-dir closure claim; coverage is FILES under the answer path (`assert_no_denied_paths` only checks files/symlinks).
+- DONE: re-verify final set over deny + allow lists
+  16 deny + 16 allow paths through `matches_denied_path`: all deny match, all allow clean. Planted negative-test files all escape the bare default (AC-2 stays load-bearing).
+- DONE: self-review
+  Added a Codex-findings-resolved section to the plan self-review.
+
+### Summary
+
+Cycle-1 used broad `**/gold*`/`**/test_patch*` token globs that, under
+`fnmatch` semantics (`*` crosses `/`), would strip legitimate files in the
+real django/astropy repos swe-bench-pro ships — corrupting the benchmark.
+Cycle-2 anchors every SWE answer-artifact glob at the task ROOT
+(`gold/**`, `gold_patch*`, `test_patch*`, `FAIL_TO_PASS*`, `PASS_TO_PASS*`,
+`patch`, `patch.diff`, `solution.patch`, `answer*`), closing the inherited
+default's top-level hole swe-scoped, and adds a load-bearing allow-side test.
+Final glob set: `SWE_BENCH_PRO_DENY_GLOBS = DEFAULT + (gold/**, gold_patch*,
+gold.patch, test_patch*, FAIL_TO_PASS*, PASS_TO_PASS*, patch, patch.diff,
+solution.patch, answer*)`. Residual captain decisions: (1) exact harbor
+answer filenames; (2) explicit no-blanket-`*.patch` judgement; (3) bare
+`patch`/`answer*` root-segment surface; (4) inline-patch escalation hook.
