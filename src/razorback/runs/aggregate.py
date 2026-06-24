@@ -128,10 +128,12 @@ def _resolve_stratum(trial_dir: Path) -> dict | None:
     return _parse_stratum_from_trial_name(trial_dir.name)
 
 
-def _stratum_from_manifest_payload(payload: dict | None) -> dict | None:
+def _stratum_from_manifest_payload(payload: object) -> dict | None:
     """Shape a view_manifest.json payload into a stratum dict, or None when it
     lacks the required identity fields."""
-    if payload is None:
+    # `_read_json` can return any JSON type; a non-dict (e.g. a list) from a
+    # malformed view_manifest.json must not crash aggregation.
+    if not isinstance(payload, dict):
         return None
     benchmark_kind = payload.get("benchmark_kind")
     benchmark_task_id = payload.get("benchmark_task_id")
@@ -167,6 +169,11 @@ def _stratum_from_config_task_path(trial_dir: Path) -> dict | None:
     if not raw_path:
         return None
     view_dir_name = Path(str(raw_path)).name
+    # Reject a basename that is empty or a traversal token (`.`/`..`) — a
+    # tampered config.json must not let `views_root / view_dir_name` escape
+    # the run's tasks root.
+    if view_dir_name in ("", ".", ".."):
+        return None
     # Re-anchor under THIS run's tasks_root and ONLY there. The recorded
     # `task.path` may be absolute, cwd-relative, or from another machine; for a
     # moved/copied run the stale absolute path can still exist and point at the
