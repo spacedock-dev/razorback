@@ -315,3 +315,46 @@ broad token globs — so deep-scanning at all depths catches nested answers
 without false-positiving legit nested repo files. No deviation from the
 cycle-2 brief; the over-match residual is documented, not narrowed, per the
 captain's leak-first priority.
+
+## Stage Report: validation (cycle 2)
+
+- DONE: Worktree clean + at branch tip
+  `git status` clean; `git log --oneline main..HEAD` shows cycle-2 guard commits 11b85e7 + f3e8b66 at tip. PASS.
+- DONE: THE GUARD (2) — read `assert_no_swe_answer_leak`+`is_swe_answer_artifact` (leakage.py:93-131); wired at translate.py:446 AFTER materialize (line 433) in the swe else-branch, before `task_paths.append` → production, not test-only. PASS.
+- DONE: 2a — raises on NESTED answers
+  Own tmp-dir probe: `repo/test_patch.diff`, `meta/gold_patch.diff`, `repo/sub/FAIL_TO_PASS.json`, `gold/anything.txt` all → `is_swe_answer_artifact`=True; `assert_no_swe_answer_leak` RAISED LeakageError listing all 4. Named tests pass (12/12). PASS.
+- DONE: 2b — NO false positive on legit nested files
+  Own probe: `tests/test_patch_helpers.py`, `src/answer_engine.py`, `lib/patch.py`, `docs/gold_notes.md`, `a/test_patch/file.py`, `src/patches/apply.py`, `config/answers_schema.json` all → False; `assert_no_swe_answer_leak` on legit-only view did NOT raise. PASS.
+- DONE: 3 — LOAD-BEARING
+  Neutered `is_swe_answer_artifact` → `return False`: 2 nested-leak tests FAILED ("DID NOT RAISE LeakageError"), incl. production-path `test_swe_branch_deep_guard_raises_on_nested_leak_in_production_leak`. Restored → 2 passed, git diff clean. Genuinely load-bearing. PASS.
+- DONE: 4 — 3 original ACs still green
+  `pytest -k 'swe_bench_pro and leak'` → 13 passed. AC-2 independent revert (dropped answer-artifact globs) → 5 tests FAIL (planted root answers no longer glob-stripped; deep guard still catches them). Load-bearing confirmed. PASS.
+- DONE: 5 — case-insensitivity (P2)
+  Own probe: `Gold.patch`, `GOLD_PATCH.DIFF`, `gold.diff`, `Test_Patch.diff`, `FAIL_TO_PASS.JSON` all → True (basenames case-folded). PASS for basenames.
+- FAILED: 5 — case-insensitivity is INCOMPLETE for the `gold/` dir rule
+  `is_swe_answer_artifact('x/Gold/secret.diff')`=False, `'x/GOLD/secret.diff')`=False, but `'x/gold/secret.diff')`=True. The `gold/`-parent rule (leakage.py:106) compares case-SENSITIVELY while basenames are case-folded — partial implementation of the cycle-1-directed "make the guard case-insensitive". The code comment (leakage.py:73-76) claims case-fold is a "safe superset" — NOT true for the dir rule. Reachable shape: an answer file under a `Gold/` dir leaks silently. BLOCKING.
+- DONE: 6 — shared default + pass-through unchanged
+  `git diff main -- leakage.py` = NO REMOVALS (additions only); `DEFAULT_SOLUTION_DENY_GLOBS` byte-identical on main (7-14); `materialize.py:36` default param still `DEFAULT_SOLUTION_DENY_GLOBS`; `git diff main --stat` touches NO `src/razorback/benchmarks/` (spider2/ade pass-through untouched). PASS.
+- DONE: 7 — full suite + 4-failure pre-existing
+  `pytest tests/ -q` → 857 passed, 4 failed, 12 skipped. The 4 (test_codex_runtime_dispatch, test_worktree_remove_force, test_matrix_specs_carry_query_mode_batch, test_rk_research_new) reproduce on a throwaway detached `main` worktree where the SWE guard is ABSENT (grep count 0) → pre-existing, not regressions. E1 swe+spider2: 121 passed. PASS.
+- DONE: 8 — code review (superpowers:requesting-code-review, base main)
+  1 Important (the case-sensitive `gold/` dir compare — independently reproduced above), 2 Minor (basename-glob redundancy; dir-symlink scan-stop latent coupling). Reviewer verdict "With fixes". Over-match residual = captain-decision #1, accept-as-documented (over-strip not under-strip). Uncovered leak shapes (bare `gold` no-ext, non-answer-named `*.patch`, non-`gold/` nested dir like `solution/the_fix.diff`/`meta/answer.patch`) all collapse to captain-decision #1 (unknowable offline filenames).
+
+### Summary (validation cycle 2)
+
+GATE: **REJECT → implementation.** The cycle-2 deep-scan guard genuinely closes the
+nested-leak hole and is LOAD-BEARING (neuter → 2 nested-leak tests fail incl. the
+production-path one; restore → green) with NO false positive on the 7 legit nested
+repo files, wired into production at translate.py:446 after materialize. The 3
+original ACs stay green (AC-2 revert load-bearing), the shared default + generic
+pass-through are byte-identical to main, and the 4 full-suite failures are confirmed
+pre-existing on a clean-main worktree. ONE blocking gap: cycle-1 explicitly directed
+"make the guard case-insensitive", but `is_swe_answer_artifact` case-folds only the
+basename — the `gold/` parent-dir rule (leakage.py:106) compares case-sensitively, so
+`Gold/secret.diff` / `GOLD/x.diff` leak silently while `gold/x.diff` raises. The code's
+own "safe superset" claim is false for the dir rule. CONCRETE FIX (one word):
+`leakage.py:106` change `parts[-2] == _SWE_ANSWER_PARENT_DIR` →
+`parts[-2].lower() == _SWE_ANSWER_PARENT_DIR`, and add a `Gold/`-nested-dir case to the
+guard-raises test. Re-validate: case-folded dir rule catches `Gold/`/`GOLD/`. The two
+Minor findings (basename-glob redundancy, dir-symlink scan-stop) and all uncovered
+unknowable-filename leak shapes remain captain-decision #1 and are non-blocking.
