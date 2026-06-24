@@ -128,7 +128,74 @@ def _resolve_stratum(trial_dir: Path) -> dict | None:
     return _parse_stratum_from_trial_name(trial_dir.name)
 
 
+def _stratum_from_manifest_payload(payload: object) -> dict | None:
+    """Shape a view_manifest.json payload into a stratum dict, or None when it
+    lacks the required identity fields."""
+    # `_read_json` can return any JSON type; a non-dict (e.g. a list) from a
+    # malformed view_manifest.json must not crash aggregation.
+    if not isinstance(payload, dict):
+        return None
+    benchmark_kind = payload.get("benchmark_kind")
+    benchmark_task_id = payload.get("benchmark_task_id")
+    if not benchmark_kind or not benchmark_task_id:
+        return None
+    return {
+        "dataset": str(benchmark_kind),
+        "query_id": str(benchmark_task_id),
+        "benchmark_kind": str(benchmark_kind),
+        "benchmark_task_id": str(benchmark_task_id),
+    }
+
+
+def _stratum_from_config_task_path(trial_dir: Path) -> dict | None:
+    """Resolve the view manifest from the trial's recorded task path.
+
+    Harbor persists `<trial_dir>/config.json` (TrialConfig) carrying
+    `task.path` = the full materialized view-dir path razorback passed
+    (harbor/trial/trial.py writes config.json; TaskConfig.path round-trips
+    verbatim). Reading the manifest from that path avoids ALL trial-dir-name
+    parsing, so canonical swe-bench-pro slugs (which contain `__` and exceed
+    the 32-char join window) resolve correctly — no `__` mis-cut, no `[:32]`
+    collision. Returns None to fall back to the dir-name join when config.json
+    is absent or carries no usable task path.
+    """
+    config = _read_json(trial_dir / "config.json")
+    if not isinstance(config, dict):
+        return None
+    task = config.get("task")
+    if not isinstance(task, dict):
+        return None
+    raw_path = task.get("path")
+    if not raw_path:
+        return None
+    view_dir_name = Path(str(raw_path)).name
+    # Reject a basename that is empty or a traversal token (`.`/`..`) — a
+    # tampered config.json must not let `views_root / view_dir_name` escape
+    # the run's tasks root.
+    if view_dir_name in ("", ".", ".."):
+        return None
+    # Re-anchor under THIS run's tasks_root and ONLY there. The recorded
+    # `task.path` may be absolute, cwd-relative, or from another machine; for a
+    # moved/copied run the stale absolute path can still exist and point at the
+    # WRONG run's manifest, so we MUST NOT read `Path(raw_path)` directly — we
+    # use only the basename re-anchored under this run. The view-dir name is the
+    # stable join key and the view always lives under run_dir/tasks.
+    views_root = task_views_root(trial_dir.parent)
+    manifest = views_root / view_dir_name / "view_manifest.json"
+    if manifest.is_file():
+        return _stratum_from_manifest_payload(_read_json(manifest))
+    return None
+
+
 def _resolve_stratum_from_task_view_manifest(trial_dir: Path) -> dict | None:
+    # Preferred: resolve directly from the trial's recorded task path
+    # (robust to canonical `__` slugs + long-slug [:32] collisions).
+    via_config = _stratum_from_config_task_path(trial_dir)
+    if via_config is not None:
+        return via_config
+
+    # Fallback: the legacy dir-name join. Keeps short, __-free slugs
+    # (dabstep/spider2/ade) and config-less/legacy run dirs working.
     run_dir = trial_dir.parent
     views_root = task_views_root(run_dir)
     if not views_root.is_dir():
@@ -136,22 +203,10 @@ def _resolve_stratum_from_task_view_manifest(trial_dir: Path) -> dict | None:
 
     trial_prefix = trial_dir.name.split("__", 1)[0]
     for manifest_path in sorted(views_root.glob("*/view_manifest.json")):
-        payload = _read_json(manifest_path)
-        if payload is None:
-            continue
         view_name = manifest_path.parent.name[:32].rstrip("_-")
         if trial_prefix != view_name:
             continue
-        benchmark_kind = payload.get("benchmark_kind")
-        benchmark_task_id = payload.get("benchmark_task_id")
-        if not benchmark_kind or not benchmark_task_id:
-            return None
-        return {
-            "dataset": str(benchmark_kind),
-            "query_id": str(benchmark_task_id),
-            "benchmark_kind": str(benchmark_kind),
-            "benchmark_task_id": str(benchmark_task_id),
-        }
+        return _stratum_from_manifest_payload(_read_json(manifest_path))
     return None
 
 
