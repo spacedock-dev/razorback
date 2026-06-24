@@ -187,6 +187,88 @@ def test_unreadable_sql_file_is_skipped_for_source_reference_scan(
     assert result["status"] == "passed"
 
 
+def test_dbt_source_metadata_renders_target_schema_and_vars(tmp_path: Path) -> None:
+    (tmp_path / "profiles.yml").write_text(
+        "\n".join(
+            [
+                "example:",
+                "  target: dev",
+                "  outputs:",
+                "    dev:",
+                "      type: duckdb",
+                "      path: db.duckdb",
+                "      schema: warehouse",
+                "",
+            ]
+        )
+    )
+    (tmp_path / "dbt_project.yml").write_text(
+        "\n".join(
+            [
+                "vars:",
+                "  seed_source: true",
+                "  package:",
+                "    raw_orders_identifier: raw_orders",
+                "",
+            ]
+        )
+    )
+    models = tmp_path / "models"
+    models.mkdir()
+    (models / "sources.yml").write_text(
+        "\n".join(
+            [
+                "version: 2",
+                "sources:",
+                "  - name: seeded",
+                "    schema: \"{% if var('seed_source') %}{{ target.schema ~ '_seeds' }}{% else %}{{ target.schema }}{% endif %}\"",
+                "    tables:",
+                "      - name: orders",
+                '        identifier: \'{{ var("raw_orders_identifier", "orders") }}\'',
+                "",
+            ]
+        )
+    )
+    (models / "uses_orders.sql").write_text(
+        "select * from {{ source('seeded', 'orders') }}\n"
+    )
+    _write_duckdb_relations(tmp_path / "db.duckdb", {("warehouse_seeds", "raw_orders")})
+
+    result = preflight_spider2_workspace(task_id="t", workspace=tmp_path)
+
+    assert result["status"] == "passed"
+    assert result["required_tables"] == ["warehouse_seeds.raw_orders"]
+
+
+def test_dbt_source_metadata_skips_external_location_sources(tmp_path: Path) -> None:
+    models = tmp_path / "models"
+    models.mkdir()
+    (models / "sources.yml").write_text(
+        "\n".join(
+            [
+                "version: 2",
+                "sources:",
+                "  - name: external",
+                "    schema: raw",
+                "    meta:",
+                "      external_location: data/{identifier}.csv",
+                "    tables:",
+                "      - name: orders",
+                "",
+            ]
+        )
+    )
+    (models / "uses_orders.sql").write_text(
+        "select * from {{ source('external', 'orders') }}\n"
+    )
+    _write_duckdb(tmp_path / "db.duckdb", {"already_present"})
+
+    result = preflight_spider2_workspace(task_id="t", workspace=tmp_path)
+
+    assert result["status"] == "passed"
+    assert result["required_tables"] == []
+
+
 def test_preflight_cli_exits_nonzero_and_emits_json_payload(tmp_path: Path) -> None:
     completed = subprocess.run(
         [
