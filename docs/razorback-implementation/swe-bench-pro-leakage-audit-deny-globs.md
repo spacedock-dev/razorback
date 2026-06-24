@@ -188,3 +188,42 @@ exact harbor answer filenames; (2) no-blanket-`*.patch`; (3) the full
 root-token collision surface; (4) inline-patch escalation hook. Flagged
 (out of scope): the shared default remains over-broad for future repo-based
 benchmarks.
+
+## Stage Report: implementation
+
+- DONE: Task 0 — probe the resolved swe shape, derive the STANDALONE curated set, record assumption
+  fnmatch probe reproduced (`**/answer*` strips `src/answer_engine.py`; root-anchored `answer*` does not); probe note `docs/razorback-implementation/plans/swe-bench-pro-leakage-probe-note.md` committed; sibling-file assumption documented, no inline-patch HALT (commit d5a7a11).
+- DONE: AC-1 — Task 1: add STANDALONE `SWE_BENCH_PRO_DENY_GLOBS` curated tuple
+  TDD red (ImportError) → green; standalone/deny/allow tests pass (commit cfcf75f).
+- DONE: AC-1 — Task 2: plant task-root answer fixtures + positive materialize test
+  fixture-001 gains `gold/gold_patch.diff`, `test_patch.diff`, `FAIL_TO_PASS.json`, legit nested `src/answer_engine.py`; materialize strips answers, keeps nested file (commit d4f8a57).
+- DONE: AC-3 — Task 3: wire the swe `_build_harbor` branch to pass `exclude_globs=SWE_BENCH_PRO_DENY_GLOBS`
+  import + branch edit at translate.py:432; E1 suite still 10/10 (commit 431041b).
+- DONE: AC-2 — Task 4: negative leakage test (plant → materialize → assert excluded → revert → assert leaks)
+  forward + revert halves pass; load-bearing proven by collapsing the constant (4 tests fail incl. forward + `pytest.raises(LeakageError)`), then reverted (commit 529d23f).
+- DONE: AC-3 — Task 5: runtime spy + static `grep -F` assert the branch passes the curated set
+  spy captures `SWE_BENCH_PRO_DENY_GLOBS` (!= default); grep finds the wiring line (commit 5cb8efa).
+- DONE: Task 6 — full acceptance + regression + ruff gate
+  `pytest tests/ -k 'swe_bench_pro and leak'` → 9 passed; swe+spider2 regression 30/30; ruff clean on changed files (import consolidation, commit e6b84d7).
+- DONE: Honor Out of scope
+  No `rk audit` SWE signatures; no view content transform; shared `DEFAULT_SOLUTION_DENY_GLOBS` untouched (git diff: no removals); default-over-broad observation FLAGGED only.
+
+### Implementation summary
+
+Modules touched: `src/razorback/harbor_tasks/leakage.py` (added the STANDALONE
+curated `SWE_BENCH_PRO_DENY_GLOBS` tuple beside the shared default, which is
+left byte-for-byte unchanged) and `src/razorback/translate.py` (import +
+swe-bench-pro `_build_harbor` branch now passes
+`exclude_globs=SWE_BENCH_PRO_DENY_GLOBS`). Tests/fixtures:
+`tests/unit/test_swe_bench_pro_leakage.py` (new; every test name contains
+`leak`) and three task-root answer artifacts + one legit nested repo file added
+to `tests/fixtures/swe_bench_pro/.../swe-bench-pro-fixture-001/`. Final set:
+`(solution/**, solutions/**, tests/expected/**, solution.*, answer*, answers*,
+gold/**, gold_patch*, gold.patch, test_patch*, FAIL_TO_PASS*, PASS_TO_PASS*,
+patch, patch.diff, solution.patch)` — all root-anchored; no broad `**/<token>`
+forms. Deviation: the plan appended test imports mid-file (TDD authoring
+convenience), which tripped ruff E402; consolidated all imports to the top in a
+follow-up style commit (e6b84d7) — no behavior change, tests stay green.
+Full suite: 853 passed, 4 pre-existing failures (test_codex_runtime_dispatch,
+test_worktree_remove_force, test_matrix_specs_carry_query_mode_batch,
+test_rk_research_new) confirmed identical on main — not regressions.
