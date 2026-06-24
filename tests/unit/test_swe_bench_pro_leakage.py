@@ -81,3 +81,48 @@ def test_swe_leak_globs_do_not_overmatch_nested_repo_files():
         "tests/test_app.py",
     ]:
         assert not matches_denied_path(path, SWE_BENCH_PRO_DENY_GLOBS), path
+
+
+from pathlib import Path
+
+from razorback.harbor_tasks.leakage import assert_no_denied_paths
+from razorback.harbor_tasks.materialize import materialize_harbor_task_view
+
+FIXTURE_ROOT = (
+    Path(__file__).parent.parent
+    / "fixtures" / "swe_bench_pro" / "harbor_task_minimal"
+)
+
+
+def test_materialized_swe_view_strips_root_answers_keeps_nested_repo_leak(tmp_path):
+    # AC-1: materialize fixture-001 with the curated SWE set; root answer files
+    # stripped, the legit NESTED repo file survives, fail-closed gate quiet.
+    source = FIXTURE_ROOT / "swe-bench-pro-fixture-001"
+    view = materialize_harbor_task_view(
+        source_task_dir=source,
+        view_root=tmp_path / "views",
+        benchmark_kind="swe-bench-pro",
+        benchmark_task_id=source.name,
+        transform_name="swe-bench-pro-harbor-task-view",
+        exclude_globs=SWE_BENCH_PRO_DENY_GLOBS,
+        view_mode="copy",
+    )
+    # root answer artifacts did NOT survive
+    assert not (view / "gold" / "gold_patch.diff").exists()
+    assert not (view / "test_patch.diff").exists()
+    assert not (view / "FAIL_TO_PASS.json").exists()
+    assert not (view / "solution" / "gold_patch.diff").exists()  # solution/** holds
+    # the legit NESTED repo file the agent MUST see DID survive (the inherited
+    # default's **/answer* would have wrongly stripped this; standalone fixes it)
+    assert (view / "src" / "answer_engine.py").is_file()
+    # no denied file survives anywhere; fail-closed gate does not raise
+    survivors = [
+        p.relative_to(view).as_posix()
+        for p in view.rglob("*")
+        if p.is_file()
+        and matches_denied_path(
+            p.relative_to(view).as_posix(), SWE_BENCH_PRO_DENY_GLOBS
+        )
+    ]
+    assert survivors == [], survivors
+    assert_no_denied_paths(view, deny_globs=SWE_BENCH_PRO_DENY_GLOBS)  # no raise
