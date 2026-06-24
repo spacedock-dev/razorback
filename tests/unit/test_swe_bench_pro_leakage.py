@@ -2,11 +2,32 @@
 # ABOUTME: AC-1/AC-2/AC-3 — swe-bench-pro gold/test-patch leakage deny-globs.
 # ABOUTME: fnmatch's `*` crosses `/`, so the SWE set is a STANDALONE curated,
 # ABOUTME: task-root-scoped tuple — it does NOT inherit the default's broad **/ globs.
+import shutil
+from pathlib import Path
+
+import pytest
+
 from razorback.harbor_tasks.leakage import (
     DEFAULT_SOLUTION_DENY_GLOBS,
     SWE_BENCH_PRO_DENY_GLOBS,
+    LeakageError,
+    assert_no_denied_paths,
     matches_denied_path,
 )
+from razorback.harbor_tasks.materialize import materialize_harbor_task_view
+from razorback.spec.schema import HarborBenchmarkBlock, NopAgentBlock, Spec
+from razorback.translate import spec_to_job_config
+
+FIXTURE_ROOT = (
+    Path(__file__).parent.parent
+    / "fixtures" / "swe_bench_pro" / "harbor_task_minimal"
+)
+
+# Revert baseline: the curated SWE set with the answer-ARTIFACT globs removed,
+# leaving only the root solution/answer-DIR family. Simulates "before E2 added
+# the swe answer-artifact coverage". Verified at plan time: this baseline
+# catches NONE of the planted task-root patch files.
+_REVERT_BASELINE = ("solution/**", "solutions/**", "tests/expected/**")
 
 
 def test_swe_leak_globs_are_standalone_not_default_superset():
@@ -83,17 +104,6 @@ def test_swe_leak_globs_do_not_overmatch_nested_repo_files():
         assert not matches_denied_path(path, SWE_BENCH_PRO_DENY_GLOBS), path
 
 
-from pathlib import Path
-
-from razorback.harbor_tasks.leakage import assert_no_denied_paths
-from razorback.harbor_tasks.materialize import materialize_harbor_task_view
-
-FIXTURE_ROOT = (
-    Path(__file__).parent.parent
-    / "fixtures" / "swe_bench_pro" / "harbor_task_minimal"
-)
-
-
 def test_materialized_swe_view_strips_root_answers_keeps_nested_repo_leak(tmp_path):
     # AC-1: materialize fixture-001 with the curated SWE set; root answer files
     # stripped, the legit NESTED repo file survives, fail-closed gate quiet.
@@ -126,21 +136,6 @@ def test_materialized_swe_view_strips_root_answers_keeps_nested_repo_leak(tmp_pa
     ]
     assert survivors == [], survivors
     assert_no_denied_paths(view, deny_globs=SWE_BENCH_PRO_DENY_GLOBS)  # no raise
-
-
-import shutil
-
-import pytest
-
-from razorback.harbor_tasks.leakage import LeakageError
-from razorback.spec.schema import HarborBenchmarkBlock, NopAgentBlock, Spec
-from razorback.translate import spec_to_job_config
-
-# Revert baseline: the curated SWE set with the answer-ARTIFACT globs removed,
-# leaving only the root solution/answer-DIR family. Simulates "before E2 added
-# the swe answer-artifact coverage". Verified at plan time: this baseline
-# catches NONE of the planted task-root patch files.
-_REVERT_BASELINE = ("solution/**", "solutions/**", "tests/expected/**")
 
 
 def _swe_spec():
