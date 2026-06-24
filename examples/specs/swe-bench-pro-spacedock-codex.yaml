@@ -1,0 +1,39 @@
+# ABOUTME: User-facing swe-bench-pro score spec — Harbor published dataset ref
+# ABOUTME: scale-ai/swe-bench-pro@latest (kind: harbor, qualified-ref resolution path).
+# ABOUTME: A live run requires the scale-ai/swe-bench-pro harbor-package to be
+# ABOUTME: hydrated/checked-out first (the PKG-40-style git-checkout blocker); freeze +
+# ABOUTME: schema-validate work offline without it via `rk freeze --allow-missing`.
+version: 1
+experiment: swe-bench-pro-spacedock-codex
+agent:
+  kind: spacedock_solver
+  runtime: codex
+  model: gpt-5.5
+  sampling:
+    temperature: 0.0
+    top_p: null
+    seed: null
+  solver_workflow: ./examples/solver_workflows/codex-benchmark-solver
+  # SWE-tuned budget — above the 1200s codex default: large repos + long
+  # test suites need more turns and a longer per-attempt/overall timeout.
+  max_turns: 400
+  override_timeout_sec: 5400
+  max_timeout_sec: 7200
+  reasoning_effort: xhigh
+benchmark:
+  kind: harbor
+  dataset: scale-ai/swe-bench-pro@latest
+  # Smoke-test a subset (spec-side selectors; same semantics as harbor -l/-i/-x):
+  #   n_tasks: 1                 # quickest: cap to the first N tasks (no names needed)
+  #   tasks:                     # or run only specific project-prefixed slugs
+  #     - astropy__astropy-7166
+  #   exclude_tasks:             # or run everything except these
+  #     - django__django-11099
+  # All commented out: the default is a full dataset run.
+trials: 1
+concurrency:
+  trials: 1
+observers:
+  - kind: jsonl
+    path: events.jsonl
+  - kind: stdout
