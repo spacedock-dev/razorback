@@ -44,6 +44,7 @@ Captain has decided the scope (standalone curated set, decision relayed). Remain
    - `gold_patch*` → root `gold_patch.diff` AND a hypothetical root `gold_patch_notes.md`
    - `test_patch*` → root `test_patch.diff` AND a hypothetical root `test_patch_helpers.py`
    - `gold.patch` / `solution.patch` / `solution.*` → root `solution.cfg` etc.
+   - `FAIL_TO_PASS*` / `PASS_TO_PASS*` → root `FAIL_TO_PASS.json`/`PASS_TO_PASS.json` AND hypothetical root `FAIL_TO_PASS_notes.md`/`PASS_TO_PASS_notes.md`
    - `patch` / `patch.diff` → a root file literally named `patch` (Unix-tool name, not typical repo content)
    NESTED versions of every one of these (`src/answer_engine.py`, `tests/test_patch_helpers.py`, `tools/gold_patch_notes.md`, `a/test_patch/file.py`) are NOT denied — proven in the allow-list test. Captain may narrow `answer*`→`answer.json` if a real task root collides.
 4. **Escalation hook (design doc E2).** IF Task 0 (or captain knowledge) shows the gold/test patch is NOT a sibling file but lives **inline** in `task.toml` / verifier metadata / an env var, path globs cannot strip it. The plan does NOT silently build a view transform — Task 0 HALTS and surfaces: "swe-bench-pro gold/test patch is inline, not a sibling file; path globs insufficient — captain decision needed (defense-in-depth audit layer or a view content transform, both out of E2 scope)."

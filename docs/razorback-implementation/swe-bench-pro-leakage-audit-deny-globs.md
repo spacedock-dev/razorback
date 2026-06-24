@@ -98,7 +98,7 @@ captain decision rather than building a new transform.
 - DONE: AC-3 — branch passes the extended set, not bare default
   Task 3 wires `exclude_globs=SWE_BENCH_PRO_DENY_GLOBS` into `_build_harbor`; Task 5 proves it via runtime spy + `grep -F`.
 - DONE: Settle deny-glob design (constant vs default)
-  Chose `SWE_BENCH_PRO_DENY_GLOBS = DEFAULT_SOLUTION_DENY_GLOBS + (...)` in leakage.py (NOT a new harbor_view.py, NOT mutating the global default); justified inline.
+  Chose `SWE_BENCH_PRO_DENY_GLOBS = DEFAULT_SOLUTION_DENY_GLOBS + (...)` in leakage.py (NOT a new harbor_view.py, NOT mutating the global default); justified inline. **[SUPERSEDED by cycle 3: the final set is a STANDALONE curated tuple, NOT `DEFAULT + (...)`. The broad cross-`/` default globs (`**/answer*`, `**/solution.*`, `**/*answers*`) were DROPPED because they over-match nested repo files. See cycle-3 report.]**
 - DONE: fnmatch top-level-dir hole handled
   SUPERSEDED by cycle 3: the final set has NO `**/gold/**` (the cycle-1 bare+nested-dir claim is obsolete). The curated set uses only root-anchored `gold/**`; see the cycle-3 report below.
 - DONE: Honor Out of scope
@@ -107,6 +107,8 @@ captain decision rather than building a new transform.
   Ran all 10 DENY + 5 ALLOW paths through `matches_denied_path`; every assertion in the plan's tests holds.
 
 ### Summary
+
+**[NOTE: this cycle-1 summary is SUPERSEDED by cycle 3 — the final set is STANDALONE, not a superset of the default. Read the cycle-3 report for the authoritative set.]**
 
 Plan hardens the swe-bench-pro deny set via a new `SWE_BENCH_PRO_DENY_GLOBS`
 constant (superset of the default, mirroring `SPIDER2_DBT_DENY_GLOBS`/`ADE_BENCH_DENY_GLOBS`),
@@ -146,7 +148,11 @@ Cycle-2 anchors every SWE answer-artifact glob at the task ROOT
 default's top-level hole swe-scoped, and adds a load-bearing allow-side test.
 Final glob set: `SWE_BENCH_PRO_DENY_GLOBS = DEFAULT + (gold/**, gold_patch*,
 gold.patch, test_patch*, FAIL_TO_PASS*, PASS_TO_PASS*, patch, patch.diff,
-solution.patch, answer*)`. Residual captain decisions: (1) exact harbor
+solution.patch, answer*)`. **[SUPERSEDED by cycle 3 — this `DEFAULT + (...)`
+form still inherited the broad cross-`/` globs that over-match nested repo
+files (`**/answer*` denies `src/answer_engine.py`). Cycle 3 replaced it with a
+STANDALONE curated tuple; see the cycle-3 report for the authoritative set.]**
+Residual captain decisions: (1) exact harbor
 answer filenames; (2) explicit no-blanket-`*.patch` judgement; (3) bare
 `patch`/`answer*` root-segment surface; (4) inline-patch escalation hook.
 
