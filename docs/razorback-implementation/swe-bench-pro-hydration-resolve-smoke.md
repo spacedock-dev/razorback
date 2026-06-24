@@ -26,7 +26,11 @@ no strata). This entity wires swe-bench-pro into `_build_harbor` as a
 task-view family (the spider2/ade pattern): a `kind: harbor` spec with
 `dataset: scale-ai/swe-bench-pro@<ref>` resolves source task dirs, routes
 each through the **generic** `materialize_harbor_task_view` with
-`benchmark_kind="swe-bench-pro"`, and emits the view dirs as
+`benchmark_kind="swe-bench-pro"` and
+`environment_env={"RAZORBACK_BENCHMARK_KIND": "swe-bench-pro",
+"RAZORBACK_BENCHMARK_TASK_ID": <slug>}` (the materializer merges that env
+into the view's task.toml — it does not synthesize it, so the branch must
+pass it, as `ade_bench`/`spider2_dbt` do), and emits the view dirs as
 `TaskConfig(path=...)`. The fully-qualified `<org>/<name>@<ref>` form is
 mandatory — `HarborBenchmarkBlock` rejects a bare ref at parse time when
 `plugin is None` (`spec/schema.py:197-249`).
@@ -54,13 +58,16 @@ paths with no manifest).
 **AC-2 — Each materialized view carries the swe-bench-pro benchmark env.**
 Verified by: a test asserting the emitted view's `task.toml` carries
 `RAZORBACK_BENCHMARK_KIND=swe-bench-pro` and `RAZORBACK_BENCHMARK_TASK_ID`
-(injected by `materialize_harbor_task_view`).
+(passed by the swe-bench-pro `_build_harbor` branch as `environment_env`
+and merged into task.toml by `materialize_harbor_task_view`).
 
 **AC-3 — `rk run --explain --explain-format json` lists the resolved task views.**
 Verified by: an in-process `CliRunner` invocation of
 `uv run rk run <fixture-spec>.frozen.yaml --explain --explain-format json`
-(resolver monkeypatched) exits 0 and the JSON payload's `task_paths` array
-has one entry per fixture instance. (Default text `--explain` prints only
+(resolver monkeypatched) exits 0 and the JSON payload's
+`prompt.task_paths` array (`cli/run_explain.py` nests it under `prompt`;
+see `tests/integration/test_rk_run_spider2_dbt_explain.py`) has one entry
+per fixture instance. (Default text `--explain` prints only
 a task count + one sample task — `cli/run_explain.py:281-309` — so the
 JSON format is the load-bearing surface.)
 

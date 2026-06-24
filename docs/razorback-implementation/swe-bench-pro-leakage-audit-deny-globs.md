@@ -72,8 +72,8 @@ Probe-then-harden: a probe test/script records the real resolved-task
 shape (committed as evidence), then unit tests around the swe deny-glob set
 and a negative leakage test (plant → materialize → assert excluded →
 revert → assert leaks). All fixture-backed and network-free. Acceptance
-command for validation: `uv run pytest tests/ -k swe_bench_pro and leak`
-(or the suite the plan names).
+command for validation: `uv run pytest tests/ -k 'swe_bench_pro and leak'`
+(quote the `-k` expression — or the suite the plan names).
 
 ## Out of scope
 

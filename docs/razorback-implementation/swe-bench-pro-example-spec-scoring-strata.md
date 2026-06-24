@@ -55,12 +55,17 @@ step (the PKG-40-style blocker) a live run requires.
 **AC-3 — The aggregator stratifies swe-bench-pro task slugs into per-task query cells.**
 Verified by: a fixture-backed test that builds a synthetic run dir with
 per-task `view_manifest.json` sidecars
-(`benchmark_kind=swe-bench-pro`, distinct `benchmark_task_id` slugs) and
-non-null `rewards["reward"]`, runs `aggregate_summary`
+(`benchmark_kind=swe-bench-pro`, distinct `benchmark_task_id` slugs),
+**realistic long swe-bench-pro trial-dir names**, and non-null
+`rewards["reward"]`, runs `aggregate_summary`
 (`src/razorback/runs/aggregate.py:526-563`), and asserts `summary.json`'s
-`swe-bench-pro` dataset stratum carries one query cell per task slug (i.e.
-the manifest path drives strata, not the `dataset="default"` collapse at
-`aggregate.py:414-418`). `rk score`'s separate `score_version`/`strata`
+`swe-bench-pro` dataset stratum carries one query cell per task slug. The
+test MUST exercise the real manifest-join key — the aggregator matches a
+trial to its view by `trial_dir.name.split("__")[0] ==
+view_dir_name[:32].rstrip("_-")` (`aggregate.py:_resolve_stratum_from_task_view_manifest`,
+~:131-153), so long slugs that collide or truncate at 32 chars must still
+land in distinct cells, not the `dataset="default"` collapse at
+`aggregate.py:414-418`. `rk score`'s separate `score_version`/`strata`
 JSON surface (`cli/score.py:122-125`) is NOT conflated with `summary.json`.
 
 ## Test plan

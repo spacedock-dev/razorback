@@ -39,9 +39,12 @@ verification surface (see each entity).
   `materialize_harbor_task_view` (`src/razorback/harbor_tasks/materialize.py:26`)
   reflects a source Harbor task into a Razorback-owned view, applying
   path deny-globs (`harbor_tasks/leakage.py:DEFAULT_SOLUTION_DENY_GLOBS`),
-  injecting `RAZORBACK_BENCHMARK_KIND` / `RAZORBACK_BENCHMARK_TASK_ID`
-  via the task.toml env, and writing a `view_manifest.json`. spider2/ade
-  wire it in via a per-benchmark branch in `_build_harbor`.
+  merging the caller-supplied `environment_env` into the view's task.toml,
+  and writing a `view_manifest.json` (with `benchmark_kind` /
+  `benchmark_task_id` from its params). spider2/ade wire it in via a
+  per-benchmark branch in `_build_harbor` that passes
+  `environment_env={"RAZORBACK_BENCHMARK_KIND": ..., "RAZORBACK_BENCHMARK_TASK_ID": ...}`
+  explicitly (`ade_bench/harbor_view.py`, `spider2_dbt/harbor_view.py`).
 - **Scoring stratifies off the view manifest.** The aggregator
   (`src/razorback/runs/aggregate.py:_resolve_stratum_from_task_view_manifest`)
   reads each view's `view_manifest.json` to recover
@@ -83,9 +86,11 @@ swe-bench-pro uses the **task-view materializer family** (the spider2/ade
 pattern): `_build_harbor` detects the swe-bench-pro dataset and routes each
 resolved source task through the **generic** `materialize_harbor_task_view`
 (no benchmark-specific view logic needed, unlike spider2's dbt wrapper),
-with swe-specific deny-globs. This one path supplies all three
-capabilities the generic pass-through lacks — leakage stripping, the
-`RAZORBACK_BENCHMARK_KIND`/`TASK_ID` env, and per-task strata via the view
+passing swe-specific deny-globs and
+`environment_env={RAZORBACK_BENCHMARK_KIND, RAZORBACK_BENCHMARK_TASK_ID}`.
+This one path supplies all three capabilities the generic pass-through
+lacks — leakage stripping, the benchmark env (the branch passes it; the
+materializer merges it into task.toml), and per-task strata via the view
 manifest.
 
 Chosen runtime/solver: **`kind: spacedock_solver` / `runtime: codex`
@@ -103,9 +108,10 @@ Wire swe-bench-pro into `_build_harbor` through the generic task-view
 materializer (the spider2/ade family pattern). Deliverable: a minimal
 swe-bench-pro-shaped harbor task fixture + an integration test that the
 resolved spec emits view dirs carrying `task.toml` +
-`RAZORBACK_BENCHMARK_KIND=swe-bench-pro` + `RAZORBACK_BENCHMARK_TASK_ID`,
-and that `rk run --explain --explain-format json` lists one `task_paths`
-entry per fixture instance. A **non-gating** live `harbor download` smoke
+`RAZORBACK_BENCHMARK_KIND=swe-bench-pro` + `RAZORBACK_BENCHMARK_TASK_ID`
+(the branch passes these as `environment_env`), and that `rk run --explain
+--explain-format json` lists one `prompt.task_paths` entry per fixture
+instance. A **non-gating** live `harbor download` smoke
 records exit code + task count, re-checking the PKG-40-style checkout
 blocker.
 
@@ -130,8 +136,12 @@ User-facing `examples/specs/swe-bench-pro-spacedock-codex.yaml`:
 SWE-tuned `max_turns` + timeout budget, hydration-prereq header note;
 freezes offline via `rk freeze --allow-missing`. Confirms the aggregator
 stratifies swe-bench-pro task slugs — a fixture-backed test over a
-synthetic run dir with `view_manifest.json` sidecars asserting the
-`swe-bench-pro` stratum carries one query cell per task slug (the
+synthetic run dir with `view_manifest.json` sidecars **and realistic long
+swe-bench-pro trial-dir names** (the aggregator joins
+`trial_name.split("__")[0]` to `view_dir_name[:32]`, so the test must
+exercise real long slugs or it passes while real matching falls back to
+`default`), asserting the `swe-bench-pro` stratum carries one query cell
+per task slug (the
 `aggregate_summary` `summary.json` surface; `rk score` echoes a separate
 `score_version`/`strata` JSON — kept distinct in the AC).
 
