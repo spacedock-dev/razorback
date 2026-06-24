@@ -219,3 +219,24 @@ canonical `__` slugs and real Harbor trial naming + `config.json`, plus a
 regression guard for dabstep/spider2/ade. AC-1/AC-2 example-spec tasks
 carry over unchanged. Plan doc rewritten; entity Problem/AC-3/Feedback
 Cycles updated; `status` untouched.
+
+## Stage Report: implementation
+
+- DONE: AC-3 — FIX the scoring join for canonical swe-bench-pro slugs (load-bearing, riskiest-first)
+  `aggregate.py` resolves the view manifest from `config.json["task"]["path"]` (re-anchored by basename); commit 5ea4291.
+- DONE: AC-3 RED-first proof on current aggregator
+  `test_aggregator_stratifies_canonical_swe_bench_pro_slugs` FAILED red: `datasets == ['default']`, `n_queries=1` (collision). Fallback test PASSED on current code.
+- DONE: AC-3 GREEN after fix
+  Both tests in `tests/unit/test_swe_bench_pro_scoring_strata.py` PASS — 3 distinct `swe-bench-pro` cells, no `default`, no -11099/-11098 collision.
+- DONE: Regression guard (dabstep/spider2/ade must not regress)
+  `test_task_identity_scoring.py` + `test_spider2_dbt_scored_run_identity.py` + `test_translate_swe_bench_pro.py` = 13 passed; broader `-k aggregate/scoring/identity/strat` = 47 passed.
+- DONE: AC-1 — schema-valid `spacedock_solver`/`runtime: codex` spec freezes offline
+  `rk freeze --allow-missing` exit 0; frozen `dataset: scale-ai/swe-bench-pro@latest`; grep confirms `kind: spacedock_solver`/`runtime: codex`/`max_turns: 400`/`override_timeout_sec: 5400`. Commit 37f32f2.
+- DONE: AC-2 — ABOUTME hydration-prereq note
+  `grep -F 'scale-ai/swe-bench-pro'` returns the ABOUTME line naming the harbor-package hydration step (PKG-40-style blocker).
+- DONE: Full-suite gate + pre-existing-failure confirmation
+  `uv run pytest tests/ -q` → 862 passed, 4 failed, 12 skipped. The 4 failures (test_codex_runtime_dispatch, test_worktree_remove_force, test_matrix_specs_carry_query_mode_batch, test_rk_research_new) are pre-existing and unrelated to the changed files.
+
+### Implementation summary
+
+Two atomic commits on branch `swe-bench-pro-example-spec-scoring-strata`. Modules touched: `src/razorback/runs/aggregate.py` (the production fix) and `examples/specs/swe-bench-pro-spacedock-codex.yaml` (new example spec); test `tests/unit/test_swe_bench_pro_scoring_strata.py`. The resolver change: `_resolve_stratum_from_task_view_manifest` now tries `_stratum_from_config_task_path(trial_dir)` FIRST — read `trial_dir/config.json` → `task["path"]`, re-anchor by **basename only** under `task_views_root(run_dir)`, read `<view>/view_manifest.json` — and falls back to the legacy dir-name join (`split("__")[0]` vs `[:32]`) only when config.json is missing/unusable. Shared payload-shaping factored into `_stratum_from_manifest_payload`. No new imports. Deviation: pre-existing ruff warning `typing.NotRequired unused` at `aggregate.py:11` left untouched (confirmed present on the base commit via stash; outside the changed region — avoided unrelated churn). `uv.lock` churn from `uv sync` reverted; worktree committed-clean.
