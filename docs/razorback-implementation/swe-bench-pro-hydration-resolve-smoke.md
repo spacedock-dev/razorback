@@ -113,3 +113,32 @@ Wrote a STANDARD separate plan at `docs/razorback-implementation/plans/swe-bench
 ### Open decisions for the captain
 1. **Exact `@<ref>` to pin** for `scale-ai/swe-bench-pro`. The fixture spec uses `@latest` (schema-valid, sufficient for the offline AC-3 gate since the resolver is monkeypatched). The live smoke (T8) and the E3 example spec need a real reproducible ref — recommend pinning a concrete published ref before validation runs T8, or confirm `@latest` is acceptable for the smoke.
 2. **Fixture realism.** The minimal fixture is `task.toml` + `instruction.md` + `environment/Dockerfile` + a planted `solution/` deny-path file — no real git-repo checkout / gold patch / test patch / FAIL_TO_PASS (those drive E2 + the hydration concern, both out of scope). Sufficient to gate AC-1/2/3; flag in case a more repo-shaped fixture is wanted before E2.
+
+## Stage Report: implementation
+
+- DONE: T1 — detect the swe-bench-pro family in `translate.py` (`_is_swe_bench_pro_dataset`).
+  Commit 0197354; 3 unit tests pass (qualified ref True, non-swe False, bare-form swallows parse error → False).
+- DONE: T2 — route swe-bench-pro through the GENERIC `materialize_harbor_task_view` via a family-dispatch in `_build_harbor`.
+  Commit 425018d; branch passes `benchmark_kind="swe-bench-pro"` + `environment_env={RAZORBACK_BENCHMARK_KIND, RAZORBACK_BENCHMARK_TASK_ID}`; spider2 keeps its wrapper; `tasks_root` guard fast-fails as SpecError. 2 tests pass.
+- DONE: T3 — minimal swe-bench-pro fixture tree (two instances + planted `solution/gold_patch.diff` deny-path file).
+  Commit 55de296; both `task.toml` validate as Harbor `TaskConfig`.
+- DONE: T4 — N leakage-clean task-view dirs, each with a `benchmark_kind == "swe-bench-pro"` manifest (AC-1).
+  Commit 21ca379; planted gold-patch file stripped; view names are `swe-bench-pro-<slug>`.
+- DONE: T4b — `exclude_tasks`/`n_tasks` bind to the SOURCE slug before materialization; swe ref takes the materializer branch NOT the generic pass-through (AC-1).
+  Commit 6438e66; 3 tests pass (exclude drops one, n_tasks caps, view name + manifest prove the branch).
+- DONE: T5 — each materialized view's `task.toml` carries the swe-bench-pro benchmark env (AC-2).
+  Commit 668ee35; `RAZORBACK_BENCHMARK_KIND=swe-bench-pro` + `RAZORBACK_BENCHMARK_TASK_ID=swe-bench-pro-fixture-001` asserted via Harbor `TaskConfig.model_validate_toml`.
+- DONE: T6 — fixture frozen `kind:harbor` swe-bench-pro spec for `rk run --explain` (AC-3).
+  Commit 2f29933; parses with `dataset: scale-ai/swe-bench-pro@latest`.
+- DONE: T7 — in-process `CliRunner` `rk run --explain --explain-format json` lists resolved views (AC-3).
+  Commit 626da25; exit 0, `payload["prompt"]["task_paths"]` has one `swe-bench-pro-<slug>` entry per fixture instance; patches BOTH `_resolve_harbor_dataset_tasks` and `razorback.cli.run._run_canary` (offline).
+- SKIPPED: T8 — live `harbor download` smoke (non-gating).
+  Out of implementation scope per dispatch; executed by the VALIDATION stage. No network access attempted.
+
+### Implementation summary
+
+The single production change is in `src/razorback/translate.py`: added `_is_swe_bench_pro_dataset` (mirrors `_is_spider2_dbt_dataset`) and generalized the spider2-only branch in `_build_harbor` into a family dispatch (`is_view_family = is_spider2_dbt or is_swe_bench_pro`). The branch shares the filter-before-materialize / `tasks_root`-guard / `view_mode` scaffolding and differs only in the materializer call: swe-bench-pro routes through the GENERIC `materialize_harbor_task_view` (NOT a new wrapper), with the branch passing `environment_env` that the materializer merges into `task.toml`. The generic non-family pass-through (`translate.py` selector block + `JobConfig`) is byte-for-byte unchanged — proven by `tests/unit/test_translate_harbor_block.py` + `test_translate_spider2_dbt.py` (21 passed). Default deny-globs only (no swe-specific `*.patch`/`gold`/`test_patch` globs — that is E2).
+
+Full suite: `uv run --frozen pytest tests/ -q` → 4 failed, 845 passed, 12 skipped. The 11 new swe-bench-pro tests all pass. The 4 failures (`test_codex_runtime_dispatch_constructs_inner_agent`, `test_worktree_remove_force_does_not_destroy_runs`, `test_matrix_specs_carry_query_mode_batch`, `test_rk_research_new_creates_scaffold_tree`) reproduce IDENTICALLY on the base commit 31dadd0 — they are pre-existing, NOT regressions. `ruff check` clean on all changed files.
+
+**Deviation (test-only, no production impact):** Plan T4 Step 1 asserted `not (view / "solution").exists()`. The materializer's `solution/**` deny-glob strips files UNDER `solution/` but leaves the empty `solution/` directory node (the glob does not match the bare `solution` path; `_reflect_allowed_files` recreates dirs unconditionally; `assert_no_denied_paths` only inspects files/symlinks). This is intrinsic materializer behavior owned by E2 (deny-glob hardening, out of scope here), and the materializer is read-only for this entity. The leaked-FILE assertion (`not (view/"solution"/"gold_patch.diff").exists()`) — the real leakage contract AC-1 gates on — holds. I relaxed the over-strict empty-dir assertion to "no files survive anywhere under `solution/`", which proves leakage-clean without depending on E2-owned behavior. The plan itself anticipated friction here ("If the `solution/` assertion FAILS, confirm `DEFAULT_SOLUTION_DENY_GLOBS` still contains `solution/**`" — it does).
