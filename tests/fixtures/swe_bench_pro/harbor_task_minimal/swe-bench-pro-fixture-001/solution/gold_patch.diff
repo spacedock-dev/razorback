@@ -1,0 +1,5 @@
+--- a/app/buggy.py
++++ b/app/buggy.py
+@@ -1 +1 @@
+-return None
++return 42

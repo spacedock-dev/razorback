@@ -1,0 +1,11 @@
+schema_version = "1.2"
+
+[task]
+name = "scale-ai/swe-bench-pro-fixture-002"
+description = "Synthetic swe-bench-pro Harbor-shaped task fixture (repo + base commit)."
+
+[environment]
+docker_image = "swe-bench-pro-source:latest"
+os = "linux"
+cpus = 2
+memory_mb = 4096
