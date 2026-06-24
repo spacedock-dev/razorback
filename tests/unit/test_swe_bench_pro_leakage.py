@@ -57,6 +57,7 @@ def test_swe_leak_globs_deny_task_root_answer_artifacts():
         "gold/gold_patch.diff",
         "gold_patch.diff",     # root gold-prefixed answer file
         "gold.patch",
+        "gold.diff",           # root gold patch (alt extension)
         "test_patch.diff",     # root test patch (hidden grading tests)
         "test_patch",
         "FAIL_TO_PASS.json",   # root fail-to-pass set

@@ -19,8 +19,8 @@ DEFAULT_SOLUTION_DENY_GLOBS = (
 # the repo the agent edits).
 #
 # This is a STANDALONE curated tuple, NOT `DEFAULT_SOLUTION_DENY_GLOBS + (...)`
-# (captain decision). `matches_denied_path` uses `fnmatch.fnmatch` (leakage.py:
-# 21-23) where `*` CROSSES `/`, so the default's broad cross-`/` globs
+# (captain decision). `matches_denied_path` uses `fnmatch.fnmatch` (see that
+# function below) where `*` CROSSES `/`, so the default's broad cross-`/` globs
 # (`**/answer*`, `**/solution.*`, `**/*answers*`) would strip LEGITIMATE nested
 # repo files (`src/answer_engine.py`, `lib/myanswers.py`, `pkg/solution.cfg`)
 # that real SWE repos (django/astropy/sympy) ship — corrupting the task. We
