@@ -10,6 +10,8 @@ from razorback.benchmarks.spider2_dbt import duckdb_match as _duckdb_match_mod
 from razorback.benchmarks.spider2_dbt import eval_spec as _eval_spec_mod
 from razorback.benchmarks.spider2_dbt import verify as _verify_mod
 from razorback.benchmarks.spider2_dbt.preflight import (
+    _read_dbt_source_tables,
+    _read_duckdb_tables,
     preflight_script_text,
     resolve_spider2_db_name,
 )
@@ -40,9 +42,7 @@ _APP_ROOT = "/app"
 # structural divergence from ade-bench's `project/`.
 _DBT_PROJECT_DIRNAME = "dbt_project"
 
-_BUILD_CONTEXT_MARKER = (
-    "# Razorback: land spider2-dbt project + source DuckDB at /app before agent runtime."
-)
+_BUILD_CONTEXT_MARKER = "# Razorback: land spider2-dbt project + source DuckDB at /app before agent runtime."
 _DBT_DEPS_LAYER_MARKER = (
     "# Razorback: install declared dbt packages before agent runtime."
 )
@@ -88,6 +88,9 @@ def materialize_spider2_harbor_task_view(
         exclude_globs=SPIDER2_DBT_DENY_GLOBS,
         view_mode=view_mode,
     )
+    _repair_missing_spider2_source_tables(
+        view, source_task_dir=Path(source_task_dir), task_slug=task_slug
+    )
     # RIDER (Codex finding 2): stage dbt_project/ (incl. the source .duckdb)
     # into the build context and COPY it to /app BEFORE the preflight RUN, so
     # the preflight `--workspace /app` can never fail on a missing project.
@@ -112,6 +115,92 @@ def _copy_into_view(src: Path, dst: Path) -> None:
     if dst.is_symlink():
         dst.unlink()
     shutil.copy2(src, dst)
+
+
+def _repair_missing_spider2_source_tables(
+    view_dir: Path, *, source_task_dir: Path, task_slug: str
+) -> None:
+    """Hydrate missing referenced source tables from Spider2's gold DuckDB.
+
+    Some upstream Spider2 DBT examples ship a source DuckDB that lacks raw
+    source tables declared and referenced by project models, while the per-task
+    gold DuckDB still contains those raw relations alongside expected outputs.
+    Copy only the referenced dbt source relations into the agent-facing source
+    DB; never copy arbitrary gold tables or scorer condition tables.
+    """
+    project_dir = _dbt_project_dir(view_dir)
+    if project_dir is None:
+        return
+
+    db_name = resolve_spider2_db_name(project_dir, task_slug=task_slug)
+    source_db = project_dir / f"{db_name}.duckdb"
+    if not source_db.is_file():
+        return
+
+    required_tables = _read_dbt_source_tables(project_dir)
+    if not required_tables:
+        return
+
+    observed_tables = _read_duckdb_tables(source_db)
+    missing_tables = required_tables - observed_tables
+    if not missing_tables:
+        return
+
+    gold_db = _source_gold_db(source_task_dir)
+    if gold_db is None:
+        return
+
+    gold_tables = _read_duckdb_tables(gold_db)
+    repairable = sorted(missing_tables & gold_tables)
+    if not repairable:
+        return
+
+    import duckdb
+
+    if source_db.is_symlink():
+        source_db_target = source_db.resolve(strict=True)
+        source_db.unlink()
+        shutil.copy2(source_db_target, source_db)
+
+    conn = duckdb.connect(str(source_db))
+    try:
+        conn.execute(
+            f"ATTACH {_sql_string(str(gold_db))} AS razorback_gold (READ_ONLY)"
+        )
+        for schema, table in repairable:
+            conn.execute(f"CREATE SCHEMA IF NOT EXISTS {_quote_ident(schema)}")
+            conn.execute(
+                "CREATE TABLE "
+                f"{_quote_ident(schema)}.{_quote_ident(table)} AS "
+                "SELECT * FROM "
+                f"razorback_gold.{_quote_ident(schema)}.{_quote_ident(table)}"
+            )
+    finally:
+        conn.close()
+
+
+def _source_gold_db(source_task_dir: Path) -> Path | None:
+    source_gold = Path(source_task_dir) / "tests" / "gold"
+    source_spec = source_gold / "spider2_eval.jsonl"
+    if not source_spec.is_file():
+        return None
+
+    try:
+        spec = _eval_spec_mod.load_eval_spec(source_spec)
+    except Exception:
+        return None
+
+    gold_basename = spec.gold or "gold.duckdb"
+    source_gold_db = source_gold / gold_basename
+    return source_gold_db if source_gold_db.is_file() else None
+
+
+def _quote_ident(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"'
+
+
+def _sql_string(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
 
 
 def _ensure_verifier_assets(
@@ -193,9 +282,7 @@ def _ensure_verifier_assets(
             gold_db=shlex.quote(f"/tests/{gold_basename}"),
         )
     )
-    test_sh.chmod(
-        test_sh.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
-    )
+    test_sh.chmod(test_sh.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
     # The deny-glob reflection strips gold FILES but leaves the now-empty
     # `gold/` directory behind. Prune empty `gold/`-named dirs so no `gold/`
@@ -233,12 +320,9 @@ def _dbt_project_dir(view_dir: Path) -> Path | None:
 
 
 def _has_dbt_packages_manifest(view_dir: Path) -> bool:
-    return (
-        (view_dir / _DBT_PROJECT_DIRNAME / "packages.yml").is_file()
-        or (
-            view_dir / "environment" / _DBT_PROJECT_DIRNAME / "packages.yml"
-        ).is_file()
-    )
+    return (view_dir / _DBT_PROJECT_DIRNAME / "packages.yml").is_file() or (
+        view_dir / "environment" / _DBT_PROJECT_DIRNAME / "packages.yml"
+    ).is_file()
 
 
 def _ensure_spider2_build_context_layer(view_dir: Path) -> None:
@@ -313,9 +397,7 @@ def _ensure_dbt_deps_image_layer(view_dir: Path) -> None:
     dockerfile.write_text(_insert_before_final_cmd(text, block))
 
 
-def _ensure_workspace_preflight_image_layer(
-    view_dir: Path, *, task_slug: str
-) -> None:
+def _ensure_workspace_preflight_image_layer(view_dir: Path, *, task_slug: str) -> None:
     """Validate the source DuckDB at build time, before the agent runs.
 
     Gated on `_has_dbt_project`: spider2-dbt has no task families, so the
