@@ -41,7 +41,7 @@
 - `tests/unit/test_translate_swe_bench_pro.py` — **create**. Unit + integration-level translator coverage for the new branch (family detect, generic-materializer dispatch, manifest `benchmark_kind`, env, `exclude_tasks`/`n_tasks` on source slugs, not-pass-through guard), using the `_resolve_harbor_dataset_tasks` monkeypatch seam.
 - `tests/fixtures/swe_bench_pro/harbor_task_minimal/` — **create**. Two swe-bench-pro-shaped Harbor task dirs (`swe-bench-pro-fixture-001`, `swe-bench-pro-fixture-002`), each with `task.toml` + `instruction.md` + an `environment/Dockerfile`, plus a planted gold/test-patch-shaped file under a default-deny path to prove leakage stripping runs. Used network-free via the resolver monkeypatch.
 - `tests/fixtures/swe_bench_pro/specs/swe-bench-pro-fixture.frozen.yaml` — **create**. A frozen `kind: harbor` swe-bench-pro spec (fully-qualified `dataset: scale-ai/swe-bench-pro@latest`) for the AC-3 `rk run --explain` command.
-- `tests/integration/test_rk_run_swe_bench_pro_explain.py` — **create**. In-process `CliRunner` `rk run --explain --explain-format json` test (AC-3); monkeypatches `_resolve_harbor_dataset_tasks` to return fixture sources — no subprocess, no env seam.
+- `tests/integration/test_rk_run_swe_bench_pro_explain.py` — **create**. In-process `CliRunner` `rk run --explain --explain-format json` test (AC-3); monkeypatches `_resolve_harbor_dataset_tasks` to return fixture sources AND `razorback.cli.run._run_canary` to a no-op (the canary shells out to `docker run` before the explain branch — patch it for a genuinely offline test). No env seam in production code; both patches are test-side.
 - `docs/razorback-implementation/validation/swe-bench-pro-hydration-resolve-smoke.md` — **created by the validation stage** (T8 names what the live-smoke section must contain; the plan does not pre-write it).
 
 ---
@@ -728,7 +728,7 @@ git commit -m "test(swe-bench-pro): fixture frozen kind:harbor spec for rk run -
 - Consumes: the fixture frozen spec (T6); `rk run ... --explain --explain-format json` via Typer `CliRunner` (`razorback.cli.app`); `razorback.translate._resolve_harbor_dataset_tasks` (monkeypatched).
 - Produces: proof of AC-3 — exit 0 and `payload["prompt"]["task_paths"]` has one entry per fixture instance, each a `swe-bench-pro-<slug>` view.
 
-**Why in-process + JSON (locked):** Running `rk run --explain` in-process via `CliRunner` lets a `monkeypatch.setattr("razorback.translate._resolve_harbor_dataset_tasks", ...)` reach the resolver, so the test is offline with zero production-code seam (mirrors `tests/integration/test_rk_run_spider2_dbt_explain.py`). The JSON format is the load-bearing surface: the default text `--explain` prints only a task count + one sample task (`cli/run_explain.py:281-309`), so the per-task list lives only in the JSON payload. `task_paths` nests under `prompt` (`run_explain.py:254` builds `"prompt": _prompt_plan(...)`, and `_prompt_plan` spreads `**_sample_task_prompt_inputs` which carries `task_paths` at `run_explain.py:52`).
+**Why in-process + JSON (locked):** Running `rk run --explain` in-process via `CliRunner` lets a `monkeypatch.setattr("razorback.translate._resolve_harbor_dataset_tasks", ...)` reach the resolver, with zero production-code seam (mirrors `tests/integration/test_rk_run_spider2_dbt_explain.py`). To be genuinely offline the test ALSO patches `razorback.cli.run._run_canary` to a no-op: `rk run` runs the runs-dir Docker canary (`run.py:213`) before the `--explain` branch (`run.py:335`), and the canary shells out to `docker run` (`runs_dir_canary.py:50`). The spider2 precedent omits this patch and so silently depends on a live Docker daemon (Colima in the dev env, per `tests/conftest.py:41`); this plan fixes that for swe-bench-pro. Both patches are test-side — no production code changes. The JSON format is the load-bearing surface: the default text `--explain` prints only a task count + one sample task (`cli/run_explain.py:281-309`), so the per-task list lives only in the JSON payload. `task_paths` nests under `prompt` (`run_explain.py:254` builds `"prompt": _prompt_plan(...)`, and `_prompt_plan` spreads `**_sample_task_prompt_inputs` which carries `task_paths` at `run_explain.py:52`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -758,6 +758,12 @@ def test_rk_run_explain_lists_swe_task_views(tmp_path, monkeypatch):
         "razorback.translate._resolve_harbor_dataset_tasks",
         lambda **k: list(sources),
     )
+    # `rk run` runs the runs-dir Docker canary (run.py:213, _run_canary
+    # defined at run.py:50) BEFORE the --explain branch (run.py:335), and it
+    # shells out to `docker run` (runs_dir_canary.py:50). Patch it so the test
+    # is genuinely offline — without this it depends on a live Docker daemon
+    # (the spider2 precedent only passes because the dev env has Colima).
+    monkeypatch.setattr("razorback.cli.run._run_canary", lambda *a, **k: None)
 
     runner = CliRunner(mix_stderr=False)
     result = runner.invoke(
@@ -855,6 +861,7 @@ The validation report lives on the validation stage, not the implementation work
 - `_prompt_plan` returns `{**_sample_task_prompt_inputs(...), ...}` carrying `task_paths` (`run_explain.py:52`); `explain_run` nests it under `"prompt"` (`run_explain.py:254`). Extraction `payload["prompt"]["task_paths"]` confirmed. ✓ (read)
 - `DEFAULT_SOLUTION_DENY_GLOBS` (`leakage.py:7-14`) contains `"solution/**"` — the planted `solution/gold_patch.diff` is stripped without adding swe-specific globs (E2). ✓ (read)
 - Precedent `tests/integration/test_rk_run_spider2_dbt_explain.py` uses exactly the `CliRunner` + resolver-monkeypatch shape T7 reuses. ✓ (read)
+- `rk run` runs `_run_canary` (`run.py:50`, called at `:213`) — which shells out to `docker run` (`runs_dir_canary.py:50`) — BEFORE the `--explain` branch (`:335`). There is no conftest autouse bypass or env-skip for it. So T7 MUST patch `razorback.cli.run._run_canary` to be offline; the spider2 precedent omits this and silently depends on a live Docker daemon. T7 Step 1 now patches it. ✓ (read; flagged by adversarial review of the plan)
 
 **Open decision for the captain (flag in Stage Report):**
 - **The exact `@<ref>` to pin** for `scale-ai/swe-bench-pro` in the live smoke (T8) and ultimately the example spec (E3). The fixture spec (T6) uses `@latest` as a placeholder — schema-valid and sufficient for the offline AC-3 gate (the resolver is monkeypatched, so the ref is never resolved). But the live smoke (T8) and the user-facing example spec (E3) need a real, reproducible ref. Recommend the captain pin a concrete published ref (or confirm `@latest` is acceptable for the smoke) before validation runs T8.
