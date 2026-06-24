@@ -86,3 +86,34 @@ the captain wants a defense-in-depth audit layer beyond the view
 exclusion. A view materializer for swe-bench-pro itself — owned by E1; if
 the probe shows path globs are insufficient, this entity surfaces the
 captain decision rather than building a new transform.
+
+## Stage Report: plan
+
+- DONE: Write a separate STANDARD plan doc
+  `docs/razorback-implementation/plans/swe-bench-pro-leakage-audit-deny-globs.md` (6 tasks, AC↔task map, riskiest-first).
+- DONE: AC-1 — view excludes gold/test-patch/answer paths
+  Task 1 (`SWE_BENCH_PRO_DENY_GLOBS` in leakage.py) + Task 2 (positive materialize test, TDD failing-test-first).
+- DONE: AC-2 — negative leakage test fails when swe globs reverted
+  Task 4 forward+revert halves; Step 3 proves load-bearing by collapsing the constant to the default.
+- DONE: AC-3 — branch passes the extended set, not bare default
+  Task 3 wires `exclude_globs=SWE_BENCH_PRO_DENY_GLOBS` into `_build_harbor`; Task 5 proves it via runtime spy + `grep -F`.
+- DONE: Settle deny-glob design (constant vs default)
+  Chose `SWE_BENCH_PRO_DENY_GLOBS = DEFAULT_SOLUTION_DENY_GLOBS + (...)` in leakage.py (NOT a new harbor_view.py, NOT mutating the global default); justified inline.
+- DONE: fnmatch top-level-dir hole handled
+  Both bare (`gold/**`) and nested (`**/gold/**`) forms for denied dirs; cited spider2 precedent (`harbor_view.py:20-31`).
+- DONE: Honor Out of scope
+  No `rk audit` SWE signatures; no new view transform; escalation hook is a Task 0 HALT-and-surface.
+- DONE: Verified glob set against live fnmatch
+  Ran all 10 DENY + 5 ALLOW paths through `matches_denied_path`; every assertion in the plan's tests holds.
+
+### Summary
+
+Plan hardens the swe-bench-pro deny set via a new `SWE_BENCH_PRO_DENY_GLOBS`
+constant (superset of the default, mirroring `SPIDER2_DBT_DENY_GLOBS`/`ADE_BENCH_DENY_GLOBS`),
+wired into the existing generic-materializer swe branch as `exclude_globs=`.
+The load-bearing AC-2 negative test plants gold/`test_patch`/`FAIL_TO_PASS`
+files, runs the full production path, and proves they leak when the globs are
+reverted to the bare default. Open captain decisions: (1) the exact swe glob
+set, (2) the offline-unverifiable assumption that harbor lands the gold/test
+patch as sibling files (not inline in task.toml/verifier metadata) — Task 0
+records this and HALTs to the captain if a future hydration shows inline.
