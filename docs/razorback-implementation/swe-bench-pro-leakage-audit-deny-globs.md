@@ -261,3 +261,57 @@ Code review found no blocking issues — the under-match shapes (casing, `gold.d
 are the already-flagged captain-verifiable filename assumption, recommended for captain
 confirmation at merge but not gate-blocking. **GATE: APPROVE.** Full report:
 `docs/razorback-implementation/validation/swe-bench-pro-leakage-audit-deny-globs.md`.
+
+## Feedback Cycles
+
+### Cycle 1 — validation gate REJECTED (2026-06-24)
+
+A Codex adversarial diff review + captain decision found: the root-anchored
+deny set is correct for the ASSUMED task-root-sibling layout, but the tests
+only model that layout, so the implementation would SILENTLY LEAK if harbor
+nests answer artifacts under a checkout/metadata dir
+(`repo/test_patch.diff`, `meta/gold_patch.diff` → root-only globs miss them →
+answers reach the agent, scores invalid, no signal). Fix directed: add a
+FAIL-CLOSED deep-scan guard (`assert_no_swe_answer_leak`) that scans the
+materialized view at ALL depths by PRECISE answer-artifact signature (exact
+basenames, not broad token globs) and raises `LeakageError` so a wrong layout
+fails LOUD; wire it into the swe `_build_harbor` branch AFTER materialize as
+the backstop (copy-time deny-globs stay as best-effort stripping). Also: add
+`gold.diff` to the deny set + guard, make the guard case-insensitive, and keep
+the top-level-collision over-match a documented residual tied to
+captain-decision #1 (real layout). Addressed in cycle 2 below.
+
+## Stage Report: implementation (cycle 2)
+
+- DONE: PRIMARY FIX — fail-closed deep-scan leak guard `assert_no_swe_answer_leak`
+  Added to `leakage.py`; deep-scans at all depths, raises `LeakageError` by precise signature. Helper `is_swe_answer_artifact` exact basenames (case-insensitive) + `gold_patch.*` glob + files directly under a `gold/` dir at any depth. No broad token globs (commit 11b85e7).
+- DONE: wire the guard into the swe `_build_harbor` branch AFTER materialize
+  Converted the comprehension to a loop; each view calls `assert_no_swe_answer_leak(view)` after `materialize_harbor_task_view` returns (translate.py).
+- DONE: TDD (a) NESTED-LEAK test (load-bearing)
+  `test_swe_answer_leak_guard_raises_on_nested_answers_leak` + production-path `test_swe_branch_deep_guard_raises_on_nested_leak_in_production_leak`. Both proven load-bearing (neuter guard / remove wiring → FAIL; restore → pass).
+- DONE: TDD (b) NO-FALSE-POSITIVE test
+  `test_swe_answer_leak_guard_allows_legit_nested_repo_files_leak` — `tests/test_patch_helpers.py`, `src/answer_engine.py`, `lib/patch.py`, `docs/gold_notes.md`, `a/test_patch/file.py` etc. do NOT trip the guard.
+- DONE: TDD (c) HAPPY-PATH test
+  `test_swe_answer_leak_guard_happy_path_after_root_strip_leak` — root answers stripped by deny-globs, guard passes, legit nested `src/answer_engine.py` survives.
+- DONE: P2 — filename variants
+  Added `gold.diff` to BOTH `SWE_BENCH_PRO_DENY_GLOBS` and the guard basenames. Guard normalizes basename to lowercase (case-insensitive) — documented as a safe superset since SWE-bench canonical names are lowercase.
+- DONE: over-match residual documented (not over-scoped)
+  Top-level repo file literally named `patch`/`test_patch*`/`solution.*` or a top-level `tests/expected/` dir is still stripped IF harbor flattens the repo at the task root. Kept as a documented residual tied to captain-decision #1 (real layout); allow-tests unbroken. The deep guard is precise (exact names) so it does NOT add over-match.
+- DONE: record-keeping + plan note + gates
+  `## Feedback Cycles` / `### Cycle 1` added; plan doc gains a cycle-2 guard-task note; `pytest tests/ -q` → 857 passed / 4 pre-existing failures (unchanged) / 12 skipped; ruff clean on changed files; shared default + generic pass-through byte-identical to main.
+
+### Implementation summary (cycle 2)
+
+Modules touched: `src/razorback/harbor_tasks/leakage.py` (new
+`assert_no_swe_answer_leak` deep-scan guard + `is_swe_answer_artifact` helper;
+`gold.diff` added to the curated deny set; shared `DEFAULT_SOLUTION_DENY_GLOBS`
+unchanged) and `src/razorback/translate.py` (import the guard; swe branch loop
+calls it after each materialize as the fail-closed backstop). Tests:
+`tests/unit/test_swe_bench_pro_leakage.py` gains 4 cycle-2 tests (3 guard unit
+tests + 1 production-wiring test); both leak tests proven load-bearing.
+The guard uses PRECISE signatures (exact case-insensitive basenames, a
+`gold_patch.*` glob, and the immediate-`gold/`-dir rule) — deliberately not
+broad token globs — so deep-scanning at all depths catches nested answers
+without false-positiving legit nested repo files. No deviation from the
+cycle-2 brief; the over-match residual is documented, not narrowed, per the
+captain's leak-first priority.

@@ -66,6 +66,25 @@ The shared `DEFAULT_SOLUTION_DENY_GLOBS` RETAINS the broad cross-`/` globs (`**/
 
 **Riskiest-first ordering rationale:** The load-bearing proof is the **negative leakage test (Task 4)** — plant → materialize → assert excluded → revert globs → assert leak. The planted task-root answer files are chosen so the **revert baseline** (the curated set with the SWE answer-artifact globs removed, leaving only `solution/**`/`solutions/**`/`tests/expected/**`) does NOT catch them (verified at plan time), so reverting genuinely leaks. Tasks are ordered so the deny set (Task 1) and production wiring (Task 3) exist before Task 4 exercises them. Task 0 runs first because it derives the set and can trigger the escalation HALT.
 
+### Task 7 (cycle 2): fail-closed deep-scan answer-leak guard
+
+Added after a validation-gate rejection (Codex review + captain decision). The
+root-anchored deny-globs (Tasks 1/3) strip answers ONLY at the assumed
+task-root sibling layout; if harbor NESTS answer artifacts under a
+checkout/metadata dir (`repo/test_patch.diff`, `meta/gold_patch.diff`), the
+root globs miss them and answers leak silently. Add `assert_no_swe_answer_leak`
+to `leakage.py` — a DEEP-scan (all depths) guard that raises `LeakageError` by
+PRECISE answer signature (exact case-insensitive basenames `gold.patch`,
+`gold.diff`, `gold_patch.diff`, `test_patch.diff`, `test_patch`,
+`FAIL_TO_PASS.json`, `PASS_TO_PASS.json`, `solution.patch`; a `gold_patch.*`
+basename glob; any file directly under a `gold/` dir) — NOT broad token globs,
+so legit nested repo files (`tests/test_patch_helpers.py`, `lib/patch.py`,
+`a/test_patch/file.py`) are not tripped. Wire it into the swe `_build_harbor`
+branch AFTER `materialize_harbor_task_view` returns (copy-time deny-globs stay
+as best-effort stripping; this is the fail-closed backstop). Also add
+`gold.diff` to the deny set. TDD: nested-leak (load-bearing, must raise),
+no-false-positive, happy-path, plus a production-wiring test.
+
 ---
 
 ## File Structure
