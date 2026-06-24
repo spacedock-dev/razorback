@@ -1,9 +1,9 @@
 ---
 id: jryf2ezvxa5s7zpayf9568zz
 title: swe-bench-pro — hydration + task-view materializer wiring smoke
-status: backlog
+status: plan
 source: docs/superpowers/specs/2026-06-24-swe-bench-pro-on-harbor-design.md (E1); spider2-dbt-source-resolution-and-run-wiring as the family-branch reference; captain directive "use harbor's scale-ai/swe-bench-pro"
-started:
+started: 2026-06-24T03:20:33Z
 completed:
 verdict:
 score:
