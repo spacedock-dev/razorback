@@ -23,7 +23,8 @@ on razorback's **task-view materializer** path
 `kind: harbor` pass-through (which hands source dirs straight to
 `TaskConfig` at `translate.py:403-419` with no leakage stripping, no env,
 no strata). This entity wires swe-bench-pro into `_build_harbor` as a
-task-view family (the spider2/ade pattern): a `kind: harbor` spec with
+task-view family (the spider2 `_build_harbor` wiring pattern; ade uses the
+same materializer via its own helper): a `kind: harbor` spec with
 `dataset: scale-ai/swe-bench-pro@<ref>` resolves source task dirs, routes
 each through the **generic** `materialize_harbor_task_view` with
 `benchmark_kind="swe-bench-pro"` and
