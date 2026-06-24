@@ -256,3 +256,100 @@ def test_swe_branch_wiring_grep_leak():
         / "src" / "razorback" / "translate.py"
     ).read_text()
     assert "exclude_globs=SWE_BENCH_PRO_DENY_GLOBS" in src
+
+
+# --- cycle 2: fail-closed deep-scan leak guard (assert_no_swe_answer_leak) ---
+
+
+def test_swe_answer_leak_guard_raises_on_nested_answers_leak(tmp_path):
+    # AC (cycle 2, LOAD-BEARING): root-anchored deny-globs MISS answers harbor
+    # nests under a checkout/metadata dir (`repo/test_patch.diff`,
+    # `meta/gold_patch.diff`). The deep-scan guard must FAIL LOUD instead of
+    # silently leaking. Plant answers at depth and assert the guard RAISES.
+    view = tmp_path / "view"
+    (view / "repo").mkdir(parents=True)
+    (view / "meta").mkdir()
+    (view / "repo" / "sub").mkdir()
+    (view / "repo" / "test_patch.diff").write_text("+assert buggy() == 42\n")
+    (view / "meta" / "gold_patch.diff").write_text("+return 42\n")
+    (view / "repo" / "sub" / "FAIL_TO_PASS.json").write_text('["t"]\n')
+    # a legit nested repo file alongside, to prove the guard is precise
+    (view / "repo" / "answer_engine.py").write_text("x = 1\n")
+
+    from razorback.harbor_tasks.leakage import assert_no_swe_answer_leak
+
+    with pytest.raises(LeakageError):
+        assert_no_swe_answer_leak(view)
+
+
+def test_swe_answer_leak_guard_allows_legit_nested_repo_files_leak(tmp_path):
+    # NO-FALSE-POSITIVE: a view with only legit nested repo files (the captain-
+    # named over-match cases) must NOT trip the guard. Exact-name matching keeps
+    # `tests/test_patch_helpers.py`, `lib/patch.py`, `a/test_patch/file.py` safe.
+    view = tmp_path / "view"
+    for rel in [
+        "tests/test_patch_helpers.py",
+        "src/answer_engine.py",
+        "lib/patch.py",
+        "docs/gold_notes.md",
+        "a/test_patch/file.py",
+        "pkg/solution_helpers.py",
+        "astropy/io/tests/test_patch_io.py",
+        "django/test/patches.py",
+        "docs/changelog.diff",
+        "src/test_patcher.py",
+        "tools/gold_standard.py",
+        "README.md",
+    ]:
+        target = view / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("legit\n")
+
+    from razorback.harbor_tasks.leakage import assert_no_swe_answer_leak
+
+    assert_no_swe_answer_leak(view)  # must not raise
+
+
+def test_swe_answer_leak_guard_happy_path_after_root_strip_leak(tmp_path):
+    # HAPPY PATH: answers at the task root get stripped by the deny-globs at
+    # copy time, so nothing answer-shaped survives → the guard passes. Drive the
+    # real materializer (root-sibling layout, the assumed shape) then guard.
+    from razorback.harbor_tasks.leakage import assert_no_swe_answer_leak
+
+    source = FIXTURE_ROOT / "swe-bench-pro-fixture-001"
+    view = materialize_harbor_task_view(
+        source_task_dir=source,
+        view_root=tmp_path / "views",
+        benchmark_kind="swe-bench-pro",
+        benchmark_task_id=source.name,
+        transform_name="swe-bench-pro-harbor-task-view",
+        exclude_globs=SWE_BENCH_PRO_DENY_GLOBS,
+        view_mode="copy",
+    )
+    assert (view / "src" / "answer_engine.py").is_file()  # legit file survives
+    assert_no_swe_answer_leak(view)  # no answer artifact survived → no raise
+
+
+def test_swe_branch_deep_guard_raises_on_nested_leak_in_production_leak(
+    tmp_path, monkeypatch
+):
+    # WIRING: the PRODUCTION swe branch must call the deep guard after
+    # materialize. Plant answers NESTED under a checkout dir in an isolated
+    # source copy (root deny-globs miss them) → spec_to_job_config must RAISE
+    # LeakageError, not silently emit a leaking view.
+    base = FIXTURE_ROOT / "swe-bench-pro-fixture-001"
+    source = tmp_path / "src_copy" / "swe-bench-pro-fixture-001"
+    shutil.copytree(base, source)
+    (source / "repo").mkdir()
+    (source / "repo" / "test_patch.diff").write_text("+assert buggy() == 42\n")
+
+    monkeypatch.setattr(
+        "razorback.translate._resolve_harbor_dataset_tasks", lambda **k: [source]
+    )
+    with pytest.raises(LeakageError):
+        spec_to_job_config(
+            _swe_spec(),
+            job_name="job",
+            jobs_dir=tmp_path,
+            tasks_root=tmp_path / "tasks",
+        )

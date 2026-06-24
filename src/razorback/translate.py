@@ -17,7 +17,10 @@ from razorback.agents.auth import resolve_claude_auth, resolve_codex_auth
 from razorback.benchmarks.spider2_dbt.harbor_view import (
     materialize_spider2_harbor_task_view,
 )
-from razorback.harbor_tasks.leakage import SWE_BENCH_PRO_DENY_GLOBS
+from razorback.harbor_tasks.leakage import (
+    SWE_BENCH_PRO_DENY_GLOBS,
+    assert_no_swe_answer_leak,
+)
 from razorback.harbor_tasks.materialize import materialize_harbor_task_view
 from razorback.agents.proxy import PROXY_BLOCK_ENV
 from razorback.errors import SpecError
@@ -418,8 +421,16 @@ def _build_harbor(
                 # SWE_BENCH_PRO_DENY_GLOBS (task-root gold patch / test patch /
                 # FAIL_TO_PASS answer artifacts; root-anchored so it never
                 # strips the repo checkout the agent edits — E2).
-                task_paths = [
-                    materialize_harbor_task_view(
+                #
+                # The root-anchored deny-globs are best-effort copy-time
+                # stripping for the ASSUMED task-root sibling layout. After each
+                # view materializes we DEEP-scan it with assert_no_swe_answer_leak
+                # as the FAIL-CLOSED backstop: if harbor nested the answers under
+                # a checkout/metadata dir (root globs miss them), this raises
+                # LeakageError instead of silently leaking answers to the agent.
+                task_paths = []
+                for src in selected_sources:
+                    view = materialize_harbor_task_view(
                         source_task_dir=src,
                         view_root=view_root,
                         benchmark_kind="swe-bench-pro",
@@ -432,8 +443,8 @@ def _build_harbor(
                         exclude_globs=SWE_BENCH_PRO_DENY_GLOBS,
                         view_mode=view_mode,
                     )
-                    for src in selected_sources
-                ]
+                    assert_no_swe_answer_leak(view)
+                    task_paths.append(view)
             trial_name_map = {}
 
             cfg = JobConfig(
