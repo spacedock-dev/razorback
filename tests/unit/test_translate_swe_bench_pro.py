@@ -8,7 +8,11 @@ import pytest
 from harbor.models.task.config import TaskConfig as HarborTaskConfig
 
 from razorback.spec.schema import HarborBenchmarkBlock, NopAgentBlock, Spec
-from razorback.translate import _is_swe_bench_pro_dataset, spec_to_job_config
+from razorback.translate import (
+    SpecError,
+    _is_swe_bench_pro_dataset,
+    spec_to_job_config,
+)
 
 
 def test_detects_swe_bench_pro_fully_qualified():
@@ -82,7 +86,7 @@ def test_swe_dataset_requires_tasks_root(tmp_path, monkeypatch):
     spec = _spec(
         HarborBenchmarkBlock(kind="harbor", dataset="scale-ai/swe-bench-pro@latest")
     )
-    with pytest.raises(Exception) as exc:
+    with pytest.raises(SpecError) as exc:
         spec_to_job_config(spec, job_name="job", jobs_dir=tmp_path, tasks_root=None)
     assert "tasks_root" in str(exc.value).lower()
 
