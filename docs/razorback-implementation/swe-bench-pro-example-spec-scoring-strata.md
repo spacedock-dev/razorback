@@ -1,9 +1,9 @@
 ---
 id: xrh8vh7pbdzt7h09sfkspwp2
 title: swe-bench-pro — example spec + scoring strata confirmation
-status: backlog
+status: plan
 source: docs/superpowers/specs/2026-06-24-swe-bench-pro-on-harbor-design.md (E3); spider2-dbt-example-spec + harbor-view-task-identity-scored-runs as reference; sibling shape dabstep-claude-harbor.yaml (spacedock_solver + solver_workflow)
-started:
+started: 2026-06-24T08:19:00Z
 completed:
 verdict:
 score:
