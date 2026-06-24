@@ -240,3 +240,28 @@ Cycles updated; `status` untouched.
 ### Implementation summary
 
 Two atomic commits on branch `swe-bench-pro-example-spec-scoring-strata`. Modules touched: `src/razorback/runs/aggregate.py` (the production fix) and `examples/specs/swe-bench-pro-spacedock-codex.yaml` (new example spec); test `tests/unit/test_swe_bench_pro_scoring_strata.py`. The resolver change: `_resolve_stratum_from_task_view_manifest` now tries `_stratum_from_config_task_path(trial_dir)` FIRST — read `trial_dir/config.json` → `task["path"]`, re-anchor by **basename only** under `task_views_root(run_dir)`, read `<view>/view_manifest.json` — and falls back to the legacy dir-name join (`split("__")[0]` vs `[:32]`) only when config.json is missing/unusable. Shared payload-shaping factored into `_stratum_from_manifest_payload`. No new imports. Deviation: pre-existing ruff warning `typing.NotRequired unused` at `aggregate.py:11` left untouched (confirmed present on the base commit via stash; outside the changed region — avoided unrelated churn). `uv.lock` churn from `uv sync` reverted; worktree committed-clean.
+
+## Stage Report: validation
+
+- DONE: Worktree clean + at tip
+  `git status` clean; `git log main..HEAD` = 3 commits (5ea4291, 37f32f2, f5cf8d4); HEAD f5cf8d4.
+- DONE: AC-3 RED-first is HONEST (critical)
+  Reverted ONLY aggregate.py to main, kept test → canonical `__`-slug test FAILS (`got ['default']`, n_queries=1); restored fix → 2 passed. Test is load-bearing, not dishonest.
+- DONE: AC-3 fix correctness
+  Read resolver; confirmed basename-only re-anchor under task_views_root (NOT `Path(raw_path)` directly). Own synthetic run (real generate_trial_name + real config.json) → 3 distinct swe-bench-pro cells, no default, no collision.
+- DONE: REGRESSION (shared aggregator — most important)
+  test_task_identity_scoring (2) + test_spider2_dbt_scored_run_identity (1) pass. Own short-slug runs WITH and WITHOUT config.json both stratify (dabstep/spider2-dbt). Existing benchmarks resolve SAME via config-first (task.path basename == view dir name per translate.py); config-first only differs where old `[:32]` join was lossy — strictly more correct. Fallback logic unchanged.
+- DONE: Edge cases
+  Multi-attempt → one cell, n_trials=2; malformed config.json → graceful fallback no crash; unmatched basename → fallback no crash; missing config.json → fallback.
+- DONE: AC-1
+  `rk freeze --allow-missing` exit 0; frozen dataset `scale-ai/swe-bench-pro@latest`; agent spacedock_solver/codex, max_turns 400, override_timeout_sec 5400 (> 1200 default).
+- DONE: AC-2
+  `grep -F 'scale-ai/swe-bench-pro'` returns ABOUTME hydration-prereq note.
+- DONE: Full suite + regression classification
+  `pytest tests/ -q` → 4 failed, 862 passed, 12 skipped. Same 4 failures confirmed pre-existing on main (1444078) via throwaway detached worktree — not regressions.
+- DONE: superpowers:requesting-code-review (base main); classify
+  Independent reviewer verdict Ready-to-merge: Yes; no Critical/Important; 2 Minor (pre-existing `_read_json` non-dict nit; precedence-test coverage gap). Key regression risk judged SAFE for all benchmarks.
+
+### Summary
+
+Independent verification confirms the shared-aggregator fix is honest and safe. The AC-3 test genuinely fails on the pre-fix aggregator (collapse to `default`) and passes after — proven by reverting only aggregate.py. The config.json-first resolution uses basename-only re-anchoring and never reads the raw recorded path; for existing benchmarks (dabstep/spider2/ade) it resolves the same manifest as the old dir-name join and is strictly more correct where the old `[:32]`/`__` join was lossy, so no regression. All edge cases degrade gracefully. AC-1/AC-2 verified live; full-suite failures all pre-existing on main. GATE: APPROVE.
