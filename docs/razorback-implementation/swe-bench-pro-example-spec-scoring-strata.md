@@ -265,3 +265,8 @@ Two atomic commits on branch `swe-bench-pro-example-spec-scoring-strata`. Module
 ### Summary
 
 Independent verification confirms the shared-aggregator fix is honest and safe. The AC-3 test genuinely fails on the pre-fix aggregator (collapse to `default`) and passes after — proven by reverting only aggregate.py. The config.json-first resolution uses basename-only re-anchoring and never reads the raw recorded path; for existing benchmarks (dabstep/spider2/ade) it resolves the same manifest as the old dir-name join and is strictly more correct where the old `[:32]`/`__` join was lossy, so no regression. All edge cases degrade gracefully. AC-1/AC-2 verified live; full-suite failures all pre-existing on main. GATE: APPROVE.
+
+### Addendum (validation P2 fold-in)
+
+- DONE: Add config-first backward-compat regression test
+  `tests/unit/test_swe_bench_pro_scoring_strata.py::test_short_dunderless_slugs_stratify_via_config_first_path` — short, `__`-free spider2-dbt/ade-bench slugs that DO carry a real per-trial `config.json` resolve via the NEW config-first path to the SAME `{dataset, query_id}` the legacy join yields (old==new, proven by deleting config.json → identical fallback identity). Locks in shared-aggregator backward-compat that prior coverage (config-less) missed. Network-free; 6/6 pass in the scoring file; ruff clean. Commit 6d83d37.
