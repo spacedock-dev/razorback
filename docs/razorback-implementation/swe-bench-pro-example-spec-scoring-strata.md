@@ -86,3 +86,22 @@ leakage/deny-glob hardening (its own entity). The full-dataset N=1 score
 (deferred goal entity). Authoring a swe-tuned solver workflow — the
 existing `codex-benchmark-solver` is the starting point; deferred unless it
 underperforms on a live task.
+
+## Stage Report: plan
+
+- DONE: Write the implementation plan (STANDARD — separate plan doc)
+  `docs/razorback-implementation/plans/swe-bench-pro-example-spec-scoring-strata.md`: header, Global Constraints, AC↔task map, 2 tasks (riskiest-first), final verification, open decisions, self-review.
+- DONE: AC↔task map with 1:1 TDD checkpoints
+  AC-3→Task 1 (load-bearing test, first); AC-1→Task 2 (freeze+grep); AC-2→Task 2 (ABOUTME note). Map table in plan.
+- DONE: Per-step spec/design §-cite + live code-surface cites
+  Join `aggregate.py:137-143`; default collapse `:414-418`; `aggregate_summary` `:526-563`; `_view_name` `materialize.py:149-152`; `task_views_root` `manifest.py:15-24`; schema `:92-119`; freeze `freeze_cmd.py`.
+- DONE: Plan-time live verifications recorded
+  (1) `SpacedockSolverAgentBlock(runtime=codex, max_turns=400, override_timeout_sec=5400, max_timeout_sec=7200)` constructs OK. (2) `rk freeze --allow-missing` on spider2 spec → exit 0, dataset written verbatim offline. (3) Join math computed for real long slugs; `[:32]` w/ 14-char `swe-bench-pro-` prefix leaves 18 task-id chars. `*.frozen.yaml`+`provenance.yaml` confirmed gitignored.
+- DONE: Self-review for placeholders/contradictions
+  Spec coverage complete, no placeholders, type/name consistency checked against cited line numbers.
+- DONE: Flag open captain decisions
+  (1) `@<ref>` pin (`@latest` offline placeholder vs concrete published ref). (2) Real `__` separator in swe-bench-pro slugs + `[:32]` truncation/collision — whether a dedicated forced-collision test case is in scope or upstream-owned.
+
+### Summary
+
+Authored a STANDARD plan doc producing two artifacts with no production-code change: a fixture-backed AC-3 test (`tests/unit/test_swe_bench_pro_scoring_strata.py`) proving long project-prefixed swe-bench-pro slugs land in distinct `swe-bench-pro` query cells (not the `dataset="default"` collapse) via the real `trial_dir.name.split("__")[0] == view_dir.name[:32].rstrip("_-")` join key — with a mutation step to prove the test is load-bearing — and a user-facing `examples/specs/swe-bench-pro-spacedock-codex.yaml` (`spacedock_solver`/`runtime: codex`/gpt-5.5 + `codex-benchmark-solver`, SWE-tuned budget, ABOUTME hydration-prereq note) that freezes offline via `rk freeze --allow-missing`. Ordered riskiest-first (AC-3 before the cheap freeze/grep checks). Two open captain decisions flagged: the `@<ref>` pin and the `__`/`[:32]` truncation-collision scope.
