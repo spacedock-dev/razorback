@@ -109,6 +109,65 @@ def test_link_mode_symlinks_files_but_never_mutates_source_task_toml(tmp_path):
     assert "RAZORBACK_BENCHMARK_TASK_ID" not in (source / "task.toml").read_text()
 
 
+def test_link_mode_copies_environment_build_context_as_real_files(tmp_path):
+    """`view_mode="link"` must keep the `environment/` Docker build context as
+    REAL files, not symlinks. `docker compose build` runs with the view's
+    `environment/` dir as the build context; BuildKit cannot read a Dockerfile
+    that symlinks outside the context (`failed to read dockerfile: no such file
+    or directory`), so a symlinked build context breaks every build-from-source
+    benchmark (e.g. swe-bench-pro) under the default bind/link mode. Bulk task
+    files still symlink — only the build context is forced real.
+    """
+    source = _write_source_task(tmp_path)
+    dockerfile_text = (source / "environment" / "Dockerfile").read_text()
+
+    view = materialize_harbor_task_view(
+        source_task_dir=source,
+        view_root=tmp_path / "views",
+        benchmark_kind="fixture-bench",
+        benchmark_task_id="task-001",
+        transform_name="fixture-transform",
+        view_mode="link",
+    )
+
+    # the Docker build context is a real, view-owned file (readable by BuildKit)
+    assert (view / "environment" / "Dockerfile").is_file()
+    assert not (view / "environment" / "Dockerfile").is_symlink()
+    assert (view / "environment" / "Dockerfile").read_text() == dockerfile_text
+    # bulk files outside environment/ still symlink — the bind/link contract holds
+    assert (view / "instruction.md").is_symlink()
+    assert (view / "data" / "input.csv").is_symlink()
+
+
+def test_environment_symlink_to_denied_target_is_not_smuggled(tmp_path):
+    """A symlink under `environment/` with an innocuous name must not smuggle a
+    DENIED target's bytes into the view. Copying the build context follows
+    symlinks (shutil.copy2), and the name-based deny filter only sees the link's
+    own path — so `environment/leak.patch -> ../gold_patch.diff` would otherwise
+    embed gold-patch content under an allowed view path. The materializer must
+    resolve the target and re-apply the deny check, dropping it.
+    """
+    source = _write_source_task(tmp_path)
+    (source / "gold_patch.diff").write_text("--- GOLD ANSWER PATCH ---\n")
+    (source / "environment" / "leak.patch").symlink_to(source / "gold_patch.diff")
+
+    view = materialize_harbor_task_view(
+        source_task_dir=source,
+        view_root=tmp_path / "views",
+        benchmark_kind="fixture-bench",
+        benchmark_task_id="task-001",
+        transform_name="fixture-transform",
+        exclude_globs=("gold_patch*", "gold.patch"),
+        view_mode="link",
+    )
+
+    # the legit build context is still materialized as a real file …
+    assert (view / "environment" / "Dockerfile").is_file()
+    assert not (view / "environment" / "Dockerfile").is_symlink()
+    # … but the disguised symlink to a denied target is dropped, not embedded
+    assert not (view / "environment" / "leak.patch").exists()
+
+
 def test_materialized_view_is_harbor_taskconfig_path_ready(tmp_path):
     source = _write_source_task(tmp_path)
 
