@@ -113,10 +113,39 @@ def _reflect_allowed_files(
             target.mkdir(parents=True, exist_ok=True)
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
-        if view_mode == "copy":
+        # The `environment/` subtree is the Docker build context (current Harbor
+        # convention): `docker compose build` runs with it as the project
+        # directory, and BuildKit cannot read a Dockerfile (or any build input)
+        # that symlinks outside the context ("failed to read dockerfile: no such
+        # file or directory"). So always materialize the build context as real
+        # files, even in link mode — mirroring how `_patch_task_toml` keeps
+        # task.toml view-owned. Bulk task files still symlink in link mode (the
+        # whole point of bind: no eager duplication).
+        copy_real = view_mode == "copy" or _is_build_context_path(rel)
+        if path.is_symlink():
+            # The name filter above only saw the LINK's own path. A symlink with
+            # an innocuous name can still point at a denied answer artifact (e.g.
+            # `environment/leak.patch -> ../gold.patch`); copying follows the link
+            # and embeds the target's bytes under an allowed view path, and a view
+            # symlink chases through to it too — bypassing the leakage deny
+            # boundary. Resolve the target and re-apply the deny check (and
+            # source containment) so a symlink cannot smuggle denied or
+            # out-of-tree content into the view.
+            try:
+                resolved_rel = path.resolve().relative_to(source).as_posix()
+            except ValueError:
+                continue  # target escapes the source tree — refuse it
+            if matches_denied_path(resolved_rel, exclude_globs):
+                continue
+        if copy_real:
             shutil.copy2(path, target)
         else:
             os.symlink(path, target)
+
+
+def _is_build_context_path(rel: Path) -> bool:
+    """True for files under the `environment/` Docker build context."""
+    return rel.parts[:1] == ("environment",)
 
 
 def _patch_task_toml(

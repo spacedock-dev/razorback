@@ -209,9 +209,16 @@ def _codex_kwargs(harbor_agent_kwargs: dict[str, Any]) -> dict[str, Any]:
         if _is_empty_noop(name, value):
             continue
         if name not in _CODEX_SUPPORTED_KWARGS:
+            hint = ""
+            if name == "max_turns":
+                hint = (
+                    " The codex runtime accepts only the default max_turns (200); "
+                    "keep it at 200 and budget wall-clock via "
+                    "override_timeout_sec / max_timeout_sec instead."
+                )
             raise SpacedockSolverAgentError(
                 "codex runtime adapter cannot honor unsupported harbor_agent_kwargs "
-                f"field {name!r}; refusing to silently drop it."
+                f"field {name!r}; refusing to silently drop it.{hint}"
             )
         kw[name] = value
     return kw

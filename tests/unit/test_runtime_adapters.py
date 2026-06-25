@@ -501,6 +501,23 @@ def test_codex_rejects_unsupported_contract_kwargs(tmp_path, kwarg):
         )
 
 
+def test_codex_max_turns_rejection_is_actionable(tmp_path):
+    """A custom max_turns is the most common codex trip (claude honors it, codex
+    does not). The error must tell the user the fix: keep the default (200) and
+    budget wall-clock via timeouts — not leave them to reverse-engineer it.
+    """
+    with pytest.raises(SpacedockSolverAgentError) as excinfo:
+        codex_adapter.build_inner_agent(
+            logs_dir=tmp_path,
+            model="gpt-5.1-codex",
+            harbor_agent_kwargs={"max_turns": 400},
+            extra_env={"OPENAI_API_KEY": "sk-fake"},
+        )
+    message = str(excinfo.value)
+    assert "200" in message
+    assert "timeout" in message.lower()
+
+
 def test_pi_raises_not_implemented(tmp_path):
     with pytest.raises(NotImplementedError, match="pi"):
         pi_adapter.build_inner_agent(

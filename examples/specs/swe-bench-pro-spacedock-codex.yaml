@@ -14,9 +14,12 @@ agent:
     top_p: null
     seed: null
   solver_workflow: ./examples/solver_workflows/codex-benchmark-solver
-  # SWE-tuned budget — above the 1200s codex default: large repos + long
-  # test suites need more turns and a longer per-attempt/overall timeout.
-  max_turns: 400
+  # SWE-tuned budget. The codex runtime does NOT honor a custom max_turns —
+  # it accepts only the default (200); any other value raises
+  # SpacedockSolverAgentError. So keep max_turns at 200 and buy the
+  # "large repo + long test suite" headroom via the TIMEOUTS below, which
+  # govern wall-clock (harbor trial config), not codex turn limits.
+  max_turns: 200
   override_timeout_sec: 5400
   max_timeout_sec: 7200
   reasoning_effort: xhigh
