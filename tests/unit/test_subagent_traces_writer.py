@@ -224,8 +224,19 @@ def test_writer_counts_codex_subagent_rollouts_when_stdout_has_no_spawn(tmp_path
             },
         },
     ]
+    # Leading blank line: session_meta detection must read the first
+    # NON-EMPTY line, not blindly the first line.
     (sessions_day / "rollout-ensign.jsonl").write_text(
-        "\n".join(json.dumps(e) for e in ensign_rollout) + "\n"
+        "\n" + "\n".join(json.dumps(e) for e in ensign_rollout) + "\n"
+    )
+    # A rollout with invalid UTF-8 must be skipped, not abort the writer.
+    # This one sorts FIRST and advertises a parent thread, so the parent-model
+    # extraction hits its UnicodeDecodeError fallback before reaching rollout-fo.
+    corrupt_meta = json.dumps(
+        {"type": "session_meta", "payload": {"id": "thread-x", "thread_source": "user"}}
+    )
+    (sessions_day / "rollout-corrupt.jsonl").write_bytes(
+        corrupt_meta.encode("utf-8") + b"\n\xff\xfe\x00garbage\n"
     )
 
     manifest = write_subagent_trace_manifest(cell_dir)

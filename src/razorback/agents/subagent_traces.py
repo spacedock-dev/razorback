@@ -171,12 +171,17 @@ def _iter_session_rollouts(log_dir: Path):
         return
     for path in sorted(sessions_dir.glob("**/*.jsonl")):
         try:
+            first = ""
             with path.open("r", encoding="utf-8", errors="ignore") as handle:
-                first = handle.readline().strip()
+                for line in handle:
+                    line = line.lstrip("\ufeff").strip()
+                    if line:
+                        first = line
+                        break
             head = json.loads(first)
         except (OSError, json.JSONDecodeError):
             continue
-        if head.get("type") != "session_meta":
+        if not isinstance(head, dict) or head.get("type") != "session_meta":
             continue
         payload = head.get("payload")
         if isinstance(payload, dict):
@@ -221,7 +226,12 @@ def _extract_codex_session_dispatches(
     for path, meta in _iter_session_rollouts(log_dir):
         if meta.get("thread_source") != "subagent":
             if parent_model is None:
-                events = list(_parse_events(path))
+                # Best-effort evidence: a rollout with invalid bytes must not
+                # abort manifest generation (_parse_events decodes strict UTF-8).
+                try:
+                    events = list(_parse_events(path))
+                except (OSError, UnicodeDecodeError):
+                    events = []
                 parent_model = _extract_codex_parent_model(events)
             continue
         prompt = _rollout_first_user_prompt(path)
