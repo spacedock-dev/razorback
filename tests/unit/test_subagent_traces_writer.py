@@ -167,6 +167,98 @@ def test_writer_counts_codex_spawn_agent_events(tmp_path):
     assert manifest["dispatches"][0]["spawn_index"] == 0
 
 
+def test_writer_counts_codex_subagent_rollouts_when_stdout_has_no_spawn(tmp_path):
+    """codex `exec --json` stdout is parent-thread-only: native spawn_agent
+    dispatches never appear in codex.txt (only e.g. `wait` collab calls do).
+    The writer must fall back to the sessions/ rollout mirror, where every
+    thread — including subagent threads — has a rollout jsonl.
+    """
+    cell_dir = tmp_path / "cell"
+    agent_dir = cell_dir / "steps" / "main" / "agent"
+    stdout_events = [
+        {"type": "thread.started", "thread_id": "thread-fo"},
+        {
+            "type": "item.completed",
+            "item": {
+                "id": "item_12",
+                "type": "collab_tool_call",
+                "tool": "wait",
+                "sender_thread_id": "thread-fo",
+                "receiver_thread_ids": [],
+                "status": "completed",
+            },
+        },
+        {"type": "turn.completed", "usage": {"input_tokens": 1, "output_tokens": 1}},
+    ]
+    _write_claude_code_txt(agent_dir / "codex.txt", stdout_events)
+
+    sessions_day = agent_dir / "sessions" / "2026" / "07" / "10"
+    sessions_day.mkdir(parents=True)
+    fo_rollout = [
+        {
+            "type": "session_meta",
+            "payload": {"id": "thread-fo", "thread_source": "user", "source": "exec"},
+        },
+        {"type": "turn_context", "payload": {"model": "gpt-5.6-sol"}},
+    ]
+    (sessions_day / "rollout-fo.jsonl").write_text(
+        "\n".join(json.dumps(e) for e in fo_rollout) + "\n"
+    )
+    ensign_rollout = [
+        {
+            "type": "session_meta",
+            "payload": {
+                "id": "thread-ensign",
+                "session_id": "thread-fo",
+                "parent_thread_id": "thread-fo",
+                "thread_source": "subagent",
+                "agent_nickname": "Arendt",
+                "agent_path": "/root/dataset_solver",
+            },
+        },
+        {
+            "type": "event_msg",
+            "payload": {
+                "type": "user_message",
+                "message": "dispatch_agent_id: spacedock:ensign\nworker_key: spacedock-ensign\n",
+            },
+        },
+    ]
+    # Leading blank line: session_meta detection must read the first
+    # NON-EMPTY line, not blindly the first line.
+    (sessions_day / "rollout-ensign.jsonl").write_text(
+        "\n" + "\n".join(json.dumps(e) for e in ensign_rollout) + "\n"
+    )
+    # A rollout with invalid UTF-8 must be skipped, not abort the writer.
+    # This one sorts FIRST and advertises a parent thread, so the parent-model
+    # extraction hits its UnicodeDecodeError fallback before reaching rollout-fo.
+    corrupt_meta = json.dumps(
+        {"type": "session_meta", "payload": {"id": "thread-x", "thread_source": "user"}}
+    )
+    (sessions_day / "rollout-corrupt.jsonl").write_bytes(
+        corrupt_meta.encode("utf-8") + b"\n\xff\xfe\x00garbage\n"
+    )
+
+    manifest = write_subagent_trace_manifest(cell_dir)
+
+    assert manifest["capture_source"] == "razorback-codex-cli-trace"
+    assert manifest["captured"] == 1
+    dispatch = manifest["dispatches"][0]
+    assert dispatch["tool_use_id"] == "thread-ensign"
+    assert dispatch["subagent_type"] == "spacedock:ensign"
+    assert dispatch["spawn_index"] == 0
+    assert len(dispatch["prompt_sha256"]) == 64
+    # The subagent rollout is listed as a trace artifact next to the parent log.
+    kinds = {(a["kind"], a["path"]) for a in manifest["trace_artifacts"]}
+    assert ("parent_log", "steps/main/agent/codex.txt") in kinds
+    assert (
+        "subagent_rollout",
+        "steps/main/agent/sessions/2026/07/10/rollout-ensign.jsonl",
+    ) in kinds
+    # Parent model recovered from the FO rollout (stdout has no turn_context).
+    assert manifest["parent_agent"]["model"] == "gpt-5.6-sol"
+
+
 def test_writer_raises_on_missing_claude_code_txt(tmp_path):
     cell_dir = tmp_path / "empty-cell"
     cell_dir.mkdir()
